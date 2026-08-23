@@ -249,6 +249,7 @@ export default function MasterPlanPage() {
     scenarioUpdated: isEn ? 'Scenario updated successfully!' : 'Cenário atualizado com sucesso!',
     scenarioSaveError: isEn ? 'The scenario could not be saved.' : 'Não foi possível salvar o cenário.',
     scenarioLoadError: isEn ? 'The Master Plan could not be loaded.' : 'Não foi possível carregar o Master Plan.',
+    packageSyncError: isEn ? 'The scenario was saved, but the normalized work packages could not be synchronized.' : 'O cenário foi salvo, mas os pacotes de trabalho normalizados não puderam ser sincronizados.',
     
     freezeBase: isEn ? '🔒 Freeze Baseline' : '🔒 Congelar Linha de Base',
     editBase: isEn ? '🔓 Edit Baseline' : '🔓 Editar Base',
@@ -536,6 +537,316 @@ export default function MasterPlanPage() {
     customServices: servicosCustomizados,
     hideWeekends: ocultarFinaisDeSemana
   });
+
+  const sincronizarPacotesNormalizados = async (
+    scenarioId,
+    packagesSnapshot = pacotesLancados
+  ) => {
+    if (!scenarioId || !projetoSelecionado) {
+      return {
+        ok: false,
+        error: new Error(
+          'Scenario or project is missing.'
+        )
+      };
+    }
+
+    const packages = Array.isArray(packagesSnapshot)
+      ? packagesSnapshot
+      : [];
+
+    // ----------------------------------------------------
+    // 1. REMOVE PREVIOUS NORMALIZED SNAPSHOT
+    // ----------------------------------------------------
+    // master_plan_scenarios.plan_data remains the complete
+    // source of truth for the visual Master Plan.
+    //
+    // master_plan_packages is rebuilt from that scenario
+    // snapshot whenever the user saves / updates / freezes.
+    const {
+      error: deleteError
+    } = await supabase
+      .from('master_plan_packages')
+      .delete()
+      .eq('scenario_id', scenarioId)
+      .eq('project_id', projetoSelecionado);
+
+    if (deleteError) {
+      console.error(
+        'Master Plan - delete normalized packages:',
+        deleteError
+      );
+
+      return {
+        ok: false,
+        error: deleteError
+      };
+    }
+
+    if (packages.length === 0) {
+      return {
+        ok: true,
+        insertedCount: 0
+      };
+    }
+
+    // ----------------------------------------------------
+    // 2. BUILD READABLE SNAPSHOT MAPS
+    // ----------------------------------------------------
+    const rowById = new Map();
+
+    secoes.forEach((section) => {
+      (section.linhas || []).forEach((row) => {
+        rowById.set(row.id, row);
+      });
+    });
+
+    const packageByUiId = new Map(
+      packages.map((pkg) => [
+        pkg.id,
+        pkg
+      ])
+    );
+
+    const dbIdByUiId = new Map();
+    const visiting = new Set();
+    const inserted = new Set();
+
+    // ----------------------------------------------------
+    // 3. INSERT IN DEPENDENCY ORDER
+    // ----------------------------------------------------
+    // The UI uses temporary IDs (pct_...). PostgreSQL uses UUIDs.
+    // We insert each predecessor first, store its generated UUID,
+    // then use that UUID when inserting the dependent package.
+    const insertPackage = async (
+      pkg,
+      sequenceNumber
+    ) => {
+      if (!pkg?.id) {
+        throw new Error(
+          'Master Plan package is missing its UI identifier.'
+        );
+      }
+
+      if (inserted.has(pkg.id)) {
+        return dbIdByUiId.get(pkg.id);
+      }
+
+      if (visiting.has(pkg.id)) {
+        throw new Error(
+          `Circular predecessor relationship detected for package ${pkg.id}.`
+        );
+      }
+
+      visiting.add(pkg.id);
+
+      let predecessorDbId = null;
+
+      if (
+        pkg.tipoInicio === 'predecessora' &&
+        pkg.predecessoraId
+      ) {
+        const predecessor =
+          packageByUiId.get(
+            pkg.predecessoraId
+          );
+
+        if (!predecessor) {
+          throw new Error(
+            `Predecessor ${pkg.predecessoraId} was not found in this scenario.`
+          );
+        }
+
+        const predecessorSequence =
+          packages.findIndex(
+            (item) =>
+              item.id ===
+              predecessor.id
+          );
+
+        predecessorDbId =
+          await insertPackage(
+            predecessor,
+            predecessorSequence >= 0
+              ? predecessorSequence
+              : 0
+          );
+      }
+
+      const row =
+        rowById.get(
+          pkg.linhaId
+        ) || null;
+
+      const service =
+        servicosCores[
+          pkg.atividade
+        ] || null;
+
+      const normalizedStartRule =
+        pkg.tipoInicio === 'predecessora'
+          ? 'predecessor'
+          : 'date';
+
+      const payload = {
+        scenario_id:
+          scenarioId,
+
+        project_id:
+          projetoSelecionado,
+
+        location_id:
+          pkg.locationId ||
+          row?.locationId ||
+          null,
+
+        project_service_id:
+          pkg.projectServiceId ||
+          service?.projectServiceId ||
+          null,
+
+        row_key:
+          pkg.linhaId ||
+          null,
+
+        package_code:
+          String(
+            pkg.atividade ||
+            ''
+          )
+            .trim()
+            .toUpperCase()
+            .slice(
+              0,
+              3
+            ) ||
+          null,
+
+        location_name:
+          row?.descricao ||
+          null,
+
+        location_path:
+          pkg.locationPath ||
+          row?.locationPath ||
+          row?.descricao ||
+          null,
+
+        service_name:
+          service
+            ? (
+                isEn
+                  ? service.labelEn
+                  : service.labelPt
+              ) ||
+              service.labelEn ||
+              service.labelPt ||
+              pkg.atividade
+            : pkg.atividade ||
+              null,
+
+        service_code:
+          service?.sourceServiceCode ||
+          pkg.atividade ||
+          null,
+
+        unit:
+          service?.unit ||
+          null,
+
+        start_rule:
+          normalizedStartRule,
+
+        planned_start_date:
+          normalizedStartRule === 'date'
+            ? pkg.dataInicio ||
+              null
+            : null,
+
+        predecessor_package_id:
+          normalizedStartRule === 'predecessor'
+            ? predecessorDbId
+            : null,
+
+        duration_working_days:
+          Math.max(
+            1,
+            Number(
+              pkg.duracao ||
+              1
+            )
+          ),
+
+        sequence_number:
+          Math.max(
+            0,
+            Number(
+              sequenceNumber ||
+              0
+            )
+          )
+      };
+
+      const {
+        data: insertedPackage,
+        error: insertError
+      } = await supabase
+        .from('master_plan_packages')
+        .insert(
+          payload
+        )
+        .select('id')
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      dbIdByUiId.set(
+        pkg.id,
+        insertedPackage.id
+      );
+
+      inserted.add(
+        pkg.id
+      );
+
+      visiting.delete(
+        pkg.id
+      );
+
+      return insertedPackage.id;
+    };
+
+    try {
+      for (
+        let index = 0;
+        index < packages.length;
+        index += 1
+      ) {
+        await insertPackage(
+          packages[index],
+          index
+        );
+      }
+
+      return {
+        ok: true,
+        insertedCount:
+          inserted.size
+      };
+    } catch (error) {
+      console.error(
+        'Master Plan - normalized package synchronization:',
+        error
+      );
+
+      return {
+        ok: false,
+        error
+      };
+    }
+  };
 
   useEffect(() => {
     const fetchProjetos = async () => {
@@ -1061,6 +1372,22 @@ export default function MasterPlanPage() {
     setVersaoAtivaId(frozenVersion.id);
     setLinhaDeBaseCongelada(true);
     setModoControle(true);
+
+    const packageSync =
+      await sincronizarPacotesNormalizados(
+        frozenVersion.id,
+        pacotesLancados
+      );
+
+    if (!packageSync.ok) {
+      alert(
+        `${t.packageSyncError}
+${
+          packageSync.error?.message ||
+          ''
+        }`
+      );
+    }
   };
 
   const handleDescongelar = async () => {
@@ -1192,6 +1519,24 @@ export default function MasterPlanPage() {
     ]);
 
     setVersaoAtivaId(novaVersao.id);
+
+    const packageSync =
+      await sincronizarPacotesNormalizados(
+        novaVersao.id,
+        pacotesLancados
+      );
+
+    if (!packageSync.ok) {
+      alert(
+        `${t.packageSyncError}
+${
+          packageSync.error?.message ||
+          ''
+        }`
+      );
+      return;
+    }
+
     alert(t.scenarioSaved);
   };
 
@@ -1234,6 +1579,23 @@ export default function MasterPlanPage() {
         item.id === versaoAtualizada.id ? versaoAtualizada : item
       )
     );
+
+    const packageSync =
+      await sincronizarPacotesNormalizados(
+        versaoAtualizada.id,
+        pacotesLancados
+      );
+
+    if (!packageSync.ok) {
+      alert(
+        `${t.packageSyncError}
+${
+          packageSync.error?.message ||
+          ''
+        }`
+      );
+      return;
+    }
 
     alert(t.scenarioUpdated);
   };
@@ -1281,6 +1643,23 @@ export default function MasterPlanPage() {
     setVersaoAtivaId(novaVersao.id);
     setLinhaDeBaseCongelada(false);
     setModoControle(false);
+
+    const packageSync =
+      await sincronizarPacotesNormalizados(
+        novaVersao.id,
+        pacotesLancados
+      );
+
+    if (!packageSync.ok) {
+      alert(
+        `${t.packageSyncError}
+${
+          packageSync.error?.message ||
+          ''
+        }`
+      );
+      return;
+    }
 
     alert(t.scenarioSaved);
   };
