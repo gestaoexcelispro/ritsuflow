@@ -1182,7 +1182,8 @@ export default function MasterPlanPage() {
   };
 
   const criarSnapshotAgendaImutavel = (
-    packagesSnapshot
+    packagesSnapshot,
+    showDiagnostic = false
   ) => {
     const rawPackages =
       Array.isArray(
@@ -1204,6 +1205,9 @@ export default function MasterPlanPage() {
     const snapshot =
       new Map();
 
+    const diagnosticRows =
+      [];
+
     packages.forEach(
       (pkg) => {
         const schedule =
@@ -1212,45 +1216,218 @@ export default function MasterPlanPage() {
           ) ||
           null;
 
+        const scheduledStartDate =
+          schedule
+            ? (
+                datasPlanilha[
+                  schedule.startIndex
+                ]?.dataIso ||
+                null
+              )
+            : null;
+
+        const scheduledFinishDate =
+          schedule
+            ? (
+                datasPlanilha[
+                  schedule.endIndex
+                ]?.dataIso ||
+                null
+              )
+            : null;
+
+        const sequenceGroupId =
+          pkg.sequenceGroupId ||
+          obterConfiguracaoSequenciaPacote(
+            pkg
+          )?.id ||
+          null;
+
         snapshot.set(
           pkg.id,
           {
-            scheduledStartDate:
-              schedule
-                ? (
-                    datasPlanilha[
-                      schedule.startIndex
-                    ]?.dataIso ||
-                    null
-                  )
-                : null,
-
-            scheduledFinishDate:
-              schedule
-                ? (
-                    datasPlanilha[
-                      schedule.endIndex
-                    ]?.dataIso ||
-                    null
-                  )
-                : null,
-
-            sequenceGroupId:
-              pkg.sequenceGroupId ||
-              obterConfiguracaoSequenciaPacote(
-                pkg
-              )?.id ||
-              null
+            scheduledStartDate,
+            scheduledFinishDate,
+            sequenceGroupId
           }
         );
+
+        diagnosticRows.push({
+          packageId:
+            pkg.id,
+
+          code:
+            pkg.atividade,
+
+          rowId:
+            pkg.linhaId,
+
+          startType:
+            pkg.tipoInicio,
+
+          explicitStart:
+            pkg.dataInicio ||
+            null,
+
+          predecessorId:
+            pkg.predecessoraId ||
+            null,
+
+          dependencyCount:
+            obterDependenciasPacote(
+              pkg
+            ).length,
+
+          scheduleFound:
+            Boolean(
+              schedule
+            ),
+
+          startIndex:
+            schedule
+              ?.startIndex ??
+            null,
+
+          endIndex:
+            schedule
+              ?.endIndex ??
+            null,
+
+          scheduledStartDate,
+
+          scheduledFinishDate
+        });
       }
     );
 
+    const resolvedRows =
+      diagnosticRows.filter(
+        (row) =>
+          row.scheduledStartDate &&
+          row.scheduledFinishDate
+      );
+
+    const unresolvedRows =
+      diagnosticRows.filter(
+        (row) =>
+          !row.scheduledStartDate ||
+          !row.scheduledFinishDate
+      );
+
+    const diagnostic = {
+      rawPackageCount:
+        rawPackages.length,
+
+      rebuiltPackageCount:
+        packages.length,
+
+      scheduleMapSize:
+        schedules.size,
+
+      calendarDayCount:
+        datasPlanilha.length,
+
+      calendarStart:
+        datasPlanilha[0]
+          ?.dataIso ||
+        null,
+
+      calendarFinish:
+        datasPlanilha[
+          datasPlanilha.length -
+            1
+        ]?.dataIso ||
+        null,
+
+      resolvedPackageCount:
+        resolvedRows.length,
+
+      unresolvedPackageCount:
+        unresolvedRows.length,
+
+      firstPackage:
+        diagnosticRows[0] ||
+        null,
+
+      firstUnresolved:
+        unresolvedRows[0] ||
+        null
+    };
+
+    console.group(
+      'RitsuFlow Master Plan - Schedule Snapshot Diagnostic'
+    );
+
+    console.log(
+      diagnostic
+    );
+
+    console.table(
+      diagnosticRows
+    );
+
+    console.groupEnd();
+
+    if (showDiagnostic) {
+      const first =
+        diagnostic.firstPackage;
+
+      const unresolved =
+        diagnostic.firstUnresolved;
+
+      window.alert(
+        [
+          'MASTER PLAN SCHEDULE SNAPSHOT DIAGNOSTIC',
+          '',
+          `Raw packages: ${diagnostic.rawPackageCount}`,
+          `Rebuilt packages: ${diagnostic.rebuiltPackageCount}`,
+          `Schedule map entries: ${diagnostic.scheduleMapSize}`,
+          `Calendar days: ${diagnostic.calendarDayCount}`,
+          `Calendar: ${diagnostic.calendarStart || 'NULL'} → ${diagnostic.calendarFinish || 'NULL'}`,
+          `Resolved package dates: ${diagnostic.resolvedPackageCount}`,
+          `Unresolved packages: ${diagnostic.unresolvedPackageCount}`,
+          '',
+          first
+            ? `First package: ${first.code} | ${first.packageId}`
+            : 'First package: NONE',
+          first
+            ? `First explicit start: ${first.explicitStart || 'NULL'}`
+            : '',
+          first
+            ? `First schedule found: ${first.scheduleFound ? 'YES' : 'NO'}`
+            : '',
+          first
+            ? `First indexes: ${first.startIndex ?? 'NULL'} → ${first.endIndex ?? 'NULL'}`
+            : '',
+          first
+            ? `First dates: ${first.scheduledStartDate || 'NULL'} → ${first.scheduledFinishDate || 'NULL'}`
+            : '',
+          '',
+          unresolved
+            ? `First unresolved: ${unresolved.code} | ${unresolved.packageId}`
+            : 'First unresolved: NONE',
+          unresolved
+            ? `Dependencies: ${unresolved.dependencyCount}`
+            : ''
+        ]
+          .filter(
+            (line) =>
+              line !== ''
+          )
+          .join(
+            '\n'
+          )
+      );
+    }
+
     return {
       packages,
-      snapshot
+      snapshot,
+      diagnostic,
+      diagnosticRows
     };
   };
+
 
   const sincronizarPacotesNormalizados = async (
     scenarioId,
@@ -3487,7 +3664,8 @@ ${
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
-        pacotesLancados
+        pacotesLancados,
+        true
       );
 
     const packageSync =
