@@ -644,6 +644,76 @@ export default function MasterPlanPage() {
   // ----------------------------------------------------
   // This is intentionally calculated ONCE with useMemo below.
   // Never call this helper from individual calendar cells.
+  const obterConfiguracaoSequenciaPacote = (
+    pacote
+  ) => {
+    if (!pacote) return null;
+
+    if (pacote.sequenceGroupId) {
+      const directConfig =
+        sequenceConfigurations.find(
+          (config) =>
+            config.id ===
+            pacote.sequenceGroupId
+        );
+
+      if (directConfig) {
+        return directConfig;
+      }
+    }
+
+    // Legacy fallback for a generated package created before
+    // sequenceGroupId was persisted.
+    if (
+      pacote.generatedBySequence &&
+      sequenceConfigurations.length === 1
+    ) {
+      return sequenceConfigurations[0];
+    }
+
+    return null;
+  };
+
+  const isPacoteAncoraSequencia = (
+    pacote
+  ) => {
+    const config =
+      obterConfiguracaoSequenciaPacote(
+        pacote
+      );
+
+    if (!config) return false;
+
+    const firstLocation =
+      (
+        config.locations ||
+        []
+      ).find(
+        (location) =>
+          location.selected !== false
+      );
+
+    const firstActivity =
+      (
+        config.activities ||
+        []
+      )[0];
+
+    if (
+      !firstLocation ||
+      !firstActivity
+    ) {
+      return false;
+    }
+
+    return (
+      pacote.linhaId ===
+        firstLocation.rowId &&
+      pacote.atividade ===
+        firstActivity.code
+    );
+  };
+
   const reconstruirRedeDependencias = (
     packagesSnapshot
   ) => {
@@ -775,10 +845,17 @@ export default function MasterPlanPage() {
 
     return packages.map(
       (pkg) => {
-        const existing =
-          obterDependenciasPacote(
+        const isSequenceAnchor =
+          isPacoteAncoraSequencia(
             pkg
           );
+
+        const existing =
+          isSequenceAnchor
+            ? []
+            : obterDependenciasPacote(
+                pkg
+              );
 
         const dependencies =
           [];
@@ -873,6 +950,7 @@ export default function MasterPlanPage() {
         // TRADE dependency:
         // previous activity in the SAME location.
         if (
+          !isSequenceAnchor &&
           !hasSavedTrade &&
           Number.isInteger(
             currentActivityIndex
@@ -929,6 +1007,7 @@ export default function MasterPlanPage() {
         // same activity in the immediately previous location
         // where that activity exists.
         if (
+          !isSequenceAnchor &&
           !hasSavedFlow &&
           Number.isInteger(
             currentRowIndex
@@ -2619,10 +2698,17 @@ export default function MasterPlanPage() {
 
     salvarHistorico();
 
-    const dependencies =
-      obterDependenciasPacote(
+    const isSequenceAnchor =
+      isPacoteAncoraSequencia(
         pacote
       );
+
+    const dependencies =
+      isSequenceAnchor
+        ? []
+        : obterDependenciasPacote(
+            pacote
+          );
 
     setPacotesLancados(
       (current) =>
@@ -2647,15 +2733,55 @@ export default function MasterPlanPage() {
                   targetIndex
                 );
 
+              const newStartDate =
+                datasPlanilha[
+                  legalTarget
+                ]?.dataIso ||
+                item.dataInicio;
+
+              const sequenceConfig =
+                obterConfiguracaoSequenciaPacote(
+                  item
+                );
+
+              if (
+                sequenceConfig
+              ) {
+                setSequenceConfigurations(
+                  (currentConfigs) =>
+                    currentConfigs.map(
+                      (config) =>
+                        config.id ===
+                        sequenceConfig.id
+                          ? {
+                              ...config,
+                              startType:
+                                'data',
+                              startDate:
+                                newStartDate,
+                              predecessorId:
+                                '',
+                              startLag:
+                                0,
+                              updatedAt:
+                                new Date().toISOString()
+                            }
+                          : config
+                    )
+                );
+              }
+
               return {
                 ...item,
                 tipoInicio:
                   'data',
                 dataInicio:
-                  datasPlanilha[
-                    legalTarget
-                  ]?.dataIso ||
-                  item.dataInicio,
+                  newStartDate,
+                predecessoraId:
+                  '',
+                dependencies: [],
+                lagWorkingDays:
+                  0,
                 manualDelayWorkingDays:
                   0
               };
@@ -3705,14 +3831,98 @@ ${
 
     salvarHistorico();
 
+    if (
+      sequenceStartType === 'data' &&
+      sequenceStartDate &&
+      (
+        !dataInicio ||
+        sequenceStartDate <
+          dataInicio
+      )
+    ) {
+      setDataInicio(
+        sequenceStartDate
+      );
+    }
+
     const sequenceGroupId =
       sequenceEditingId ||
       `seq_${Date.now()}`;
 
+    const activeConfig =
+      sequenceConfigurations.find(
+        (config) =>
+          config.id ===
+          sequenceGroupId
+      ) ||
+      null;
+
+    const activeLocationIds =
+      new Set(
+        (
+          activeConfig?.locations ||
+          sequenceLocations
+        )
+          .filter(
+            (location) =>
+              location.selected !== false
+          )
+          .map(
+            (location) =>
+              location.rowId
+          )
+      );
+
+    const activeActivityCodes =
+      new Set(
+        (
+          activeConfig?.activities ||
+          sequenceActivities
+        ).map(
+          (activity) =>
+            activity.code
+        )
+      );
+
+    const belongsToEditedSequence = (
+      pkg
+    ) => {
+      if (
+        pkg.sequenceGroupId ===
+        sequenceGroupId
+      ) {
+        return true;
+      }
+
+      // Legacy migration fallback:
+      // a generated package may predate sequenceGroupId. If there
+      // is only one stored sequence configuration, packages marked
+      // generatedBySequence that match its Location × Activity
+      // footprint belong to that same sequence.
+      if (
+        !pkg.sequenceGroupId &&
+        pkg.generatedBySequence &&
+        sequenceConfigurations.length <= 1 &&
+        activeLocationIds.has(
+          pkg.linhaId
+        ) &&
+        activeActivityCodes.has(
+          pkg.atividade
+        )
+      ) {
+        return true;
+      }
+
+      return false;
+    };
+
     const basePackages =
       isRegenerating
         ? pacotesLancados.filter(
-            (pkg) => pkg.sequenceGroupId !== sequenceGroupId
+            (pkg) =>
+              !belongsToEditedSequence(
+                pkg
+              )
           )
         : pacotesLancados;
 
@@ -3836,6 +4046,10 @@ ${
           }
         }
 
+        const isFirstGeneratedPackage =
+          locationIndex === 0 &&
+          activityIndex === 0;
+
         const pkg = {
           id,
           atividade: activity.code,
@@ -3843,14 +4057,30 @@ ${
           locationId: location.locationId || null,
           locationPath: location.label || '',
           projectServiceId: service?.projectServiceId || null,
-          tipoInicio: tipo,
-          dataInicio: startDate,
-          predecessoraId: predecessorId,
+          tipoInicio:
+            isFirstGeneratedPackage &&
+            sequenceStartType === 'data'
+              ? 'data'
+              : tipo,
+          dataInicio:
+            isFirstGeneratedPackage &&
+            sequenceStartType === 'data'
+              ? sequenceStartDate
+              : startDate,
+          predecessoraId:
+            isFirstGeneratedPackage &&
+            sequenceStartType === 'data'
+              ? ''
+              : predecessorId,
           lagWorkingDays:
             tipo === 'predecessora'
               ? relationshipLag
               : 0,
-          dependencies,
+          dependencies:
+            isFirstGeneratedPackage &&
+            sequenceStartType === 'data'
+              ? []
+              : dependencies,
           manualDelayWorkingDays: 0,
           duracao: Math.max(1, Number(activity.duration || 1)),
           generatedBySequence: true,
