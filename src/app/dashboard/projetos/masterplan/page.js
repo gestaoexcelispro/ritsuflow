@@ -639,8 +639,38 @@ export default function MasterPlanPage() {
       return [];
     }
 
+    // IMPORTANT:
+    // Location flow must NOT be inferred from the visual top-to-bottom
+    // order of the Line of Balance rows. The user may have reordered
+    // locations inside the Work Sequence Generator, and the execution
+    // direction may be bottom-to-top.
+    //
+    // pacotesLancados preserves the original generator order, because
+    // the generator creates every activity for Location 1, then every
+    // activity for Location 2, and so on.
+    //
+    // Therefore the first appearance of each linhaId is the safest
+    // representation of the actual Location Flow that was saved.
     const orderedRowIds = [];
 
+    packages.forEach(
+      (pkg) => {
+        if (
+          pkg?.linhaId &&
+          !orderedRowIds.includes(
+            pkg.linhaId
+          )
+        ) {
+          orderedRowIds.push(
+            pkg.linhaId
+          );
+        }
+      }
+    );
+
+    // Fallback only for rows that currently have no package.
+    // They are appended after the saved execution-flow rows and do
+    // not alter the dependency order of existing scheduled packages.
     secoes.forEach(
       (section) => {
         (
@@ -795,6 +825,20 @@ export default function MasterPlanPage() {
             addDependency
           );
 
+        const hasSavedTrade =
+          existing.some(
+            (dependency) =>
+              dependency.type ===
+              'trade'
+          );
+
+        const hasSavedFlow =
+          existing.some(
+            (dependency) =>
+              dependency.type ===
+              'flow'
+          );
+
         const currentRowIndex =
           rowIndex.get(
             pkg.linhaId
@@ -808,6 +852,7 @@ export default function MasterPlanPage() {
         // TRADE dependency:
         // previous activity in the SAME location.
         if (
+          !hasSavedTrade &&
           Number.isInteger(
             currentActivityIndex
           ) &&
@@ -863,6 +908,7 @@ export default function MasterPlanPage() {
         // same activity in the immediately previous location
         // where that activity exists.
         if (
+          !hasSavedFlow &&
           Number.isInteger(
             currentRowIndex
           ) &&
