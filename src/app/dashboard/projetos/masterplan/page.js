@@ -1152,6 +1152,14 @@ export default function MasterPlanPage() {
         rawPackages
       );
 
+    // Calculate the final schedule once for the complete package
+    // snapshot. Downstream modules can then read these dates without
+    // reproducing the Master Plan scheduling engine.
+    const calculatedSchedules =
+      calcularAgendaPacotesCompleta(
+        packages
+      );
+
     // ----------------------------------------------------
     // 1. CLEAR PREVIOUS NORMALIZED NETWORK
     // ----------------------------------------------------
@@ -1368,6 +1376,32 @@ export default function MasterPlanPage() {
         dataInicio ||
         null;
 
+      const calculatedSchedule =
+        calculatedSchedules.get(
+          pkg.id
+        ) ||
+        null;
+
+      const scheduledStartDate =
+        calculatedSchedule
+          ? (
+              datasPlanilha[
+                calculatedSchedule.startIndex
+              ]?.dataIso ||
+              null
+            )
+          : null;
+
+      const scheduledFinishDate =
+        calculatedSchedule
+          ? (
+              datasPlanilha[
+                calculatedSchedule.endIndex
+              ]?.dataIso ||
+              null
+            )
+          : null;
+
       const payload = {
         scenario_id:
           scenarioId,
@@ -1475,6 +1509,16 @@ export default function MasterPlanPage() {
               0
             )
           ),
+
+        scheduled_start_date:
+          scheduledStartDate,
+
+        scheduled_finish_date:
+          scheduledFinishDate,
+
+        sequence_group_id:
+          pkg.sequenceGroupId ||
+          null,
 
         sequence_number:
           Math.max(
