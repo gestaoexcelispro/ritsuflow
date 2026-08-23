@@ -433,6 +433,7 @@ export default function MasterPlanPage() {
   const [sequenceDrag, setSequenceDrag] = useState(null);
   const [sequenceDragOver, setSequenceDragOver] = useState(null);
   const [packageDrag, setPackageDrag] = useState(null);
+  const [schedulePersistenceDiagnostic, setSchedulePersistenceDiagnostic] = useState(null);
 
   const [datasPlanilha, setDatasPlanilha] = useState([]);
   const [dadosCelulas, setDadosCelulas] = useState({});
@@ -1368,57 +1369,6 @@ export default function MasterPlanPage() {
 
     console.groupEnd();
 
-    if (showDiagnostic) {
-      const first =
-        diagnostic.firstPackage;
-
-      const unresolved =
-        diagnostic.firstUnresolved;
-
-      window.alert(
-        [
-          'MASTER PLAN SCHEDULE SNAPSHOT DIAGNOSTIC',
-          '',
-          `Raw packages: ${diagnostic.rawPackageCount}`,
-          `Rebuilt packages: ${diagnostic.rebuiltPackageCount}`,
-          `Schedule map entries: ${diagnostic.scheduleMapSize}`,
-          `Calendar days: ${diagnostic.calendarDayCount}`,
-          `Calendar: ${diagnostic.calendarStart || 'NULL'} → ${diagnostic.calendarFinish || 'NULL'}`,
-          `Resolved package dates: ${diagnostic.resolvedPackageCount}`,
-          `Unresolved packages: ${diagnostic.unresolvedPackageCount}`,
-          '',
-          first
-            ? `First package: ${first.code} | ${first.packageId}`
-            : 'First package: NONE',
-          first
-            ? `First explicit start: ${first.explicitStart || 'NULL'}`
-            : '',
-          first
-            ? `First schedule found: ${first.scheduleFound ? 'YES' : 'NO'}`
-            : '',
-          first
-            ? `First indexes: ${first.startIndex ?? 'NULL'} → ${first.endIndex ?? 'NULL'}`
-            : '',
-          first
-            ? `First dates: ${first.scheduledStartDate || 'NULL'} → ${first.scheduledFinishDate || 'NULL'}`
-            : '',
-          '',
-          unresolved
-            ? `First unresolved: ${unresolved.code} | ${unresolved.packageId}`
-            : 'First unresolved: NONE',
-          unresolved
-            ? `Dependencies: ${unresolved.dependencyCount}`
-            : ''
-        ]
-          .filter(
-            (line) =>
-              line !== ''
-          )
-          .join(
-            '\n'
-          )
-      );
-    }
 
     return {
       packages,
@@ -3668,6 +3618,10 @@ ${
         true
       );
 
+    setSchedulePersistenceDiagnostic(
+      immutableScheduleSnapshot.diagnostic
+    );
+
     const packageSync =
       await sincronizarPacotesNormalizados(
         versaoAtualizada.id,
@@ -5429,6 +5383,64 @@ ${
               <button onClick={() => setShowPdfModal(false)} style={{ backgroundColor: '#cbd5e0', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer' }}>{t.mPkgCancel}</button>
               <button onClick={gerarPDF} style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mPdfConfirm}</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {schedulePersistenceDiagnostic && (
+        <div
+          style={{
+            marginBottom: '14px',
+            padding: '14px 16px',
+            border: '1px solid #f59e0b',
+            backgroundColor: '#fffbeb',
+            borderRadius: '8px',
+            color: '#78350f',
+            fontFamily: 'sans-serif'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: '8px' }}>
+                Master Plan Schedule Snapshot Diagnostic
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '6px 18px', fontSize: '0.78rem' }}>
+                <div>Raw packages: <strong>{schedulePersistenceDiagnostic.rawPackageCount}</strong></div>
+                <div>Rebuilt packages: <strong>{schedulePersistenceDiagnostic.rebuiltPackageCount}</strong></div>
+                <div>Schedule entries: <strong>{schedulePersistenceDiagnostic.scheduleMapSize}</strong></div>
+                <div>Calendar days: <strong>{schedulePersistenceDiagnostic.calendarDayCount}</strong></div>
+                <div>Calendar start: <strong>{schedulePersistenceDiagnostic.calendarStart || 'NULL'}</strong></div>
+                <div>Calendar finish: <strong>{schedulePersistenceDiagnostic.calendarFinish || 'NULL'}</strong></div>
+                <div>Resolved packages: <strong>{schedulePersistenceDiagnostic.resolvedPackageCount}</strong></div>
+                <div>Unresolved packages: <strong>{schedulePersistenceDiagnostic.unresolvedPackageCount}</strong></div>
+              </div>
+
+              {schedulePersistenceDiagnostic.firstPackage && (
+                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #fde68a', fontSize: '0.76rem', lineHeight: 1.5 }}>
+                  <div>First package: <strong>{schedulePersistenceDiagnostic.firstPackage.code}</strong></div>
+                  <div>ID: <code>{schedulePersistenceDiagnostic.firstPackage.packageId}</code></div>
+                  <div>Explicit start: <strong>{schedulePersistenceDiagnostic.firstPackage.explicitStart || 'NULL'}</strong></div>
+                  <div>Schedule found: <strong>{schedulePersistenceDiagnostic.firstPackage.scheduleFound ? 'YES' : 'NO'}</strong></div>
+                  <div>Indexes: <strong>{schedulePersistenceDiagnostic.firstPackage.startIndex ?? 'NULL'} → {schedulePersistenceDiagnostic.firstPackage.endIndex ?? 'NULL'}</strong></div>
+                  <div>Dates: <strong>{schedulePersistenceDiagnostic.firstPackage.scheduledStartDate || 'NULL'} → {schedulePersistenceDiagnostic.firstPackage.scheduledFinishDate || 'NULL'}</strong></div>
+                </div>
+              )}
+
+              {schedulePersistenceDiagnostic.firstUnresolved && (
+                <div style={{ marginTop: '8px', fontSize: '0.76rem' }}>
+                  First unresolved: <strong>{schedulePersistenceDiagnostic.firstUnresolved.code}</strong> · Dependencies: <strong>{schedulePersistenceDiagnostic.firstUnresolved.dependencyCount}</strong>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSchedulePersistenceDiagnostic(null)}
+              style={{ border: 'none', background: 'transparent', color: '#92400e', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 900 }}
+            >
+              ×
+            </button>
           </div>
         </div>
       )}
