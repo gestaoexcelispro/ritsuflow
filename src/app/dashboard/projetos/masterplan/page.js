@@ -275,6 +275,8 @@ export default function MasterPlanPage() {
     startLag: isEn ? 'Start Lag (workdays)' : 'Lag inicial (dias úteis)',
     dragToReorder: isEn ? 'Drag rows to reorder, or use the arrows.' : 'Arraste as linhas para reordenar ou use as setas.',
     dependencySyncError: isEn ? 'The scenario was saved, but the dependency network could not be synchronized.' : 'O cenário foi salvo, mas a rede de dependências não pôde ser sincronizada.',
+    dragPackageHint: isEn ? 'Drag horizontally to reschedule' : 'Arraste horizontalmente para reagendar',
+    dragPackageLockedRow: isEn ? 'Work packages stay locked to their Location row.' : 'Os pacotes permanecem bloqueados na linha de Localização.',
     undoBtn: isEn ? 'Undo' : 'Desfazer', // Novo botão de desfazer
     showWeekends: isEn ? 'Show Weekends' : 'Mostrar Finais de Semana',
     hideWeekends: isEn ? 'Hide Weekends' : 'Ocultar Finais de Semana',
@@ -418,6 +420,7 @@ export default function MasterPlanPage() {
   const [sequenceStartLag, setSequenceStartLag] = useState(0);
   const [sequenceDrag, setSequenceDrag] = useState(null);
   const [sequenceDragOver, setSequenceDragOver] = useState(null);
+  const [packageDrag, setPackageDrag] = useState(null);
 
   const [datasPlanilha, setDatasPlanilha] = useState([]);
   const [dadosCelulas, setDadosCelulas] = useState({});
@@ -643,11 +646,8 @@ export default function MasterPlanPage() {
       : [];
 
     // ----------------------------------------------------
-    // 1. CLEAR THE PREVIOUS NORMALIZED NETWORK
+    // 1. CLEAR PREVIOUS NORMALIZED NETWORK
     // ----------------------------------------------------
-    // Dependencies reference packages, so dependencies must
-    // be deleted first. plan_data remains the complete UI
-    // snapshot and is not affected.
     const {
       error: dependencyDeleteError
     } = await supabase
@@ -672,15 +672,16 @@ export default function MasterPlanPage() {
 
       return {
         ok: false,
-        error:
-          dependencyDeleteError
+        error: dependencyDeleteError
       };
     }
 
     const {
       error: deleteError
     } = await supabase
-      .from('master_plan_packages')
+      .from(
+        'master_plan_packages'
+      )
       .delete()
       .eq(
         'scenario_id',
@@ -712,7 +713,7 @@ export default function MasterPlanPage() {
     }
 
     // ----------------------------------------------------
-    // 2. READABLE SNAPSHOT MAPS
+    // 2. LOOKUP MAPS
     // ----------------------------------------------------
     const rowById = new Map();
 
@@ -725,22 +726,120 @@ export default function MasterPlanPage() {
       });
     });
 
+    const packageByUiId =
+      new Map(
+        packages.map(
+          (pkg) => [
+            pkg.id,
+            pkg
+          ]
+        )
+      );
+
     const dbIdByUiId =
       new Map();
 
+    const inserted =
+      new Set();
+
+    const visiting =
+      new Set();
+
     // ----------------------------------------------------
-    // 3. INSERT PACKAGES FIRST
+    // 3. INSERT PACKAGES IN DEPENDENCY ORDER
+    //
+    // This preserves the existing DB constraint:
+    //
+    // predecessor start rule
+    //     => predecessor_package_id must already exist.
+    //
+    // We still preserve EVERY logical predecessor separately
+    // in master_plan_package_dependencies afterward.
     // ----------------------------------------------------
-    // All packages are created without DB predecessor UUIDs.
-    // This makes multi-predecessor networks possible without
-    // requiring a dependency insertion order.
-    for (
-      let index = 0;
-      index < packages.length;
-      index += 1
-    ) {
-      const pkg =
-        packages[index];
+    const insertPackage = async (
+      pkg,
+      sequenceNumber
+    ) => {
+      if (!pkg?.id) {
+        throw new Error(
+          'Master Plan package is missing its UI identifier.'
+        );
+      }
+
+      if (
+        inserted.has(
+          pkg.id
+        )
+      ) {
+        return dbIdByUiId.get(
+          pkg.id
+        );
+      }
+
+      if (
+        visiting.has(
+          pkg.id
+        )
+      ) {
+        throw new Error(
+          `Circular dependency detected for package ${pkg.id}.`
+        );
+      }
+
+      visiting.add(
+        pkg.id
+      );
+
+      const dependencies =
+        obterDependenciasPacote(
+          pkg
+        );
+
+      // Compatibility controlling predecessor.
+      // The full network is stored later in the dependency table.
+      const controllingDependency =
+        dependencies.find(
+          (dependency) =>
+            dependency.predecessorId ===
+            pkg.predecessoraId
+        ) ||
+        dependencies[0] ||
+        null;
+
+      let controllingPredecessorDbId =
+        null;
+
+      if (
+        controllingDependency
+          ?.predecessorId
+      ) {
+        const predecessor =
+          packageByUiId.get(
+            controllingDependency
+              .predecessorId
+          );
+
+        if (!predecessor) {
+          throw new Error(
+            `Predecessor ${controllingDependency.predecessorId} was not found in this scenario.`
+          );
+        }
+
+        const predecessorIndex =
+          packages.findIndex(
+            (item) =>
+              item.id ===
+              predecessor.id
+          );
+
+        controllingPredecessorDbId =
+          await insertPackage(
+            predecessor,
+            predecessorIndex >= 0
+              ? predecessorIndex
+              : 0
+          );
+      }
 
       const row =
         rowById.get(
@@ -752,18 +851,14 @@ export default function MasterPlanPage() {
           pkg.atividade
         ] || null;
 
-      const dependencies =
-        obterDependenciasPacote(
-          pkg
+      const hasPredecessor =
+        Boolean(
+          controllingPredecessorDbId
         );
 
-      const controllingDependency =
-        dependencies.find(
-          (dependency) =>
-            dependency.predecessorId ===
-            pkg.predecessoraId
-        ) ||
-        dependencies[0] ||
+      const fallbackStartDate =
+        pkg.dataInicio ||
+        dataInicio ||
         null;
 
       const payload = {
@@ -833,19 +928,17 @@ export default function MasterPlanPage() {
           null,
 
         start_rule:
-          dependencies.length > 0
+          hasPredecessor
             ? 'predecessor'
             : 'date',
 
         planned_start_date:
-          dependencies.length > 0
+          hasPredecessor
             ? null
-            : pkg.dataInicio ||
-              null,
+            : fallbackStartDate,
 
-        // Filled after all packages exist.
         predecessor_package_id:
-          null,
+          controllingPredecessorDbId,
 
         duration_working_days:
           Math.max(
@@ -867,11 +960,21 @@ export default function MasterPlanPage() {
             )
           ),
 
+        manual_delay_working_days:
+          Math.max(
+            0,
+            Number(
+              pkg.manualDelayWorkingDays ||
+              0
+            )
+          ),
+
         sequence_number:
           Math.max(
             0,
             Number(
-              index
+              sequenceNumber ||
+              0
             )
           )
       };
@@ -890,27 +993,53 @@ export default function MasterPlanPage() {
         .single();
 
       if (insertError) {
-        console.error(
-          'Master Plan - insert normalized package:',
-          insertError
-        );
-
-        return {
-          ok: false,
-          error: insertError
-        };
+        throw insertError;
       }
 
       dbIdByUiId.set(
         pkg.id,
         insertedPackage.id
       );
+
+      inserted.add(
+        pkg.id
+      );
+
+      visiting.delete(
+        pkg.id
+      );
+
+      return insertedPackage.id;
+    };
+
+    try {
+      for (
+        let index = 0;
+        index < packages.length;
+        index += 1
+      ) {
+        await insertPackage(
+          packages[index],
+          index
+        );
+      }
+    } catch (error) {
+      console.error(
+        'Master Plan - normalized package insertion:',
+        error
+      );
+
+      return {
+        ok: false,
+        error
+      };
     }
 
     // ----------------------------------------------------
-    // 4. INSERT EVERY LOGICAL DEPENDENCY
+    // 4. INSERT FULL MULTI-PREDECESSOR NETWORK
     // ----------------------------------------------------
-    const dependencyRows = [];
+    const dependencyRows =
+      [];
 
     packages.forEach((pkg) => {
       const packageDbId =
@@ -918,17 +1047,21 @@ export default function MasterPlanPage() {
           pkg.id
         );
 
+      if (!packageDbId) {
+        return;
+      }
+
       obterDependenciasPacote(
         pkg
       ).forEach(
         (dependency) => {
           const predecessorDbId =
             dbIdByUiId.get(
-              dependency.predecessorId
+              dependency
+                .predecessorId
             );
 
           if (
-            !packageDbId ||
             !predecessorDbId
           ) {
             return;
@@ -955,7 +1088,8 @@ export default function MasterPlanPage() {
               Math.max(
                 0,
                 Number(
-                  dependency.lagWorkingDays ||
+                  dependency
+                    .lagWorkingDays ||
                   0
                 )
               )
@@ -968,7 +1102,8 @@ export default function MasterPlanPage() {
       dependencyRows.length > 0
     ) {
       const {
-        error: dependencyInsertError
+        error:
+          dependencyInsertError
       } = await supabase
         .from(
           'master_plan_package_dependencies'
@@ -993,92 +1128,10 @@ export default function MasterPlanPage() {
       }
     }
 
-    // ----------------------------------------------------
-    // 5. KEEP SINGLE CONTROLLING PREDECESSOR FOR
-    //    BACKWARD COMPATIBILITY
-    // ----------------------------------------------------
-    for (
-      const pkg of packages
-    ) {
-      const dependencies =
-        obterDependenciasPacote(
-          pkg
-        );
-
-      if (
-        dependencies.length === 0
-      ) {
-        continue;
-      }
-
-      const controllingDependency =
-        dependencies.find(
-          (dependency) =>
-            dependency.predecessorId ===
-            pkg.predecessoraId
-        ) ||
-        dependencies[0];
-
-      const packageDbId =
-        dbIdByUiId.get(
-          pkg.id
-        );
-
-      const predecessorDbId =
-        dbIdByUiId.get(
-          controllingDependency
-            .predecessorId
-        );
-
-      if (
-        !packageDbId ||
-        !predecessorDbId
-      ) {
-        continue;
-      }
-
-      const {
-        error: updateError
-      } = await supabase
-        .from(
-          'master_plan_packages'
-        )
-        .update({
-          predecessor_package_id:
-            predecessorDbId,
-
-          lag_working_days:
-            Math.max(
-              0,
-              Number(
-                controllingDependency
-                  .lagWorkingDays ||
-                0
-              )
-            )
-        })
-        .eq(
-          'id',
-          packageDbId
-        );
-
-      if (updateError) {
-        console.error(
-          'Master Plan - update controlling predecessor:',
-          updateError
-        );
-
-        return {
-          ok: false,
-          error: updateError
-        };
-      }
-    }
-
     return {
       ok: true,
       insertedCount:
-        packages.length,
+        inserted.size,
       dependencyCount:
         dependencyRows.length
     };
@@ -1419,20 +1472,27 @@ export default function MasterPlanPage() {
 
   const datasVisiveis = datasPlanilha.filter(d => ocultarFinaisDeSemana ? !d.isFimDeSemana : true);
 
-  // MOTOR DE RECÁLCULO AUTOMÁTICO
-  useEffect(() => {
-    if (datasPlanilha.length === 0) return;
+  // ----------------------------------------------------
+  // DYNAMIC FLOW SCHEDULING ENGINE
+  // ----------------------------------------------------
+  // Calculates the complete package network from every
+  // Trade / Flow / External dependency.
+  //
+  // manualDelayWorkingDays is an ADDITIONAL offset after
+  // the earliest legal start. Horizontal dragging changes
+  // this offset, never the package's Location or dependency
+  // identity.
+  const calcularAgendaPacotesCompleta = (
+    packagesSnapshot = pacotesLancados
+  ) => {
+    const packages =
+      Array.isArray(packagesSnapshot)
+        ? packagesSnapshot
+        : [];
 
-    // Se é um retorno de histórico (Desfazer), não rola o recálculo para não sobrescrever a tela resgatada
-    if (isUndoRef.current) {
-      isUndoRef.current = false;
-      return;
-    }
-
-    const novaGrade = {};
     const packageById =
       new Map(
-        pacotesLancados.map(
+        packages.map(
           (pacote) => [
             pacote.id,
             pacote
@@ -1443,7 +1503,84 @@ export default function MasterPlanPage() {
     const scheduleCache =
       new Map();
 
-    const calculatePackageSchedule = (
+    const isWorkingDay = (
+      index
+    ) => {
+      const day =
+        datasPlanilha[index];
+
+      return Boolean(
+        day &&
+        !day.isFimDeSemana &&
+        !day.isFeriado
+      );
+    };
+
+    const nextWorkingDayIndex = (
+      index
+    ) => {
+      let current =
+        Math.max(
+          0,
+          Number(
+            index ||
+            0
+          )
+        );
+
+      while (
+        current <
+          datasPlanilha.length &&
+        !isWorkingDay(
+          current
+        )
+      ) {
+        current += 1;
+      }
+
+      return current;
+    };
+
+    const advanceWorkingDaysFromStart = (
+      startIndex,
+      workingDays
+    ) => {
+      let current =
+        nextWorkingDayIndex(
+          startIndex
+        );
+
+      let remaining =
+        Math.max(
+          0,
+          Number(
+            workingDays ||
+            0
+          )
+        );
+
+      while (
+        remaining > 0 &&
+        current + 1 <
+          datasPlanilha.length
+      ) {
+        current += 1;
+
+        if (
+          isWorkingDay(
+            current
+          )
+        ) {
+          remaining -= 1;
+        }
+      }
+
+      return nextWorkingDayIndex(
+        current
+      );
+    };
+
+    const calculate = (
       pacote,
       stack = new Set()
     ) => {
@@ -1485,26 +1622,29 @@ export default function MasterPlanPage() {
         pacote.id
       );
 
-      let startIndex = -1;
-
       const dependencies =
         obterDependenciasPacote(
           pacote
         );
 
+      let earliestLegalStart =
+        -1;
+
       if (
         dependencies.length === 0
       ) {
-        startIndex =
+        earliestLegalStart =
           datasPlanilha.findIndex(
             (day) =>
               day.dataIso ===
               pacote.dataInicio
           );
-      } else {
-        let controllingReadyIndex =
-          -1;
 
+        earliestLegalStart =
+          nextWorkingDayIndex(
+            earliestLegalStart
+          );
+      } else {
         dependencies.forEach(
           (dependency) => {
             const predecessor =
@@ -1518,7 +1658,7 @@ export default function MasterPlanPage() {
             }
 
             const predecessorSchedule =
-              calculatePackageSchedule(
+              calculate(
                 predecessor,
                 nextStack
               );
@@ -1531,29 +1671,74 @@ export default function MasterPlanPage() {
               return;
             }
 
-            const lagEndIndex =
-              avancarDiasUteisGerador(
-                predecessorSchedule.endIndex,
-                dependency
-                  .lagWorkingDays
+            // Lag occurs AFTER predecessor finish.
+            let readyIndex =
+              predecessorSchedule
+                .endIndex;
+
+            let remainingLag =
+              Math.max(
+                0,
+                Number(
+                  dependency
+                    .lagWorkingDays ||
+                  0
+                )
               );
 
-            const readyIndex =
-              lagEndIndex + 1;
-
-            if (
-              readyIndex >
-              controllingReadyIndex
+            while (
+              remainingLag > 0 &&
+              readyIndex + 1 <
+                datasPlanilha.length
             ) {
-              controllingReadyIndex =
-                readyIndex;
+              readyIndex += 1;
+
+              if (
+                isWorkingDay(
+                  readyIndex
+                )
+              ) {
+                remainingLag -= 1;
+              }
             }
+
+            // Successor begins on the next working day.
+            readyIndex =
+              nextWorkingDayIndex(
+                readyIndex + 1
+              );
+
+            earliestLegalStart =
+              Math.max(
+                earliestLegalStart,
+                readyIndex
+              );
           }
         );
-
-        startIndex =
-          controllingReadyIndex;
       }
+
+      if (
+        earliestLegalStart < 0 ||
+        earliestLegalStart >=
+          datasPlanilha.length
+      ) {
+        return null;
+      }
+
+      const startIndex =
+        dependencies.length > 0
+          ? advanceWorkingDaysFromStart(
+              earliestLegalStart,
+              Math.max(
+                0,
+                Number(
+                  pacote
+                    .manualDelayWorkingDays ||
+                  0
+                )
+              )
+            )
+          : earliestLegalStart;
 
       if (
         startIndex < 0 ||
@@ -1564,7 +1749,7 @@ export default function MasterPlanPage() {
       }
 
       let allocatedDays = 0;
-      let lastIndex =
+      let endIndex =
         startIndex;
 
       for (
@@ -1581,15 +1766,13 @@ export default function MasterPlanPage() {
           );
         index += 1
       ) {
-        const day =
-          datasPlanilha[index];
-
         if (
-          !day.isFimDeSemana &&
-          !day.isFeriado
+          isWorkingDay(
+            index
+          )
         ) {
           allocatedDays += 1;
-          lastIndex = index;
+          endIndex = index;
         }
       }
 
@@ -1597,8 +1780,9 @@ export default function MasterPlanPage() {
         startIndex,
         endIndex:
           allocatedDays > 0
-            ? lastIndex
-            : -1
+            ? endIndex
+            : -1,
+        earliestLegalStart
       };
 
       scheduleCache.set(
@@ -1609,18 +1793,407 @@ export default function MasterPlanPage() {
       return result;
     };
 
+    packages.forEach(
+      (pacote) => {
+        calculate(
+          pacote
+        );
+      }
+    );
+
+    return scheduleCache;
+  };
+
+  const contarDiasUteisEntreIndices = (
+    fromIndex,
+    toIndex
+  ) => {
+    if (
+      toIndex <=
+      fromIndex
+    ) {
+      return 0;
+    }
+
+    let count = 0;
+
+    for (
+      let index =
+        fromIndex + 1;
+      index <=
+        toIndex;
+      index += 1
+    ) {
+      const day =
+        datasPlanilha[index];
+
+      if (
+        day &&
+        !day.isFimDeSemana &&
+        !day.isFeriado
+      ) {
+        count += 1;
+      }
+    }
+
+    return count;
+  };
+
+  const normalizarDestinoDrag = (
+    targetIndex
+  ) => {
+    let index =
+      Math.max(
+        0,
+        Number(
+          targetIndex ||
+          0
+        )
+      );
+
+    while (
+      index <
+        datasPlanilha.length &&
+      (
+        datasPlanilha[
+          index
+        ]?.isFimDeSemana ||
+        datasPlanilha[
+          index
+        ]?.isFeriado
+      )
+    ) {
+      index += 1;
+    }
+
+    return Math.min(
+      index,
+      Math.max(
+        0,
+        datasPlanilha.length - 1
+      )
+    );
+  };
+
+  const agendaPacotes =
+    React.useMemo(
+      () =>
+        calcularAgendaPacotesCompleta(
+          pacotesLancados
+        ),
+      [
+        pacotesLancados,
+        datasPlanilha
+      ]
+    );
+
+  const pacotePorCelula =
+    React.useMemo(
+      () => {
+        const map =
+          new Map();
+
+        pacotesLancados.forEach(
+          (pacote) => {
+            const schedule =
+              agendaPacotes.get(
+                pacote.id
+              );
+
+            if (!schedule) return;
+
+            let allocatedDays = 0;
+
+            for (
+              let index =
+                schedule.startIndex;
+              index <
+                datasPlanilha.length &&
+              allocatedDays <
+                Math.max(
+                  1,
+                  Number(
+                    pacote.duracao ||
+                    1
+                  )
+                );
+              index += 1
+            ) {
+              const day =
+                datasPlanilha[index];
+
+              if (
+                day &&
+                !day.isFimDeSemana &&
+                !day.isFeriado
+              ) {
+                map.set(
+                  `${pacote.linhaId}___${day.dataIso}`,
+                  pacote
+                );
+
+                allocatedDays += 1;
+              }
+            }
+          }
+        );
+
+        return map;
+      },
+      [
+        pacotesLancados,
+        agendaPacotes,
+        datasPlanilha
+      ]
+    );
+
+  const iniciarDragPacote = (
+    event,
+    pacote
+  ) => {
+    if (
+      !pacote ||
+      linhaDeBaseCongelada
+    ) {
+      return;
+    }
+
+    const schedule =
+      agendaPacotes.get(
+        pacote.id
+      );
+
+    if (!schedule) return;
+
+    event.dataTransfer.effectAllowed =
+      'move';
+
+    event.dataTransfer.setData(
+      'text/plain',
+      pacote.id
+    );
+
+    setPackageDrag({
+      packageId:
+        pacote.id,
+      rowId:
+        pacote.linhaId,
+      startIndex:
+        schedule.startIndex,
+      targetIndex:
+        schedule.startIndex
+    });
+  };
+
+  const atualizarDestinoDragPacote = (
+    event,
+    rowId,
+    dataIso
+  ) => {
+    if (
+      !packageDrag ||
+      packageDrag.rowId !==
+        rowId
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    event.dataTransfer.dropEffect =
+      'move';
+
+    const index =
+      datasPlanilha.findIndex(
+        (day) =>
+          day.dataIso ===
+          dataIso
+      );
+
+    if (index < 0) return;
+
+    setPackageDrag(
+      (current) =>
+        current
+          ? {
+              ...current,
+              targetIndex:
+                normalizarDestinoDrag(
+                  index
+                )
+            }
+          : current
+    );
+  };
+
+  const finalizarDragPacote = (
+    event,
+    rowId,
+    dataIso
+  ) => {
+    if (!packageDrag) {
+      return;
+    }
+
+    // RULE: manual drag cannot change Location row.
+    if (
+      packageDrag.rowId !==
+      rowId
+    ) {
+      setPackageDrag(null);
+      return;
+    }
+
+    event.preventDefault();
+
+    const rawTargetIndex =
+      datasPlanilha.findIndex(
+        (day) =>
+          day.dataIso ===
+          dataIso
+      );
+
+    if (
+      rawTargetIndex < 0
+    ) {
+      setPackageDrag(null);
+      return;
+    }
+
+    const targetIndex =
+      normalizarDestinoDrag(
+        rawTargetIndex
+      );
+
+    const pacote =
+      pacotesLancados.find(
+        (item) =>
+          item.id ===
+          packageDrag.packageId
+      );
+
+    if (!pacote) {
+      setPackageDrag(null);
+      return;
+    }
+
+    const schedule =
+      agendaPacotes.get(
+        pacote.id
+      );
+
+    if (!schedule) {
+      setPackageDrag(null);
+      return;
+    }
+
+    salvarHistorico();
+
+    const dependencies =
+      obterDependenciasPacote(
+        pacote
+      );
+
+    setPacotesLancados(
+      (current) =>
+        current.map(
+          (item) => {
+            if (
+              item.id !==
+              pacote.id
+            ) {
+              return item;
+            }
+
+            // Anchor package:
+            // horizontal movement changes only its explicit start date.
+            if (
+              dependencies.length ===
+              0
+            ) {
+              const legalTarget =
+                Math.max(
+                  0,
+                  targetIndex
+                );
+
+              return {
+                ...item,
+                tipoInicio:
+                  'data',
+                dataInicio:
+                  datasPlanilha[
+                    legalTarget
+                  ]?.dataIso ||
+                  item.dataInicio,
+                manualDelayWorkingDays:
+                  0
+              };
+            }
+
+            // Dependent package:
+            // package remains connected to ALL predecessors.
+            //
+            // Dragging later adds a manual working-day delay after
+            // the earliest legal start.
+            //
+            // Dragging earlier reduces that delay, but never below
+            // the dependency-constrained earliest legal start.
+            const earliestLegalStart =
+              schedule
+                .earliestLegalStart;
+
+            const legalTarget =
+              Math.max(
+                earliestLegalStart,
+                targetIndex
+              );
+
+            const manualDelay =
+              contarDiasUteisEntreIndices(
+                earliestLegalStart,
+                legalTarget
+              );
+
+            return {
+              ...item,
+              manualDelayWorkingDays:
+                manualDelay
+            };
+          }
+        )
+    );
+
+    setPackageDrag(null);
+  };
+
+  // MOTOR DE RECÁLCULO AUTOMÁTICO
+  useEffect(() => {
+    if (
+      datasPlanilha.length === 0
+    ) {
+      return;
+    }
+
+    if (
+      isUndoRef.current
+    ) {
+      isUndoRef.current =
+        false;
+
+      return;
+    }
+
+    const novaGrade = {};
+
     pacotesLancados.forEach(
       (pacote) => {
         const schedule =
-          calculatePackageSchedule(
-            pacote
+          agendaPacotes.get(
+            pacote.id
           );
 
-        if (
-          !schedule
-        ) {
-          return;
-        }
+        if (!schedule) return;
 
         let allocatedDays = 0;
 
@@ -1643,13 +2216,13 @@ export default function MasterPlanPage() {
             datasPlanilha[index];
 
           if (
+            day &&
             !day.isFimDeSemana &&
             !day.isFeriado
           ) {
-            const cellKey =
-              `${pacote.linhaId}___${day.dataIso}`;
-
-            novaGrade[cellKey] =
+            novaGrade[
+              `${pacote.linhaId}___${day.dataIso}`
+            ] =
               pacote.atividade;
 
             allocatedDays += 1;
@@ -1661,7 +2234,11 @@ export default function MasterPlanPage() {
     setDadosCelulas(
       novaGrade
     );
-  }, [pacotesLancados, datasPlanilha]);
+  }, [
+    pacotesLancados,
+    datasPlanilha,
+    agendaPacotes
+  ]);
 
   const calcularPapelSugerido = () => {
     const colunasDeData = datasVisiveis.length;
@@ -2670,6 +3247,8 @@ ${
 
           dependencies,
 
+          manualDelayWorkingDays: 0,
+
           duracao: Math.max(1, Number(activity.duration || 1)),
           generatedBySequence: true
         };
@@ -2758,6 +3337,7 @@ ${
       lagWorkingDays: 0,
       dependencies:
         manualDependencies,
+      manualDelayWorkingDays: 0,
       duracao: pacoteDuracao
     };
 
@@ -3573,22 +4153,123 @@ ${
 
                             const inputBloqueado = isRealizado ? false : linhaDeBaseCongelada;
 
+                            const pacoteCelula =
+                              !isRealizado
+                                ? pacotePorCelula.get(
+                                    cellKey
+                                  ) || null
+                                : null;
+
+                            const isDragTarget =
+                              Boolean(
+                                packageDrag &&
+                                packageDrag.rowId === linha.id &&
+                                packageDrag.targetIndex ===
+                                  datasPlanilha.findIndex(
+                                    (day) =>
+                                      day.dataIso ===
+                                      d.dataIso
+                                  )
+                              );
+
                             return (
-                              <td key={cellKey} style={{ borderRight: '1px dotted #cbd5e0', padding: '1px', backgroundColor: bgColor, textAlign: 'center', width: '45px', minWidth: '45px', maxWidth: '45px', height: '26px', overflow: 'hidden' }}>
+                              <td
+                                key={cellKey}
+                                onDragOver={(event) =>
+                                  atualizarDestinoDragPacote(
+                                    event,
+                                    linha.id,
+                                    d.dataIso
+                                  )
+                                }
+                                onDrop={(event) =>
+                                  finalizarDragPacote(
+                                    event,
+                                    linha.id,
+                                    d.dataIso
+                                  )
+                                }
+                                style={{
+                                  borderRight: '1px dotted #cbd5e0',
+                                  padding: '1px',
+                                  backgroundColor:
+                                    isDragTarget
+                                      ? '#dff7f2'
+                                      : bgColor,
+                                  outline:
+                                    isDragTarget
+                                      ? '2px solid #0d9488'
+                                      : 'none',
+                                  outlineOffset:
+                                    '-2px',
+                                  textAlign: 'center',
+                                  width: '45px',
+                                  minWidth: '45px',
+                                  maxWidth: '45px',
+                                  height: '26px',
+                                  overflow: 'hidden'
+                                }}
+                              >
                                 <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  <select
-                                    value={valorEfetivo}
-                                    onChange={(e) => isRealizado ? handleCellRealizadoChange(linha.id, d.dataIso, e.target.value) : handleCellChange(linha.id, d.dataIso, e.target.value)}
-                                    disabled={inputBloqueado}
-                                    style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: configCor.color, color: configCor.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: inputBloqueado ? 'default' : 'pointer', borderRadius: '2px', opacity: (modoControle && !isRealizado && valorEfetivo) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
-                                  >
-                                    <option value=""></option>
-                                    {Object.keys(servicosCores).filter(k => k !== '').map(sigla => (
-                                      <option key={sigla} value={sigla}>{sigla}</option>
-                                    ))}
-                                  </select>
-                                  {!inputBloqueado && (
-                                    <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '0.45rem', color: configCor.text === '#fff' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)' }}>▼</div>
+                                  {pacoteCelula ? (
+                                    <div
+                                      draggable={!inputBloqueado}
+                                      onDragStart={(event) =>
+                                        iniciarDragPacote(
+                                          event,
+                                          pacoteCelula
+                                        )
+                                      }
+                                      onDragEnd={() =>
+                                        setPackageDrag(
+                                          null
+                                        )
+                                      }
+                                      title={`${t.dragPackageHint} · ${t.dragPackageLockedRow}`}
+                                      style={{
+                                        width: '43px',
+                                        height: '100%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        backgroundColor:
+                                          configCor.color,
+                                        color:
+                                          configCor.text,
+                                        borderRadius: '2px',
+                                        fontSize: '0.7rem',
+                                        fontWeight: 'bold',
+                                        cursor:
+                                          inputBloqueado
+                                            ? 'default'
+                                            : 'ew-resize',
+                                        userSelect: 'none',
+                                        opacity:
+                                          modoControle
+                                            ? 0.6
+                                            : 1
+                                      }}
+                                    >
+                                      {valorEfetivo}
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <select
+                                        value={valorEfetivo}
+                                        onChange={(e) => isRealizado ? handleCellRealizadoChange(linha.id, d.dataIso, e.target.value) : handleCellChange(linha.id, d.dataIso, e.target.value)}
+                                        disabled={inputBloqueado}
+                                        style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: configCor.color, color: configCor.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: inputBloqueado ? 'default' : 'pointer', borderRadius: '2px', opacity: (modoControle && !isRealizado && valorEfetivo) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
+                                      >
+                                        <option value=""></option>
+                                        {Object.keys(servicosCores).filter(k => k !== '').map(sigla => (
+                                          <option key={sigla} value={sigla}>{sigla}</option>
+                                        ))}
+                                      </select>
+
+                                      {!inputBloqueado && (
+                                        <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '0.45rem', color: configCor.text === '#fff' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)' }}>▼</div>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               </td>
