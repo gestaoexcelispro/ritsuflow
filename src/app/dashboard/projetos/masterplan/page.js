@@ -2246,18 +2246,32 @@ export default function MasterPlanPage() {
   };
 
   const normalizarDestinoDrag = (
-    targetIndex
+    targetIndex,
+    direction = 1
   ) => {
     let index =
       Math.max(
         0,
-        Number(
-          targetIndex ||
-          0
+        Math.min(
+          Number(
+            targetIndex ||
+            0
+          ),
+          Math.max(
+            0,
+            datasPlanilha.length -
+              1
+          )
         )
       );
 
+    const step =
+      direction < 0
+        ? -1
+        : 1;
+
     while (
+      index >= 0 &&
       index <
         datasPlanilha.length &&
       (
@@ -2269,15 +2283,56 @@ export default function MasterPlanPage() {
         ]?.isFeriado
       )
     ) {
-      index += 1;
+      index += step;
     }
 
-    return Math.min(
-      index,
-      Math.max(
-        0,
-        datasPlanilha.length - 1
-      )
+    if (
+      index < 0
+    ) {
+      index = 0;
+
+      while (
+        index <
+          datasPlanilha.length &&
+        (
+          datasPlanilha[
+            index
+          ]?.isFimDeSemana ||
+          datasPlanilha[
+            index
+          ]?.isFeriado
+        )
+      ) {
+        index += 1;
+      }
+    }
+
+    if (
+      index >=
+      datasPlanilha.length
+    ) {
+      index =
+        datasPlanilha.length -
+        1;
+
+      while (
+        index >= 0 &&
+        (
+          datasPlanilha[
+            index
+          ]?.isFimDeSemana ||
+          datasPlanilha[
+            index
+          ]?.isFeriado
+        )
+      ) {
+        index -= 1;
+      }
+    }
+
+    return Math.max(
+      0,
+      index
     );
   };
 
@@ -2355,7 +2410,8 @@ export default function MasterPlanPage() {
 
   const iniciarDragPacote = (
     event,
-    pacote
+    pacote,
+    sourceDataIso
   ) => {
     if (
       !pacote ||
@@ -2370,6 +2426,31 @@ export default function MasterPlanPage() {
       );
 
     if (!schedule) return;
+
+    const sourceIndex =
+      datasPlanilha.findIndex(
+        (day) =>
+          day.dataIso ===
+          sourceDataIso
+      );
+
+    if (
+      sourceIndex < 0
+    ) {
+      return;
+    }
+
+    // Preserve the exact point where the user grabbed the
+    // multi-day package. If the user grabs day 2 of a 3-day
+    // package and drops it five cells earlier, the WHOLE package
+    // moves five cells earlier — the dropped cell does not become
+    // the package start.
+    const grabOffset =
+      Math.max(
+        0,
+        sourceIndex -
+          schedule.startIndex
+      );
 
     event.dataTransfer.effectAllowed =
       'move';
@@ -2386,8 +2467,10 @@ export default function MasterPlanPage() {
         pacote.linhaId,
       startIndex:
         schedule.startIndex,
+      sourceIndex,
+      grabOffset,
       targetIndex:
-        schedule.startIndex
+        sourceIndex
     });
   };
 
@@ -2424,9 +2507,7 @@ export default function MasterPlanPage() {
           ? {
               ...current,
               targetIndex:
-                normalizarDestinoDrag(
-                  index
-                )
+                index
             }
           : current
     );
@@ -2466,9 +2547,26 @@ export default function MasterPlanPage() {
       return;
     }
 
+    const rawProposedStart =
+      rawTargetIndex -
+      Math.max(
+        0,
+        Number(
+          packageDrag.grabOffset ||
+          0
+        )
+      );
+
+    const dragDirection =
+      rawProposedStart <
+      packageDrag.startIndex
+        ? -1
+        : 1;
+
     const targetIndex =
       normalizarDestinoDrag(
-        rawTargetIndex
+        rawProposedStart,
+        dragDirection
       );
 
     const pacote =
@@ -4576,16 +4674,48 @@ ${
                                   ) || null
                                 : null;
 
+                            const currentCellIndex =
+                              datasPlanilha.findIndex(
+                                (day) =>
+                                  day.dataIso ===
+                                  d.dataIso
+                              );
+
+                            const proposedDragStart =
+                              packageDrag
+                                ? normalizarDestinoDrag(
+                                    (
+                                      packageDrag.targetIndex -
+                                      Math.max(
+                                        0,
+                                        Number(
+                                          packageDrag.grabOffset ||
+                                          0
+                                        )
+                                      )
+                                    ),
+                                    (
+                                      packageDrag.targetIndex -
+                                      Math.max(
+                                        0,
+                                        Number(
+                                          packageDrag.grabOffset ||
+                                          0
+                                        )
+                                      )
+                                    ) <
+                                    packageDrag.startIndex
+                                      ? -1
+                                      : 1
+                                  )
+                                : -1;
+
                             const isDragTarget =
                               Boolean(
                                 packageDrag &&
                                 packageDrag.rowId === linha.id &&
-                                packageDrag.targetIndex ===
-                                  datasPlanilha.findIndex(
-                                    (day) =>
-                                      day.dataIso ===
-                                      d.dataIso
-                                  )
+                                proposedDragStart ===
+                                  currentCellIndex
                               );
 
                             return (
@@ -4633,7 +4763,8 @@ ${
                                       onDragStart={(event) =>
                                         iniciarDragPacote(
                                           event,
-                                          pacoteCelula
+                                          pacoteCelula,
+                                          d.dataIso
                                         )
                                       }
                                       onDragEnd={() =>
