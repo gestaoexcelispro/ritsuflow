@@ -271,6 +271,9 @@ export default function MasterPlanPage() {
     selectAtLeastOneActivity: isEn ? 'Add at least one activity.' : 'Adicione pelo menos uma atividade.',
     specificStartDate: isEn ? 'Specific start date' : 'Data de início específica',
     existingPredecessor: isEn ? 'Existing predecessor' : 'Predecessor existente',
+    lagWorkingDays: isEn ? 'Lag (workdays)' : 'Lag (dias úteis)',
+    startLag: isEn ? 'Start Lag (workdays)' : 'Lag inicial (dias úteis)',
+    dragToReorder: isEn ? 'Drag rows to reorder, or use the arrows.' : 'Arraste as linhas para reordenar ou use as setas.',
     undoBtn: isEn ? 'Undo' : 'Desfazer', // Novo botão de desfazer
     showWeekends: isEn ? 'Show Weekends' : 'Mostrar Finais de Semana',
     hideWeekends: isEn ? 'Hide Weekends' : 'Ocultar Finais de Semana',
@@ -411,6 +414,9 @@ export default function MasterPlanPage() {
   const [sequenceStartType, setSequenceStartType] = useState('data');
   const [sequenceStartDate, setSequenceStartDate] = useState('');
   const [sequencePredecessor, setSequencePredecessor] = useState('');
+  const [sequenceStartLag, setSequenceStartLag] = useState(0);
+  const [sequenceDrag, setSequenceDrag] = useState(null);
+  const [sequenceDragOver, setSequenceDragOver] = useState(null);
 
   const [datasPlanilha, setDatasPlanilha] = useState([]);
   const [dadosCelulas, setDadosCelulas] = useState({});
@@ -798,6 +804,15 @@ export default function MasterPlanPage() {
             Number(
               pkg.duracao ||
               1
+            )
+          ),
+
+        lag_working_days:
+          Math.max(
+            0,
+            Number(
+              pkg.lagWorkingDays ||
+              0
             )
           ),
 
@@ -1228,7 +1243,19 @@ export default function MasterPlanPage() {
       } else if (pacote.tipoInicio === 'predecessora') {
         const indexFimPredecessora = trackerFimPacote[pacote.predecessoraId];
         if (indexFimPredecessora !== undefined) {
-          startIndex = indexFimPredecessora + 1; 
+          const lagEndIndex =
+            avancarDiasUteisGerador(
+              indexFimPredecessora,
+              Math.max(
+                0,
+                Number(
+                  pacote.lagWorkingDays ||
+                  0
+                )
+              )
+            );
+
+          startIndex = lagEndIndex + 1;
         }
       }
 
@@ -1850,6 +1877,9 @@ ${
     setSequenceStartType('data');
     setSequenceStartDate('');
     setSequencePredecessor('');
+    setSequenceStartLag(0);
+    setSequenceDrag(null);
+    setSequenceDragOver(null);
     setShowSequenceModal(true);
   };
 
@@ -1863,6 +1893,45 @@ ${
     });
   };
 
+  const finalizarDragSequencia = (
+    type,
+    targetIndex
+  ) => {
+    if (
+      !sequenceDrag ||
+      sequenceDrag.type !== type ||
+      sequenceDrag.index === targetIndex
+    ) {
+      setSequenceDrag(null);
+      setSequenceDragOver(null);
+      return;
+    }
+
+    const setter =
+      type === 'location'
+        ? setSequenceLocations
+        : setSequenceActivities;
+
+    setter((current) => {
+      const next = [...current];
+      const [moved] = next.splice(
+        sequenceDrag.index,
+        1
+      );
+
+      next.splice(
+        targetIndex,
+        0,
+        moved
+      );
+
+      return next;
+    });
+
+    setSequenceDrag(null);
+    setSequenceDragOver(null);
+  };
+
   const adicionarAtividadeSequencia = () => {
     if (!sequenceNewActivity) return;
     setSequenceActivities((current) => [
@@ -1870,10 +1939,44 @@ ${
       {
         id: `seqact_${Date.now()}_${current.length}`,
         code: sequenceNewActivity,
-        duration: 1
+        duration: 1,
+        lag: 0
       }
     ]);
     setSequenceNewActivity('');
+  };
+
+  const avancarDiasUteisGerador = (
+    startIndex,
+    workingDays
+  ) => {
+    let index = startIndex;
+    let remaining = Math.max(
+      0,
+      Number(
+        workingDays ||
+        0
+      )
+    );
+
+    while (
+      remaining > 0 &&
+      index + 1 < datasPlanilha.length
+    ) {
+      index += 1;
+
+      const day =
+        datasPlanilha[index];
+
+      if (
+        !day.isFimDeSemana &&
+        !day.isFeriado
+      ) {
+        remaining -= 1;
+      }
+    }
+
+    return index;
   };
 
   const calcularFimPacoteGerador = (
@@ -1923,8 +2026,20 @@ ${
           );
 
         if (predecessorEnd >= 0) {
+          const lagEndIndex =
+            avancarDiasUteisGerador(
+              predecessorEnd,
+              Math.max(
+                0,
+                Number(
+                  pacote.lagWorkingDays ||
+                  0
+                )
+              )
+            );
+
           startIndex =
-            predecessorEnd + 1;
+            lagEndIndex + 1;
         }
       }
     }
@@ -2014,10 +2129,18 @@ ${
         let tipo = 'predecessora';
         let predecessorId = '';
         let startDate = '';
+        let relationshipLag = 0;
 
         if (locationIndex === 0 && activityIndex === 0) {
           if (sequenceStartType === 'predecessora') {
             predecessorId = sequencePredecessor;
+            relationshipLag = Math.max(
+              0,
+              Number(
+                sequenceStartLag ||
+                0
+              )
+            );
           } else {
             tipo = 'data';
             startDate = sequenceStartDate;
@@ -2035,8 +2158,23 @@ ${
 
           const candidates = [previousTrade, previousLocation].filter(Boolean);
 
+          const activityLag =
+            Math.max(
+              0,
+              Number(
+                activity.lag ||
+                0
+              )
+            );
+
           if (candidates.length === 1) {
-            predecessorId = candidates[0].id;
+            predecessorId =
+              candidates[0].id;
+
+            relationshipLag =
+              candidates[0] === previousTrade
+                ? activityLag
+                : 0;
           } else if (candidates.length === 2) {
             const pool = [
               ...pacotesLancados,
@@ -2046,24 +2184,44 @@ ${
             const finishCache =
               new Map();
 
-            const finishA =
+            const finishTrade =
               calcularFimPacoteGerador(
-                candidates[0],
+                previousTrade,
                 pool,
                 finishCache
               );
 
-            const finishB =
+            const finishLocation =
               calcularFimPacoteGerador(
-                candidates[1],
+                previousLocation,
                 pool,
                 finishCache
               );
 
-            predecessorId =
-              finishA >= finishB
-                ? candidates[0].id
-                : candidates[1].id;
+            const tradeReady =
+              avancarDiasUteisGerador(
+                finishTrade,
+                activityLag
+              );
+
+            const locationReady =
+              finishLocation;
+
+            if (
+              tradeReady >=
+              locationReady
+            ) {
+              predecessorId =
+                previousTrade.id;
+
+              relationshipLag =
+                activityLag;
+            } else {
+              predecessorId =
+                previousLocation.id;
+
+              relationshipLag = 0;
+            }
           } else {
             tipo = 'data';
             startDate = sequenceStartDate;
@@ -2080,6 +2238,10 @@ ${
           tipoInicio: tipo,
           dataInicio: startDate,
           predecessoraId: predecessorId,
+          lagWorkingDays:
+            tipo === 'predecessora'
+              ? relationshipLag
+              : 0,
           duracao: Math.max(1, Number(activity.duration || 1)),
           generatedBySequence: true
         };
@@ -2507,11 +2669,50 @@ ${
 
             <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                <h3 style={{ margin: '0 0 12px', color: '#0b2239' }}>{t.sequenceLocations}</h3>
+                <h3 style={{ margin: '0 0 5px', color: '#0b2239' }}>{t.sequenceLocations}</h3>
+                <div style={{ marginBottom: '12px', fontSize: '0.72rem', color: '#64748b' }}>{t.dragToReorder}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', maxHeight: '330px', overflowY: 'auto' }}>
                   {sequenceLocations.map((location, index) => (
-                    <div key={location.rowId} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 30px 30px', gap: '7px', alignItems: 'center', padding: '8px', backgroundColor: location.selected ? '#f0fdfa' : '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '7px' }}>
+                    <div
+                      key={location.rowId}
+                      draggable
+                      onDragStart={() => setSequenceDrag({ type: 'location', index })}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setSequenceDragOver({ type: 'location', index });
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        finalizarDragSequencia('location', index);
+                      }}
+                      onDragEnd={() => {
+                        setSequenceDrag(null);
+                        setSequenceDragOver(null);
+                      }}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '28px 26px 1fr 30px 30px',
+                        gap: '7px',
+                        alignItems: 'center',
+                        padding: '8px',
+                        backgroundColor:
+                          sequenceDragOver?.type === 'location' &&
+                          sequenceDragOver?.index === index
+                            ? '#ccfbf1'
+                            : location.selected
+                              ? '#f0fdfa'
+                              : '#f8fafc',
+                        border:
+                          sequenceDragOver?.type === 'location' &&
+                          sequenceDragOver?.index === index
+                            ? '2px solid #14b8a6'
+                            : '1px solid #e2e8f0',
+                        borderRadius: '7px',
+                        cursor: 'grab'
+                      }}
+                    >
                       <input type="checkbox" checked={location.selected} onChange={(e) => setSequenceLocations((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: e.target.checked } : item))} />
+                      <span title={t.dragToReorder} style={{ color: '#94a3b8', fontWeight: 900, letterSpacing: '-2px', cursor: 'grab', userSelect: 'none' }}>⋮⋮</span>
                       <div title={location.label} style={{ minWidth: 0, fontSize: '0.78rem', fontWeight: 700, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{index + 1}. {location.label}</div>
                       <button type="button" disabled={index === 0} onClick={() => moverSequencia(setSequenceLocations, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↑</button>
                       <button type="button" disabled={index === sequenceLocations.length - 1} onClick={() => moverSequencia(setSequenceLocations, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↓</button>
@@ -2521,7 +2722,8 @@ ${
               </section>
 
               <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                <h3 style={{ margin: '0 0 12px', color: '#0b2239' }}>{t.sequenceActivities}</h3>
+                <h3 style={{ margin: '0 0 5px', color: '#0b2239' }}>{t.sequenceActivities}</h3>
+                <div style={{ marginBottom: '12px', fontSize: '0.72rem', color: '#64748b' }}>{t.dragToReorder}</div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', marginBottom: '12px' }}>
                   <select value={sequenceNewActivity} onChange={(e) => setSequenceNewActivity(e.target.value)} style={{ padding: '9px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
@@ -2533,14 +2735,64 @@ ${
                   <button type="button" onClick={adicionarAtividadeSequencia} style={{ padding: '9px 12px', border: 'none', borderRadius: '6px', backgroundColor: '#0b2239', color: 'white', fontWeight: 800, cursor: 'pointer' }}>{t.addActivity}</button>
                 </div>
 
+                {sequenceActivities.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '24px 28px 1fr 78px 78px 30px 30px 30px', gap: '7px', padding: '0 8px 5px', fontSize: '0.64rem', fontWeight: 800, color: '#64748b' }}>
+                    <span></span>
+                    <span>#</span>
+                    <span>ACTIVITY</span>
+                    <span>{t.durationDays}</span>
+                    <span>{t.lagWorkingDays}</span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', maxHeight: '275px', overflowY: 'auto' }}>
                   {sequenceActivities.map((activity, index) => {
                     const service = servicosCores[activity.code];
                     return (
-                      <div key={activity.id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 92px 30px 30px 30px', gap: '7px', alignItems: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '7px' }}>
+                      <div
+                        key={activity.id}
+                        draggable
+                        onDragStart={() => setSequenceDrag({ type: 'activity', index })}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setSequenceDragOver({ type: 'activity', index });
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          finalizarDragSequencia('activity', index);
+                        }}
+                        onDragEnd={() => {
+                          setSequenceDrag(null);
+                          setSequenceDragOver(null);
+                        }}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '24px 28px 1fr 78px 78px 30px 30px 30px',
+                          gap: '7px',
+                          alignItems: 'center',
+                          padding: '8px',
+                          border:
+                            sequenceDragOver?.type === 'activity' &&
+                            sequenceDragOver?.index === index
+                              ? '2px solid #14b8a6'
+                              : '1px solid #e2e8f0',
+                          backgroundColor:
+                            sequenceDragOver?.type === 'activity' &&
+                            sequenceDragOver?.index === index
+                              ? '#f0fdfa'
+                              : 'white',
+                          borderRadius: '7px',
+                          cursor: 'grab'
+                        }}
+                      >
+                        <span title={t.dragToReorder} style={{ color: '#94a3b8', fontWeight: 900, letterSpacing: '-2px', cursor: 'grab', userSelect: 'none' }}>⋮⋮</span>
                         <strong style={{ color: '#008f8c' }}>{index + 1}</strong>
                         <div style={{ minWidth: 0, fontSize: '0.76rem', fontWeight: 700 }}>{activity.code} · {isEn ? service?.labelEn : service?.labelPt}</div>
                         <input type="number" min="1" title={t.durationDays} value={activity.duration} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, duration: Math.max(1, Number(e.target.value || 1)) } : item))} style={{ width: '100%', padding: '7px', border: '1px solid #cbd5e1', borderRadius: '5px' }} />
+                        <input type="number" min="0" title={t.lagWorkingDays} value={activity.lag ?? 0} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, lag: Math.max(0, Number(e.target.value || 0)) } : item))} style={{ width: '100%', padding: '7px', border: '1px solid #cbd5e1', borderRadius: '5px' }} />
                         <button type="button" disabled={index === 0} onClick={() => moverSequencia(setSequenceActivities, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↑</button>
                         <button type="button" disabled={index === sequenceActivities.length - 1} onClick={() => moverSequencia(setSequenceActivities, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↓</button>
                         <button type="button" onClick={() => setSequenceActivities((current) => current.filter((_, itemIndex) => itemIndex !== index))} style={{ height: '28px', border: 'none', borderRadius: '5px', background: '#fff1f2', color: '#e11d48', fontWeight: 900, cursor: 'pointer' }}>×</button>
@@ -2569,6 +2821,18 @@ ${
                       <option key={pkg.id} value={pkg.id}>{pkg.label}</option>
                     ))}
                   </select>
+
+                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, opacity: sequenceStartType === 'predecessora' ? 1 : 0.5 }}>
+                    {t.startLag}
+                    <input
+                      type="number"
+                      min="0"
+                      disabled={sequenceStartType !== 'predecessora'}
+                      value={sequenceStartLag}
+                      onChange={(e) => setSequenceStartLag(Math.max(0, Number(e.target.value || 0)))}
+                      style={{ width: '72px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                    />
+                  </label>
                 </div>
 
                 <div style={{ marginTop: '15px', padding: '12px 14px', backgroundColor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px' }}>
