@@ -256,6 +256,21 @@ export default function MasterPlanPage() {
     planning: isEn ? '📋 Planning' : '📋 Planejamento',
     control: isEn ? '⚙️ Control (Actual)' : '⚙️ Controle (Realizado)',
     insertPackage: isEn ? '⚡ Insert Package' : '⚡ Inserir Pacote',
+    generateSequence: isEn ? '⚙ Generate Work Sequence' : '⚙ Gerar Sequência de Trabalho',
+    sequenceGenerator: isEn ? 'Work Sequence Generator' : 'Gerador de Sequência de Trabalho',
+    sequenceLocations: isEn ? '1. Location Flow' : '1. Fluxo de Locais',
+    sequenceActivities: isEn ? '2. Activity Sequence' : '2. Sequência de Atividades',
+    sequenceStart: isEn ? '3. Start Rule' : '3. Regra de Início',
+    addActivity: isEn ? 'Add Activity' : 'Adicionar Atividade',
+    durationDays: isEn ? 'Duration (days)' : 'Duração (dias)',
+    continuousFlow: isEn ? 'Continuous Flow' : 'Fluxo Contínuo',
+    continuousFlowHelp: isEn ? 'Each package respects the previous activity in the same location and the same activity in the previous location. The later finish controls the start.' : 'Cada pacote respeita a atividade anterior no mesmo local e a mesma atividade no local anterior. O término mais tardio controla o início.',
+    packagesWillBeCreated: isEn ? 'work packages will be created' : 'pacotes de trabalho serão criados',
+    generatePackages: isEn ? 'Generate Packages' : 'Gerar Pacotes',
+    selectAtLeastOneLocation: isEn ? 'Select at least one location.' : 'Selecione pelo menos um local.',
+    selectAtLeastOneActivity: isEn ? 'Add at least one activity.' : 'Adicione pelo menos uma atividade.',
+    specificStartDate: isEn ? 'Specific start date' : 'Data de início específica',
+    existingPredecessor: isEn ? 'Existing predecessor' : 'Predecessor existente',
     undoBtn: isEn ? 'Undo' : 'Desfazer', // Novo botão de desfazer
     showWeekends: isEn ? 'Show Weekends' : 'Mostrar Finais de Semana',
     hideWeekends: isEn ? 'Hide Weekends' : 'Ocultar Finais de Semana',
@@ -387,6 +402,15 @@ export default function MasterPlanPage() {
   const [pacoteLinhaId, setPacoteLinhaId] = useState('');
   const [pacoteDataInicio, setPacoteDataInicio] = useState('');
   const [pacoteDuracao, setPacoteDuracao] = useState(1);
+
+  // WORK SEQUENCE GENERATOR
+  const [showSequenceModal, setShowSequenceModal] = useState(false);
+  const [sequenceLocations, setSequenceLocations] = useState([]);
+  const [sequenceActivities, setSequenceActivities] = useState([]);
+  const [sequenceNewActivity, setSequenceNewActivity] = useState('');
+  const [sequenceStartType, setSequenceStartType] = useState('data');
+  const [sequenceStartDate, setSequenceStartDate] = useState('');
+  const [sequencePredecessor, setSequencePredecessor] = useState('');
 
   const [datasPlanilha, setDatasPlanilha] = useState([]);
   const [dadosCelulas, setDadosCelulas] = useState({});
@@ -1806,6 +1830,146 @@ ${
     };
   });
 
+  const abrirGeradorSequencia = () => {
+    const rows = [];
+    secoes.forEach((section) => {
+      (section.linhas || []).forEach((row) => {
+        if (!row?.id) return;
+        rows.push({
+          rowId: row.id,
+          locationId: row.locationId || null,
+          label: row.locationPath || row.descricao || row.id,
+          selected: true
+        });
+      });
+    });
+
+    setSequenceLocations(rows);
+    setSequenceActivities([]);
+    setSequenceNewActivity('');
+    setSequenceStartType('data');
+    setSequenceStartDate('');
+    setSequencePredecessor('');
+    setShowSequenceModal(true);
+  };
+
+  const moverSequencia = (setter, index, direction) => {
+    setter((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
+  const adicionarAtividadeSequencia = () => {
+    if (!sequenceNewActivity) return;
+    setSequenceActivities((current) => [
+      ...current,
+      {
+        id: `seqact_${Date.now()}_${current.length}`,
+        code: sequenceNewActivity,
+        duration: 1
+      }
+    ]);
+    setSequenceNewActivity('');
+  };
+
+  const gerarSequenciaTrabalho = () => {
+    const selectedLocations = sequenceLocations.filter((item) => item.selected);
+
+    if (selectedLocations.length === 0) {
+      alert(t.selectAtLeastOneLocation);
+      return;
+    }
+
+    if (sequenceActivities.length === 0) {
+      alert(t.selectAtLeastOneActivity);
+      return;
+    }
+
+    if (sequenceStartType === 'data' && !sequenceStartDate) {
+      alert(t.errSelectDate);
+      return;
+    }
+
+    if (sequenceStartType === 'predecessora' && !sequencePredecessor) {
+      alert(t.errSelectPred);
+      return;
+    }
+
+    salvarHistorico();
+
+    const generated = [];
+    const generatedByCell = new Map();
+    const stamp = Date.now();
+
+    selectedLocations.forEach((location, locationIndex) => {
+      sequenceActivities.forEach((activity, activityIndex) => {
+        const service = servicosCores[activity.code] || null;
+        const id = `pct_seq_${stamp}_${locationIndex}_${activityIndex}`;
+
+        let tipo = 'predecessora';
+        let predecessorId = '';
+        let startDate = '';
+
+        if (locationIndex === 0 && activityIndex === 0) {
+          if (sequenceStartType === 'predecessora') {
+            predecessorId = sequencePredecessor;
+          } else {
+            tipo = 'data';
+            startDate = sequenceStartDate;
+          }
+        } else {
+          const previousTrade =
+            activityIndex > 0
+              ? generatedByCell.get(`${locationIndex}:${activityIndex - 1}`)
+              : null;
+
+          const previousLocation =
+            locationIndex > 0
+              ? generatedByCell.get(`${locationIndex - 1}:${activityIndex}`)
+              : null;
+
+          const candidates = [previousTrade, previousLocation].filter(Boolean);
+
+          if (candidates.length === 1) {
+            predecessorId = candidates[0].id;
+          } else if (candidates.length === 2) {
+            const pool = [...pacotesLancados, ...generated];
+            const finishA = calcularDatasPacote(candidates[0], pool).fim;
+            const finishB = calcularDatasPacote(candidates[1], pool).fim;
+            predecessorId = finishA >= finishB ? candidates[0].id : candidates[1].id;
+          } else {
+            tipo = 'data';
+            startDate = sequenceStartDate;
+          }
+        }
+
+        const pkg = {
+          id,
+          atividade: activity.code,
+          linhaId: location.rowId,
+          locationId: location.locationId || null,
+          locationPath: location.label || '',
+          projectServiceId: service?.projectServiceId || null,
+          tipoInicio: tipo,
+          dataInicio: startDate,
+          predecessoraId: predecessorId,
+          duracao: Math.max(1, Number(activity.duration || 1)),
+          generatedBySequence: true
+        };
+
+        generated.push(pkg);
+        generatedByCell.set(`${locationIndex}:${activityIndex}`, pkg);
+      });
+    });
+
+    setPacotesLancados((current) => [...current, ...generated]);
+    setShowSequenceModal(false);
+  };
+
   const handleInserirPacoteAutomacao = (e) => {
     e.preventDefault();
     if (!pacoteAtividade || !pacoteLinhaId || pacoteDuracao < 1) {
@@ -2128,6 +2292,10 @@ ${
 
         {projetoSelecionado && (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={abrirGeradorSequencia} disabled={linhaDeBaseCongelada} style={{ backgroundColor: '#008f8c', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: linhaDeBaseCongelada ? 0.6 : 1 }}>
+              {t.generateSequence}
+            </button>
+
             <button onClick={() => setShowPacoteModal(true)} disabled={linhaDeBaseCongelada} style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: linhaDeBaseCongelada ? 0.6 : 1 }}>
               {t.insertPackage}
             </button>
@@ -2198,6 +2366,104 @@ ${
                 <button type="submit" style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.saveScenario}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: WORK SEQUENCE GENERATOR */}
+      {showSequenceModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3500, padding: '20px' }}>
+          <div style={{ backgroundColor: 'white', width: 'min(1050px, 96vw)', maxHeight: '92vh', overflowY: 'auto', borderRadius: '12px', boxShadow: '0 24px 70px rgba(0,0,0,0.28)', fontFamily: 'sans-serif' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 2 }}>
+              <div>
+                <div style={{ fontSize: '0.7rem', fontWeight: 900, letterSpacing: '0.08em', color: '#008f8c', marginBottom: '4px' }}>MASTER PLAN</div>
+                <h2 style={{ margin: 0, color: '#0b2239' }}>{t.sequenceGenerator}</h2>
+              </div>
+              <button type="button" onClick={() => setShowSequenceModal(false)} style={{ border: 'none', background: 'transparent', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+            </div>
+
+            <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                <h3 style={{ margin: '0 0 12px', color: '#0b2239' }}>{t.sequenceLocations}</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', maxHeight: '330px', overflowY: 'auto' }}>
+                  {sequenceLocations.map((location, index) => (
+                    <div key={location.rowId} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 30px 30px', gap: '7px', alignItems: 'center', padding: '8px', backgroundColor: location.selected ? '#f0fdfa' : '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '7px' }}>
+                      <input type="checkbox" checked={location.selected} onChange={(e) => setSequenceLocations((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: e.target.checked } : item))} />
+                      <div title={location.label} style={{ minWidth: 0, fontSize: '0.78rem', fontWeight: 700, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{index + 1}. {location.label}</div>
+                      <button type="button" disabled={index === 0} onClick={() => moverSequencia(setSequenceLocations, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↑</button>
+                      <button type="button" disabled={index === sequenceLocations.length - 1} onClick={() => moverSequencia(setSequenceLocations, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↓</button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                <h3 style={{ margin: '0 0 12px', color: '#0b2239' }}>{t.sequenceActivities}</h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', marginBottom: '12px' }}>
+                  <select value={sequenceNewActivity} onChange={(e) => setSequenceNewActivity(e.target.value)} style={{ padding: '9px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+                    <option value="">{t.mPkgSelectAct}</option>
+                    {Object.entries(servicosCores).map(([code, service]) => (
+                      <option key={code} value={code}>{code} - {isEn ? service.labelEn : service.labelPt}</option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={adicionarAtividadeSequencia} style={{ padding: '9px 12px', border: 'none', borderRadius: '6px', backgroundColor: '#0b2239', color: 'white', fontWeight: 800, cursor: 'pointer' }}>{t.addActivity}</button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', maxHeight: '275px', overflowY: 'auto' }}>
+                  {sequenceActivities.map((activity, index) => {
+                    const service = servicosCores[activity.code];
+                    return (
+                      <div key={activity.id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 92px 30px 30px 30px', gap: '7px', alignItems: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '7px' }}>
+                        <strong style={{ color: '#008f8c' }}>{index + 1}</strong>
+                        <div style={{ minWidth: 0, fontSize: '0.76rem', fontWeight: 700 }}>{activity.code} · {isEn ? service?.labelEn : service?.labelPt}</div>
+                        <input type="number" min="1" title={t.durationDays} value={activity.duration} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, duration: Math.max(1, Number(e.target.value || 1)) } : item))} style={{ width: '100%', padding: '7px', border: '1px solid #cbd5e1', borderRadius: '5px' }} />
+                        <button type="button" disabled={index === 0} onClick={() => moverSequencia(setSequenceActivities, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↑</button>
+                        <button type="button" disabled={index === sequenceActivities.length - 1} onClick={() => moverSequencia(setSequenceActivities, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↓</button>
+                        <button type="button" onClick={() => setSequenceActivities((current) => current.filter((_, itemIndex) => itemIndex !== index))} style={{ height: '28px', border: 'none', borderRadius: '5px', background: '#fff1f2', color: '#e11d48', fontWeight: 900, cursor: 'pointer' }}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section style={{ gridColumn: '1 / -1', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                <h3 style={{ margin: '0 0 12px', color: '#0b2239' }}>{t.sequenceStart}</h3>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
+                    <input type="radio" checked={sequenceStartType === 'data'} onChange={() => setSequenceStartType('data')} />
+                    {t.specificStartDate}
+                  </label>
+                  <input type="date" disabled={sequenceStartType !== 'data'} value={sequenceStartDate} onChange={(e) => setSequenceStartDate(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }} />
+
+                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
+                    <input type="radio" checked={sequenceStartType === 'predecessora'} onChange={() => setSequenceStartType('predecessora')} />
+                    {t.existingPredecessor}
+                  </label>
+                  <select disabled={sequenceStartType !== 'predecessora'} value={sequencePredecessor} onChange={(e) => setSequencePredecessor(e.target.value)} style={{ minWidth: '260px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+                    <option value="">{t.mPkgSelectPred}</option>
+                    {pacotesExistentes.map((pkg) => (
+                      <option key={pkg.id} value={pkg.id}>{pkg.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginTop: '15px', padding: '12px 14px', backgroundColor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px' }}>
+                  <strong style={{ display: 'block', color: '#0f766e', marginBottom: '4px' }}>{t.continuousFlow}</strong>
+                  <span style={{ fontSize: '0.78rem', color: '#475569' }}>{t.continuousFlowHelp}</span>
+                </div>
+              </section>
+            </div>
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', position: 'sticky', bottom: 0, backgroundColor: 'white' }}>
+              <div style={{ color: '#475569', fontSize: '0.82rem' }}>
+                <strong>{sequenceLocations.filter((item) => item.selected).length}</strong> locations × <strong>{sequenceActivities.length}</strong> activities = <strong>{sequenceLocations.filter((item) => item.selected).length * sequenceActivities.length}</strong> {t.packagesWillBeCreated}
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" onClick={() => setShowSequenceModal(false)} style={{ padding: '10px 16px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white', cursor: 'pointer', fontWeight: 700 }}>{t.mPkgCancel}</button>
+                <button type="button" onClick={gerarSequenciaTrabalho} style={{ padding: '10px 18px', border: 'none', borderRadius: '6px', background: '#008f8c', color: 'white', cursor: 'pointer', fontWeight: 900 }}>{t.generatePackages}</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
