@@ -146,7 +146,13 @@ export default async function ProjectSetupPage({
         city,
         state_region,
         postal_code,
-        country_code
+        country_code,
+        cover_image_path,
+        latitude,
+        longitude,
+        geofence_radius_m,
+        geofence_enabled,
+        max_gps_accuracy_m
       `)
       .eq('id', projectId)
       .maybeSingle()

@@ -104,6 +104,27 @@ function createInitialFormData(
     country_code:
       project?.country_code ||
       'US',
+
+    latitude:
+      project?.latitude ??
+      '',
+
+    longitude:
+      project?.longitude ??
+      '',
+
+    geofence_radius_m:
+      project?.geofence_radius_m ??
+      '',
+
+    max_gps_accuracy_m:
+      project?.max_gps_accuracy_m ??
+      '',
+
+    geofence_enabled:
+      Boolean(
+        project?.geofence_enabled
+      ),
   }
 }
 
@@ -296,6 +317,8 @@ export default function ProjectForm({
     const {
       name,
       value,
+      type,
+      checked,
     } = event.target
 
     setFormData(
@@ -303,7 +326,10 @@ export default function ProjectForm({
         currentFormData
       ) => ({
         ...currentFormData,
-        [name]: value,
+        [name]:
+          type === 'checkbox'
+            ? checked
+            : value,
       })
     )
   }
@@ -637,6 +663,128 @@ export default function ProjectForm({
       return
     }
 
+    const latitude =
+      formData.latitude === ''
+        ? null
+        : Number(
+            formData.latitude
+          )
+
+    const longitude =
+      formData.longitude === ''
+        ? null
+        : Number(
+            formData.longitude
+          )
+
+    const geofenceRadius =
+      formData.geofence_radius_m ===
+      ''
+        ? null
+        : Number(
+            formData.geofence_radius_m
+          )
+
+    const maxGpsAccuracy =
+      formData.max_gps_accuracy_m ===
+      ''
+        ? null
+        : Number(
+            formData.max_gps_accuracy_m
+          )
+
+    if (
+      latitude !== null &&
+      (
+        Number.isNaN(
+          latitude
+        ) ||
+        latitude < -90 ||
+        latitude > 90
+      )
+    ) {
+      setErrorMessage(
+        'Reference latitude must be a valid number between -90 and 90.'
+      )
+
+      setIsSaving(false)
+      return
+    }
+
+    if (
+      longitude !== null &&
+      (
+        Number.isNaN(
+          longitude
+        ) ||
+        longitude < -180 ||
+        longitude > 180
+      )
+    ) {
+      setErrorMessage(
+        'Reference longitude must be a valid number between -180 and 180.'
+      )
+
+      setIsSaving(false)
+      return
+    }
+
+    if (
+      geofenceRadius !== null &&
+      (
+        Number.isNaN(
+          geofenceRadius
+        ) ||
+        !Number.isInteger(
+          geofenceRadius
+        ) ||
+        geofenceRadius <= 0
+      )
+    ) {
+      setErrorMessage(
+        'Geofence radius must be a positive whole number of meters.'
+      )
+
+      setIsSaving(false)
+      return
+    }
+
+    if (
+      maxGpsAccuracy !== null &&
+      (
+        Number.isNaN(
+          maxGpsAccuracy
+        ) ||
+        !Number.isInteger(
+          maxGpsAccuracy
+        ) ||
+        maxGpsAccuracy <= 0
+      )
+    ) {
+      setErrorMessage(
+        'Maximum GPS accuracy must be a positive whole number of meters.'
+      )
+
+      setIsSaving(false)
+      return
+    }
+
+    if (
+      formData.geofence_enabled &&
+      (
+        latitude === null ||
+        longitude === null ||
+        geofenceRadius === null
+      )
+    ) {
+      setErrorMessage(
+        'Reference latitude, reference longitude, and geofence radius are required before Attendance Geofence can be enabled.'
+      )
+
+      setIsSaving(false)
+      return
+    }
+
     const projectPayload = {
       code:
         formData.code
@@ -709,6 +857,19 @@ export default function ProjectForm({
         formData.country_code
           .trim()
           .toUpperCase(),
+
+      latitude,
+
+      longitude,
+
+      geofence_radius_m:
+        geofenceRadius,
+
+      max_gps_accuracy_m:
+        maxGpsAccuracy,
+
+      geofence_enabled:
+        formData.geofence_enabled,
     }
 
     try {
@@ -1752,6 +1913,300 @@ export default function ProjectForm({
                   Use the two-letter ISO country
                   code.
                 </p>
+              </div>
+            </div>
+          </section>
+
+          <section
+            className={
+              styles.section
+            }
+          >
+            <div
+              className={
+                styles.sectionHeading
+              }
+            >
+              <h3
+                className={
+                  styles.sectionTitle
+                }
+              >
+                Attendance Geofence
+              </h3>
+
+              <p
+                className={
+                  styles.sectionDescription
+                }
+              >
+                Define the jobsite reference point
+                and allowed radius used to validate
+                Attendance Check-In and Check-Out
+                locations.
+              </p>
+            </div>
+
+            <div
+              className={
+                styles.grid
+              }
+            >
+              <div
+                className={`${styles.field} ${styles.span4}`}
+              >
+                <label
+                  className={
+                    styles.label
+                  }
+                  htmlFor="latitude"
+                >
+                  Reference latitude
+                </label>
+
+                <input
+                  className={
+                    styles.input
+                  }
+                  id="latitude"
+                  name="latitude"
+                  type="number"
+                  min="-90"
+                  max="90"
+                  step="any"
+                  value={
+                    formData.latitude
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  placeholder="-25.000000"
+                />
+
+                <p
+                  className={
+                    styles.helpText
+                  }
+                >
+                  Decimal degrees between -90 and
+                  90.
+                </p>
+              </div>
+
+              <div
+                className={`${styles.field} ${styles.span4}`}
+              >
+                <label
+                  className={
+                    styles.label
+                  }
+                  htmlFor="longitude"
+                >
+                  Reference longitude
+                </label>
+
+                <input
+                  className={
+                    styles.input
+                  }
+                  id="longitude"
+                  name="longitude"
+                  type="number"
+                  min="-180"
+                  max="180"
+                  step="any"
+                  value={
+                    formData.longitude
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  placeholder="-50.000000"
+                />
+
+                <p
+                  className={
+                    styles.helpText
+                  }
+                >
+                  Decimal degrees between -180 and
+                  180.
+                </p>
+              </div>
+
+              <div
+                className={`${styles.field} ${styles.span4}`}
+              >
+                <label
+                  className={
+                    styles.label
+                  }
+                  htmlFor="geofence_radius_m"
+                >
+                  Geofence radius
+                </label>
+
+                <input
+                  className={
+                    styles.input
+                  }
+                  id="geofence_radius_m"
+                  name="geofence_radius_m"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={
+                    formData.geofence_radius_m
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  placeholder="150"
+                />
+
+                <p
+                  className={
+                    styles.helpText
+                  }
+                >
+                  Maximum allowed distance from the
+                  reference point, in meters.
+                </p>
+              </div>
+
+              <div
+                className={`${styles.field} ${styles.span4}`}
+              >
+                <label
+                  className={
+                    styles.label
+                  }
+                  htmlFor="max_gps_accuracy_m"
+                >
+                  Maximum GPS accuracy
+                </label>
+
+                <input
+                  className={
+                    styles.input
+                  }
+                  id="max_gps_accuracy_m"
+                  name="max_gps_accuracy_m"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={
+                    formData.max_gps_accuracy_m
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  placeholder="50"
+                />
+
+                <p
+                  className={
+                    styles.helpText
+                  }
+                >
+                  Maximum acceptable device GPS
+                  accuracy, in meters. Leave blank
+                  to disable the project-specific
+                  accuracy threshold.
+                </p>
+              </div>
+
+              <div
+                className={`${styles.field} ${styles.span12}`}
+              >
+                <label
+                  htmlFor="geofence_enabled"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '14px 16px',
+                    border: '1px solid #d9e2ec',
+                    borderRadius: '12px',
+                    background: formData.geofence_enabled
+                      ? '#f0fdfa'
+                      : '#f8fafc',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    id="geofence_enabled"
+                    name="geofence_enabled"
+                    type="checkbox"
+                    checked={
+                      formData.geofence_enabled
+                    }
+                    onChange={
+                      handleChange
+                    }
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      marginTop: '2px',
+                      accentColor: '#08aa96',
+                      cursor: 'pointer',
+                    }}
+                  />
+
+                  <span>
+                    <strong
+                      style={{
+                        display: 'block',
+                        marginBottom: '4px',
+                        color: '#0f172a',
+                        fontSize: '0.86rem',
+                      }}
+                    >
+                      Enable Attendance Geofence
+                    </strong>
+
+                    <span
+                      style={{
+                        display: 'block',
+                        color: '#64748b',
+                        fontSize: '0.78rem',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      When enabled, RitsuFlow will
+                      compare worker GPS coordinates
+                      with this project reference
+                      point during Check-In and
+                      Check-Out.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              <div
+                className={`${styles.field} ${styles.span12}`}
+              >
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    border: formData.geofence_enabled
+                      ? '1px solid #99f6e4'
+                      : '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    background: formData.geofence_enabled
+                      ? '#f0fdfa'
+                      : '#f8fafc',
+                    color: formData.geofence_enabled
+                      ? '#115e59'
+                      : '#64748b',
+                    fontSize: '0.78rem',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {formData.geofence_enabled
+                    ? 'Attendance Geofence is enabled. Check-In and Check-Out location validation will use the configured coordinates and radius.'
+                    : 'Attendance Geofence is disabled. Attendance can continue without project distance validation until this setting is enabled.'}
+                </div>
               </div>
             </div>
           </section>

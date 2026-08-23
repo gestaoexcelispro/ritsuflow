@@ -162,7 +162,12 @@ export default async function ProjectSetupPage({
       address_line,
       neighborhood,
       postal_code,
-      cover_image_path
+      cover_image_path,
+      latitude,
+      longitude,
+      geofence_radius_m,
+      geofence_enabled,
+      max_gps_accuracy_m
     `)
     .eq(
       'organization_id',

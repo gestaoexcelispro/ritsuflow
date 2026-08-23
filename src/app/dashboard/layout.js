@@ -56,6 +56,11 @@ const navigationGroups = [
         href: '/dashboard/field-management/workforce/assignments',
         icon: 'PA',
       },
+      {
+        label: 'Attendance',
+        href: '/dashboard/field-management/workforce/attendance',
+        icon: 'AT',
+      },
     ],
   },
   {
