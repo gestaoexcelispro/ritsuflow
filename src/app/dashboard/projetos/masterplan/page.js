@@ -215,6 +215,7 @@ export default function MasterPlanPage() {
 
   const [projetosLista, setProjetosLista] = useState([]);
   const [projectCoverUrls, setProjectCoverUrls] = useState({});
+  const [projectProgressMap, setProjectProgressMap] = useState({});
   const [projetoSelecionado, setProjetoSelecionado] = useState('');
 
   const [linhaDeBaseCongelada, setLinhaDeBaseCongelada] = useState(false);
@@ -440,24 +441,56 @@ export default function MasterPlanPage() {
 
       // Project covers use the same private Storage bucket already used by
       // Project Setup and Daily Reports project cards.
-      const coverEntries = await Promise.all(
-        projects.map(async (project) => {
-          if (!project.cover_image_path) return [project.id, ''];
+      const [coverEntries, progressResult] = await Promise.all([
+        Promise.all(
+          projects.map(async (project) => {
+            if (!project.cover_image_path) return [project.id, ''];
 
-          const { data: signedData, error: signedError } = await supabase.storage
-            .from('project-covers')
-            .createSignedUrl(project.cover_image_path, 60 * 60);
+            const { data: signedData, error: signedError } = await supabase.storage
+              .from('project-covers')
+              .createSignedUrl(project.cover_image_path, 60 * 60);
 
-          if (signedError) {
-            console.warn('Master Plan - project cover:', signedError);
-            return [project.id, ''];
-          }
+            if (signedError) {
+              console.warn('Master Plan - project cover:', signedError);
+              return [project.id, ''];
+            }
 
-          return [project.id, signedData?.signedUrl || ''];
-        })
-      );
+            return [project.id, signedData?.signedUrl || ''];
+          })
+        ),
+
+        supabase
+          .from('production_control_project_portfolio')
+          .select(`
+            project_id,
+            scope_item_count,
+            not_started_count,
+            in_progress_count,
+            completed_count,
+            overall_progress_percentage,
+            last_production_date,
+            has_production_scope
+          `)
+      ]);
 
       setProjectCoverUrls(Object.fromEntries(coverEntries));
+
+      if (progressResult.error) {
+        console.warn(
+          'Master Plan - production control portfolio:',
+          progressResult.error
+        );
+        setProjectProgressMap({});
+      } else {
+        const progressMap = Object.fromEntries(
+          (progressResult.data || []).map((item) => [
+            item.project_id,
+            item
+          ])
+        );
+
+        setProjectProgressMap(progressMap);
+      }
     };
 
     fetchProjetos();
@@ -1252,6 +1285,22 @@ export default function MasterPlanPage() {
             {projetosLista.map((project) => {
               const locationText = [project.city, project.state_region].filter(Boolean).join(', ');
               const coverUrl = projectCoverUrls[project.id];
+              const progressRecord = projectProgressMap[project.id] || null;
+              const hasProductionScope = Boolean(progressRecord?.has_production_scope);
+              const rawProgress = Number(progressRecord?.overall_progress_percentage);
+              const progress = hasProductionScope && Number.isFinite(rawProgress)
+                ? Math.max(0, Math.min(100, rawProgress))
+                : null;
+              const progressLabel = progress === null
+                ? '—'
+                : `${Math.round(progress)}%`;
+              const progressHelper = !hasProductionScope
+                ? 'Production Control data not available yet.'
+                : progressRecord.completed_count > 0
+                  ? `${progressRecord.completed_count} of ${progressRecord.scope_item_count} scope items completed.`
+                  : progressRecord.in_progress_count > 0
+                    ? `${progressRecord.in_progress_count} scope item${progressRecord.in_progress_count === 1 ? '' : 's'} in progress.`
+                    : 'Production scope available. Field production has not started yet.';
 
               return (
                 <article key={project.id} style={{ overflow: 'hidden', border: '1px solid #d9e2ec', borderRadius: '15px', background: '#fff', boxShadow: '0 14px 30px rgba(15, 23, 42, 0.055)' }}>
@@ -1284,13 +1333,23 @@ export default function MasterPlanPage() {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '11px' }}>
                       <span style={{ color: '#36516d', fontSize: '0.68rem', fontWeight: 900 }}>Overall Progress</span>
-                      <span style={{ color: '#00a18f', fontSize: '0.72rem', fontWeight: 900 }}>—</span>
+                      <span style={{ color: progress === null ? '#91a3b5' : '#00a18f', fontSize: '0.72rem', fontWeight: 900 }}>
+                        {progressLabel}
+                      </span>
                     </div>
                     <div style={{ width: '100%', height: '7px', overflow: 'hidden', borderRadius: '999px', background: '#e5ebf0' }}>
-                      <div style={{ width: '0%', height: '100%', borderRadius: '999px', background: '#00aa96' }} />
+                      <div
+                        style={{
+                          width: progress === null ? '0%' : `${progress}%`,
+                          height: '100%',
+                          borderRadius: '999px',
+                          background: '#00aa96',
+                          transition: 'width 180ms ease'
+                        }}
+                      />
                     </div>
                     <p style={{ margin: '9px 0 0', color: '#91a3b5', fontSize: '0.66rem' }}>
-                      Production Control data not available yet.
+                      {progressHelper}
                     </p>
                   </div>
 
