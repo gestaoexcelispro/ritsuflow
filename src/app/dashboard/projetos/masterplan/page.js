@@ -618,67 +618,92 @@ export default function MasterPlanPage() {
     return [];
   };
 
+  // ----------------------------------------------------
+  // OPTIMIZED DEPENDENCY NETWORK RECONSTRUCTION
+  // ----------------------------------------------------
+  // This is intentionally calculated ONCE with useMemo below.
+  // Never call this helper from individual calendar cells.
   const reconstruirRedeDependencias = (
-    packagesSnapshot = pacotesLancados
+    packagesSnapshot
   ) => {
     const packages =
-      Array.isArray(packagesSnapshot)
+      Array.isArray(
+        packagesSnapshot
+      )
         ? packagesSnapshot
         : [];
 
-    if (packages.length === 0) {
+    if (
+      packages.length === 0
+    ) {
       return [];
     }
 
-    // Preserve the current row order as the Location Flow order.
     const orderedRowIds = [];
 
-    secoes.forEach((section) => {
-      (section.linhas || []).forEach((row) => {
-        if (
-          !orderedRowIds.includes(
-            row.id
-          )
-        ) {
-          orderedRowIds.push(
-            row.id
-          );
-        }
-      });
-    });
+    secoes.forEach(
+      (section) => {
+        (
+          section.linhas ||
+          []
+        ).forEach(
+          (row) => {
+            if (
+              row?.id &&
+              !orderedRowIds.includes(
+                row.id
+              )
+            ) {
+              orderedRowIds.push(
+                row.id
+              );
+            }
+          }
+        );
+      }
+    );
 
     const rowIndex =
       new Map(
         orderedRowIds.map(
-          (rowId, index) => [
+          (
+            rowId,
+            index
+          ) => [
             rowId,
             index
           ]
         )
       );
 
-    // Activity order is inferred from the earliest appearance in the
-    // package snapshot. Generated sequence packages already preserve
-    // this ordering in pacotesLancados.
-    const orderedActivities = [];
+    // Activity order comes from first appearance in the
+    // current package snapshot, which preserves the generator
+    // sequence without scanning the calendar.
+    const orderedActivities =
+      [];
 
-    packages.forEach((pkg) => {
-      if (
-        pkg.atividade &&
-        !orderedActivities.includes(
-          pkg.atividade
-        )
-      ) {
-        orderedActivities.push(
-          pkg.atividade
-        );
+    packages.forEach(
+      (pkg) => {
+        if (
+          pkg?.atividade &&
+          !orderedActivities.includes(
+            pkg.atividade
+          )
+        ) {
+          orderedActivities.push(
+            pkg.atividade
+          );
+        }
       }
-    });
+    );
 
     const activityIndex =
       new Map(
         orderedActivities.map(
-          (activity, index) => [
+          (
+            activity,
+            index
+          ) => [
             activity,
             index
           ]
@@ -688,204 +713,262 @@ export default function MasterPlanPage() {
     const packageAt =
       new Map();
 
-    packages.forEach((pkg) => {
-      packageAt.set(
-        `${pkg.linhaId}___${pkg.atividade}`,
-        pkg
-      );
-    });
-
-    return packages.map((pkg) => {
-      const existing =
-        obterDependenciasPacote(
+    packages.forEach(
+      (pkg) => {
+        packageAt.set(
+          `${pkg.linhaId}___${pkg.atividade}`,
           pkg
         );
+      }
+    );
 
-      const dependencies = [];
-      const seen =
-        new Set();
-
-      const addDependency = (
-        dependency
-      ) => {
-        if (
-          !dependency?.predecessorId ||
-          dependency.predecessorId ===
-            pkg.id
-        ) {
-          return;
-        }
-
-        const key =
-          `${dependency.type}___${dependency.predecessorId}`;
-
-        if (seen.has(key)) {
-          return;
-        }
-
-        seen.add(key);
-
-        dependencies.push({
-          type:
-            dependency.type ||
-            'external',
-          predecessorId:
-            dependency.predecessorId,
-          lagWorkingDays:
-            Math.max(
-              0,
-              Number(
-                dependency.lagWorkingDays ||
-                0
-              )
-            )
-        });
-      };
-
-      // Keep explicit/external relationships already stored.
-      existing
-        .filter(
-          (dependency) =>
-            dependency.type ===
-              'external'
-        )
-        .forEach(
-          addDependency
-        );
-
-      const currentRowIndex =
-        rowIndex.get(
-          pkg.linhaId
-        );
-
-      const currentActivityIndex =
-        activityIndex.get(
-          pkg.atividade
-        );
-
-      // TRADE:
-      // previous activity in the same Location.
-      if (
-        Number.isInteger(
-          currentActivityIndex
-        ) &&
-        currentActivityIndex > 0
-      ) {
-        const previousActivity =
-          orderedActivities[
-            currentActivityIndex - 1
-          ];
-
-        const previousTrade =
-          packageAt.get(
-            `${pkg.linhaId}___${previousActivity}`
+    return packages.map(
+      (pkg) => {
+        const existing =
+          obterDependenciasPacote(
+            pkg
           );
 
-        if (previousTrade) {
-          const existingTrade =
-            existing.find(
-              (dependency) =>
-                dependency.type ===
-                  'trade' &&
-                dependency.predecessorId ===
-                  previousTrade.id
-            );
+        const dependencies =
+          [];
 
-          addDependency({
-            type: 'trade',
+        const seen =
+          new Set();
+
+        const addDependency = (
+          dependency
+        ) => {
+          if (
+            !dependency
+              ?.predecessorId ||
+            dependency
+              .predecessorId ===
+              pkg.id
+          ) {
+            return;
+          }
+
+          const key =
+            `${dependency.type || 'external'}___${dependency.predecessorId}`;
+
+          if (
+            seen.has(
+              key
+            )
+          ) {
+            return;
+          }
+
+          seen.add(
+            key
+          );
+
+          dependencies.push({
+            type:
+              dependency.type ||
+              'external',
+
             predecessorId:
-              previousTrade.id,
-            lagWorkingDays:
-              existingTrade
-                ?.lagWorkingDays ??
-              (
-                pkg.predecessoraId ===
-                previousTrade.id
-                  ? pkg.lagWorkingDays
-                  : 0
-              ) ??
-              0
-          });
-        }
-      }
+              dependency
+                .predecessorId,
 
-      // FLOW:
-      // same activity in the previous Location.
-      if (
-        Number.isInteger(
-          currentRowIndex
-        ) &&
-        currentRowIndex > 0
-      ) {
-        for (
-          let previousRowIndex =
-            currentRowIndex - 1;
-          previousRowIndex >= 0;
-          previousRowIndex -= 1
+            lagWorkingDays:
+              Math.max(
+                0,
+                Number(
+                  dependency
+                    .lagWorkingDays ||
+                  0
+                )
+              )
+          });
+        };
+
+        // Keep explicit external anchors.
+        existing
+          .filter(
+            (dependency) =>
+              dependency.type ===
+              'external'
+          )
+          .forEach(
+            addDependency
+          );
+
+        const currentRowIndex =
+          rowIndex.get(
+            pkg.linhaId
+          );
+
+        const currentActivityIndex =
+          activityIndex.get(
+            pkg.atividade
+          );
+
+        // TRADE dependency:
+        // previous activity in the SAME location.
+        if (
+          Number.isInteger(
+            currentActivityIndex
+          ) &&
+          currentActivityIndex > 0
         ) {
-          const previousRowId =
-            orderedRowIds[
-              previousRowIndex
+          const previousActivity =
+            orderedActivities[
+              currentActivityIndex -
+                1
             ];
 
-          const previousLocation =
+          const previousTrade =
             packageAt.get(
-              `${previousRowId}___${pkg.atividade}`
+              `${pkg.linhaId}___${previousActivity}`
             );
 
-          if (previousLocation) {
+          if (
+            previousTrade
+          ) {
+            const existingTrade =
+              existing.find(
+                (dependency) =>
+                  dependency.type ===
+                    'trade' &&
+                  dependency
+                    .predecessorId ===
+                    previousTrade.id
+              );
+
+            addDependency({
+              type: 'trade',
+
+              predecessorId:
+                previousTrade.id,
+
+              lagWorkingDays:
+                existingTrade
+                  ?.lagWorkingDays ??
+                (
+                  pkg.predecessoraId ===
+                  previousTrade.id
+                    ? Number(
+                        pkg.lagWorkingDays ||
+                        0
+                      )
+                    : 0
+                )
+            });
+          }
+        }
+
+        // FLOW dependency:
+        // same activity in the immediately previous location
+        // where that activity exists.
+        if (
+          Number.isInteger(
+            currentRowIndex
+          ) &&
+          currentRowIndex > 0
+        ) {
+          for (
+            let previousRowIndex =
+              currentRowIndex -
+                1;
+            previousRowIndex >=
+            0;
+            previousRowIndex -= 1
+          ) {
+            const previousRowId =
+              orderedRowIds[
+                previousRowIndex
+              ];
+
+            const previousLocation =
+              packageAt.get(
+                `${previousRowId}___${pkg.atividade}`
+              );
+
+            if (
+              !previousLocation
+            ) {
+              continue;
+            }
+
             const existingFlow =
               existing.find(
                 (dependency) =>
                   dependency.type ===
                     'flow' &&
-                  dependency.predecessorId ===
+                  dependency
+                    .predecessorId ===
                     previousLocation.id
               );
 
             addDependency({
               type: 'flow',
+
               predecessorId:
                 previousLocation.id,
+
               lagWorkingDays:
                 existingFlow
                   ?.lagWorkingDays ??
                 (
                   pkg.predecessoraId ===
                   previousLocation.id
-                    ? pkg.lagWorkingDays
+                    ? Number(
+                        pkg.lagWorkingDays ||
+                        0
+                      )
                     : 0
-                ) ??
-                0
+                )
             });
 
             break;
           }
         }
+
+        // Preserve any other previously stored relationships.
+        existing.forEach(
+          addDependency
+        );
+
+        return {
+          ...pkg,
+          dependencies
+        };
       }
-
-      // If this package came from an older scenario and its single
-      // predecessor was neither reconstructed Trade nor Flow, keep it.
-      existing.forEach(
-        (dependency) => {
-          if (
-            dependency.type !==
-              'external'
-          ) {
-            addDependency(
-              dependency
-            );
-          }
-        }
-      );
-
-      return {
-        ...pkg,
-        dependencies
-      };
-    });
+    );
   };
 
+  // One dependency-network rebuild per schedule/section change.
+  // This avoids the performance problem from Step 12.5 where
+  // the network was reconstructed repeatedly inside cell logic.
+  const pacotesComRede =
+    React.useMemo(
+      () =>
+        reconstruirRedeDependencias(
+          pacotesLancados
+        ),
+      [
+        pacotesLancados,
+        secoes
+      ]
+    );
+
+  const pacoteComRedePorId =
+    React.useMemo(
+      () =>
+        new Map(
+          pacotesComRede.map(
+            (pkg) => [
+              pkg.id,
+              pkg
+            ]
+          )
+        ),
+      [
+        pacotesComRede
+      ]
+    );
 
   const montarPlanData = () => ({
     sections: secoes,
@@ -910,9 +993,12 @@ export default function MasterPlanPage() {
       };
     }
 
-    const rawPackages = Array.isArray(packagesSnapshot)
-      ? packagesSnapshot
-      : [];
+    const rawPackages =
+      Array.isArray(
+        packagesSnapshot
+      )
+        ? packagesSnapshot
+        : [];
 
     const packages =
       reconstruirRedeDependencias(
@@ -1759,15 +1845,10 @@ export default function MasterPlanPage() {
   const calcularAgendaPacotesCompleta = (
     packagesSnapshot = pacotesLancados
   ) => {
-    const rawPackages =
+    const packages =
       Array.isArray(packagesSnapshot)
         ? packagesSnapshot
         : [];
-
-    const packages =
-      reconstruirRedeDependencias(
-        rawPackages
-      );
 
     const packageById =
       new Map(
@@ -2158,10 +2239,10 @@ export default function MasterPlanPage() {
     React.useMemo(
       () =>
         calcularAgendaPacotesCompleta(
-          pacotesLancados
+          pacotesComRede
         ),
       [
-        pacotesLancados,
+        pacotesComRede,
         datasPlanilha
       ]
     );
@@ -2172,7 +2253,7 @@ export default function MasterPlanPage() {
         const map =
           new Map();
 
-        pacotesLancados.forEach(
+        pacotesComRede.forEach(
           (pacote) => {
             const schedule =
               agendaPacotes.get(
@@ -2220,7 +2301,7 @@ export default function MasterPlanPage() {
         return map;
       },
       [
-        pacotesLancados,
+        pacotesComRede,
         agendaPacotes,
         datasPlanilha
       ]
@@ -2345,11 +2426,9 @@ export default function MasterPlanPage() {
       );
 
     const pacote =
-      pacotesLancados.find(
-        (item) =>
-          item.id ===
-          packageDrag.packageId
-      );
+      pacoteComRedePorId.get(
+        packageDrag.packageId
+      ) || null;
 
     if (!pacote) {
       setPackageDrag(null);
@@ -2368,18 +2447,9 @@ export default function MasterPlanPage() {
 
     salvarHistorico();
 
-    const pacoteComRede =
-      reconstruirRedeDependencias(
-        pacotesLancados
-      ).find(
-        (item) =>
-          item.id ===
-          pacote.id
-      ) || pacote;
-
     const dependencies =
       obterDependenciasPacote(
-        pacoteComRede
+        pacote
       );
 
     setPacotesLancados(
@@ -2443,21 +2513,20 @@ export default function MasterPlanPage() {
                 legalTarget
               );
 
-            const repairedItem =
-              reconstruirRedeDependencias(
-                current
-              ).find(
-                (candidate) =>
-                  candidate.id ===
-                  item.id
-              ) || item;
+            const repairedPackage =
+              pacoteComRedePorId.get(
+                item.id
+              );
 
             return {
               ...item,
+
               dependencies:
-                repairedItem.dependencies ||
+                repairedPackage
+                  ?.dependencies ||
                 item.dependencies ||
                 [],
+
               manualDelayWorkingDays:
                 manualDelay
             };
@@ -2487,7 +2556,7 @@ export default function MasterPlanPage() {
 
     const novaGrade = {};
 
-    pacotesLancados.forEach(
+    pacotesComRede.forEach(
       (pacote) => {
         const schedule =
           agendaPacotes.get(
@@ -2536,7 +2605,7 @@ export default function MasterPlanPage() {
       novaGrade
     );
   }, [
-    pacotesLancados,
+    pacotesComRede,
     datasPlanilha,
     agendaPacotes
   ]);
