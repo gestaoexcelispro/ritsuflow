@@ -1181,19 +1181,9 @@ export default function MasterPlanPage() {
     };
   };
 
-  const sincronizarPacotesNormalizados = async (
-    scenarioId,
-    packagesSnapshot = pacotesLancados
+  const criarSnapshotAgendaImutavel = (
+    packagesSnapshot
   ) => {
-    if (!scenarioId || !projetoSelecionado) {
-      return {
-        ok: false,
-        error: new Error(
-          'Scenario or project is missing.'
-        )
-      };
-    }
-
     const rawPackages =
       Array.isArray(
         packagesSnapshot
@@ -1206,8 +1196,93 @@ export default function MasterPlanPage() {
         rawPackages
       );
 
+    const schedules =
+      calcularAgendaPacotesCompleta(
+        packages
+      );
+
+    const snapshot =
+      new Map();
+
+    packages.forEach(
+      (pkg) => {
+        const schedule =
+          schedules.get(
+            pkg.id
+          ) ||
+          null;
+
+        snapshot.set(
+          pkg.id,
+          {
+            scheduledStartDate:
+              schedule
+                ? (
+                    datasPlanilha[
+                      schedule.startIndex
+                    ]?.dataIso ||
+                    null
+                  )
+                : null,
+
+            scheduledFinishDate:
+              schedule
+                ? (
+                    datasPlanilha[
+                      schedule.endIndex
+                    ]?.dataIso ||
+                    null
+                  )
+                : null,
+
+            sequenceGroupId:
+              pkg.sequenceGroupId ||
+              obterConfiguracaoSequenciaPacote(
+                pkg
+              )?.id ||
+              null
+          }
+        );
+      }
+    );
+
+    return {
+      packages,
+      snapshot
+    };
+  };
+
+  const sincronizarPacotesNormalizados = async (
+    scenarioId,
+    packagesSnapshot = pacotesLancados,
+    immutableScheduleSnapshot = null
+  ) => {
+    if (!scenarioId || !projetoSelecionado) {
+      return {
+        ok: false,
+        error: new Error(
+          'Scenario or project is missing.'
+        )
+      };
+    }
+
+    const preparedSchedule =
+      immutableScheduleSnapshot &&
+      immutableScheduleSnapshot.packages &&
+      immutableScheduleSnapshot.snapshot
+        ? immutableScheduleSnapshot
+        : criarSnapshotAgendaImutavel(
+            packagesSnapshot
+          );
+
+    const packages =
+      preparedSchedule.packages;
+
+    const immutableSnapshot =
+      preparedSchedule.snapshot;
+
     // IMPORTANT:
-    // Do not calculate a second schedule here.
+    // The schedule snapshot is built BEFORE the async persistence flow.
     //
     // agendaPacotes is the authoritative schedule already used to draw
     // the Line of Balance. Persisting those exact results guarantees
@@ -1432,94 +1507,43 @@ export default function MasterPlanPage() {
         dataInicio ||
         null;
 
-      const calculatedSchedule =
-        agendaPacotes.get(
+      const persistedSchedule =
+        immutableSnapshot.get(
           pkg.id
         ) ||
         null;
 
-      const visibleGridSchedule =
-        obterDatasPacoteDaGradeVisivel(
-          pkg
-        );
-
       const scheduledStartDate =
-        calculatedSchedule
-          ? (
-              datasPlanilha[
-                calculatedSchedule.startIndex
-              ]?.dataIso ||
-              visibleGridSchedule
-                .scheduledStartDate ||
-              null
-            )
-          : (
-              visibleGridSchedule
-                .scheduledStartDate ||
-              null
-            );
+        persistedSchedule
+          ?.scheduledStartDate ||
+        null;
 
       const scheduledFinishDate =
-        calculatedSchedule
-          ? (
-              datasPlanilha[
-                calculatedSchedule.endIndex
-              ]?.dataIso ||
-              visibleGridSchedule
-                .scheduledFinishDate ||
-              null
-            )
-          : (
-              visibleGridSchedule
-                .scheduledFinishDate ||
-              null
-            );
+        persistedSchedule
+          ?.scheduledFinishDate ||
+        null;
 
       if (
         !scheduledStartDate ||
         !scheduledFinishDate
       ) {
         console.warn(
-          'Master Plan - package schedule could not be resolved for persistence:',
+          'Master Plan - immutable schedule snapshot missing dates:',
           {
             packageId:
               pkg.id,
             packageCode:
               pkg.atividade,
             rowId:
-              pkg.linhaId,
-            agendaFound:
-              Boolean(
-                calculatedSchedule
-              ),
-            gridStart:
-              visibleGridSchedule
-                .scheduledStartDate,
-            gridFinish:
-              visibleGridSchedule
-                .scheduledFinishDate
+              pkg.linhaId
           }
         );
       }
 
-      // Resolve generated sequence ownership.
-      //
-      // New packages already carry sequenceGroupId.
-      // Legacy generated packages can still be associated when the
-      // scenario has a saved Sequence Configuration.
-      const sequenceConfiguration =
-        obterConfiguracaoSequenciaPacote(
-          pkg
-        );
-
       const persistedSequenceGroupId =
-        pkg.sequenceGroupId ||
-        sequenceConfiguration?.id ||
-        (
-          pkg.generatedBySequence
-            ? `legacy_sequence_${scenarioId}`
-            : null
-        );
+        persistedSchedule
+          ?.sequenceGroupId ||
+        null;
 
       const payload = {
         scenario_id:
@@ -3242,10 +3266,16 @@ export default function MasterPlanPage() {
     setLinhaDeBaseCongelada(true);
     setModoControle(true);
 
+    const immutableScheduleSnapshot =
+      criarSnapshotAgendaImutavel(
+        pacotesLancados
+      );
+
     const packageSync =
       await sincronizarPacotesNormalizados(
         frozenVersion.id,
-        pacotesLancados
+        pacotesLancados,
+        immutableScheduleSnapshot
       );
 
     if (!packageSync.ok) {
@@ -3389,10 +3419,16 @@ ${
 
     setVersaoAtivaId(novaVersao.id);
 
+    const immutableScheduleSnapshot =
+      criarSnapshotAgendaImutavel(
+        pacotesLancados
+      );
+
     const packageSync =
       await sincronizarPacotesNormalizados(
         novaVersao.id,
-        pacotesLancados
+        pacotesLancados,
+        immutableScheduleSnapshot
       );
 
     if (!packageSync.ok) {
@@ -3449,10 +3485,16 @@ ${
       )
     );
 
+    const immutableScheduleSnapshot =
+      criarSnapshotAgendaImutavel(
+        pacotesLancados
+      );
+
     const packageSync =
       await sincronizarPacotesNormalizados(
         versaoAtualizada.id,
-        pacotesLancados
+        pacotesLancados,
+        immutableScheduleSnapshot
       );
 
     if (!packageSync.ok) {
@@ -3513,10 +3555,16 @@ ${
     setLinhaDeBaseCongelada(false);
     setModoControle(false);
 
+    const immutableScheduleSnapshot =
+      criarSnapshotAgendaImutavel(
+        pacotesLancados
+      );
+
     const packageSync =
       await sincronizarPacotesNormalizados(
         novaVersao.id,
-        pacotesLancados
+        pacotesLancados,
+        immutableScheduleSnapshot
       );
 
     if (!packageSync.ok) {
