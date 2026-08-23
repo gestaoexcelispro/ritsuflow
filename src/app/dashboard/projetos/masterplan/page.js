@@ -1876,6 +1876,107 @@ ${
     setSequenceNewActivity('');
   };
 
+  const calcularFimPacoteGerador = (
+    pacote,
+    packagePool,
+    cache = new Map(),
+    stack = new Set()
+  ) => {
+    if (!pacote?.id) return -1;
+
+    if (cache.has(pacote.id)) {
+      return cache.get(pacote.id);
+    }
+
+    if (stack.has(pacote.id)) {
+      return -1;
+    }
+
+    stack.add(pacote.id);
+
+    let startIndex = -1;
+
+    if (pacote.tipoInicio === 'data') {
+      startIndex = datasPlanilha.findIndex(
+        (day) =>
+          day.dataIso ===
+          pacote.dataInicio
+      );
+    } else if (
+      pacote.tipoInicio === 'predecessora' &&
+      pacote.predecessoraId
+    ) {
+      const predecessor =
+        packagePool.find(
+          (item) =>
+            item.id ===
+            pacote.predecessoraId
+        );
+
+      if (predecessor) {
+        const predecessorEnd =
+          calcularFimPacoteGerador(
+            predecessor,
+            packagePool,
+            cache,
+            stack
+          );
+
+        if (predecessorEnd >= 0) {
+          startIndex =
+            predecessorEnd + 1;
+        }
+      }
+    }
+
+    if (startIndex < 0) {
+      stack.delete(pacote.id);
+      cache.set(pacote.id, -1);
+      return -1;
+    }
+
+    let allocatedDays = 0;
+    let lastIndex = startIndex;
+
+    for (
+      let index = startIndex;
+      index < datasPlanilha.length &&
+      allocatedDays <
+        Math.max(
+          1,
+          Number(
+            pacote.duracao ||
+            1
+          )
+        );
+      index += 1
+    ) {
+      const day =
+        datasPlanilha[index];
+
+      if (
+        !day.isFimDeSemana &&
+        !day.isFeriado
+      ) {
+        allocatedDays += 1;
+        lastIndex = index;
+      }
+    }
+
+    const endIndex =
+      allocatedDays > 0
+        ? lastIndex
+        : -1;
+
+    stack.delete(pacote.id);
+    cache.set(
+      pacote.id,
+      endIndex
+    );
+
+    return endIndex;
+  };
+
   const gerarSequenciaTrabalho = () => {
     const selectedLocations = sequenceLocations.filter((item) => item.selected);
 
@@ -1937,10 +2038,32 @@ ${
           if (candidates.length === 1) {
             predecessorId = candidates[0].id;
           } else if (candidates.length === 2) {
-            const pool = [...pacotesLancados, ...generated];
-            const finishA = calcularDatasPacote(candidates[0], pool).fim;
-            const finishB = calcularDatasPacote(candidates[1], pool).fim;
-            predecessorId = finishA >= finishB ? candidates[0].id : candidates[1].id;
+            const pool = [
+              ...pacotesLancados,
+              ...generated
+            ];
+
+            const finishCache =
+              new Map();
+
+            const finishA =
+              calcularFimPacoteGerador(
+                candidates[0],
+                pool,
+                finishCache
+              );
+
+            const finishB =
+              calcularFimPacoteGerador(
+                candidates[1],
+                pool,
+                finishCache
+              );
+
+            predecessorId =
+              finishA >= finishB
+                ? candidates[0].id
+                : candidates[1].id;
           } else {
             tipo = 'data';
             startDate = sequenceStartDate;
