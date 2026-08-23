@@ -271,6 +271,14 @@ export default function MasterPlanPage() {
     selectAtLeastOneActivity: isEn ? 'Add at least one activity.' : 'Adicione pelo menos uma atividade.',
     specificStartDate: isEn ? 'Specific start date' : 'Data de início específica',
     existingPredecessor: isEn ? 'Existing predecessor' : 'Predecessor existente',
+    sequenceSettings: isEn ? 'Sequence Settings' : 'Configurações da Sequência',
+    regenerateSequence: isEn ? 'Regenerate Sequence' : 'Regenerar Sequência',
+    sequenceName: isEn ? 'Sequence Name' : 'Nome da Sequência',
+    defaultSequenceName: isEn ? 'Main Work Sequence' : 'Sequência Principal',
+    noSequenceConfigured: isEn ? 'No generated sequence is configured yet.' : 'Nenhuma sequência gerada está configurada ainda.',
+    confirmRegenerate: isEn ? 'This sequence may contain manual schedule adjustments. Regenerating will rebuild only the packages created by this sequence. Manual packages created with Insert Package will remain. Continue?' : 'Esta sequência pode conter ajustes manuais. Regenerar reconstruirá apenas os pacotes criados por esta sequência. Pacotes manuais criados com Inserir Pacote permanecerão. Continuar?',
+    sequenceRegenerated: isEn ? 'Sequence regenerated successfully.' : 'Sequência regenerada com sucesso.',
+    editSequenceHelp: isEn ? 'Review locations, activity order, durations, lags, and start rule, then regenerate the sequence.' : 'Revise locais, ordem das atividades, durações, lags e regra de início e depois regenere a sequência.',
     lagWorkingDays: isEn ? 'Lag (workdays)' : 'Lag (dias úteis)',
     startLag: isEn ? 'Start Lag (workdays)' : 'Lag inicial (dias úteis)',
     dragToReorder: isEn ? 'Drag rows to reorder, or use the arrows.' : 'Arraste as linhas para reordenar ou use as setas.',
@@ -418,6 +426,10 @@ export default function MasterPlanPage() {
   const [sequenceStartDate, setSequenceStartDate] = useState('');
   const [sequencePredecessor, setSequencePredecessor] = useState('');
   const [sequenceStartLag, setSequenceStartLag] = useState(0);
+  const [sequenceConfigurations, setSequenceConfigurations] = useState([]);
+  const [activeSequenceConfigId, setActiveSequenceConfigId] = useState(null);
+  const [sequenceName, setSequenceName] = useState('');
+  const [sequenceEditingId, setSequenceEditingId] = useState(null);
   const [sequenceDrag, setSequenceDrag] = useState(null);
   const [sequenceDragOver, setSequenceDragOver] = useState(null);
   const [packageDrag, setPackageDrag] = useState(null);
@@ -552,6 +564,15 @@ export default function MasterPlanPage() {
     );
 
     setOcultarFinaisDeSemana(Boolean(plano.hideWeekends));
+
+    const savedSequenceConfigurations =
+      Array.isArray(plano.sequenceConfigurations)
+        ? plano.sequenceConfigurations
+        : [];
+
+    setSequenceConfigurations(savedSequenceConfigurations);
+    setActiveSequenceConfigId(savedSequenceConfigurations[0]?.id || null);
+    setSequenceEditingId(null);
 
     if (versao?.plannedStartDate) setDataInicio(versao.plannedStartDate);
     if (versao?.plannedFinishDate) setDataFim(versao.plannedFinishDate);
@@ -1023,7 +1044,8 @@ export default function MasterPlanPage() {
     actualCells: dadosRealizado,
     holidays: feriados,
     customServices: servicosCustomizados,
-    hideWeekends: ocultarFinaisDeSemana
+    hideWeekends: ocultarFinaisDeSemana,
+    sequenceConfigurations
   });
 
   const sincronizarPacotesNormalizados = async (
@@ -1643,6 +1665,9 @@ export default function MasterPlanPage() {
         setServicosCustomizados({});
         setVersoes([]);
         setVersaoAtivaId(null);
+        setSequenceConfigurations([]);
+        setActiveSequenceConfigId(null);
+        setSequenceEditingId(null);
         setLinhaDeBaseCongelada(false);
         setModoControle(false);
         setHistorico([]);
@@ -1810,6 +1835,9 @@ export default function MasterPlanPage() {
         setLinhaDeBaseCongelada(false);
         setModoControle(false);
         setServicosCustomizados({});
+        setSequenceConfigurations([]);
+        setActiveSequenceConfigId(null);
+        setSequenceEditingId(null);
         setPacotesLancados([]);
         setFeriados([]);
         setDadosCelulas({});
@@ -3199,6 +3227,9 @@ ${
         setDadosCelulas({});
         setDadosRealizado({});
         setServicosCustomizados({});
+        setSequenceConfigurations([]);
+        setActiveSequenceConfigId(null);
+        setSequenceEditingId(null);
 
         // Blank Scenario means a fresh plan using the project's
         // current canonical Location Structure.
@@ -3334,9 +3365,11 @@ ${
 
   const abrirGeradorSequencia = () => {
     const rows = [];
+
     secoes.forEach((section) => {
       (section.linhas || []).forEach((row) => {
         if (!row?.id) return;
+
         rows.push({
           rowId: row.id,
           locationId: row.locationId || null,
@@ -3353,8 +3386,75 @@ ${
     setSequenceStartDate('');
     setSequencePredecessor('');
     setSequenceStartLag(0);
-    setSequenceDrag(null);
-    setSequenceDragOver(null);
+    setSequenceName(t.defaultSequenceName);
+    setSequenceEditingId(null);
+    setShowSequenceModal(true);
+  };
+
+  const abrirConfiguracoesSequencia = () => {
+    const config =
+      sequenceConfigurations.find(
+        (item) => item.id === activeSequenceConfigId
+      ) ||
+      sequenceConfigurations[0] ||
+      null;
+
+    if (!config) {
+      alert(t.noSequenceConfigured);
+      return;
+    }
+
+    const currentRows = new Map();
+
+    secoes.forEach((section) => {
+      (section.linhas || []).forEach((row) => {
+        currentRows.set(row.id, row);
+      });
+    });
+
+    const restoredLocations =
+      Array.isArray(config.locations)
+        ? config.locations.map((saved) => {
+            const row = currentRows.get(saved.rowId);
+
+            return {
+              rowId: saved.rowId,
+              locationId:
+                saved.locationId ||
+                row?.locationId ||
+                null,
+              label:
+                saved.label ||
+                row?.locationPath ||
+                row?.descricao ||
+                saved.rowId,
+              selected: saved.selected !== false
+            };
+          })
+        : [];
+
+    const restoredActivities =
+      Array.isArray(config.activities)
+        ? config.activities.map((activity, index) => ({
+            id:
+              activity.id ||
+              `seqact_restore_${Date.now()}_${index}`,
+            code: activity.code,
+            duration: Math.max(1, Number(activity.duration || 1)),
+            lag: Math.max(0, Number(activity.lag || 0))
+          }))
+        : [];
+
+    setSequenceLocations(restoredLocations);
+    setSequenceActivities(restoredActivities);
+    setSequenceNewActivity('');
+    setSequenceStartType(config.startType || 'data');
+    setSequenceStartDate(config.startDate || '');
+    setSequencePredecessor(config.predecessorId || '');
+    setSequenceStartLag(Math.max(0, Number(config.startLag || 0)));
+    setSequenceName(config.name || t.defaultSequenceName);
+    setSequenceEditingId(config.id);
+    setActiveSequenceConfigId(config.id);
     setShowSequenceModal(true);
   };
 
@@ -3568,7 +3668,8 @@ ${
   };
 
   const gerarSequenciaTrabalho = () => {
-    const selectedLocations = sequenceLocations.filter((item) => item.selected);
+    const selectedLocations =
+      sequenceLocations.filter((item) => item.selected);
 
     if (selectedLocations.length === 0) {
       alert(t.selectAtLeastOneLocation);
@@ -3585,12 +3686,35 @@ ${
       return;
     }
 
-    if (sequenceStartType === 'predecessora' && !sequencePredecessor) {
+    if (
+      sequenceStartType === 'predecessora' &&
+      !sequencePredecessor
+    ) {
       alert(t.errSelectPred);
       return;
     }
 
+    const isRegenerating = Boolean(sequenceEditingId);
+
+    if (
+      isRegenerating &&
+      !window.confirm(t.confirmRegenerate)
+    ) {
+      return;
+    }
+
     salvarHistorico();
+
+    const sequenceGroupId =
+      sequenceEditingId ||
+      `seq_${Date.now()}`;
+
+    const basePackages =
+      isRegenerating
+        ? pacotesLancados.filter(
+            (pkg) => pkg.sequenceGroupId !== sequenceGroupId
+          )
+        : pacotesLancados;
 
     const generated = [];
     const generatedByCell = new Map();
@@ -3599,7 +3723,8 @@ ${
     selectedLocations.forEach((location, locationIndex) => {
       sequenceActivities.forEach((activity, activityIndex) => {
         const service = servicosCores[activity.code] || null;
-        const id = `pct_seq_${stamp}_${locationIndex}_${activityIndex}`;
+        const id =
+          `pct_seq_${stamp}_${locationIndex}_${activityIndex}`;
 
         let tipo = 'predecessora';
         let predecessorId = '';
@@ -3612,19 +3737,14 @@ ${
             predecessorId = sequencePredecessor;
             relationshipLag = Math.max(
               0,
-              Number(
-                sequenceStartLag ||
-                0
-              )
+              Number(sequenceStartLag || 0)
             );
 
             dependencies = [
               {
                 type: 'external',
-                predecessorId:
-                  sequencePredecessor,
-                lagWorkingDays:
-                  relationshipLag
+                predecessorId: sequencePredecessor,
+                lagWorkingDays: relationshipLag
               }
             ];
           } else {
@@ -3635,112 +3755,84 @@ ${
         } else {
           const previousTrade =
             activityIndex > 0
-              ? generatedByCell.get(`${locationIndex}:${activityIndex - 1}`)
+              ? generatedByCell.get(
+                  `${locationIndex}:${activityIndex - 1}`
+                )
               : null;
 
           const previousLocation =
             locationIndex > 0
-              ? generatedByCell.get(`${locationIndex - 1}:${activityIndex}`)
+              ? generatedByCell.get(
+                  `${locationIndex - 1}:${activityIndex}`
+                )
               : null;
 
-          const candidates = [previousTrade, previousLocation].filter(Boolean);
-
-          const activityLag =
-            Math.max(
-              0,
-              Number(
-                activity.lag ||
-                0
-              )
-            );
+          const activityLag = Math.max(
+            0,
+            Number(activity.lag || 0)
+          );
 
           dependencies = [];
 
           if (previousTrade) {
             dependencies.push({
               type: 'trade',
-              predecessorId:
-                previousTrade.id,
-              lagWorkingDays:
-                activityLag
+              predecessorId: previousTrade.id,
+              lagWorkingDays: activityLag
             });
           }
 
           if (previousLocation) {
             dependencies.push({
               type: 'flow',
-              predecessorId:
-                previousLocation.id,
+              predecessorId: previousLocation.id,
               lagWorkingDays: 0
             });
           }
 
           if (dependencies.length > 0) {
             const pool = [
-              ...pacotesLancados,
+              ...basePackages,
               ...generated
             ];
 
-            const finishCache =
-              new Map();
+            const finishCache = new Map();
+            let latestReadyIndex = -1;
+            let controlling = dependencies[0];
 
-            let latestReadyIndex =
-              -1;
+            dependencies.forEach((dependency) => {
+              const predecessor =
+                pool.find(
+                  (item) =>
+                    item.id === dependency.predecessorId
+                );
 
-            let controlling =
-              dependencies[0];
+              if (!predecessor) return;
 
-            dependencies.forEach(
-              (dependency) => {
-                const predecessor =
-                  pool.find(
-                    (item) =>
-                      item.id ===
-                      dependency.predecessorId
-                  );
+              const finish =
+                calcularFimPacoteGerador(
+                  predecessor,
+                  pool,
+                  finishCache
+                );
 
-                if (!predecessor) {
-                  return;
-                }
+              const ready =
+                avancarDiasUteisGerador(
+                  finish,
+                  dependency.lagWorkingDays
+                );
 
-                const finish =
-                  calcularFimPacoteGerador(
-                    predecessor,
-                    pool,
-                    finishCache
-                  );
-
-                const ready =
-                  avancarDiasUteisGerador(
-                    finish,
-                    dependency
-                      .lagWorkingDays
-                  );
-
-                if (
-                  ready >
-                  latestReadyIndex
-                ) {
-                  latestReadyIndex =
-                    ready;
-
-                  controlling =
-                    dependency;
-                }
+              if (ready > latestReadyIndex) {
+                latestReadyIndex = ready;
+                controlling = dependency;
               }
-            );
+            });
 
-            predecessorId =
-              controlling
-                .predecessorId;
-
-            relationshipLag =
-              controlling
-                .lagWorkingDays;
+            predecessorId = controlling.predecessorId;
+            relationshipLag = controlling.lagWorkingDays;
           } else {
             tipo = 'data';
-            startDate =
-              sequenceStartDate;
+            startDate = sequenceStartDate;
           }
         }
 
@@ -3758,22 +3850,91 @@ ${
             tipo === 'predecessora'
               ? relationshipLag
               : 0,
-
           dependencies,
-
           manualDelayWorkingDays: 0,
-
           duracao: Math.max(1, Number(activity.duration || 1)),
-          generatedBySequence: true
+          generatedBySequence: true,
+          sequenceGroupId
         };
 
         generated.push(pkg);
-        generatedByCell.set(`${locationIndex}:${activityIndex}`, pkg);
+        generatedByCell.set(
+          `${locationIndex}:${activityIndex}`,
+          pkg
+        );
       });
     });
 
-    setPacotesLancados((current) => [...current, ...generated]);
+    const configuration = {
+      id: sequenceGroupId,
+      name:
+        sequenceName?.trim() ||
+        t.defaultSequenceName,
+      locations:
+        sequenceLocations.map((location) => ({
+          rowId: location.rowId,
+          locationId: location.locationId || null,
+          label: location.label || '',
+          selected: location.selected !== false
+        })),
+      activities:
+        sequenceActivities.map((activity) => ({
+          id: activity.id,
+          code: activity.code,
+          duration: Math.max(1, Number(activity.duration || 1)),
+          lag: Math.max(0, Number(activity.lag || 0))
+        })),
+      startType: sequenceStartType,
+      startDate:
+        sequenceStartType === 'data'
+          ? sequenceStartDate
+          : '',
+      predecessorId:
+        sequenceStartType === 'predecessora'
+          ? sequencePredecessor
+          : '',
+      startLag:
+        sequenceStartType === 'predecessora'
+          ? Math.max(0, Number(sequenceStartLag || 0))
+          : 0,
+      flowRule: 'continuous',
+      updatedAt: new Date().toISOString()
+    };
+
+    setPacotesLancados([
+      ...basePackages,
+      ...generated
+    ]);
+
+    setSequenceConfigurations((current) => {
+      const exists =
+        current.some(
+          (item) => item.id === sequenceGroupId
+        );
+
+      if (exists) {
+        return current.map((item) =>
+          item.id === sequenceGroupId
+            ? configuration
+            : item
+        );
+      }
+
+      return [
+        ...current,
+        configuration
+      ];
+    });
+
+    setActiveSequenceConfigId(sequenceGroupId);
+    setSequenceEditingId(sequenceGroupId);
     setShowSequenceModal(false);
+
+    alert(
+      isRegenerating
+        ? t.sequenceRegenerated
+        : `${generated.length} ${t.packagesWillBeCreated}.`
+    );
   };
 
   const handleInserirPacoteAutomacao = (e) => {
@@ -4119,6 +4280,41 @@ ${
               {t.generateSequence}
             </button>
 
+            <button
+              onClick={abrirConfiguracoesSequencia}
+              disabled={
+                linhaDeBaseCongelada ||
+                sequenceConfigurations.length === 0
+              }
+              title={
+                sequenceConfigurations.length === 0
+                  ? t.noSequenceConfigured
+                  : t.editSequenceHelp
+              }
+              style={{
+                backgroundColor:
+                  sequenceConfigurations.length === 0 || linhaDeBaseCongelada
+                    ? '#cbd5e1'
+                    : '#475569',
+                color: 'white',
+                border: 'none',
+                padding: '8px 15px',
+                borderRadius: '6px',
+                cursor:
+                  sequenceConfigurations.length === 0 || linhaDeBaseCongelada
+                    ? 'not-allowed'
+                    : 'pointer',
+                fontWeight: 'bold',
+                fontSize: '0.85rem',
+                opacity:
+                  sequenceConfigurations.length === 0 || linhaDeBaseCongelada
+                    ? 0.65
+                    : 1
+              }}
+            >
+              ⚙ {t.sequenceSettings}
+            </button>
+
             <button onClick={() => setShowPacoteModal(true)} disabled={linhaDeBaseCongelada} style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: linhaDeBaseCongelada ? 0.6 : 1 }}>
               {t.insertPackage}
             </button>
@@ -4200,12 +4396,31 @@ ${
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 2 }}>
               <div>
                 <div style={{ fontSize: '0.7rem', fontWeight: 900, letterSpacing: '0.08em', color: '#008f8c', marginBottom: '4px' }}>MASTER PLAN</div>
-                <h2 style={{ margin: 0, color: '#0b2239' }}>{t.sequenceGenerator}</h2>
+                <h2 style={{ margin: 0, color: '#0b2239' }}>
+                  {sequenceEditingId ? t.sequenceSettings : t.sequenceGenerator}
+                </h2>
+                {sequenceEditingId && (
+                  <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '0.75rem' }}>
+                    {t.editSequenceHelp}
+                  </p>
+                )}
               </div>
               <button type="button" onClick={() => setShowSequenceModal(false)} style={{ border: 'none', background: 'transparent', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
             </div>
 
-            <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div style={{ padding: '18px 24px 0' }}>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#475569', fontSize: '0.72rem', fontWeight: 800 }}>
+                {t.sequenceName}
+              </label>
+              <input
+                type="text"
+                value={sequenceName}
+                onChange={(e) => setSequenceName(e.target.value)}
+                style={{ width: '100%', maxWidth: '420px', padding: '9px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#0f172a' }}
+              />
+            </div>
+
+            <div style={{ padding: '18px 24px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
                 <h3 style={{ margin: '0 0 5px', color: '#0b2239' }}>{t.sequenceLocations}</h3>
                 <div style={{ marginBottom: '12px', fontSize: '0.72rem', color: '#64748b' }}>{t.dragToReorder}</div>
@@ -4386,7 +4601,7 @@ ${
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="button" onClick={() => setShowSequenceModal(false)} style={{ padding: '10px 16px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white', cursor: 'pointer', fontWeight: 700 }}>{t.mPkgCancel}</button>
-                <button type="button" onClick={gerarSequenciaTrabalho} style={{ padding: '10px 18px', border: 'none', borderRadius: '6px', background: '#008f8c', color: 'white', cursor: 'pointer', fontWeight: 900 }}>{t.generatePackages}</button>
+                <button type="button" onClick={gerarSequenciaTrabalho} style={{ padding: '10px 18px', border: 'none', borderRadius: '6px', background: '#008f8c', color: 'white', cursor: 'pointer', fontWeight: 900 }}>{sequenceEditingId ? t.regenerateSequence : t.generatePackages}</button>
               </div>
             </div>
           </div>
@@ -4657,13 +4872,27 @@ ${
                             if (d.isFeriado) defaultValor = 'FER';
                             else if (d.isFimDeSemana) defaultValor = 'OFF';
 
-                            const valorEfetivo = valorSalvo !== undefined ? valorSalvo : (isRealizado ? '' : defaultValor);
+                            // Project calendar markers belong to both
+                            // Planning and Control. A holiday remains a
+                            // holiday regardless of which row is being viewed.
+                            //
+                            // Actual data can still override FER/OFF if work
+                            // was genuinely performed on that non-working day.
+                            const valorEfetivo =
+                              valorSalvo !== undefined
+                                ? valorSalvo
+                                : defaultValor;
                             const configCor = servicosCores[valorEfetivo] || servicosCores[''];
 
                             let bgColor = 'transparent';
-                            if (configCor.color !== 'transparent') bgColor = configCor.color;
-                            else if (!isRealizado && d.isFeriado) bgColor = '#fed7d7';
-                            else if (!isRealizado && d.isFimDeSemana) bgColor = '#e2e8f0';
+
+                            if (configCor.color !== 'transparent') {
+                              bgColor = configCor.color;
+                            } else if (d.isFeriado) {
+                              bgColor = '#fed7d7';
+                            } else if (d.isFimDeSemana) {
+                              bgColor = '#e2e8f0';
+                            }
 
                             const inputBloqueado = isRealizado ? false : linhaDeBaseCongelada;
 
