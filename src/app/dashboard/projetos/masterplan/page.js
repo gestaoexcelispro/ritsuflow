@@ -104,6 +104,131 @@ const buildServiceAcronym = (service, index, usedCodes) => {
   return fallback;
 };
 
+
+// ----------------------------------------------------
+// MASTER PLAN LOCATION STRUCTURE INTEGRATION
+// ----------------------------------------------------
+// The canonical RitsuFlow Location Structure becomes the default
+// planning backbone for NEW / BLANK Master Plan scenarios.
+//
+// Existing saved scenarios are never overwritten. Their saved sections
+// remain exactly as they were when the scenario was created.
+//
+// Leaf locations become planning rows. Their immediate parent path becomes
+// the visual section title. Stable IDs are derived from the canonical
+// location UUIDs so saved grid cells remain deterministic.
+const buildMasterPlanSectionsFromLocations = (locations = []) => {
+  if (!Array.isArray(locations) || locations.length === 0) {
+    return [];
+  }
+
+  const locationMap = new Map(
+    locations.map((location) => [location.id, location])
+  );
+
+  const childCount = new Map();
+
+  locations.forEach((location) => {
+    if (!location.parent_id) return;
+
+    childCount.set(
+      location.parent_id,
+      (childCount.get(location.parent_id) || 0) + 1
+    );
+  });
+
+  const pathCache = new Map();
+
+  const buildPath = (location) => {
+    if (!location) return '';
+    if (pathCache.has(location.id)) return pathCache.get(location.id);
+
+    const parts = [];
+    const visited = new Set();
+    let current = location;
+
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+
+      if (current.name) {
+        parts.unshift(current.name);
+      }
+
+      current = current.parent_id
+        ? locationMap.get(current.parent_id)
+        : null;
+    }
+
+    const path = parts.join(' / ');
+    pathCache.set(location.id, path);
+
+    return path;
+  };
+
+  const planningLocations = locations.filter(
+    (location) => !childCount.has(location.id)
+  );
+
+  const rowsSource =
+    planningLocations.length > 0
+      ? planningLocations
+      : locations;
+
+  const sectionMap = new Map();
+
+  rowsSource.forEach((location) => {
+    const parent = location.parent_id
+      ? locationMap.get(location.parent_id)
+      : null;
+
+    const sectionKey = parent?.id || 'root';
+
+    const sectionTitle = parent
+      ? buildPath(parent)
+      : 'PROJECT LOCATIONS';
+
+    if (!sectionMap.has(sectionKey)) {
+      sectionMap.set(sectionKey, {
+        id: `locsec_${sectionKey}`,
+        titulo: sectionTitle || 'PROJECT LOCATIONS',
+        source: 'location_structure',
+        locationParentId: parent?.id || null,
+        linhas: [],
+      });
+    }
+
+    sectionMap.get(sectionKey).linhas.push({
+      id: `loc_${location.id}`,
+      descricao: location.name || buildPath(location),
+      locationId: location.id,
+      locationPath: buildPath(location),
+      source: 'location_structure',
+      sequenceNumber: Number(location.sequence_number || 0),
+    });
+  });
+
+  return Array.from(sectionMap.values())
+    .map((section) => ({
+      ...section,
+      linhas: [...section.linhas].sort((a, b) => {
+        const bySequence =
+          Number(a.sequenceNumber || 0) -
+          Number(b.sequenceNumber || 0);
+
+        if (bySequence !== 0) return bySequence;
+
+        return String(a.descricao || '').localeCompare(
+          String(b.descricao || '')
+        );
+      }),
+    }))
+    .sort((a, b) =>
+      String(a.titulo || '').localeCompare(
+        String(b.titulo || '')
+      )
+    );
+};
+
 export default function MasterPlanPage() {
   const { lang } = useLanguage();
   const isEn = lang === 'en-US';
@@ -266,6 +391,13 @@ export default function MasterPlanPage() {
   const [dadosCelulas, setDadosCelulas] = useState({});
   const [dadosRealizado, setDadosRealizado] = useState({});
   const [zonasColeta, setZonasColeta] = useState([]);
+
+  // Canonical Location Structure template used by new / blank scenarios.
+  // Saved scenarios keep their own persisted section snapshots.
+  const [
+    locationStructureSections,
+    setLocationStructureSections
+  ] = useState([]);
 
   const [secoes, setSecoes] = useState([
     {
@@ -500,6 +632,7 @@ export default function MasterPlanPage() {
     const carregarMasterPlanProjeto = async () => {
       if (!projetoSelecionado) {
         setZonasColeta([]);
+        setLocationStructureSections([]);
         setServicosProjeto({});
         setServicosCustomizados({});
         setVersoes([]);
@@ -595,8 +728,30 @@ export default function MasterPlanPage() {
         return path;
       };
 
+      const canonicalSections =
+        buildMasterPlanSectionsFromLocations(
+          locations
+        );
+
+      setLocationStructureSections(
+        canonicalSections
+      );
+
+      // Only planning rows (leaf locations) are exposed as selectable
+      // Master Plan locations. Full paths stay available for context.
       setZonasColeta(
-        [...new Set(locations.map(buildLocationPath).filter(Boolean))]
+        [
+          ...new Set(
+            canonicalSections.flatMap(
+              (section) =>
+                section.linhas.map(
+                  (row) =>
+                    row.locationPath ||
+                    row.descricao
+                )
+            )
+          ),
+        ].filter(Boolean)
       );
 
       const palette = [
@@ -653,6 +808,13 @@ export default function MasterPlanPage() {
         setFeriados([]);
         setDadosCelulas({});
         setDadosRealizado({});
+
+        // New Master Plans start from the project's canonical
+        // Location Structure instead of the old hard-coded rows.
+        if (canonicalSections.length > 0) {
+          setSecoes(canonicalSections);
+        }
+
         setHistorico([]);
       }
     };
@@ -1132,6 +1294,19 @@ export default function MasterPlanPage() {
         setDadosCelulas({});
         setDadosRealizado({});
         setServicosCustomizados({});
+
+        // Blank Scenario means a fresh plan using the project's
+        // current canonical Location Structure.
+        if (locationStructureSections.length > 0) {
+          setSecoes(
+            JSON.parse(
+              JSON.stringify(
+                locationStructureSections
+              )
+            )
+          );
+        }
+
         setVersaoAtivaId(null);
         setLinhaDeBaseCongelada(false);
         setModoControle(false);
@@ -1181,10 +1356,61 @@ export default function MasterPlanPage() {
   
   const handleAdicionarLinha = (secId) => {
     salvarHistorico();
-    setSecoes(secoes.map(s => s.id === secId ? { ...s, linhas: [...s.linhas, { id: `l_${Date.now()}`, descricao: '' }] } : s));
+
+    setSecoes(
+      secoes.map((section) =>
+        section.id === secId
+          ? {
+              ...section,
+              linhas: [
+                ...section.linhas,
+                {
+                  id: `l_${Date.now()}`,
+                  descricao: '',
+                  locationId: null,
+                  locationPath: '',
+                  source: 'manual'
+                }
+              ]
+            }
+          : section
+      )
+    );
   };
 
-  const handleAtualizarLinha = (secId, linhaId, valor) => setSecoes(secoes.map(s => s.id === secId ? { ...s, linhas: s.linhas.map(l => l.id === linhaId ? { ...l, descricao: valor } : l) } : s));
+  const handleAtualizarLinha = (secId, linhaId, valor) =>
+    setSecoes(
+      secoes.map((section) =>
+        section.id === secId
+          ? {
+              ...section,
+              linhas: section.linhas.map((row) =>
+                row.id === linhaId
+                  ? {
+                      ...row,
+                      descricao: valor,
+                      // Editing a canonical row turns it into a manual row.
+                      // This prevents a renamed label from silently pointing
+                      // to the wrong Location Structure record.
+                      locationId:
+                        row.source === 'location_structure'
+                          ? null
+                          : row.locationId || null,
+                      locationPath:
+                        row.source === 'location_structure'
+                          ? ''
+                          : row.locationPath || '',
+                      source:
+                        row.source === 'location_structure'
+                          ? 'manual'
+                          : row.source || 'manual'
+                    }
+                  : row
+              )
+            }
+          : section
+      )
+    );
   
   const handleRemoverLinha = (secId, linhaId) => {
     salvarHistorico();
@@ -1213,10 +1439,50 @@ export default function MasterPlanPage() {
 
     salvarHistorico();
 
+    let selectedPlanningRow = null;
+
+    secoes.some((section) => {
+      const foundRow =
+        section.linhas.find(
+          (row) =>
+            row.id ===
+            pacoteLinhaId
+        );
+
+      if (foundRow) {
+        selectedPlanningRow =
+          foundRow;
+
+        return true;
+      }
+
+      return false;
+    });
+
+    const selectedService =
+      servicosCores[
+        pacoteAtividade
+      ] || null;
+
     const novoPacote = {
       id: `pct_${Date.now()}`,
       atividade: pacoteAtividade,
       linhaId: pacoteLinhaId,
+
+      // Canonical links are persisted inside the scenario snapshot.
+      // They prepare Master Plan -> Lookahead -> Weekly -> Production
+      // integration without changing the current scheduling engine.
+      locationId:
+        selectedPlanningRow?.locationId ||
+        null,
+      locationPath:
+        selectedPlanningRow?.locationPath ||
+        selectedPlanningRow?.descricao ||
+        '',
+      projectServiceId:
+        selectedService?.projectServiceId ||
+        null,
+
       tipoInicio: tipoInicio,
       dataInicio: pacoteDataInicio,
       predecessoraId: pacotePredecessora,
@@ -1771,13 +2037,33 @@ export default function MasterPlanPage() {
                       <tr style={{ backgroundColor: '#edf2f7' }}>
                         <td colSpan={2} style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#edf2f7', padding: '6px 15px', borderBottom: '2px solid #2a4365', borderTop: '2px solid #2a4365' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <input 
-                              type="text"
-                              value={displayTitle}
-                              onChange={(e) => handleAtualizarTituloSecao(secao.id, e.target.value)}
-                              disabled={linhaDeBaseCongelada}
-                              style={{ fontWeight: 'bold', fontStyle: 'italic', color: '#2a4365', background: 'transparent', border: 'none', outline: 'none', width: '85%', fontSize: '0.9rem' }}
-                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '85%' }}>
+                              <input 
+                                type="text"
+                                value={displayTitle}
+                                onChange={(e) => handleAtualizarTituloSecao(secao.id, e.target.value)}
+                                disabled={linhaDeBaseCongelada}
+                                style={{ fontWeight: 'bold', fontStyle: 'italic', color: '#2a4365', background: 'transparent', border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: '0.9rem' }}
+                              />
+
+                              {secao.source === 'location_structure' && (
+                                <span
+                                  title="Generated from Project Location Structure"
+                                  style={{
+                                    flexShrink: 0,
+                                    padding: '2px 6px',
+                                    borderRadius: '999px',
+                                    backgroundColor: '#dff7f2',
+                                    color: '#087f73',
+                                    fontSize: '0.58rem',
+                                    fontWeight: 900,
+                                    letterSpacing: '0.05em'
+                                  }}
+                                >
+                                  LOCATION
+                                </span>
+                              )}
+                            </div>
                             {!linhaDeBaseCongelada && (
                               <button onClick={() => handleRemoverSecao(secao.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>✖</button>
                             )}
@@ -1850,6 +2136,11 @@ export default function MasterPlanPage() {
                                       disabled={linhaDeBaseCongelada}
                                       list="lista-zonas-coleta"
                                       placeholder={t.selectOrType}
+                                      title={
+                                        linha.locationPath ||
+                                        linha.descricao ||
+                                        ''
+                                      }
                                       style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: '#2d3748', fontSize: '0.85rem' }}
                                     />
                                     {modoControle && <span style={{ fontSize: '0.65rem', backgroundColor: '#cbd5e0', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: '#4a5568' }}>{t.plannedBadge}</span>}
