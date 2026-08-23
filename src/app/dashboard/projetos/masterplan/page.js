@@ -274,6 +274,7 @@ export default function MasterPlanPage() {
     lagWorkingDays: isEn ? 'Lag (workdays)' : 'Lag (dias úteis)',
     startLag: isEn ? 'Start Lag (workdays)' : 'Lag inicial (dias úteis)',
     dragToReorder: isEn ? 'Drag rows to reorder, or use the arrows.' : 'Arraste as linhas para reordenar ou use as setas.',
+    dependencySyncError: isEn ? 'The scenario was saved, but the dependency network could not be synchronized.' : 'O cenário foi salvo, mas a rede de dependências não pôde ser sincronizada.',
     undoBtn: isEn ? 'Undo' : 'Desfazer', // Novo botão de desfazer
     showWeekends: isEn ? 'Show Weekends' : 'Mostrar Finais de Semana',
     hideWeekends: isEn ? 'Hide Weekends' : 'Ocultar Finais de Semana',
@@ -558,6 +559,62 @@ export default function MasterPlanPage() {
     setHistorico([]);
   };
 
+  const obterDependenciasPacote = (pacote) => {
+    if (
+      Array.isArray(
+        pacote?.dependencies
+      ) &&
+      pacote.dependencies.length > 0
+    ) {
+      return pacote.dependencies
+        .filter(
+          (dependency) =>
+            dependency?.predecessorId
+        )
+        .map(
+          (dependency) => ({
+            type:
+              dependency.type ||
+              'external',
+            predecessorId:
+              dependency.predecessorId,
+            lagWorkingDays:
+              Math.max(
+                0,
+                Number(
+                  dependency.lagWorkingDays ||
+                  0
+                )
+              )
+          })
+        );
+    }
+
+    if (
+      pacote?.tipoInicio ===
+        'predecessora' &&
+      pacote?.predecessoraId
+    ) {
+      return [
+        {
+          type: 'external',
+          predecessorId:
+            pacote.predecessoraId,
+          lagWorkingDays:
+            Math.max(
+              0,
+              Number(
+                pacote.lagWorkingDays ||
+                0
+              )
+            )
+        }
+      ];
+    }
+
+    return [];
+  };
+
   const montarPlanData = () => ({
     sections: secoes,
     packages: pacotesLancados,
@@ -586,20 +643,53 @@ export default function MasterPlanPage() {
       : [];
 
     // ----------------------------------------------------
-    // 1. REMOVE PREVIOUS NORMALIZED SNAPSHOT
+    // 1. CLEAR THE PREVIOUS NORMALIZED NETWORK
     // ----------------------------------------------------
-    // master_plan_scenarios.plan_data remains the complete
-    // source of truth for the visual Master Plan.
-    //
-    // master_plan_packages is rebuilt from that scenario
-    // snapshot whenever the user saves / updates / freezes.
+    // Dependencies reference packages, so dependencies must
+    // be deleted first. plan_data remains the complete UI
+    // snapshot and is not affected.
+    const {
+      error: dependencyDeleteError
+    } = await supabase
+      .from(
+        'master_plan_package_dependencies'
+      )
+      .delete()
+      .eq(
+        'scenario_id',
+        scenarioId
+      )
+      .eq(
+        'project_id',
+        projetoSelecionado
+      );
+
+    if (dependencyDeleteError) {
+      console.error(
+        'Master Plan - delete normalized dependencies:',
+        dependencyDeleteError
+      );
+
+      return {
+        ok: false,
+        error:
+          dependencyDeleteError
+      };
+    }
+
     const {
       error: deleteError
     } = await supabase
       .from('master_plan_packages')
       .delete()
-      .eq('scenario_id', scenarioId)
-      .eq('project_id', projetoSelecionado);
+      .eq(
+        'scenario_id',
+        scenarioId
+      )
+      .eq(
+        'project_id',
+        projetoSelecionado
+      );
 
     if (deleteError) {
       console.error(
@@ -616,92 +706,41 @@ export default function MasterPlanPage() {
     if (packages.length === 0) {
       return {
         ok: true,
-        insertedCount: 0
+        insertedCount: 0,
+        dependencyCount: 0
       };
     }
 
     // ----------------------------------------------------
-    // 2. BUILD READABLE SNAPSHOT MAPS
+    // 2. READABLE SNAPSHOT MAPS
     // ----------------------------------------------------
     const rowById = new Map();
 
     secoes.forEach((section) => {
       (section.linhas || []).forEach((row) => {
-        rowById.set(row.id, row);
+        rowById.set(
+          row.id,
+          row
+        );
       });
     });
 
-    const packageByUiId = new Map(
-      packages.map((pkg) => [
-        pkg.id,
-        pkg
-      ])
-    );
-
-    const dbIdByUiId = new Map();
-    const visiting = new Set();
-    const inserted = new Set();
+    const dbIdByUiId =
+      new Map();
 
     // ----------------------------------------------------
-    // 3. INSERT IN DEPENDENCY ORDER
+    // 3. INSERT PACKAGES FIRST
     // ----------------------------------------------------
-    // The UI uses temporary IDs (pct_...). PostgreSQL uses UUIDs.
-    // We insert each predecessor first, store its generated UUID,
-    // then use that UUID when inserting the dependent package.
-    const insertPackage = async (
-      pkg,
-      sequenceNumber
-    ) => {
-      if (!pkg?.id) {
-        throw new Error(
-          'Master Plan package is missing its UI identifier.'
-        );
-      }
-
-      if (inserted.has(pkg.id)) {
-        return dbIdByUiId.get(pkg.id);
-      }
-
-      if (visiting.has(pkg.id)) {
-        throw new Error(
-          `Circular predecessor relationship detected for package ${pkg.id}.`
-        );
-      }
-
-      visiting.add(pkg.id);
-
-      let predecessorDbId = null;
-
-      if (
-        pkg.tipoInicio === 'predecessora' &&
-        pkg.predecessoraId
-      ) {
-        const predecessor =
-          packageByUiId.get(
-            pkg.predecessoraId
-          );
-
-        if (!predecessor) {
-          throw new Error(
-            `Predecessor ${pkg.predecessoraId} was not found in this scenario.`
-          );
-        }
-
-        const predecessorSequence =
-          packages.findIndex(
-            (item) =>
-              item.id ===
-              predecessor.id
-          );
-
-        predecessorDbId =
-          await insertPackage(
-            predecessor,
-            predecessorSequence >= 0
-              ? predecessorSequence
-              : 0
-          );
-      }
+    // All packages are created without DB predecessor UUIDs.
+    // This makes multi-predecessor networks possible without
+    // requiring a dependency insertion order.
+    for (
+      let index = 0;
+      index < packages.length;
+      index += 1
+    ) {
+      const pkg =
+        packages[index];
 
       const row =
         rowById.get(
@@ -713,10 +752,19 @@ export default function MasterPlanPage() {
           pkg.atividade
         ] || null;
 
-      const normalizedStartRule =
-        pkg.tipoInicio === 'predecessora'
-          ? 'predecessor'
-          : 'date';
+      const dependencies =
+        obterDependenciasPacote(
+          pkg
+        );
+
+      const controllingDependency =
+        dependencies.find(
+          (dependency) =>
+            dependency.predecessorId ===
+            pkg.predecessoraId
+        ) ||
+        dependencies[0] ||
+        null;
 
       const payload = {
         scenario_id:
@@ -785,18 +833,19 @@ export default function MasterPlanPage() {
           null,
 
         start_rule:
-          normalizedStartRule,
+          dependencies.length > 0
+            ? 'predecessor'
+            : 'date',
 
         planned_start_date:
-          normalizedStartRule === 'date'
-            ? pkg.dataInicio ||
-              null
-            : null,
+          dependencies.length > 0
+            ? null
+            : pkg.dataInicio ||
+              null,
 
+        // Filled after all packages exist.
         predecessor_package_id:
-          normalizedStartRule === 'predecessor'
-            ? predecessorDbId
-            : null,
+          null,
 
         duration_working_days:
           Math.max(
@@ -811,6 +860,8 @@ export default function MasterPlanPage() {
           Math.max(
             0,
             Number(
+              controllingDependency
+                ?.lagWorkingDays ||
               pkg.lagWorkingDays ||
               0
             )
@@ -820,8 +871,7 @@ export default function MasterPlanPage() {
           Math.max(
             0,
             Number(
-              sequenceNumber ||
-              0
+              index
             )
           )
       };
@@ -830,7 +880,9 @@ export default function MasterPlanPage() {
         data: insertedPackage,
         error: insertError
       } = await supabase
-        .from('master_plan_packages')
+        .from(
+          'master_plan_packages'
+        )
         .insert(
           payload
         )
@@ -838,53 +890,198 @@ export default function MasterPlanPage() {
         .single();
 
       if (insertError) {
-        throw insertError;
+        console.error(
+          'Master Plan - insert normalized package:',
+          insertError
+        );
+
+        return {
+          ok: false,
+          error: insertError
+        };
       }
 
       dbIdByUiId.set(
         pkg.id,
         insertedPackage.id
       );
+    }
 
-      inserted.add(
-        pkg.id
-      );
+    // ----------------------------------------------------
+    // 4. INSERT EVERY LOGICAL DEPENDENCY
+    // ----------------------------------------------------
+    const dependencyRows = [];
 
-      visiting.delete(
-        pkg.id
-      );
-
-      return insertedPackage.id;
-    };
-
-    try {
-      for (
-        let index = 0;
-        index < packages.length;
-        index += 1
-      ) {
-        await insertPackage(
-          packages[index],
-          index
+    packages.forEach((pkg) => {
+      const packageDbId =
+        dbIdByUiId.get(
+          pkg.id
         );
+
+      obterDependenciasPacote(
+        pkg
+      ).forEach(
+        (dependency) => {
+          const predecessorDbId =
+            dbIdByUiId.get(
+              dependency.predecessorId
+            );
+
+          if (
+            !packageDbId ||
+            !predecessorDbId
+          ) {
+            return;
+          }
+
+          dependencyRows.push({
+            scenario_id:
+              scenarioId,
+
+            project_id:
+              projetoSelecionado,
+
+            package_id:
+              packageDbId,
+
+            predecessor_package_id:
+              predecessorDbId,
+
+            dependency_type:
+              dependency.type ||
+              'external',
+
+            lag_working_days:
+              Math.max(
+                0,
+                Number(
+                  dependency.lagWorkingDays ||
+                  0
+                )
+              )
+          });
+        }
+      );
+    });
+
+    if (
+      dependencyRows.length > 0
+    ) {
+      const {
+        error: dependencyInsertError
+      } = await supabase
+        .from(
+          'master_plan_package_dependencies'
+        )
+        .insert(
+          dependencyRows
+        );
+
+      if (
+        dependencyInsertError
+      ) {
+        console.error(
+          'Master Plan - insert dependency network:',
+          dependencyInsertError
+        );
+
+        return {
+          ok: false,
+          error:
+            dependencyInsertError
+        };
+      }
+    }
+
+    // ----------------------------------------------------
+    // 5. KEEP SINGLE CONTROLLING PREDECESSOR FOR
+    //    BACKWARD COMPATIBILITY
+    // ----------------------------------------------------
+    for (
+      const pkg of packages
+    ) {
+      const dependencies =
+        obterDependenciasPacote(
+          pkg
+        );
+
+      if (
+        dependencies.length === 0
+      ) {
+        continue;
       }
 
-      return {
-        ok: true,
-        insertedCount:
-          inserted.size
-      };
-    } catch (error) {
-      console.error(
-        'Master Plan - normalized package synchronization:',
-        error
-      );
+      const controllingDependency =
+        dependencies.find(
+          (dependency) =>
+            dependency.predecessorId ===
+            pkg.predecessoraId
+        ) ||
+        dependencies[0];
 
-      return {
-        ok: false,
-        error
-      };
+      const packageDbId =
+        dbIdByUiId.get(
+          pkg.id
+        );
+
+      const predecessorDbId =
+        dbIdByUiId.get(
+          controllingDependency
+            .predecessorId
+        );
+
+      if (
+        !packageDbId ||
+        !predecessorDbId
+      ) {
+        continue;
+      }
+
+      const {
+        error: updateError
+      } = await supabase
+        .from(
+          'master_plan_packages'
+        )
+        .update({
+          predecessor_package_id:
+            predecessorDbId,
+
+          lag_working_days:
+            Math.max(
+              0,
+              Number(
+                controllingDependency
+                  .lagWorkingDays ||
+                0
+              )
+            )
+        })
+        .eq(
+          'id',
+          packageDbId
+        );
+
+      if (updateError) {
+        console.error(
+          'Master Plan - update controlling predecessor:',
+          updateError
+        );
+
+        return {
+          ok: false,
+          error: updateError
+        };
+      }
     }
+
+    return {
+      ok: true,
+      insertedCount:
+        packages.length,
+      dependencyCount:
+        dependencyRows.length
+    };
   };
 
   useEffect(() => {
@@ -1232,51 +1429,238 @@ export default function MasterPlanPage() {
       return;
     }
 
-    let novaGrade = {};
-    let trackerFimPacote = {}; 
+    const novaGrade = {};
+    const packageById =
+      new Map(
+        pacotesLancados.map(
+          (pacote) => [
+            pacote.id,
+            pacote
+          ]
+        )
+      );
 
-    pacotesLancados.forEach(pacote => {
+    const scheduleCache =
+      new Map();
+
+    const calculatePackageSchedule = (
+      pacote,
+      stack = new Set()
+    ) => {
+      if (
+        !pacote?.id
+      ) {
+        return null;
+      }
+
+      if (
+        scheduleCache.has(
+          pacote.id
+        )
+      ) {
+        return scheduleCache.get(
+          pacote.id
+        );
+      }
+
+      if (
+        stack.has(
+          pacote.id
+        )
+      ) {
+        console.error(
+          'Master Plan - circular dependency detected:',
+          pacote.id
+        );
+
+        return null;
+      }
+
+      const nextStack =
+        new Set(
+          stack
+        );
+
+      nextStack.add(
+        pacote.id
+      );
+
       let startIndex = -1;
 
-      if (pacote.tipoInicio === 'data') {
-        startIndex = datasPlanilha.findIndex(d => d.dataIso === pacote.dataInicio);
-      } else if (pacote.tipoInicio === 'predecessora') {
-        const indexFimPredecessora = trackerFimPacote[pacote.predecessoraId];
-        if (indexFimPredecessora !== undefined) {
-          const lagEndIndex =
-            avancarDiasUteisGerador(
-              indexFimPredecessora,
-              Math.max(
-                0,
-                Number(
-                  pacote.lagWorkingDays ||
-                  0
-                )
+      const dependencies =
+        obterDependenciasPacote(
+          pacote
+        );
+
+      if (
+        dependencies.length === 0
+      ) {
+        startIndex =
+          datasPlanilha.findIndex(
+            (day) =>
+              day.dataIso ===
+              pacote.dataInicio
+          );
+      } else {
+        let controllingReadyIndex =
+          -1;
+
+        dependencies.forEach(
+          (dependency) => {
+            const predecessor =
+              packageById.get(
+                dependency
+                  .predecessorId
+              );
+
+            if (!predecessor) {
+              return;
+            }
+
+            const predecessorSchedule =
+              calculatePackageSchedule(
+                predecessor,
+                nextStack
+              );
+
+            if (
+              !predecessorSchedule ||
+              predecessorSchedule.endIndex <
+                0
+            ) {
+              return;
+            }
+
+            const lagEndIndex =
+              avancarDiasUteisGerador(
+                predecessorSchedule.endIndex,
+                dependency
+                  .lagWorkingDays
+              );
+
+            const readyIndex =
+              lagEndIndex + 1;
+
+            if (
+              readyIndex >
+              controllingReadyIndex
+            ) {
+              controllingReadyIndex =
+                readyIndex;
+            }
+          }
+        );
+
+        startIndex =
+          controllingReadyIndex;
+      }
+
+      if (
+        startIndex < 0 ||
+        startIndex >=
+          datasPlanilha.length
+      ) {
+        return null;
+      }
+
+      let allocatedDays = 0;
+      let lastIndex =
+        startIndex;
+
+      for (
+        let index = startIndex;
+        index <
+          datasPlanilha.length &&
+        allocatedDays <
+          Math.max(
+            1,
+            Number(
+              pacote.duracao ||
+              1
+            )
+          );
+        index += 1
+      ) {
+        const day =
+          datasPlanilha[index];
+
+        if (
+          !day.isFimDeSemana &&
+          !day.isFeriado
+        ) {
+          allocatedDays += 1;
+          lastIndex = index;
+        }
+      }
+
+      const result = {
+        startIndex,
+        endIndex:
+          allocatedDays > 0
+            ? lastIndex
+            : -1
+      };
+
+      scheduleCache.set(
+        pacote.id,
+        result
+      );
+
+      return result;
+    };
+
+    pacotesLancados.forEach(
+      (pacote) => {
+        const schedule =
+          calculatePackageSchedule(
+            pacote
+          );
+
+        if (
+          !schedule
+        ) {
+          return;
+        }
+
+        let allocatedDays = 0;
+
+        for (
+          let index =
+            schedule.startIndex;
+          index <
+            datasPlanilha.length &&
+          allocatedDays <
+            Math.max(
+              1,
+              Number(
+                pacote.duracao ||
+                1
               )
             );
+          index += 1
+        ) {
+          const day =
+            datasPlanilha[index];
 
-          startIndex = lagEndIndex + 1;
-        }
-      }
+          if (
+            !day.isFimDeSemana &&
+            !day.isFeriado
+          ) {
+            const cellKey =
+              `${pacote.linhaId}___${day.dataIso}`;
 
-      if (startIndex !== -1) {
-        let diasAlocados = 0;
-        let lastIndex = startIndex;
+            novaGrade[cellKey] =
+              pacote.atividade;
 
-        for (let i = startIndex; i < datasPlanilha.length && diasAlocados < pacote.duracao; i++) {
-          const dia = datasPlanilha[i];
-          if (!dia.isFimDeSemana && !dia.isFeriado) {
-            const cellKey = `${pacote.linhaId}___${dia.dataIso}`;
-            novaGrade[cellKey] = pacote.atividade;
-            diasAlocados++;
-            lastIndex = i;
+            allocatedDays += 1;
           }
         }
-        trackerFimPacote[pacote.id] = lastIndex; 
       }
-    });
+    );
 
-    setDadosCelulas(novaGrade);
+    setDadosCelulas(
+      novaGrade
+    );
   }, [pacotesLancados, datasPlanilha]);
 
   const calcularPapelSugerido = () => {
@@ -2130,6 +2514,7 @@ ${
         let predecessorId = '';
         let startDate = '';
         let relationshipLag = 0;
+        let dependencies = [];
 
         if (locationIndex === 0 && activityIndex === 0) {
           if (sequenceStartType === 'predecessora') {
@@ -2141,9 +2526,20 @@ ${
                 0
               )
             );
+
+            dependencies = [
+              {
+                type: 'external',
+                predecessorId:
+                  sequencePredecessor,
+                lagWorkingDays:
+                  relationshipLag
+              }
+            ];
           } else {
             tipo = 'data';
             startDate = sequenceStartDate;
+            dependencies = [];
           }
         } else {
           const previousTrade =
@@ -2167,15 +2563,28 @@ ${
               )
             );
 
-          if (candidates.length === 1) {
-            predecessorId =
-              candidates[0].id;
+          dependencies = [];
 
-            relationshipLag =
-              candidates[0] === previousTrade
-                ? activityLag
-                : 0;
-          } else if (candidates.length === 2) {
+          if (previousTrade) {
+            dependencies.push({
+              type: 'trade',
+              predecessorId:
+                previousTrade.id,
+              lagWorkingDays:
+                activityLag
+            });
+          }
+
+          if (previousLocation) {
+            dependencies.push({
+              type: 'flow',
+              predecessorId:
+                previousLocation.id,
+              lagWorkingDays: 0
+            });
+          }
+
+          if (dependencies.length > 0) {
             const pool = [
               ...pacotesLancados,
               ...generated
@@ -2184,47 +2593,63 @@ ${
             const finishCache =
               new Map();
 
-            const finishTrade =
-              calcularFimPacoteGerador(
-                previousTrade,
-                pool,
-                finishCache
-              );
+            let latestReadyIndex =
+              -1;
 
-            const finishLocation =
-              calcularFimPacoteGerador(
-                previousLocation,
-                pool,
-                finishCache
-              );
+            let controlling =
+              dependencies[0];
 
-            const tradeReady =
-              avancarDiasUteisGerador(
-                finishTrade,
-                activityLag
-              );
+            dependencies.forEach(
+              (dependency) => {
+                const predecessor =
+                  pool.find(
+                    (item) =>
+                      item.id ===
+                      dependency.predecessorId
+                  );
 
-            const locationReady =
-              finishLocation;
+                if (!predecessor) {
+                  return;
+                }
 
-            if (
-              tradeReady >=
-              locationReady
-            ) {
-              predecessorId =
-                previousTrade.id;
+                const finish =
+                  calcularFimPacoteGerador(
+                    predecessor,
+                    pool,
+                    finishCache
+                  );
 
-              relationshipLag =
-                activityLag;
-            } else {
-              predecessorId =
-                previousLocation.id;
+                const ready =
+                  avancarDiasUteisGerador(
+                    finish,
+                    dependency
+                      .lagWorkingDays
+                  );
 
-              relationshipLag = 0;
-            }
+                if (
+                  ready >
+                  latestReadyIndex
+                ) {
+                  latestReadyIndex =
+                    ready;
+
+                  controlling =
+                    dependency;
+                }
+              }
+            );
+
+            predecessorId =
+              controlling
+                .predecessorId;
+
+            relationshipLag =
+              controlling
+                .lagWorkingDays;
           } else {
             tipo = 'data';
-            startDate = sequenceStartDate;
+            startDate =
+              sequenceStartDate;
           }
         }
 
@@ -2242,6 +2667,9 @@ ${
             tipo === 'predecessora'
               ? relationshipLag
               : 0,
+
+          dependencies,
+
           duracao: Math.max(1, Number(activity.duration || 1)),
           generatedBySequence: true
         };
@@ -2292,6 +2720,19 @@ ${
         pacoteAtividade
       ] || null;
 
+    const manualDependencies =
+      tipoInicio === 'predecessora' &&
+      pacotePredecessora
+        ? [
+            {
+              type: 'external',
+              predecessorId:
+                pacotePredecessora,
+              lagWorkingDays: 0
+            }
+          ]
+        : [];
+
     const novoPacote = {
       id: `pct_${Date.now()}`,
       atividade: pacoteAtividade,
@@ -2314,6 +2755,9 @@ ${
       tipoInicio: tipoInicio,
       dataInicio: pacoteDataInicio,
       predecessoraId: pacotePredecessora,
+      lagWorkingDays: 0,
+      dependencies:
+        manualDependencies,
       duracao: pacoteDuracao
     };
 
