@@ -433,7 +433,6 @@ export default function MasterPlanPage() {
   const [sequenceDrag, setSequenceDrag] = useState(null);
   const [sequenceDragOver, setSequenceDragOver] = useState(null);
   const [packageDrag, setPackageDrag] = useState(null);
-  const [schedulePersistenceDiagnostic, setSchedulePersistenceDiagnostic] = useState(null);
 
   const [datasPlanilha, setDatasPlanilha] = useState([]);
   const [dadosCelulas, setDadosCelulas] = useState({});
@@ -1183,8 +1182,7 @@ export default function MasterPlanPage() {
   };
 
   const criarSnapshotAgendaImutavel = (
-    packagesSnapshot,
-    showDiagnostic = false
+    packagesSnapshot
   ) => {
     const rawPackages =
       Array.isArray(
@@ -1206,9 +1204,6 @@ export default function MasterPlanPage() {
     const snapshot =
       new Map();
 
-    const diagnosticRows =
-      [];
-
     packages.forEach(
       (pkg) => {
         const schedule =
@@ -1217,164 +1212,43 @@ export default function MasterPlanPage() {
           ) ||
           null;
 
-        const scheduledStartDate =
-          schedule
-            ? (
-                datasPlanilha[
-                  schedule.startIndex
-                ]?.dataIso ||
-                null
-              )
-            : null;
-
-        const scheduledFinishDate =
-          schedule
-            ? (
-                datasPlanilha[
-                  schedule.endIndex
-                ]?.dataIso ||
-                null
-              )
-            : null;
-
-        const sequenceGroupId =
-          pkg.sequenceGroupId ||
-          obterConfiguracaoSequenciaPacote(
-            pkg
-          )?.id ||
-          null;
-
         snapshot.set(
           pkg.id,
           {
-            scheduledStartDate,
-            scheduledFinishDate,
-            sequenceGroupId
+            scheduledStartDate:
+              schedule
+                ? (
+                    datasPlanilha[
+                      schedule.startIndex
+                    ]?.dataIso ||
+                    null
+                  )
+                : null,
+
+            scheduledFinishDate:
+              schedule
+                ? (
+                    datasPlanilha[
+                      schedule.endIndex
+                    ]?.dataIso ||
+                    null
+                  )
+                : null,
+
+            sequenceGroupId:
+              pkg.sequenceGroupId ||
+              obterConfiguracaoSequenciaPacote(
+                pkg
+              )?.id ||
+              null
           }
         );
-
-        diagnosticRows.push({
-          packageId:
-            pkg.id,
-
-          code:
-            pkg.atividade,
-
-          rowId:
-            pkg.linhaId,
-
-          startType:
-            pkg.tipoInicio,
-
-          explicitStart:
-            pkg.dataInicio ||
-            null,
-
-          predecessorId:
-            pkg.predecessoraId ||
-            null,
-
-          dependencyCount:
-            obterDependenciasPacote(
-              pkg
-            ).length,
-
-          scheduleFound:
-            Boolean(
-              schedule
-            ),
-
-          startIndex:
-            schedule
-              ?.startIndex ??
-            null,
-
-          endIndex:
-            schedule
-              ?.endIndex ??
-            null,
-
-          scheduledStartDate,
-
-          scheduledFinishDate
-        });
       }
     );
 
-    const resolvedRows =
-      diagnosticRows.filter(
-        (row) =>
-          row.scheduledStartDate &&
-          row.scheduledFinishDate
-      );
-
-    const unresolvedRows =
-      diagnosticRows.filter(
-        (row) =>
-          !row.scheduledStartDate ||
-          !row.scheduledFinishDate
-      );
-
-    const diagnostic = {
-      rawPackageCount:
-        rawPackages.length,
-
-      rebuiltPackageCount:
-        packages.length,
-
-      scheduleMapSize:
-        schedules.size,
-
-      calendarDayCount:
-        datasPlanilha.length,
-
-      calendarStart:
-        datasPlanilha[0]
-          ?.dataIso ||
-        null,
-
-      calendarFinish:
-        datasPlanilha[
-          datasPlanilha.length -
-            1
-        ]?.dataIso ||
-        null,
-
-      resolvedPackageCount:
-        resolvedRows.length,
-
-      unresolvedPackageCount:
-        unresolvedRows.length,
-
-      firstPackage:
-        diagnosticRows[0] ||
-        null,
-
-      firstUnresolved:
-        unresolvedRows[0] ||
-        null
-    };
-
-    console.group(
-      'RitsuFlow Master Plan - Schedule Snapshot Diagnostic'
-    );
-
-    console.log(
-      diagnostic
-    );
-
-    console.table(
-      diagnosticRows
-    );
-
-    console.groupEnd();
-
-
     return {
       packages,
-      snapshot,
-      diagnostic,
-      diagnosticRows
+      snapshot
     };
   };
 
@@ -3614,13 +3488,8 @@ ${
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
-        pacotesLancados,
-        true
+        pacotesLancados
       );
-
-    setSchedulePersistenceDiagnostic(
-      immutableScheduleSnapshot.diagnostic
-    );
 
     const packageSync =
       await sincronizarPacotesNormalizados(
@@ -5383,64 +5252,6 @@ ${
               <button onClick={() => setShowPdfModal(false)} style={{ backgroundColor: '#cbd5e0', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer' }}>{t.mPkgCancel}</button>
               <button onClick={gerarPDF} style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mPdfConfirm}</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {schedulePersistenceDiagnostic && (
-        <div
-          style={{
-            marginBottom: '14px',
-            padding: '14px 16px',
-            border: '1px solid #f59e0b',
-            backgroundColor: '#fffbeb',
-            borderRadius: '8px',
-            color: '#78350f',
-            fontFamily: 'sans-serif'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: '8px' }}>
-                Master Plan Schedule Snapshot Diagnostic
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '6px 18px', fontSize: '0.78rem' }}>
-                <div>Raw packages: <strong>{schedulePersistenceDiagnostic.rawPackageCount}</strong></div>
-                <div>Rebuilt packages: <strong>{schedulePersistenceDiagnostic.rebuiltPackageCount}</strong></div>
-                <div>Schedule entries: <strong>{schedulePersistenceDiagnostic.scheduleMapSize}</strong></div>
-                <div>Calendar days: <strong>{schedulePersistenceDiagnostic.calendarDayCount}</strong></div>
-                <div>Calendar start: <strong>{schedulePersistenceDiagnostic.calendarStart || 'NULL'}</strong></div>
-                <div>Calendar finish: <strong>{schedulePersistenceDiagnostic.calendarFinish || 'NULL'}</strong></div>
-                <div>Resolved packages: <strong>{schedulePersistenceDiagnostic.resolvedPackageCount}</strong></div>
-                <div>Unresolved packages: <strong>{schedulePersistenceDiagnostic.unresolvedPackageCount}</strong></div>
-              </div>
-
-              {schedulePersistenceDiagnostic.firstPackage && (
-                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #fde68a', fontSize: '0.76rem', lineHeight: 1.5 }}>
-                  <div>First package: <strong>{schedulePersistenceDiagnostic.firstPackage.code}</strong></div>
-                  <div>ID: <code>{schedulePersistenceDiagnostic.firstPackage.packageId}</code></div>
-                  <div>Explicit start: <strong>{schedulePersistenceDiagnostic.firstPackage.explicitStart || 'NULL'}</strong></div>
-                  <div>Schedule found: <strong>{schedulePersistenceDiagnostic.firstPackage.scheduleFound ? 'YES' : 'NO'}</strong></div>
-                  <div>Indexes: <strong>{schedulePersistenceDiagnostic.firstPackage.startIndex ?? 'NULL'} → {schedulePersistenceDiagnostic.firstPackage.endIndex ?? 'NULL'}</strong></div>
-                  <div>Dates: <strong>{schedulePersistenceDiagnostic.firstPackage.scheduledStartDate || 'NULL'} → {schedulePersistenceDiagnostic.firstPackage.scheduledFinishDate || 'NULL'}</strong></div>
-                </div>
-              )}
-
-              {schedulePersistenceDiagnostic.firstUnresolved && (
-                <div style={{ marginTop: '8px', fontSize: '0.76rem' }}>
-                  First unresolved: <strong>{schedulePersistenceDiagnostic.firstUnresolved.code}</strong> · Dependencies: <strong>{schedulePersistenceDiagnostic.firstUnresolved.dependencyCount}</strong>
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setSchedulePersistenceDiagnostic(null)}
-              style={{ border: 'none', background: 'transparent', color: '#92400e', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 900 }}
-            >
-              ×
-            </button>
           </div>
         </div>
       )}
