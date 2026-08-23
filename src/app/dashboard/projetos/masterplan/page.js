@@ -1127,6 +1127,60 @@ export default function MasterPlanPage() {
     sequenceConfigurations
   });
 
+  const obterDatasPacoteDaGradeVisivel = (
+    pacote
+  ) => {
+    if (
+      !pacote?.linhaId ||
+      !pacote?.atividade
+    ) {
+      return {
+        scheduledStartDate: null,
+        scheduledFinishDate: null
+      };
+    }
+
+    const matchingDates =
+      datasPlanilha
+        .filter(
+          (day) => {
+            if (
+              day.isFimDeSemana ||
+              day.isFeriado
+            ) {
+              return false;
+            }
+
+            const cellKey =
+              `${pacote.linhaId}___${day.dataIso}`;
+
+            return (
+              dadosCelulas[
+                cellKey
+              ] ===
+              pacote.atividade
+            );
+          }
+        )
+        .map(
+          (day) =>
+            day.dataIso
+        );
+
+    return {
+      scheduledStartDate:
+        matchingDates[0] ||
+        null,
+
+      scheduledFinishDate:
+        matchingDates[
+          matchingDates.length -
+            1
+        ] ||
+        null
+    };
+  };
+
   const sincronizarPacotesNormalizados = async (
     scenarioId,
     packagesSnapshot = pacotesLancados
@@ -1384,18 +1438,10 @@ export default function MasterPlanPage() {
         ) ||
         null;
 
-      if (
-        !calculatedSchedule
-      ) {
-        console.warn(
-          'Master Plan - package has no authoritative schedule result:',
-          {
-            packageId: pkg.id,
-            packageCode: pkg.atividade,
-            rowId: pkg.linhaId
-          }
+      const visibleGridSchedule =
+        obterDatasPacoteDaGradeVisivel(
+          pkg
         );
-      }
 
       const scheduledStartDate =
         calculatedSchedule
@@ -1403,9 +1449,15 @@ export default function MasterPlanPage() {
               datasPlanilha[
                 calculatedSchedule.startIndex
               ]?.dataIso ||
+              visibleGridSchedule
+                .scheduledStartDate ||
               null
             )
-          : null;
+          : (
+              visibleGridSchedule
+                .scheduledStartDate ||
+              null
+            );
 
       const scheduledFinishDate =
         calculatedSchedule
@@ -1413,9 +1465,42 @@ export default function MasterPlanPage() {
               datasPlanilha[
                 calculatedSchedule.endIndex
               ]?.dataIso ||
+              visibleGridSchedule
+                .scheduledFinishDate ||
               null
             )
-          : null;
+          : (
+              visibleGridSchedule
+                .scheduledFinishDate ||
+              null
+            );
+
+      if (
+        !scheduledStartDate ||
+        !scheduledFinishDate
+      ) {
+        console.warn(
+          'Master Plan - package schedule could not be resolved for persistence:',
+          {
+            packageId:
+              pkg.id,
+            packageCode:
+              pkg.atividade,
+            rowId:
+              pkg.linhaId,
+            agendaFound:
+              Boolean(
+                calculatedSchedule
+              ),
+            gridStart:
+              visibleGridSchedule
+                .scheduledStartDate,
+            gridFinish:
+              visibleGridSchedule
+                .scheduledFinishDate
+          }
+        );
+      }
 
       // Resolve generated sequence ownership.
       //
@@ -1430,7 +1515,11 @@ export default function MasterPlanPage() {
       const persistedSequenceGroupId =
         pkg.sequenceGroupId ||
         sequenceConfiguration?.id ||
-        null;
+        (
+          pkg.generatedBySequence
+            ? `legacy_sequence_${scenarioId}`
+            : null
+        );
 
       const payload = {
         scenario_id:
@@ -1569,11 +1658,38 @@ export default function MasterPlanPage() {
         .insert(
           payload
         )
-        .select('id')
+        .select(`
+          id,
+          scheduled_start_date,
+          scheduled_finish_date,
+          sequence_group_id
+        `)
         .single();
 
       if (insertError) {
         throw insertError;
+      }
+
+      if (
+        scheduledStartDate &&
+        insertedPackage
+          ?.scheduled_start_date !==
+          scheduledStartDate
+      ) {
+        throw new Error(
+          `Master Plan schedule persistence mismatch for ${pkg.atividade}: expected start ${scheduledStartDate}, stored ${insertedPackage?.scheduled_start_date || 'NULL'}.`
+        );
+      }
+
+      if (
+        scheduledFinishDate &&
+        insertedPackage
+          ?.scheduled_finish_date !==
+          scheduledFinishDate
+      ) {
+        throw new Error(
+          `Master Plan schedule persistence mismatch for ${pkg.atividade}: expected finish ${scheduledFinishDate}, stored ${insertedPackage?.scheduled_finish_date || 'NULL'}.`
+        );
       }
 
       dbIdByUiId.set(
