@@ -219,6 +219,11 @@ export default function DailyReportsPage() {
   ] = useState({});
 
   const [
+    projectProgressById,
+    setProjectProgressById,
+  ] = useState({});
+
+  const [
     selectedProject,
     setSelectedProject,
   ] = useState(null);
@@ -348,6 +353,59 @@ export default function DailyReportsPage() {
       setProjects(
         availableProjects
       );
+
+      // ------------------------------------------------------
+      // CENTRAL PRODUCTION CONTROL PROGRESS
+      // ------------------------------------------------------
+      // This is the same portfolio-level source used by
+      // Master Plan. Daily Reports does not recalculate
+      // project progress independently.
+      const {
+        data: progressData,
+        error: progressError,
+      } =
+        await supabase
+          .from(
+            'production_control_project_portfolio'
+          )
+          .select(`
+            project_id,
+            scope_item_count,
+            not_started_count,
+            in_progress_count,
+            completed_count,
+            overall_progress_percentage,
+            last_production_date,
+            has_production_scope
+          `);
+
+      if (progressError) {
+        console.warn(
+          'Daily Reports - Production Control progress:',
+          progressError
+        );
+
+        setProjectProgressById(
+          {}
+        );
+      } else {
+        const progressMap =
+          Object.fromEntries(
+            (
+              progressData ||
+              []
+            ).map(
+              (item) => [
+                item.project_id,
+                item,
+              ]
+            )
+          );
+
+        setProjectProgressById(
+          progressMap
+        );
+      }
 
       const coverEntries =
         await Promise.all(
@@ -780,8 +838,55 @@ export default function DailyReportsPage() {
                   project.id
                 ] || '';
 
+              const progressData =
+                projectProgressById[
+                  project.id
+                ] || null;
+
+              const hasProductionScope =
+                Boolean(
+                  progressData?.has_production_scope
+                );
+
+              const rawProgress =
+                Number(
+                  progressData?.overall_progress_percentage ??
+                    0
+                );
+
               const progress =
-                null;
+                hasProductionScope &&
+                Number.isFinite(
+                  rawProgress
+                )
+                  ? Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        Math.round(
+                          rawProgress
+                        )
+                      )
+                    )
+                  : null;
+
+              const scopeItemCount =
+                Number(
+                  progressData?.scope_item_count ||
+                    0
+                );
+
+              const completedCount =
+                Number(
+                  progressData?.completed_count ||
+                    0
+                );
+
+              const inProgressCount =
+                Number(
+                  progressData?.in_progress_count ||
+                    0
+                );
 
               return (
                 <button
@@ -967,9 +1072,13 @@ export default function DailyReportsPage() {
                           centerStyles.progressHelper
                         }
                       >
-                        Production Control
-                        data not available
-                        yet.
+                        {progress === null
+                          ? 'Production Control data not available yet.'
+                          : `${completedCount} of ${scopeItemCount} scope items completed${
+                              inProgressCount > 0
+                                ? ` · ${inProgressCount} in progress`
+                                : ''
+                            }.`}
                       </p>
                     </div>
 
