@@ -1152,13 +1152,15 @@ export default function MasterPlanPage() {
         rawPackages
       );
 
-    // Calculate the final schedule once for the complete package
-    // snapshot. Downstream modules can then read these dates without
-    // reproducing the Master Plan scheduling engine.
-    const calculatedSchedules =
-      calcularAgendaPacotesCompleta(
-        packages
-      );
+    // IMPORTANT:
+    // Do not calculate a second schedule here.
+    //
+    // agendaPacotes is the authoritative schedule already used to draw
+    // the Line of Balance. Persisting those exact results guarantees
+    // that the database dates match what the user sees on screen.
+    //
+    // This also avoids timing differences between regeneration, drag,
+    // calendar expansion and the save operation.
 
     // ----------------------------------------------------
     // 1. CLEAR PREVIOUS NORMALIZED NETWORK
@@ -1377,10 +1379,23 @@ export default function MasterPlanPage() {
         null;
 
       const calculatedSchedule =
-        calculatedSchedules.get(
+        agendaPacotes.get(
           pkg.id
         ) ||
         null;
+
+      if (
+        !calculatedSchedule
+      ) {
+        console.warn(
+          'Master Plan - package has no authoritative schedule result:',
+          {
+            packageId: pkg.id,
+            packageCode: pkg.atividade,
+            rowId: pkg.linhaId
+          }
+        );
+      }
 
       const scheduledStartDate =
         calculatedSchedule
@@ -1401,6 +1416,21 @@ export default function MasterPlanPage() {
               null
             )
           : null;
+
+      // Resolve generated sequence ownership.
+      //
+      // New packages already carry sequenceGroupId.
+      // Legacy generated packages can still be associated when the
+      // scenario has a saved Sequence Configuration.
+      const sequenceConfiguration =
+        obterConfiguracaoSequenciaPacote(
+          pkg
+        );
+
+      const persistedSequenceGroupId =
+        pkg.sequenceGroupId ||
+        sequenceConfiguration?.id ||
+        null;
 
       const payload = {
         scenario_id:
@@ -1517,8 +1547,7 @@ export default function MasterPlanPage() {
           scheduledFinishDate,
 
         sequence_group_id:
-          pkg.sequenceGroupId ||
-          null,
+          persistedSequenceGroupId,
 
         sequence_number:
           Math.max(
