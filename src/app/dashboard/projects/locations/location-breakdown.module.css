@@ -922,6 +922,411 @@
   border-top: 1px solid #e2eaf0;
 }
 
+
+.hierarchyWorkspace {
+  padding: 18px;
+  background: #f8fbfc;
+}
+
+.hierarchyUtilityBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #dfe8ee;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.hierarchyUtilityBar > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.hierarchyUtilityBar strong {
+  color: #0a2941;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.hierarchyUtilityBar span {
+  color: #8293a3;
+  font-size: 0.67rem;
+}
+
+.hierarchyUtilityActions,
+.hierarchyHeaderActions,
+.zoneHeaderActions,
+.zoneLocationActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hierarchyUtilityButton,
+.hierarchyTextAction,
+.zoneEditButton,
+.zoneLocationActions button {
+  border: 0;
+  background: transparent;
+  color: #1371aa;
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.hierarchyUtilityButton {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #dce6ec;
+  border-radius: 7px;
+  background: #f8fafb;
+  color: #53687b;
+}
+
+.hierarchyUtilityButton:hover,
+.hierarchyTextAction:hover,
+.zoneEditButton:hover,
+.zoneLocationActions button:hover {
+  color: #007f75;
+}
+
+.buildingStack,
+.floorStack {
+  display: flex;
+  flex-direction: column;
+}
+
+.buildingStack {
+  gap: 16px;
+}
+
+.buildingGroup {
+  overflow: hidden;
+  border: 1px solid #d8e4eb;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 9px 24px rgba(17, 42, 67, 0.045);
+}
+
+.buildingHeader,
+.floorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.buildingHeader {
+  min-height: 62px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e1e9ef;
+  background: #fbfcfd;
+}
+
+.floorStack {
+  gap: 14px;
+  padding: 14px;
+}
+
+.floorGroup {
+  overflow: hidden;
+  border: 1px solid #dfe8ee;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.floorHeader {
+  min-height: 58px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5edf2;
+  background: #f9fbfc;
+}
+
+.hierarchyHeaderIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.hierarchyChevron {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dce6ec;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #5f7487;
+  font-size: 1rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.hierarchyChevron:hover {
+  border-color: #9bcfc8;
+  color: #008f84;
+}
+
+.buildingIcon,
+.floorIcon {
+  display: inline-flex;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+
+.buildingIcon {
+  background: #e4f8f4;
+  color: #00877c;
+}
+
+.floorIcon {
+  background: #e5f2ff;
+  color: #1365a6;
+}
+
+.hierarchyLevelLabel {
+  display: block;
+  margin-bottom: 2px;
+  color: #91a0af;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.buildingName,
+.floorName {
+  margin: 0;
+  color: #09253c;
+  line-height: 1.2;
+}
+
+.buildingName {
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+.floorName {
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.hierarchyStats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hierarchyStats span,
+.zoneCount {
+  display: inline-flex;
+  min-height: 25px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #edf3f7;
+  color: #627587;
+  font-size: 0.58rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.zoneGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 14px;
+  background: #f7fafc;
+}
+
+.zoneCard {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  border: 1px solid #dce6ec;
+  border-top: 4px solid var(--zone-accent, #64748b);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 5px 16px rgba(17, 42, 67, 0.045);
+}
+
+.zoneHeader {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5edf2;
+  background: var(--zone-soft, #f8fafc);
+}
+
+.zoneIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.zoneIdentity strong {
+  color: #09253c;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.zoneDot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--zone-accent, #64748b);
+}
+
+.zoneLocationList {
+  min-height: 58px;
+  padding: 4px 10px;
+}
+
+.zoneLocationRow {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid #edf1f4;
+}
+
+.zoneLocationRow:last-child {
+  border-bottom: 0;
+}
+
+.zoneLocationIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.zoneLocationIcon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #f1f5f7;
+  color: #6f8495;
+  font-size: 0.7rem;
+}
+
+.zoneLocationIdentity > div {
+  min-width: 0;
+}
+
+.zoneLocationIdentity strong,
+.zoneLocationIdentity span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zoneLocationIdentity strong {
+  color: #173b59;
+  font-size: 0.69rem;
+  font-weight: 850;
+}
+
+.zoneLocationIdentity span {
+  margin-top: 2px;
+  color: #8a9baa;
+  font-size: 0.57rem;
+}
+
+.zoneLocationActions {
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.zoneLocationRow:hover .zoneLocationActions {
+  opacity: 1;
+}
+
+.zoneDeleteButton {
+  color: #bd525b !important;
+}
+
+.zoneAddButton {
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-top: 1px solid #e6edf2;
+  background: #fbfcfd;
+  color: var(--zone-accent, #1371aa);
+  font-size: 0.64rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.zoneAddButton:hover {
+  background: var(--zone-soft, #f8fafc);
+}
+
+.zoneEmptyState {
+  padding: 18px 4px;
+  color: #95a3b0;
+  font-size: 0.65rem;
+  text-align: center;
+}
+
+.unassignedZoneCard {
+  --zone-accent: #94a3b8;
+  --zone-soft: #f8fafc;
+  border-style: dashed;
+}
+
+.floorEmptyState {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 150px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
+  border: 1px dashed #cfdce5;
+  border-radius: 10px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.floorEmptyState strong {
+  color: #173b59;
+  font-size: 0.8rem;
+}
+
+.floorEmptyState span {
+  color: #8293a3;
+  font-size: 0.68rem;
+}
+
 @media (max-width: 1050px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -937,6 +1342,12 @@
 
   .projectSelector {
     min-width: 240px;
+  }
+}
+
+@media (max-width: 1050px) and (min-width: 761px) {
+  .zoneGrid {
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
   }
 }
 
@@ -1022,6 +1433,37 @@
   .modal {
     padding: 20px;
   }
+
+  .hierarchyWorkspace {
+    padding: 12px;
+  }
+
+  .hierarchyUtilityBar,
+  .buildingHeader,
+  .floorHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hierarchyUtilityActions,
+  .hierarchyHeaderActions {
+    flex-wrap: wrap;
+  }
+
+  .hierarchyStats {
+    order: 2;
+    flex-wrap: wrap;
+  }
+
+  .zoneGrid {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .zoneLocationActions {
+    opacity: 1;
+  }
+
 }
 
 @media (max-width: 480px) {
