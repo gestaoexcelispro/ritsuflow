@@ -1635,28 +1635,31 @@ export default function LocationBreakdownPage() {
         childLocation.parent_id === location.id
     )
 
-    const hasLegacyScopeItems = scopeItems.some(
-      (scopeItem) => scopeItem.location_id === location.id
-    )
-
-    const hasMatrixQuantities = serviceQuantities.some(
-      (quantityItem) =>
-        quantityItem.location_id === location.id
-    )
-
-    if (
-      hasChildLocations ||
-      hasLegacyScopeItems ||
-      hasMatrixQuantities
-    ) {
+    if (hasChildLocations) {
       setNoticeMessage(
-        `Cannot delete ${location.name}. Remove its child locations and assigned quantities first.`
+        `Cannot delete ${location.name} because it still contains child locations. Delete or move the child locations first.`
       )
       return
     }
 
+    const locationQuantities = serviceQuantities.filter(
+      (quantityItem) =>
+        quantityItem.location_id === location.id
+    )
+
+    const legacyScopeAssignments = scopeItems.filter(
+      (scopeItem) =>
+        scopeItem.location_id === location.id
+    )
+
+    const dependentRecordCount =
+      locationQuantities.length +
+      legacyScopeAssignments.length
+
     const confirmed = window.confirm(
-      `Delete ${location.name}? This action cannot be undone.`
+      dependentRecordCount > 0
+        ? `Delete ${location.name}? This will also remove ${dependentRecordCount} connected quantity/scope record${dependentRecordCount === 1 ? '' : 's'} for this location. This action cannot be undone.`
+        : `Delete ${location.name}? This action cannot be undone.`
     )
 
     if (!confirmed) {
@@ -1664,25 +1667,113 @@ export default function LocationBreakdownPage() {
     }
 
     setErrorMessage('')
+    setIsSaving(true)
 
-    const { error } = await supabase
+    /*
+     * Remove dependent matrix quantities first.
+     *
+     * The current RitsuFlow schema already protects project
+     * boundaries with RLS. Deleting these records explicitly
+     * makes the UI behavior predictable even when a legacy
+     * foreign-key definition does not use ON DELETE CASCADE.
+     */
+    if (locationQuantities.length > 0) {
+      const { error: quantityDeleteError } = await supabase
+        .from('location_service_quantities')
+        .delete()
+        .eq('project_id', selectedProject.id)
+        .eq('location_id', location.id)
+
+      if (quantityDeleteError) {
+        setErrorMessage(
+          getErrorMessage(quantityDeleteError)
+        )
+        setIsSaving(false)
+        return
+      }
+    }
+
+    /*
+     * scope_items is retained as a legacy/safety structure,
+     * but records assigned specifically to a location cannot
+     * remain after that location is deleted.
+     */
+    if (legacyScopeAssignments.length > 0) {
+      const { error: scopeDeleteError } = await supabase
+        .from('scope_items')
+        .delete()
+        .eq('project_id', selectedProject.id)
+        .eq('location_id', location.id)
+
+      if (scopeDeleteError) {
+        setErrorMessage(
+          getErrorMessage(scopeDeleteError)
+        )
+        setIsSaving(false)
+        return
+      }
+    }
+
+    const { error: locationDeleteError } = await supabase
       .from('locations')
       .delete()
       .eq('id', location.id)
       .eq('project_id', selectedProject.id)
 
-    if (error) {
-      setErrorMessage(getErrorMessage(error))
+    if (locationDeleteError) {
+      /*
+       * Reload the workspace because dependent records may
+       * already have been removed before the location delete
+       * failed.
+       */
+      setErrorMessage(
+        getErrorMessage(locationDeleteError)
+      )
+      setIsSaving(false)
+      await loadWorkspace()
       return
     }
 
     setLocations((currentLocations) =>
       currentLocations.filter(
-        (currentLocation) => currentLocation.id !== location.id
+        (currentLocation) =>
+          currentLocation.id !== location.id
       )
     )
 
-    setNoticeMessage(`${location.name} was deleted.`)
+    setScopeItems((currentScopeItems) =>
+      currentScopeItems.filter(
+        (scopeItem) =>
+          scopeItem.location_id !== location.id
+      )
+    )
+
+    setServiceQuantities((currentQuantities) =>
+      currentQuantities.filter(
+        (quantityItem) =>
+          quantityItem.location_id !== location.id
+      )
+    )
+
+    setQuantityDrafts((currentDrafts) => {
+      const nextDrafts = {
+        ...currentDrafts,
+      }
+
+      projectServices.forEach((service) => {
+        delete nextDrafts[
+          `${location.id}___${service.id}`
+        ]
+      })
+
+      return nextDrafts
+    })
+
+    setNoticeMessage(
+      `${location.name} was deleted successfully.`
+    )
+
+    setIsSaving(false)
   }
 
   async function saveService(event) {
