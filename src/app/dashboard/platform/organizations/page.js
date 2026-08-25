@@ -6,6 +6,8 @@ import {
   createClient,
 } from '../../../../lib/supabase/server'
 
+import AddOrganizationClient from './AddOrganizationClient'
+
 
 function formatDate(value) {
   if (!value) {
@@ -198,10 +200,14 @@ export default async function PlatformOrganizationsPage() {
   return (
     <div
       style={{
-        display: 'flex',
+        display:
+          'flex',
+
         flexDirection:
           'column',
-        gap: '24px',
+
+        gap:
+          '24px',
       }}
     >
       {/* ==================================================
@@ -210,13 +216,20 @@ export default async function PlatformOrganizationsPage() {
 
       <section
         style={{
-          display: 'flex',
+          display:
+            'flex',
+
           justifyContent:
             'space-between',
+
           alignItems:
             'flex-start',
-          gap: '20px',
-          flexWrap: 'wrap',
+
+          gap:
+            '20px',
+
+          flexWrap:
+            'wrap',
         }}
       >
         <div>
@@ -224,8 +237,10 @@ export default async function PlatformOrganizationsPage() {
             style={{
               margin:
                 '0 0 8px',
+
               color:
                 '#0f172a',
+
               fontSize:
                 '1.6rem',
             }}
@@ -236,8 +251,10 @@ export default async function PlatformOrganizationsPage() {
           <p
             style={{
               margin: 0,
+
               color:
                 '#64748b',
+
               lineHeight:
                 1.5,
             }}
@@ -250,35 +267,7 @@ export default async function PlatformOrganizationsPage() {
         </div>
 
 
-        {/*
-          The button becomes functional
-          in the next development step.
-        */}
-
-        <button
-          type="button"
-          disabled
-          title="Organization provisioning will be enabled next."
-          style={{
-            padding:
-              '12px 18px',
-            border: 0,
-            borderRadius:
-              '8px',
-            background:
-              '#94a3b8',
-            color:
-              '#ffffff',
-            fontSize:
-              '0.95rem',
-            fontWeight:
-              700,
-            cursor:
-              'not-allowed',
-          }}
-        >
-          + Add Organization
-        </button>
+        <AddOrganizationClient />
       </section>
 
 
@@ -291,12 +280,16 @@ export default async function PlatformOrganizationsPage() {
           style={{
             padding:
               '16px',
+
             border:
               '1px solid #fecaca',
+
             borderRadius:
               '10px',
+
             background:
               '#fef2f2',
+
             color:
               '#991b1b',
           }}
@@ -318,12 +311,16 @@ export default async function PlatformOrganizationsPage() {
             style={{
               padding:
                 '48px 24px',
+
               border:
                 '1px solid #e2e8f0',
+
               borderRadius:
                 '12px',
+
               background:
                 '#ffffff',
+
               textAlign:
                 'center',
             }}
@@ -332,22 +329,31 @@ export default async function PlatformOrganizationsPage() {
               style={{
                 width:
                   '52px',
+
                 height:
                   '52px',
+
                 margin:
                   '0 auto 16px',
+
                 display:
                   'flex',
+
                 alignItems:
                   'center',
+
                 justifyContent:
                   'center',
+
                 borderRadius:
                   '12px',
+
                 background:
                   '#e0f2fe',
+
                 color:
                   '#075985',
+
                 fontWeight:
                   800,
               }}
@@ -359,6 +365,7 @@ export default async function PlatformOrganizationsPage() {
               style={{
                 margin:
                   '0 0 8px',
+
                 color:
                   '#0f172a',
               }}
@@ -369,6 +376,7 @@ export default async function PlatformOrganizationsPage() {
             <p
               style={{
                 margin: 0,
+
                 color:
                   '#64748b',
               }}
@@ -392,8 +400,10 @@ export default async function PlatformOrganizationsPage() {
             style={{
               display:
                 'grid',
+
               gridTemplateColumns:
                 'repeat(auto-fit, minmax(340px, 1fr))',
+
               gap:
                 '18px',
             }}
@@ -417,6 +427,7 @@ export default async function PlatformOrganizationsPage() {
                     .enabled_modules ||
                   []
 
+
                 return (
                   <article
                     key={
@@ -426,12 +437,16 @@ export default async function PlatformOrganizationsPage() {
                     style={{
                       padding:
                         '22px',
+
                       border:
                         '1px solid #e2e8f0',
+
                       borderRadius:
                         '12px',
+
                       background:
                         '#ffffff',
+
                       boxShadow:
                         '0 4px 16px rgba(15, 23, 42, 0.04)',
                     }}
@@ -444,12 +459,16 @@ export default async function PlatformOrganizationsPage() {
                       style={{
                         display:
                           'flex',
+
                         justifyContent:
                           'space-between',
+
                         alignItems:
                           'flex-start',
+
                         gap:
                           '16px',
+
                         marginBottom:
                           '22px',
                       }}
@@ -459,8 +478,10 @@ export default async function PlatformOrganizationsPage() {
                           style={{
                             margin:
                               '0 0 6px',
+
                             color:
                               '#0f172a',
+
                             fontSize:
                               '1.15rem',
                           }}
@@ -475,6 +496,7 @@ export default async function PlatformOrganizationsPage() {
                           style={{
                             color:
                               '#64748b',
+
                             fontSize:
                               '0.9rem',
                           }}
@@ -494,20 +516,27 @@ export default async function PlatformOrganizationsPage() {
                         style={{
                           padding:
                             '6px 10px',
+
                           borderRadius:
                             '999px',
+
                           background:
                             statusStyles
                               .background,
+
                           color:
                             statusStyles
                               .color,
+
                           fontSize:
                             '0.72rem',
+
                           fontWeight:
                             800,
+
                           textTransform:
                             'uppercase',
+
                           letterSpacing:
                             '0.04em',
                         }}
@@ -525,10 +554,13 @@ export default async function PlatformOrganizationsPage() {
                       style={{
                         display:
                           'grid',
+
                         gridTemplateColumns:
                           'repeat(2, minmax(0, 1fr))',
+
                         gap:
                           '16px',
+
                         marginBottom:
                           '22px',
                       }}
@@ -538,12 +570,16 @@ export default async function PlatformOrganizationsPage() {
                           style={{
                             margin:
                               '0 0 4px',
+
                             color:
                               '#94a3b8',
+
                             fontSize:
                               '0.75rem',
+
                             fontWeight:
                               700,
+
                             textTransform:
                               'uppercase',
                           }}
@@ -575,12 +611,16 @@ export default async function PlatformOrganizationsPage() {
                           style={{
                             margin:
                               '0 0 4px',
+
                             color:
                               '#94a3b8',
+
                             fontSize:
                               '0.75rem',
+
                             fontWeight:
                               700,
+
                             textTransform:
                               'uppercase',
                           }}
@@ -613,10 +653,13 @@ export default async function PlatformOrganizationsPage() {
                       style={{
                         marginBottom:
                           '22px',
+
                         padding:
                           '14px',
+
                         borderRadius:
                           '8px',
+
                         background:
                           '#f8fafc',
                       }}
@@ -625,12 +668,16 @@ export default async function PlatformOrganizationsPage() {
                         style={{
                           margin:
                             '0 0 6px',
+
                           color:
                             '#94a3b8',
+
                           fontSize:
                             '0.75rem',
+
                           fontWeight:
                             700,
+
                           textTransform:
                             'uppercase',
                         }}
@@ -642,6 +689,7 @@ export default async function PlatformOrganizationsPage() {
                         style={{
                           color:
                             '#334155',
+
                           fontWeight:
                             700,
                         }}
@@ -659,8 +707,10 @@ export default async function PlatformOrganizationsPage() {
                           style={{
                             marginTop:
                               '3px',
+
                             color:
                               '#64748b',
+
                             fontSize:
                               '0.88rem',
                           }}
@@ -683,12 +733,16 @@ export default async function PlatformOrganizationsPage() {
                         style={{
                           margin:
                             '0 0 10px',
+
                           color:
                             '#94a3b8',
+
                           fontSize:
                             '0.75rem',
+
                           fontWeight:
                             700,
+
                           textTransform:
                             'uppercase',
                         }}
@@ -703,6 +757,7 @@ export default async function PlatformOrganizationsPage() {
                           style={{
                             color:
                               '#94a3b8',
+
                             fontSize:
                               '0.88rem',
                           }}
@@ -715,8 +770,10 @@ export default async function PlatformOrganizationsPage() {
                           style={{
                             display:
                               'flex',
+
                             flexWrap:
                               'wrap',
+
                             gap:
                               '8px',
                           }}
@@ -732,14 +789,19 @@ export default async function PlatformOrganizationsPage() {
                                 style={{
                                   padding:
                                     '6px 9px',
+
                                   borderRadius:
                                     '6px',
+
                                   background:
                                     '#e0f2fe',
+
                                   color:
                                     '#075985',
+
                                   fontSize:
                                     '0.78rem',
+
                                   fontWeight:
                                     700,
                                 }}
