@@ -1634,19 +1634,56 @@ export default function LocationBreakdownPage() {
       return
     }
 
-    const childLocations = locations.filter(
-      (location) => location.parent_id === zone.id
-    )
+    const descendantIds = new Set()
+    const pendingParentIds = [zone.id]
 
-    if (childLocations.length > 0) {
-      setNoticeMessage(
-        `Cannot delete ${zone.name} because it still contains ${childLocations.length} location${childLocations.length === 1 ? '' : 's'}. Delete or move those locations first.`
-      )
-      return
+    while (pendingParentIds.length > 0) {
+      const parentId = pendingParentIds.shift()
+
+      locations
+        .filter(
+          (location) =>
+            location.parent_id === parentId
+        )
+        .forEach((childLocation) => {
+          if (!descendantIds.has(childLocation.id)) {
+            descendantIds.add(childLocation.id)
+            pendingParentIds.push(childLocation.id)
+          }
+        })
     }
 
+    const descendantLocations = locations.filter(
+      (location) => descendantIds.has(location.id)
+    )
+
+    const affectedLocationIds = new Set([
+      zone.id,
+      ...descendantLocations.map(
+        (location) => location.id
+      ),
+    ])
+
+    const connectedQuantityCount =
+      serviceQuantities.filter(
+        (quantityItem) =>
+          affectedLocationIds.has(
+            quantityItem.location_id
+          )
+      ).length
+
+    const connectedScopeCount =
+      scopeItems.filter(
+        (scopeItem) =>
+          affectedLocationIds.has(
+            scopeItem.location_id
+          )
+      ).length
+
     const confirmed = window.confirm(
-      `Delete zone ${zone.name}? This action cannot be undone.`
+      descendantLocations.length > 0
+        ? `Delete zone ${zone.name}? This will also delete ${descendantLocations.length} location${descendantLocations.length === 1 ? '' : 's'} inside this zone and remove ${connectedQuantityCount + connectedScopeCount} connected quantity/scope record${connectedQuantityCount + connectedScopeCount === 1 ? '' : 's'}. This action cannot be undone.`
+        : `Delete zone ${zone.name}? This action cannot be undone.`
     )
 
     if (!confirmed) {
@@ -1656,12 +1693,12 @@ export default function LocationBreakdownPage() {
     setErrorMessage('')
     setIsSaving(true)
 
-    const { error } = await supabase
-      .from('locations')
-      .delete()
-      .eq('id', zone.id)
-      .eq('project_id', selectedProject.id)
-      .eq('location_type', 'zone')
+    const { data, error } = await supabase.rpc(
+      'delete_project_location_tree',
+      {
+        target_location_id: zone.id,
+      }
+    )
 
     if (error) {
       setErrorMessage(getErrorMessage(error))
@@ -1669,14 +1706,58 @@ export default function LocationBreakdownPage() {
       return
     }
 
+    if (data?.deleted !== true) {
+      setErrorMessage(
+        data?.message ||
+          'The zone could not be deleted.'
+      )
+      setIsSaving(false)
+      return
+    }
+
     setLocations((currentLocations) =>
       currentLocations.filter(
-        (location) => location.id !== zone.id
+        (location) =>
+          !affectedLocationIds.has(location.id)
       )
     )
 
+    setScopeItems((currentScopeItems) =>
+      currentScopeItems.filter(
+        (scopeItem) =>
+          !affectedLocationIds.has(
+            scopeItem.location_id
+          )
+      )
+    )
+
+    setServiceQuantities((currentQuantities) =>
+      currentQuantities.filter(
+        (quantityItem) =>
+          !affectedLocationIds.has(
+            quantityItem.location_id
+          )
+      )
+    )
+
+    setQuantityDrafts((currentDrafts) => {
+      const nextDrafts = {
+        ...currentDrafts,
+      }
+
+      affectedLocationIds.forEach((locationId) => {
+        projectServices.forEach((service) => {
+          delete nextDrafts[
+            `${locationId}___${service.id}`
+          ]
+        })
+      })
+
+      return nextDrafts
+    })
+
     setNoticeMessage(
-      `${zone.name} was deleted successfully.`
+      `${zone.name} and its contained locations were deleted successfully.`
     )
 
     setIsSaving(false)
