@@ -1629,6 +1629,59 @@ export default function LocationBreakdownPage() {
     setLocationForm(emptyLocationForm)
   }
 
+  async function deleteZone(zone) {
+    if (!selectedProject || !zone) {
+      return
+    }
+
+    const childLocations = locations.filter(
+      (location) => location.parent_id === zone.id
+    )
+
+    if (childLocations.length > 0) {
+      setNoticeMessage(
+        `Cannot delete ${zone.name} because it still contains ${childLocations.length} location${childLocations.length === 1 ? '' : 's'}. Delete or move those locations first.`
+      )
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete zone ${zone.name}? This action cannot be undone.`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setErrorMessage('')
+    setIsSaving(true)
+
+    const { error } = await supabase
+      .from('locations')
+      .delete()
+      .eq('id', zone.id)
+      .eq('project_id', selectedProject.id)
+      .eq('location_type', 'zone')
+
+    if (error) {
+      setErrorMessage(getErrorMessage(error))
+      setIsSaving(false)
+      return
+    }
+
+    setLocations((currentLocations) =>
+      currentLocations.filter(
+        (location) => location.id !== zone.id
+      )
+    )
+
+    setNoticeMessage(
+      `${zone.name} was deleted successfully.`
+    )
+
+    setIsSaving(false)
+  }
+
   async function deleteLocation(location) {
     const hasChildLocations = locations.some(
       (childLocation) =>
@@ -2661,6 +2714,16 @@ export default function LocationBreakdownPage() {
                                               }
                                             >
                                               Edit
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              className={`${styles.zoneEditButton} ${styles.deleteAction}`}
+                                              onClick={() =>
+                                                deleteZone(zone)
+                                              }
+                                            >
+                                              Delete
                                             </button>
                                           </div>
                                         </div>
