@@ -173,6 +173,33 @@ function getZoneColor(zoneName) {
   return palette[Math.abs(hash) % palette.length]
 }
 
+function getZoneAccent(zoneName) {
+  if (!zoneName) {
+    return '#94a3b8'
+  }
+
+  const normalized = zoneName.trim().toUpperCase()
+
+  const accents = {
+    Z1: '#3182ce',
+    Z2: '#16a085',
+    Z3: '#805ad5',
+    Z4: '#d69e2e',
+    Z5: '#e53e3e',
+    Z6: '#0891b2',
+    Z7: '#65a30d',
+    Z8: '#db2777',
+    'ZONE 1': '#3182ce',
+    'ZONE 2': '#16a085',
+    'ZONE 3': '#805ad5',
+    'ZONE 4': '#d69e2e',
+    'ZONE 5': '#e53e3e',
+    'ZONE 6': '#0891b2',
+  }
+
+  return accents[normalized] || '#64748b'
+}
+
 function formatQuantity(value) {
   const numberValue = Number(value)
 
@@ -223,6 +250,8 @@ export default function LocationBreakdownPage() {
   const [divisionTaktTargets, setDivisionTaktTargets] = useState([])
   const [taktTargetDrafts, setTaktTargetDrafts] = useState({})
   const [savingTaktTargetId, setSavingTaktTargetId] = useState(null)
+  const [collapsedBuildingIds, setCollapsedBuildingIds] = useState([])
+  const [collapsedFloorIds, setCollapsedFloorIds] = useState([])
 
   const loadWorkspace = useCallback(async () => {
     setIsLoading(true)
@@ -665,6 +694,195 @@ export default function LocationBreakdownPage() {
     sortedLocations,
   ])
 
+  const locationHierarchy = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+
+    const buildingLocations = sortedLocations.filter(
+      (location) => location.location_type === 'building'
+    )
+
+    const floorLocationsInHierarchy = sortedLocations.filter(
+      (location) => location.location_type === 'floor'
+    )
+
+    const zoneLocations = sortedLocations.filter(
+      (location) => location.location_type === 'zone'
+    )
+
+    const assignableLocations = sortedLocations.filter(
+      (location) =>
+        location.location_type === 'area' ||
+        location.location_type === 'room' ||
+        location.location_type === 'custom'
+    )
+
+    function locationMatches(location) {
+      if (!normalizedSearch) {
+        return true
+      }
+
+      const path = locationPathMap.get(location.id) || []
+
+      return [
+        location.name,
+        location.location_type,
+        location.environment_type,
+        ...path.map((pathLocation) => pathLocation.name),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedSearch)
+    }
+
+    function buildFloorEntry(floor) {
+      const floorMatches = locationMatches(floor)
+
+      const zones = zoneLocations
+        .filter((zone) => {
+          const path = locationPathMap.get(zone.id) || []
+          return path.some(
+            (pathLocation) => pathLocation.id === floor.id
+          )
+        })
+        .map((zone) => {
+          const zoneMatches = locationMatches(zone)
+
+          const locationsInZone = assignableLocations.filter(
+            (location) => {
+              const path = locationPathMap.get(location.id) || []
+              return path.some(
+                (pathLocation) => pathLocation.id === zone.id
+              )
+            }
+          )
+
+          const visibleLocations =
+            !normalizedSearch || floorMatches || zoneMatches
+              ? locationsInZone
+              : locationsInZone.filter(locationMatches)
+
+          const isVisible =
+            !normalizedSearch ||
+            floorMatches ||
+            zoneMatches ||
+            visibleLocations.length > 0
+
+          return {
+            zone,
+            locations: visibleLocations,
+            totalLocations: locationsInZone.length,
+            isVisible,
+          }
+        })
+        .filter((zoneEntry) => zoneEntry.isVisible)
+
+      const unassignedLocations = assignableLocations.filter(
+        (location) => {
+          const path = locationPathMap.get(location.id) || []
+          const belongsToFloor = path.some(
+            (pathLocation) => pathLocation.id === floor.id
+          )
+          const belongsToZone = path.some(
+            (pathLocation) => pathLocation.location_type === 'zone'
+          )
+          return belongsToFloor && !belongsToZone
+        }
+      )
+
+      const visibleUnassignedLocations =
+        !normalizedSearch || floorMatches
+          ? unassignedLocations
+          : unassignedLocations.filter(locationMatches)
+
+      const isVisible =
+        !normalizedSearch ||
+        floorMatches ||
+        zones.length > 0 ||
+        visibleUnassignedLocations.length > 0
+
+      return {
+        floor,
+        zones,
+        unassignedLocations: visibleUnassignedLocations,
+        totalZones: zoneLocations.filter((zone) => {
+          const path = locationPathMap.get(zone.id) || []
+          return path.some(
+            (pathLocation) => pathLocation.id === floor.id
+          )
+        }).length,
+        totalLocations: assignableLocations.filter((location) => {
+          const path = locationPathMap.get(location.id) || []
+          return path.some(
+            (pathLocation) => pathLocation.id === floor.id
+          )
+        }).length,
+        isVisible,
+      }
+    }
+
+    const floorEntries = floorLocationsInHierarchy
+      .map(buildFloorEntry)
+      .filter((floorEntry) => floorEntry.isVisible)
+
+    const groups = buildingLocations
+      .map((building) => {
+        const buildingMatches = locationMatches(building)
+
+        const floors = floorEntries.filter((floorEntry) => {
+          const path = locationPathMap.get(floorEntry.floor.id) || []
+          return path.some(
+            (pathLocation) => pathLocation.id === building.id
+          )
+        })
+
+        return {
+          id: building.id,
+          building,
+          label: building.name,
+          floors,
+          totalFloors: floorLocationsInHierarchy.filter((floor) => {
+            const path = locationPathMap.get(floor.id) || []
+            return path.some(
+              (pathLocation) => pathLocation.id === building.id
+            )
+          }).length,
+          isVisible:
+            !normalizedSearch || buildingMatches || floors.length > 0,
+        }
+      })
+      .filter((group) => group.isVisible)
+
+    const orphanFloors = floorEntries.filter((floorEntry) => {
+      const path = locationPathMap.get(floorEntry.floor.id) || []
+      return !path.some(
+        (pathLocation) => pathLocation.location_type === 'building'
+      )
+    })
+
+    if (orphanFloors.length > 0 || buildingLocations.length === 0) {
+      groups.push({
+        id: 'project-root',
+        building: null,
+        label: selectedProject?.name || 'Project locations',
+        floors:
+          buildingLocations.length === 0 ? floorEntries : orphanFloors,
+        totalFloors:
+          buildingLocations.length === 0
+            ? floorLocationsInHierarchy.length
+            : orphanFloors.length,
+        isVisible: true,
+      })
+    }
+
+    return groups.filter((group) => group.floors.length > 0)
+  }, [
+    locationPathMap,
+    searchTerm,
+    selectedProject,
+    sortedLocations,
+  ])
+
   const quantityMap = useMemo(() => {
     const map = new Map()
 
@@ -804,9 +1022,16 @@ export default function LocationBreakdownPage() {
       `/dashboard/projects/locations?projectId=${projectId}`
   }
 
-  function openNewLocationModal() {
+  function openNewLocationModal(options = {}) {
+    const parentId = options.parentId || ''
+    const locationType = options.locationType || 'area'
+
+    const siblingLocations = locations.filter(
+      (location) => (location.parent_id || '') === parentId
+    )
+
     const nextSequence =
-      locations.reduce(
+      siblingLocations.reduce(
         (largestSequence, location) =>
           Math.max(
             largestSequence,
@@ -817,11 +1042,46 @@ export default function LocationBreakdownPage() {
 
     setLocationForm({
       ...emptyLocationForm,
+      location_type: locationType,
+      parent_id: parentId,
       sequence_number: String(nextSequence),
     })
 
     setErrorMessage('')
+    setNoticeMessage('')
     setIsLocationModalOpen(true)
+  }
+
+  function toggleBuilding(buildingId) {
+    setCollapsedBuildingIds((currentIds) =>
+      currentIds.includes(buildingId)
+        ? currentIds.filter((id) => id !== buildingId)
+        : [...currentIds, buildingId]
+    )
+  }
+
+  function toggleFloor(floorId) {
+    setCollapsedFloorIds((currentIds) =>
+      currentIds.includes(floorId)
+        ? currentIds.filter((id) => id !== floorId)
+        : [...currentIds, floorId]
+    )
+  }
+
+  function expandAllHierarchy() {
+    setCollapsedBuildingIds([])
+    setCollapsedFloorIds([])
+  }
+
+  function collapseAllHierarchy() {
+    setCollapsedBuildingIds(
+      locationHierarchy.map((group) => group.id)
+    )
+    setCollapsedFloorIds(
+      locationHierarchy.flatMap((group) =>
+        group.floors.map((floorEntry) => floorEntry.floor.id)
+      )
+    )
   }
 
   function openEditLocationModal(location) {
@@ -2027,11 +2287,13 @@ export default function LocationBreakdownPage() {
           <button
             type="button"
             className={styles.primaryButton}
-            onClick={
-              activeTab === 'locations'
-                ? openNewLocationModal
-                : openServiceModal
-            }
+            onClick={() => {
+              if (activeTab === 'locations') {
+                openNewLocationModal()
+              } else {
+                openServiceModal()
+              }
+            }}
             disabled={
               activeTab === 'scope' && locations.length === 0
             }
@@ -2049,112 +2311,455 @@ export default function LocationBreakdownPage() {
         )}
 
         {activeTab === 'locations' ? (
-          <div className={styles.tableContainer}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Sequence</th>
-                  <th>Location type</th>
-                  <th>Location name</th>
-                  <th>Parent location</th>
-                  <th>Environment type</th>
-                  <th className={styles.actionsHeader}>
-                    Actions
-                  </th>
-                </tr>
-              </thead>
+          <div className={styles.hierarchyWorkspace}>
+            <div className={styles.hierarchyUtilityBar}>
+              <div>
+                <strong>Location hierarchy</strong>
+                <span>
+                  Building → Division → Zone → Production location
+                </span>
+              </div>
 
-              <tbody>
-                {filteredLocations.map((location) => {
-                  const parentLocation = location.parent_id
-                    ? locationMap.get(location.parent_id)
-                    : null
+              <div className={styles.hierarchyUtilityActions}>
+                <button
+                  type="button"
+                  className={styles.hierarchyUtilityButton}
+                  onClick={expandAllHierarchy}
+                >
+                  Expand all
+                </button>
 
-                  const path =
-                    locationPathMap.get(location.id) || []
+                <button
+                  type="button"
+                  className={styles.hierarchyUtilityButton}
+                  onClick={collapseAllHierarchy}
+                >
+                  Collapse all
+                </button>
+              </div>
+            </div>
 
-                  const depth = Math.max(path.length - 1, 0)
-
-                  return (
-                    <tr key={location.id}>
-                      <td className={styles.sequenceCell}>
-                        {String(
-                          location.sequence_number
-                        ).padStart(2, '0')}
-                      </td>
-
-                      <td>
-                        <span
-                          className={`${styles.locationTypeBadge} ${
-                            styles[
-                              `locationType_${location.location_type}`
-                            ] || ''
-                          }`}
-                        >
-                          {getLocationTypeLabel(
-                            location.location_type
-                          )}
-                        </span>
-                      </td>
-
-                      <td>
-                        <div
-                          className={styles.locationNameCell}
-                          style={{
-                            paddingLeft: `${Math.min(
-                              depth,
-                              4
-                            ) * 18}px`,
-                          }}
-                        >
-                          <span className={styles.locationNode} />
-                          <strong>{location.name}</strong>
-                        </div>
-                      </td>
-
-                      <td className={styles.mutedCell}>
-                        {parentLocation?.name || '—'}
-                      </td>
-
-                      <td>
-                        {location.environment_type || '—'}
-                      </td>
-
-                      <td className={styles.actionsCell}>
-                        <button
-                          type="button"
-                          className={styles.tableAction}
-                          onClick={() =>
-                            openEditLocationModal(location)
-                          }
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          className={`${styles.tableAction} ${styles.deleteAction}`}
-                          onClick={() => deleteLocation(location)}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-
-            {filteredLocations.length === 0 && (
+            {locationHierarchy.length === 0 ? (
               <div className={styles.emptyState}>
                 <h3 className={styles.emptyTitle}>
-                  No locations found.
+                  No location hierarchy found.
                 </h3>
 
                 <p className={styles.emptyDescription}>
-                  Add the first project location or adjust the
-                  current search.
+                  Add a Floor and its Zones to start building the
+                  location-based production structure.
                 </p>
+
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={() =>
+                    openNewLocationModal({ locationType: 'floor' })
+                  }
+                >
+                  + Add first division
+                </button>
+              </div>
+            ) : (
+              <div className={styles.buildingStack}>
+                {locationHierarchy.map((group) => {
+                  const buildingCollapsed =
+                    collapsedBuildingIds.includes(group.id)
+
+                  const totalZones = group.floors.reduce(
+                    (total, floorEntry) =>
+                      total + floorEntry.totalZones,
+                    0
+                  )
+
+                  const totalLocations = group.floors.reduce(
+                    (total, floorEntry) =>
+                      total + floorEntry.totalLocations,
+                    0
+                  )
+
+                  return (
+                    <article
+                      className={styles.buildingGroup}
+                      key={group.id}
+                    >
+                      <div className={styles.buildingHeader}>
+                        <div className={styles.hierarchyHeaderIdentity}>
+                          <button
+                            type="button"
+                            className={styles.hierarchyChevron}
+                            onClick={() => toggleBuilding(group.id)}
+                            aria-label={
+                              buildingCollapsed
+                                ? `Expand ${group.label}`
+                                : `Collapse ${group.label}`
+                            }
+                          >
+                            {buildingCollapsed ? '›' : '⌄'}
+                          </button>
+
+                          <span className={styles.buildingIcon}>
+                            ▦
+                          </span>
+
+                          <div>
+                            <span className={styles.hierarchyLevelLabel}>
+                              {group.building ? 'Building' : 'Project'}
+                            </span>
+                            <h3 className={styles.buildingName}>
+                              {group.label}
+                            </h3>
+                          </div>
+                        </div>
+
+                        <div className={styles.hierarchyHeaderActions}>
+                          <div className={styles.hierarchyStats}>
+                            <span>{group.totalFloors} Divisions</span>
+                            <span>{totalZones} Zones</span>
+                            <span>{totalLocations} Locations</span>
+                          </div>
+
+                          {group.building && (
+                            <>
+                              <button
+                                type="button"
+                                className={styles.hierarchyTextAction}
+                                onClick={() =>
+                                  openEditLocationModal(group.building)
+                                }
+                              >
+                                Edit
+                              </button>
+
+                              <button
+                                type="button"
+                                className={styles.hierarchyTextAction}
+                                onClick={() =>
+                                  openNewLocationModal({
+                                    parentId: group.building.id,
+                                    locationType: 'floor',
+                                  })
+                                }
+                              >
+                                + Floor
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {!buildingCollapsed && (
+                        <div className={styles.floorStack}>
+                          {group.floors.map((floorEntry) => {
+                            const { floor, zones, unassignedLocations } =
+                              floorEntry
+
+                            const floorCollapsed =
+                              collapsedFloorIds.includes(floor.id)
+
+                            return (
+                              <section
+                                className={styles.floorGroup}
+                                key={floor.id}
+                              >
+                                <div className={styles.floorHeader}>
+                                  <div
+                                    className={styles.hierarchyHeaderIdentity}
+                                  >
+                                    <button
+                                      type="button"
+                                      className={styles.hierarchyChevron}
+                                      onClick={() => toggleFloor(floor.id)}
+                                      aria-label={
+                                        floorCollapsed
+                                          ? `Expand ${floor.name}`
+                                          : `Collapse ${floor.name}`
+                                      }
+                                    >
+                                      {floorCollapsed ? '›' : '⌄'}
+                                    </button>
+
+                                    <span className={styles.floorIcon}>
+                                      ▱
+                                    </span>
+
+                                    <div>
+                                      <span
+                                        className={styles.hierarchyLevelLabel}
+                                      >
+                                        Division / Floor
+                                      </span>
+                                      <h4 className={styles.floorName}>
+                                        {floor.name}
+                                      </h4>
+                                    </div>
+                                  </div>
+
+                                  <div className={styles.hierarchyHeaderActions}>
+                                    <div className={styles.hierarchyStats}>
+                                      <span>
+                                        {floorEntry.totalZones} Zones
+                                      </span>
+                                      <span>
+                                        {floorEntry.totalLocations} Locations
+                                      </span>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      className={styles.hierarchyTextAction}
+                                      onClick={() =>
+                                        openEditLocationModal(floor)
+                                      }
+                                    >
+                                      Edit
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      className={styles.hierarchyTextAction}
+                                      onClick={() =>
+                                        openNewLocationModal({
+                                          parentId: floor.id,
+                                          locationType: 'zone',
+                                        })
+                                      }
+                                    >
+                                      + Zone
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {!floorCollapsed && (
+                                  <div className={styles.zoneGrid}>
+                                    {zones.map(({ zone, locations: zoneLocations, totalLocations }) => (
+                                      <article
+                                        className={styles.zoneCard}
+                                        key={zone.id}
+                                        style={{
+                                          '--zone-accent': getZoneAccent(zone.name),
+                                          '--zone-soft': getZoneColor(zone.name),
+                                        }}
+                                      >
+                                        <div className={styles.zoneHeader}>
+                                          <div className={styles.zoneIdentity}>
+                                            <span className={styles.zoneDot} />
+                                            <div>
+                                              <span
+                                                className={styles.hierarchyLevelLabel}
+                                              >
+                                                Zone
+                                              </span>
+                                              <strong>{zone.name}</strong>
+                                            </div>
+                                          </div>
+
+                                          <div className={styles.zoneHeaderActions}>
+                                            <span className={styles.zoneCount}>
+                                              {totalLocations}{' '}
+                                              {totalLocations === 1
+                                                ? 'Location'
+                                                : 'Locations'}
+                                            </span>
+
+                                            <button
+                                              type="button"
+                                              className={styles.zoneEditButton}
+                                              onClick={() =>
+                                                openEditLocationModal(zone)
+                                              }
+                                            >
+                                              Edit
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        <div className={styles.zoneLocationList}>
+                                          {zoneLocations.length === 0 ? (
+                                            <div
+                                              className={styles.zoneEmptyState}
+                                            >
+                                              No matching locations.
+                                            </div>
+                                          ) : (
+                                            zoneLocations.map((location) => (
+                                              <div
+                                                className={styles.zoneLocationRow}
+                                                key={location.id}
+                                              >
+                                                <div
+                                                  className={
+                                                    styles.zoneLocationIdentity
+                                                  }
+                                                >
+                                                  <span
+                                                    className={
+                                                      styles.zoneLocationIcon
+                                                    }
+                                                  >
+                                                    □
+                                                  </span>
+
+                                                  <div>
+                                                    <strong>
+                                                      {location.name}
+                                                    </strong>
+                                                    <span>
+                                                      {location.environment_type ||
+                                                        getLocationTypeLabel(
+                                                          location.location_type
+                                                        )}
+                                                    </span>
+                                                  </div>
+                                                </div>
+
+                                                <div
+                                                  className={
+                                                    styles.zoneLocationActions
+                                                  }
+                                                >
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      openEditLocationModal(
+                                                        location
+                                                      )
+                                                    }
+                                                  >
+                                                    Edit
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    className={
+                                                      styles.zoneDeleteButton
+                                                    }
+                                                    onClick={() =>
+                                                      deleteLocation(location)
+                                                    }
+                                                  >
+                                                    Delete
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          className={styles.zoneAddButton}
+                                          onClick={() =>
+                                            openNewLocationModal({
+                                              parentId: zone.id,
+                                              locationType: 'area',
+                                            })
+                                          }
+                                        >
+                                          + Add location to {zone.name}
+                                        </button>
+                                      </article>
+                                    ))}
+
+                                    {unassignedLocations.length > 0 && (
+                                      <article
+                                        className={`${styles.zoneCard} ${styles.unassignedZoneCard}`}
+                                      >
+                                        <div className={styles.zoneHeader}>
+                                          <div className={styles.zoneIdentity}>
+                                            <span className={styles.zoneDot} />
+                                            <div>
+                                              <span
+                                                className={styles.hierarchyLevelLabel}
+                                              >
+                                                Needs classification
+                                              </span>
+                                              <strong>Unassigned</strong>
+                                            </div>
+                                          </div>
+
+                                          <span className={styles.zoneCount}>
+                                            {unassignedLocations.length}{' '}
+                                            Locations
+                                          </span>
+                                        </div>
+
+                                        <div className={styles.zoneLocationList}>
+                                          {unassignedLocations.map((location) => (
+                                            <div
+                                              className={styles.zoneLocationRow}
+                                              key={location.id}
+                                            >
+                                              <div
+                                                className={
+                                                  styles.zoneLocationIdentity
+                                                }
+                                              >
+                                                <span
+                                                  className={
+                                                    styles.zoneLocationIcon
+                                                  }
+                                                >
+                                                  □
+                                                </span>
+                                                <div>
+                                                  <strong>{location.name}</strong>
+                                                  <span>
+                                                    {location.environment_type ||
+                                                      getLocationTypeLabel(
+                                                        location.location_type
+                                                      )}
+                                                  </span>
+                                                </div>
+                                              </div>
+
+                                              <button
+                                                type="button"
+                                                className={styles.zoneEditButton}
+                                                onClick={() =>
+                                                  openEditLocationModal(location)
+                                                }
+                                              >
+                                                Assign zone
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </article>
+                                    )}
+
+                                    {zones.length === 0 &&
+                                      unassignedLocations.length === 0 && (
+                                        <div className={styles.floorEmptyState}>
+                                          <strong>No zones yet.</strong>
+                                          <span>
+                                            Create the first production zone for
+                                            {` ${floor.name}`}.
+                                          </span>
+                                          <button
+                                            type="button"
+                                            className={styles.secondaryButton}
+                                            onClick={() =>
+                                              openNewLocationModal({
+                                                parentId: floor.id,
+                                                locationType: 'zone',
+                                              })
+                                            }
+                                          >
+                                            + Add zone
+                                          </button>
+                                        </div>
+                                      )}
+                                  </div>
+                                )}
+                              </section>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </article>
+                  )
+                })}
               </div>
             )}
           </div>
