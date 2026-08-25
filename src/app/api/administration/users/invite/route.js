@@ -163,7 +163,7 @@ export async function POST(request) {
             },
 
             redirectTo:
-              `${origin}/login`,
+              `${origin}/auth/invite`,
           }
         )
 
@@ -269,6 +269,7 @@ export async function POST(request) {
     return NextResponse.json(
       {
         success: true,
+
         userId:
           invitedUserId,
       }
