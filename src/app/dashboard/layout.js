@@ -98,6 +98,16 @@ const navigationGroups = [
       },
     ],
   },
+  {
+    label: 'Administration',
+    items: [
+      {
+        label: 'Users & Access',
+        href: '/dashboard/administration/users',
+        icon: 'UA',
+      },
+    ],
+  },
 ]
 
 export default function DashboardLayout({
