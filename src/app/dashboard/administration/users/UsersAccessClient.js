@@ -302,10 +302,7 @@ export default function UsersAccessClient({
   }
 
   function validateForm() {
-    if (
-      modalMode === 'add' &&
-      !form.fullName.trim()
-    ) {
+    if (!form.fullName.trim()) {
       return 'Name is required.'
     }
 
@@ -330,34 +327,51 @@ export default function UsersAccessClient({
   }
 
   async function saveExistingUser() {
-    const {
-      error,
-    } =
-      await supabase.rpc(
-        'set_organization_member_access',
+    const response =
+      await fetch(
+        '/api/administration/users/update',
         {
-          target_organization_id:
-            organization.id,
+          method: 'POST',
 
-          target_user_id:
-            form.userId,
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
 
-          target_role:
-            form.role,
+          body:
+            JSON.stringify({
+              organizationId:
+                organization.id,
 
-          target_project_access_mode:
-            form.projectAccessMode,
+              userId:
+                form.userId,
 
-          target_status:
-            form.status,
+              fullName:
+                form.fullName.trim(),
 
-          target_project_ids:
-            form.projectIds,
+              role:
+                form.role,
+
+              projectAccessMode:
+                form.projectAccessMode,
+
+              status:
+                form.status,
+
+              projectIds:
+                form.projectIds,
+            }),
         }
       )
 
-    if (error) {
-      throw error
+    const payload =
+      await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        payload?.error ||
+          'User access could not be updated.'
+      )
     }
   }
 
@@ -967,10 +981,6 @@ export default function UsersAccessClient({
                         'fullName',
                         event.target.value
                       )
-                  }
-                  disabled={
-                    modalMode ===
-                    'edit'
                   }
                   placeholder="John Smith"
                 />
