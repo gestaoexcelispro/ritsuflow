@@ -1,15 +1,31 @@
 'use client'
 
-import { useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+
+import {
+  usePathname,
+} from 'next/navigation'
+
 import LogoutButton from '../../components/LogoutButton'
+
+import {
+  createClient,
+} from '../../lib/supabase/client'
+
 import styles from './dashboard.module.css'
 
-const navigationGroups = [
+
+const baseNavigationGroups = [
   {
     label: 'Workspace',
+
     items: [
       {
         label: 'Overview',
@@ -33,8 +49,10 @@ const navigationGroups = [
       },
     ],
   },
+
   {
     label: 'Field Management',
+
     items: [
       {
         label: 'Operational Dashboard',
@@ -63,8 +81,10 @@ const navigationGroups = [
       },
     ],
   },
+
   {
     label: 'Planning',
+
     items: [
       {
         label: 'Master Plan',
@@ -83,8 +103,10 @@ const navigationGroups = [
       },
     ],
   },
+
   {
     label: 'Control',
+
     items: [
       {
         label: 'Production Map',
@@ -98,8 +120,10 @@ const navigationGroups = [
       },
     ],
   },
+
   {
     label: 'Administration',
+
     items: [
       {
         label: 'Users & Access',
@@ -110,26 +134,160 @@ const navigationGroups = [
   },
 ]
 
+
+const platformNavigationGroup = {
+  label: 'Platform',
+
+  items: [
+    {
+      label: 'Organizations',
+      href: '/dashboard/platform/organizations',
+      icon: 'OR',
+    },
+  ],
+}
+
+
 export default function DashboardLayout({
   children,
 }) {
-  const pathname = usePathname()
+  const pathname =
+    usePathname()
 
-  const [isCollapsed, setIsCollapsed] =
+  const supabase =
+    useMemo(
+      () =>
+        createClient(),
+      []
+    )
+
+  const [
+    isCollapsed,
+    setIsCollapsed,
+  ] =
     useState(false)
 
-  const [isMobileOpen, setIsMobileOpen] =
+  const [
+    isMobileOpen,
+    setIsMobileOpen,
+  ] =
     useState(false)
+
+  const [
+    isPlatformOwner,
+    setIsPlatformOwner,
+  ] =
+    useState(false)
+
+  const [
+    platformAuthorizationLoaded,
+    setPlatformAuthorizationLoaded,
+  ] =
+    useState(false)
+
+
+  // =======================================================
+  // PLATFORM OWNER NAVIGATION AUTHORIZATION
+  // =======================================================
+  //
+  // This only controls whether the Platform section is
+  // visible in navigation.
+  //
+  // The Platform Organizations page must ALSO perform its
+  // own server-side authorization.
+  //
+  // Hiding a link is never considered a security boundary.
+  // =======================================================
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadPlatformAuthorization() {
+      try {
+        const {
+          data,
+          error,
+        } =
+          await supabase.rpc(
+            'is_platform_owner'
+          )
+
+        if (!mounted) {
+          return
+        }
+
+        if (error) {
+          console.error(
+            'Platform owner authorization could not be loaded.',
+            error
+          )
+
+          setIsPlatformOwner(false)
+          setPlatformAuthorizationLoaded(true)
+
+          return
+        }
+
+        setIsPlatformOwner(
+          data === true
+        )
+
+        setPlatformAuthorizationLoaded(true)
+
+      } catch (error) {
+        console.error(
+          'Platform owner authorization failed.',
+          error
+        )
+
+        if (mounted) {
+          setIsPlatformOwner(false)
+          setPlatformAuthorizationLoaded(true)
+        }
+      }
+    }
+
+    loadPlatformAuthorization()
+
+    return () => {
+      mounted = false
+    }
+  }, [
+    supabase,
+  ])
+
+
+  const navigationGroups =
+    useMemo(() => {
+      if (
+        isPlatformOwner
+      ) {
+        return [
+          ...baseNavigationGroups,
+          platformNavigationGroup,
+        ]
+      }
+
+      return baseNavigationGroups
+    }, [
+      isPlatformOwner,
+    ])
+
 
   function isActive(href) {
-    if (href === '/dashboard') {
+    if (
+      href === '/dashboard'
+    ) {
       return (
         pathname === '/dashboard' ||
         pathname === '/dashboard/'
       )
     }
 
-    if (href === '/dashboard/projects') {
+    if (
+      href ===
+      '/dashboard/projects'
+    ) {
       return pathname === href
     }
 
@@ -143,53 +301,79 @@ export default function DashboardLayout({
       )
     }
 
-    return pathname.startsWith(href)
+    return pathname.startsWith(
+      href
+    )
   }
 
+
   const currentNavigationGroup =
-    navigationGroups.find((group) =>
-      group.items.some((item) =>
-        isActive(item.href)
-      )
+    navigationGroups.find(
+      (group) =>
+        group.items.some(
+          (item) =>
+            isActive(
+              item.href
+            )
+        )
     )
+
 
   const currentNavigationItem =
     navigationGroups
-      .flatMap((group) => group.items)
-      .find((item) =>
-        isActive(item.href)
+      .flatMap(
+        (group) =>
+          group.items
+      )
+      .find(
+        (item) =>
+          isActive(
+            item.href
+          )
       )
 
+
   const currentCategory =
-    currentNavigationGroup?.label ||
+    currentNavigationGroup
+      ?.label ||
     'Workspace'
 
+
   const currentTitle =
-    currentNavigationItem?.label ||
+    currentNavigationItem
+      ?.label ||
     'Overview'
+
 
   function toggleNavigation() {
     if (
-      typeof window !== 'undefined' &&
+      typeof window !==
+        'undefined' &&
       window
-        .matchMedia('(max-width: 980px)')
+        .matchMedia(
+          '(max-width: 980px)'
+        )
         .matches
     ) {
       setIsMobileOpen(
-        (currentState) => !currentState
+        (currentState) =>
+          !currentState
       )
 
       return
     }
 
     setIsCollapsed(
-      (currentState) => !currentState
+      (currentState) =>
+        !currentState
     )
   }
+
 
   function closeMobileNavigation() {
     setIsMobileOpen(false)
   }
+
 
   const sidebarClassName = [
     styles.sidebar,
@@ -205,8 +389,13 @@ export default function DashboardLayout({
     .filter(Boolean)
     .join(' ')
 
+
   return (
-    <div className={styles.shell}>
+    <div
+      className={
+        styles.shell
+      }
+    >
       {isMobileOpen && (
         <button
           type="button"
@@ -220,8 +409,11 @@ export default function DashboardLayout({
         />
       )}
 
+
       <aside
-        className={sidebarClassName}
+        className={
+          sidebarClassName
+        }
       >
         <div
           className={
@@ -230,7 +422,9 @@ export default function DashboardLayout({
         >
           <Link
             href="/"
-            className={styles.brand}
+            className={
+              styles.brand
+            }
             onClick={
               closeMobileNavigation
             }
@@ -249,8 +443,11 @@ export default function DashboardLayout({
           </Link>
         </div>
 
+
         <nav
-          className={styles.navigation}
+          className={
+            styles.navigation
+          }
           aria-label="RitsuFlow navigation"
         >
           {navigationGroups.map(
@@ -259,20 +456,27 @@ export default function DashboardLayout({
                 className={
                   styles.navigationGroup
                 }
-                key={group.label}
+                key={
+                  group.label
+                }
               >
                 <p
                   className={
                     styles.navigationLabel
                   }
                 >
-                  {group.label}
+                  {
+                    group.label
+                  }
                 </p>
+
 
                 {group.items.map(
                   (item) => {
                     const active =
-                      isActive(item.href)
+                      isActive(
+                        item.href
+                      )
 
                     const linkClassName = [
                       styles.navigationLink,
@@ -284,23 +488,30 @@ export default function DashboardLayout({
                       .filter(Boolean)
                       .join(' ')
 
+
                     return (
                       <Link
-                        href={item.href}
+                        href={
+                          item.href
+                        }
                         className={
                           linkClassName
                         }
                         onClick={
                           closeMobileNavigation
                         }
-                        key={item.href}
+                        key={
+                          item.href
+                        }
                       >
                         <span
                           className={
                             styles.navigationIcon
                           }
                         >
-                          {item.icon}
+                          {
+                            item.icon
+                          }
                         </span>
 
                         <span
@@ -308,7 +519,9 @@ export default function DashboardLayout({
                             styles.navigationText
                           }
                         >
-                          {item.label}
+                          {
+                            item.label
+                          }
                         </span>
                       </Link>
                     )
@@ -317,7 +530,19 @@ export default function DashboardLayout({
               </div>
             )
           )}
+
+
+          {/*
+            Prevent any temporary visual placeholder from
+            appearing while platform authorization loads.
+
+            Customer users simply never see the Platform
+            section.
+          */}
+          {!platformAuthorizationLoaded &&
+            null}
         </nav>
+
 
         <div
           className={
@@ -353,6 +578,7 @@ export default function DashboardLayout({
             </p>
           </div>
 
+
           <div
             className={
               styles.logoutArea
@@ -369,9 +595,16 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      <div className={styles.workspace}>
+
+      <div
+        className={
+          styles.workspace
+        }
+      >
         <header
-          className={styles.topbar}
+          className={
+            styles.topbar
+          }
         >
           <div
             className={
@@ -391,6 +624,7 @@ export default function DashboardLayout({
               ☰
             </button>
 
+
             <div
               className={
                 styles.pageIdentity
@@ -401,7 +635,9 @@ export default function DashboardLayout({
                   styles.pageCategory
                 }
               >
-                {currentCategory}
+                {
+                  currentCategory
+                }
               </p>
 
               <h1
@@ -409,10 +645,13 @@ export default function DashboardLayout({
                   styles.pageTitle
                 }
               >
-                {currentTitle}
+                {
+                  currentTitle
+                }
               </h1>
             </div>
           </div>
+
 
           <div
             className={
@@ -420,6 +659,7 @@ export default function DashboardLayout({
             }
           />
         </header>
+
 
         <main
           className={
