@@ -1683,6 +1683,10 @@ export default function LocationBreakdownPage() {
   }
 
   async function deleteLocation(location) {
+    if (!selectedProject || !location) {
+      return
+    }
+
     const hasChildLocations = locations.some(
       (childLocation) =>
         childLocation.parent_id === location.id
@@ -1722,68 +1726,25 @@ export default function LocationBreakdownPage() {
     setErrorMessage('')
     setIsSaving(true)
 
-    /*
-     * Remove dependent matrix quantities first.
-     *
-     * The current RitsuFlow schema already protects project
-     * boundaries with RLS. Deleting these records explicitly
-     * makes the UI behavior predictable even when a legacy
-     * foreign-key definition does not use ON DELETE CASCADE.
-     */
-    if (locationQuantities.length > 0) {
-      const { error: quantityDeleteError } = await supabase
-        .from('location_service_quantities')
-        .delete()
-        .eq('project_id', selectedProject.id)
-        .eq('location_id', location.id)
-
-      if (quantityDeleteError) {
-        setErrorMessage(
-          getErrorMessage(quantityDeleteError)
-        )
-        setIsSaving(false)
-        return
+    const { data, error } = await supabase.rpc(
+      'delete_project_location',
+      {
+        target_location_id: location.id,
       }
+    )
+
+    if (error) {
+      setErrorMessage(getErrorMessage(error))
+      setIsSaving(false)
+      return
     }
 
-    /*
-     * scope_items is retained as a legacy/safety structure,
-     * but records assigned specifically to a location cannot
-     * remain after that location is deleted.
-     */
-    if (legacyScopeAssignments.length > 0) {
-      const { error: scopeDeleteError } = await supabase
-        .from('scope_items')
-        .delete()
-        .eq('project_id', selectedProject.id)
-        .eq('location_id', location.id)
-
-      if (scopeDeleteError) {
-        setErrorMessage(
-          getErrorMessage(scopeDeleteError)
-        )
-        setIsSaving(false)
-        return
-      }
-    }
-
-    const { error: locationDeleteError } = await supabase
-      .from('locations')
-      .delete()
-      .eq('id', location.id)
-      .eq('project_id', selectedProject.id)
-
-    if (locationDeleteError) {
-      /*
-       * Reload the workspace because dependent records may
-       * already have been removed before the location delete
-       * failed.
-       */
+    if (data?.deleted !== true) {
       setErrorMessage(
-        getErrorMessage(locationDeleteError)
+        data?.message ||
+          'The location could not be deleted.'
       )
       setIsSaving(false)
-      await loadWorkspace()
       return
     }
 
