@@ -1001,8 +1001,13 @@ export default function LookaheadPage() {
   const loadWorkspace =
     useCallback(
       async (
-        planId
+        planId,
+        options = {}
       ) => {
+
+        const {
+          silent = false,
+        } = options;
 
         if (!planId) {
 
@@ -1018,9 +1023,13 @@ export default function LookaheadPage() {
         }
 
 
-        setLoading(
-          true
-        );
+        if (
+          !silent
+        ) {
+          setLoading(
+            true
+          );
+        }
 
         setErrorMessage(
           ''
@@ -1463,9 +1472,13 @@ export default function LookaheadPage() {
 
         } finally {
 
-          setLoading(
-            false
-          );
+          if (
+            !silent
+          ) {
+            setLoading(
+              false
+            );
+          }
 
         }
 
@@ -2428,7 +2441,11 @@ export default function LookaheadPage() {
 
 
         await loadWorkspace(
-          selectedPlanId
+          selectedPlanId,
+          {
+            silent:
+              true,
+          }
         );
 
       } catch (error) {
