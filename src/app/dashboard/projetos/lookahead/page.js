@@ -536,6 +536,42 @@ export default function LookaheadPage() {
   ] = useState('');
 
 
+  const [
+    showInsertPackageModal,
+    setShowInsertPackageModal,
+  ] = useState(false);
+
+
+  const [
+    insertPackageWorkPackageId,
+    setInsertPackageWorkPackageId,
+  ] = useState('');
+
+
+  const [
+    insertPackageLineId,
+    setInsertPackageLineId,
+  ] = useState('');
+
+
+  const [
+    insertPackageStartDate,
+    setInsertPackageStartDate,
+  ] = useState('');
+
+
+  const [
+    insertPackageDuration,
+    setInsertPackageDuration,
+  ] = useState(1);
+
+
+  const [
+    insertingPackage,
+    setInsertingPackage,
+  ] = useState(false);
+
+
   // ==========================================================
   // SELECTED PLAN
   // ==========================================================
@@ -2221,51 +2257,200 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
-  // INSERT PACKAGE BUTTON
+  // INSERT PACKAGE
   //
-  // Adds a new manual Lookahead row at the bottom of the sheet.
-  // The user can then:
-  // - select the Work Package in the PACKAGE column;
-  // - write a Lookahead-specific description;
-  // - assign Work Packages day-by-day using the timeline arrows.
+  // User provides:
+  // - Work Package
+  // - Line ID
+  // - Start Date
+  // - Duration (working days)
   //
-  // This does NOT modify the Master Plan.
+  // SQL 89 creates the manual row and populates the timeline
+  // atomically. Master Plan is never modified.
   // ==========================================================
 
-  const insertPackageRow =
-    async () => {
+  const openInsertPackageModal =
+    () => {
+
+      if (
+        !selectedPlanId
+      ) {
+        return;
+      }
+
+
+      setInsertPackageWorkPackageId(
+        ''
+      );
+
+
+      setInsertPackageLineId(
+        String(
+          sheetRows.length + 1
+        )
+      );
+
+
+      setInsertPackageStartDate(
+        windowStart ||
+        selectedPlan?.window_start_date ||
+        ''
+      );
+
+
+      setInsertPackageDuration(
+        1
+      );
+
+
+      setErrorMessage(
+        ''
+      );
+
+
+      setShowInsertPackageModal(
+        true
+      );
+
+    };
+
+
+  const submitInsertPackage =
+    async (
+      event
+    ) => {
+
+      event.preventDefault();
+
 
       if (
         !selectedPlanId ||
-        insertingRow
+        !insertPackageWorkPackageId ||
+        !insertPackageLineId ||
+        !insertPackageStartDate ||
+        !insertPackageDuration ||
+        insertingPackage
       ) {
         return;
+      }
+
+
+      const lineId =
+        Number(
+          insertPackageLineId
+        );
+
+
+      const duration =
+        Number(
+          insertPackageDuration
+        );
+
+
+      if (
+        !Number.isInteger(
+          lineId
+        ) ||
+        lineId < 1
+      ) {
+
+        setErrorMessage(
+          'Line ID must be a valid row number.'
+        );
+
+        return;
+
       }
 
 
       if (
-        sheetRows.length ===
-        0
+        !Number.isInteger(
+          duration
+        ) ||
+        duration < 1
       ) {
 
         setErrorMessage(
-          'A Lookahead sheet row is required before a package can be inserted.'
+          'Duration must be at least 1 working day.'
         );
 
         return;
+
       }
 
 
-      const anchorRow =
-        sheetRows[
-          sheetRows.length - 1
-        ];
-
-
-      await insertRow(
-        anchorRow,
-        'below'
+      setInsertingPackage(
+        true
       );
+
+      setErrorMessage(
+        ''
+      );
+
+
+      try {
+
+        const {
+          error,
+        } =
+          await supabase.rpc(
+            'insert_lookahead_manual_package',
+            {
+
+              target_lookahead_plan_id:
+                selectedPlanId,
+
+              target_organization_work_package_id:
+                insertPackageWorkPackageId,
+
+              target_line_id:
+                lineId,
+
+              target_start_date:
+                insertPackageStartDate,
+
+              target_duration_working_days:
+                duration,
+            }
+          );
+
+
+        if (
+          error
+        ) {
+          throw error;
+        }
+
+
+        setShowInsertPackageModal(
+          false
+        );
+
+
+        await loadWorkspace(
+          selectedPlanId
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Insert Lookahead package:',
+          error
+        );
+
+
+        setErrorMessage(
+          error.message ||
+          'The Lookahead package could not be inserted.'
+        );
+
+      } finally {
+
+        setInsertingPackage(
+          false
+        );
+
+      }
 
     };
 
@@ -3083,23 +3268,21 @@ export default function LookaheadPage() {
 
           disabled={
             !selectedPlanId ||
-            insertingRow
+            insertingPackage
           }
 
           onClick={
-            insertPackageRow
+            openInsertPackageModal
           }
 
           style={
             selectedPlanId &&
-            !insertingRow
+            !insertingPackage
               ? primaryButtonStyle
               : disabledButtonStyle
           }
         >
-          {insertingRow
-            ? '⚡ Inserting...'
-            : '⚡ Insert Package'}
+          ⚡ Insert Package
         </button>
 
 
@@ -5508,6 +5691,562 @@ export default function LookaheadPage() {
         )}
 
 
+      {/* ====================================================
+          INSERT PACKAGE MODAL
+      ===================================================== */}
+
+      {showInsertPackageModal && (
+
+        <div
+          style={{
+            position:
+              'fixed',
+
+            inset:
+              0,
+
+            zIndex:
+              6000,
+
+            display:
+              'flex',
+
+            alignItems:
+              'center',
+
+            justifyContent:
+              'center',
+
+            padding:
+              '20px',
+
+            background:
+              'rgba(6,27,47,0.58)',
+          }}
+        >
+
+          <div
+            style={{
+              width:
+                'min(520px, 96vw)',
+
+              borderRadius:
+                '10px',
+
+              background:
+                '#ffffff',
+
+              boxShadow:
+                '0 24px 70px rgba(15,23,42,0.30)',
+
+              overflow:
+                'hidden',
+            }}
+          >
+
+            <div
+              style={{
+                padding:
+                  '18px 20px',
+
+                borderBottom:
+                  '1px solid #e2e8f0',
+              }}
+            >
+
+              <div
+                style={{
+                  color:
+                    '#2563eb',
+
+                  fontSize:
+                    '10px',
+
+                  fontWeight:
+                    900,
+
+                  letterSpacing:
+                    '0.08em',
+
+                  textTransform:
+                    'uppercase',
+                }}
+              >
+                LOOKAHEAD-ONLY ACTIVITY
+              </div>
+
+
+              <h2
+                style={{
+                  margin:
+                    '5px 0 0',
+
+                  color:
+                    '#0f172a',
+
+                  fontSize:
+                    '18px',
+
+                  fontWeight:
+                    900,
+                }}
+              >
+                Insert Package
+              </h2>
+
+
+              <p
+                style={{
+                  margin:
+                    '7px 0 0',
+
+                  color:
+                    '#64748b',
+
+                  fontSize:
+                    '11px',
+
+                  lineHeight:
+                    1.5,
+                }}
+              >
+                Add an activity directly to the Lookahead without
+                changing the Master Plan.
+              </p>
+
+            </div>
+
+
+            <form
+              onSubmit={
+                submitInsertPackage
+              }
+
+              style={{
+                padding:
+                  '20px',
+              }}
+            >
+
+              {/* WORK PACKAGE */}
+
+              <div
+                style={{
+                  marginBottom:
+                    '15px',
+                }}
+              >
+
+                <label
+                  style={
+                    modalFieldLabelStyle
+                  }
+                >
+                  Work Package
+                </label>
+
+
+                <select
+                  value={
+                    insertPackageWorkPackageId
+                  }
+
+                  required
+
+                  onChange={(
+                    event
+                  ) =>
+                    setInsertPackageWorkPackageId(
+                      event.target.value
+                    )
+                  }
+
+                  style={
+                    modalFieldInputStyle
+                  }
+                >
+
+                  <option value="">
+                    -- Select Work Package --
+                  </option>
+
+
+                  {organizationWorkPackages.map(
+                    (
+                      workPackage
+                    ) => (
+
+                      <option
+                        key={
+                          workPackage.id
+                        }
+
+                        value={
+                          workPackage.id
+                        }
+                      >
+                        {workPackage.code} · {workPackage.description}
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+
+              {/* LINE ID */}
+
+              <div
+                style={{
+                  marginBottom:
+                    '15px',
+                }}
+              >
+
+                <label
+                  style={
+                    modalFieldLabelStyle
+                  }
+                >
+                  Line ID
+                </label>
+
+
+                <select
+                  value={
+                    insertPackageLineId
+                  }
+
+                  required
+
+                  onChange={(
+                    event
+                  ) =>
+                    setInsertPackageLineId(
+                      event.target.value
+                    )
+                  }
+
+                  style={
+                    modalFieldInputStyle
+                  }
+                >
+
+                  {Array.from(
+                    {
+                      length:
+                        sheetRows.length + 1,
+                    },
+                    (
+                      _,
+                      index
+                    ) =>
+                      index + 1
+                  ).map(
+                    (
+                      lineId
+                    ) => (
+
+                      <option
+                        key={
+                          lineId
+                        }
+
+                        value={
+                          lineId
+                        }
+                      >
+                        Line {lineId}
+                        {lineId ===
+                        sheetRows.length + 1
+                          ? ' · Bottom'
+                          : ''}
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
+
+                <div
+                  style={{
+                    marginTop:
+                      '5px',
+
+                    color:
+                      '#94a3b8',
+
+                    fontSize:
+                      '9px',
+                  }}
+                >
+                  Existing rows at this position and below will move down.
+                </div>
+
+              </div>
+
+
+              {/* START + DURATION */}
+
+              <div
+                style={{
+                  display:
+                    'grid',
+
+                  gridTemplateColumns:
+                    '1fr 1fr',
+
+                  gap:
+                    '12px',
+
+                  marginBottom:
+                    '18px',
+                }}
+              >
+
+                <div>
+
+                  <label
+                    style={
+                      modalFieldLabelStyle
+                    }
+                  >
+                    Start Date
+                  </label>
+
+
+                  <input
+                    type="date"
+
+                    value={
+                      insertPackageStartDate
+                    }
+
+                    min={
+                      selectedPlan?.window_start_date ||
+                      windowStart ||
+                      undefined
+                    }
+
+                    max={
+                      selectedPlan?.window_finish_date ||
+                      undefined
+                    }
+
+                    required
+
+                    onChange={(
+                      event
+                    ) =>
+                      setInsertPackageStartDate(
+                        event.target.value
+                      )
+                    }
+
+                    style={
+                      modalFieldInputStyle
+                    }
+                  />
+
+                </div>
+
+
+                <div>
+
+                  <label
+                    style={
+                      modalFieldLabelStyle
+                    }
+                  >
+                    Duration
+                  </label>
+
+
+                  <div
+                    style={{
+                      display:
+                        'flex',
+
+                      alignItems:
+                        'center',
+
+                      gap:
+                        '7px',
+                    }}
+                  >
+
+                    <input
+                      type="number"
+
+                      min={
+                        1
+                      }
+
+                      step={
+                        1
+                      }
+
+                      value={
+                        insertPackageDuration
+                      }
+
+                      required
+
+                      onChange={(
+                        event
+                      ) =>
+                        setInsertPackageDuration(
+                          Number(
+                            event.target.value
+                          )
+                        )
+                      }
+
+                      style={{
+                        ...modalFieldInputStyle,
+
+                        flex:
+                          1,
+                      }}
+                    />
+
+
+                    <span
+                      style={{
+                        color:
+                          '#64748b',
+
+                        fontSize:
+                          '10px',
+
+                        fontWeight:
+                          700,
+
+                        whiteSpace:
+                          'nowrap',
+                      }}
+                    >
+                      working days
+                    </span>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+              <div
+                style={{
+                  padding:
+                    '10px 11px',
+
+                  marginBottom:
+                    '18px',
+
+                  border:
+                    '1px solid #dbeafe',
+
+                  borderRadius:
+                    '6px',
+
+                  background:
+                    '#eff6ff',
+
+                  color:
+                    '#1e40af',
+
+                  fontSize:
+                    '10px',
+
+                  lineHeight:
+                    1.45,
+                }}
+              >
+                RitsuFlow will create the manual row and populate its
+                timeline automatically, skipping weekends and registered
+                holidays.
+              </div>
+
+
+              <div
+                style={{
+                  display:
+                    'flex',
+
+                  justifyContent:
+                    'flex-end',
+
+                  gap:
+                    '8px',
+                }}
+              >
+
+                <button
+                  type="button"
+
+                  disabled={
+                    insertingPackage
+                  }
+
+                  onClick={() =>
+                    setShowInsertPackageModal(
+                      false
+                    )
+                  }
+
+                  style={
+                    secondaryButtonStyle
+                  }
+                >
+                  Cancel
+                </button>
+
+
+                <button
+                  type="submit"
+
+                  disabled={
+                    insertingPackage ||
+                    !insertPackageWorkPackageId ||
+                    !insertPackageLineId ||
+                    !insertPackageStartDate ||
+                    Number(
+                      insertPackageDuration
+                    ) < 1
+                  }
+
+                  style={
+                    insertingPackage ||
+                    !insertPackageWorkPackageId ||
+                    !insertPackageLineId ||
+                    !insertPackageStartDate ||
+                    Number(
+                      insertPackageDuration
+                    ) < 1
+                      ? disabledButtonStyle
+                      : primaryButtonStyle
+                  }
+                >
+                  {insertingPackage
+                    ? 'Inserting...'
+                    : 'Insert Package'}
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+
+      )}
+
+
       {selectedProjectId &&
         !selectedPlanId &&
         !loading && (
@@ -5530,6 +6269,54 @@ export default function LookaheadPage() {
 // ============================================================
 // STYLES
 // ============================================================
+
+const modalFieldLabelStyle = {
+  display:
+    'block',
+
+  marginBottom:
+    '6px',
+
+  color:
+    '#334155',
+
+  fontSize:
+    '10px',
+
+  fontWeight:
+    800,
+};
+
+
+const modalFieldInputStyle = {
+  width:
+    '100%',
+
+  height:
+    '38px',
+
+  padding:
+    '0 9px',
+
+  border:
+    '1px solid #cbd5e1',
+
+  borderRadius:
+    '6px',
+
+  background:
+    '#ffffff',
+
+  color:
+    '#0f172a',
+
+  fontSize:
+    '11px',
+
+  outline:
+    'none',
+};
+
 
 const labelStyle = {
   display:
