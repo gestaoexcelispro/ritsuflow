@@ -30,7 +30,7 @@ import { supabase } from '../../../../lib/supabase';
 //
 // Example:
 //
-// VTS -> PROJECTS -> No
+// VTS -> Projects -> No
 //
 // creates ONE grouped constraint,
 // regardless of how many VTS location occurrences exist.
@@ -42,37 +42,37 @@ const ID_WIDTH = 38;
 const PACKAGE_WIDTH = 64;
 const DESCRIPTION_WIDTH = 250;
 const DAY_WIDTH = 38;
-const KOSKELA_WIDTH = 88;
+const KOSKELA_WIDTH = 110;
 
 
 const KOSKELA_COLUMNS = [
   {
     key: 'projects_information',
-    label: 'PROJECTS',
+    label: 'Projects',
   },
   {
     key: 'materials',
-    label: 'MATERIALS',
+    label: 'Materials',
   },
   {
     key: 'labor',
-    label: 'LABOR',
+    label: 'Labor',
   },
   {
     key: 'equipment',
-    label: 'EQUIPMENT',
+    label: 'Equipment',
   },
   {
     key: 'space',
-    label: 'SPACE',
+    label: 'Space',
   },
   {
     key: 'predecessor',
-    label: 'PREDECESSOR',
+    label: 'Predecessor',
   },
   {
     key: 'external_conditions',
-    label: 'EXTERNAL COND.',
+    label: 'External Conditions',
   },
 ];
 
@@ -1950,10 +1950,6 @@ export default function LookaheadPage() {
         };
 
 
-      // ------------------------------------------------------
-      // OPTIMISTIC UI
-      // ------------------------------------------------------
-
       setReadiness(
         (
           current
@@ -3039,6 +3035,12 @@ export default function LookaheadPage() {
 
                         background:
                           '#f1f5f9',
+
+                        fontSize:
+                          '10px',
+
+                        letterSpacing:
+                          '0.02em',
                       }}
                     >
                       KOSKELA FLOW MATRIX
@@ -3121,8 +3123,32 @@ export default function LookaheadPage() {
                             minWidth:
                               KOSKELA_WIDTH,
 
+                            maxWidth:
+                              KOSKELA_WIDTH,
+
+                            padding:
+                              '7px 5px',
+
                             whiteSpace:
                               'normal',
+
+                            overflowWrap:
+                              'normal',
+
+                            wordBreak:
+                              'normal',
+
+                            lineHeight:
+                              1.15,
+
+                            fontSize:
+                              '9px',
+
+                            textAlign:
+                              'center',
+
+                            verticalAlign:
+                              'middle',
                           }}
                         >
 
@@ -3852,8 +3878,14 @@ export default function LookaheadPage() {
 
                                     ...bodyCellStyle,
 
+                                    width:
+                                      KOSKELA_WIDTH,
+
+                                    minWidth:
+                                      KOSKELA_WIDTH,
+
                                     padding:
-                                      '3px',
+                                      '4px',
                                   }}
                                 >
 
@@ -3888,8 +3920,14 @@ export default function LookaheadPage() {
                                       width:
                                         '100%',
 
+                                      minWidth:
+                                        0,
+
                                       height:
-                                        '26px',
+                                        '28px',
+
+                                      padding:
+                                        '0 4px',
 
                                       border:
                                         `1px solid ${style.border}`,
