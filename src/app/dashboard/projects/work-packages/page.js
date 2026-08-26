@@ -1,87 +1,111 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { supabase } from '../../../../lib/supabase'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+
+import {
+  supabase,
+} from '../../../../lib/supabase'
 
 
 // ============================================================
 // RitsuFlow™
-// PROJECT WORK PACKAGE DATABASE
+// WORK PACKAGE DATABASE
 //
-// PURPOSE
-// ------------------------------------------------------------
-// Central project-level Work Package catalog.
+// PROJECT-LEVEL MASTER DATA
 //
-// Work Packages are independent from:
-// - Master Plan
-// - Lookahead Planning
-// - Weekly Planning
-//
-// Registering a Work Package DOES NOT schedule it.
-//
-// USER PROVIDES:
-// - exactly 3 letters
+// The user defines:
+// - 3-letter Work Package code
 // - description
 //
-// RITSUFLOW PROVIDES:
-// - persistent UUID
-// - automatic unique project color
-// - active / inactive status
+// RitsuFlow defines:
+// - UUID
+// - unique project color
+//
+// Creating a Work Package here DOES NOT add it to Master Plan,
+// Lookahead, or Weekly Planning.
 // ============================================================
 
 
-function normalizeCode(value) {
-  return String(value || '')
+function normalizeCode(
+  value
+) {
+  return String(
+    value || ''
+  )
     .toUpperCase()
-    .replace(/[^A-Z]/g, '')
-    .slice(0, 3)
+    .replace(
+      /[^A-Z]/g,
+      ''
+    )
+    .slice(
+      0,
+      3
+    )
 }
 
 
-function getTextColor(hexColor) {
-  const hex = String(hexColor || '')
-    .replace('#', '')
-    .trim()
+function getTextColor(
+  hexColor
+) {
+  const hex =
+    String(
+      hexColor || ''
+    )
+      .replace(
+        '#',
+        ''
+      )
+      .trim()
 
-  if (hex.length !== 6) {
+  if (
+    hex.length !== 6
+  ) {
     return '#ffffff'
   }
 
-  const r = parseInt(hex.slice(0, 2), 16)
-  const g = parseInt(hex.slice(2, 4), 16)
-  const b = parseInt(hex.slice(4, 6), 16)
+  const r =
+    parseInt(
+      hex.slice(
+        0,
+        2
+      ),
+      16
+    )
+
+  const g =
+    parseInt(
+      hex.slice(
+        2,
+        4
+      ),
+      16
+    )
+
+  const b =
+    parseInt(
+      hex.slice(
+        4,
+        6
+      ),
+      16
+    )
 
   const yiq =
-    (r * 299 +
+    (
+      r * 299 +
       g * 587 +
-      b * 114) /
+      b * 114
+    ) /
     1000
 
   return yiq >= 150
     ? '#0f172a'
     : '#ffffff'
-}
-
-
-function formatDate(value) {
-  if (!value) {
-    return '—'
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return '—'
-  }
-
-  return new Intl.DateTimeFormat(
-    'en-US',
-    {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-    }
-  ).format(date)
 }
 
 
@@ -97,9 +121,14 @@ export default function WorkPackagesPage() {
   ] = useState('')
 
   const [
-    catalog,
-    setCatalog,
+    workPackages,
+    setWorkPackages,
   ] = useState([])
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false)
 
   const [
     loadingProjects,
@@ -107,18 +136,13 @@ export default function WorkPackagesPage() {
   ] = useState(true)
 
   const [
-    loadingCatalog,
-    setLoadingCatalog,
-  ] = useState(false)
-
-  const [
     showInactive,
     setShowInactive,
   ] = useState(false)
 
   const [
-    showCreateModal,
-    setShowCreateModal,
+    showNewModal,
+    setShowNewModal,
   ] = useState(false)
 
   const [
@@ -147,13 +171,13 @@ export default function WorkPackagesPage() {
   ] = useState('')
 
   const [
-    savingDescriptionId,
-    setSavingDescriptionId,
+    savingId,
+    setSavingId,
   ] = useState('')
 
   const [
-    changingStatusId,
-    setChangingStatusId,
+    statusChangingId,
+    setStatusChangingId,
   ] = useState('')
 
   const [
@@ -178,7 +202,8 @@ export default function WorkPackagesPage() {
           (project) =>
             project.id ===
             selectedProjectId
-        ) || null,
+        ) ||
+        null,
       [
         projects,
         selectedProjectId,
@@ -193,8 +218,13 @@ export default function WorkPackagesPage() {
   const loadProjects =
     useCallback(
       async () => {
-        setLoadingProjects(true)
-        setErrorMessage('')
+        setLoadingProjects(
+          true
+        )
+
+        setErrorMessage(
+          ''
+        )
 
         try {
           const {
@@ -202,7 +232,9 @@ export default function WorkPackagesPage() {
             error,
           } =
             await supabase
-              .from('projects')
+              .from(
+                'projects'
+              )
               .select(`
                 id,
                 code,
@@ -217,57 +249,50 @@ export default function WorkPackagesPage() {
               .order(
                 'created_at',
                 {
-                  ascending: false,
+                  ascending:
+                    false,
                 }
               )
 
-          if (error) {
+          if (
+            error
+          ) {
             throw error
           }
 
-          const loadedProjects =
+          const loaded =
             data || []
 
           setProjects(
-            loadedProjects
+            loaded
           )
 
           const params =
             new URLSearchParams(
-              window.location.search
+              window.location
+                .search
             )
 
-          const projectIdFromUrl =
+          const projectId =
             params.get(
               'projectId'
             )
 
           if (
-            projectIdFromUrl &&
-            loadedProjects.some(
+            projectId &&
+            loaded.some(
               (project) =>
                 project.id ===
-                projectIdFromUrl
+                projectId
             )
           ) {
             setSelectedProjectId(
-              projectIdFromUrl
-            )
-
-            return
-          }
-
-          if (
-            loadedProjects.length ===
-            1
-          ) {
-            setSelectedProjectId(
-              loadedProjects[0].id
+              projectId
             )
           }
         } catch (error) {
           console.error(
-            'Work Package Database - projects:',
+            'Work Packages - projects:',
             error
           )
 
@@ -276,7 +301,9 @@ export default function WorkPackagesPage() {
               'Projects could not be loaded.'
           )
         } finally {
-          setLoadingProjects(false)
+          setLoadingProjects(
+            false
+          )
         }
       },
       []
@@ -284,21 +311,31 @@ export default function WorkPackagesPage() {
 
 
   // ==========================================================
-  // LOAD WORK PACKAGE CATALOG
+  // LOAD CATALOG
   // ==========================================================
 
-  const loadCatalog =
+  const loadWorkPackages =
     useCallback(
       async (
         projectId
       ) => {
-        if (!projectId) {
-          setCatalog([])
+        if (
+          !projectId
+        ) {
+          setWorkPackages(
+            []
+          )
+
           return
         }
 
-        setLoadingCatalog(true)
-        setErrorMessage('')
+        setLoading(
+          true
+        )
+
+        setErrorMessage(
+          ''
+        )
 
         try {
           const {
@@ -313,36 +350,38 @@ export default function WorkPackagesPage() {
               }
             )
 
-          if (error) {
+          if (
+            error
+          ) {
             throw error
           }
 
-          setCatalog(
+          setWorkPackages(
             data || []
           )
         } catch (error) {
           console.error(
-            'Work Package Database - catalog:',
+            'Work Packages - catalog:',
             error
           )
 
-          setCatalog([])
+          setWorkPackages(
+            []
+          )
 
           setErrorMessage(
             error.message ||
-              'The Work Package catalog could not be loaded.'
+              'The Work Package Database could not be loaded.'
           )
         } finally {
-          setLoadingCatalog(false)
+          setLoading(
+            false
+          )
         }
       },
       []
     )
 
-
-  // ==========================================================
-  // EFFECTS
-  // ==========================================================
 
   useEffect(
     () => {
@@ -356,13 +395,13 @@ export default function WorkPackagesPage() {
 
   useEffect(
     () => {
-      loadCatalog(
+      loadWorkPackages(
         selectedProjectId
       )
     },
     [
       selectedProjectId,
-      loadCatalog,
+      loadWorkPackages,
     ]
   )
 
@@ -371,394 +410,433 @@ export default function WorkPackagesPage() {
   // PROJECT CHANGE
   // ==========================================================
 
-  const handleProjectChange =
-    (
+  function handleProjectChange(
+    projectId
+  ) {
+    setSelectedProjectId(
       projectId
-    ) => {
-      setSelectedProjectId(
-        projectId
-      )
+    )
 
-      setSuccessMessage('')
-      setErrorMessage('')
+    setErrorMessage(
+      ''
+    )
 
-      if (projectId) {
-        window.history.replaceState(
+    setSuccessMessage(
+      ''
+    )
+
+    if (
+      projectId
+    ) {
+      window.history
+        .replaceState(
           {},
           '',
           `/dashboard/projects/work-packages?projectId=${projectId}`
         )
-      } else {
-        window.history.replaceState(
+    } else {
+      window.history
+        .replaceState(
           {},
           '',
           '/dashboard/projects/work-packages'
         )
-      }
+    }
+  }
+
+
+  // ==========================================================
+  // REGISTER WORK PACKAGE
+  // ==========================================================
+
+  async function registerWorkPackage(
+    event
+  ) {
+    event.preventDefault()
+
+    if (
+      !selectedProjectId ||
+      creating
+    ) {
+      return
     }
 
+    const code =
+      normalizeCode(
+        newCode
+      )
 
-  // ==========================================================
-  // CREATE WORK PACKAGE
-  // ==========================================================
+    const description =
+      String(
+        newDescription ||
+        ''
+      ).trim()
 
-  const handleCreateWorkPackage =
-    async (
-      event
-    ) => {
-      event.preventDefault()
+    if (
+      code.length !== 3
+    ) {
+      setErrorMessage(
+        'The Work Package code must contain exactly 3 letters.'
+      )
+
+      return
+    }
+
+    if (
+      !description
+    ) {
+      setErrorMessage(
+        'The Work Package description is required.'
+      )
+
+      return
+    }
+
+    setCreating(
+      true
+    )
+
+    setErrorMessage(
+      ''
+    )
+
+    setSuccessMessage(
+      ''
+    )
+
+    try {
+      const {
+        data,
+        error,
+      } =
+        await supabase.rpc(
+          'register_project_work_package',
+          {
+            target_project_id:
+              selectedProjectId,
+
+            target_code:
+              code,
+
+            target_description:
+              description,
+          }
+        )
 
       if (
-        !selectedProjectId ||
-        creating
+        error
       ) {
-        return
+        throw error
       }
 
-      const code =
-        normalizeCode(
-          newCode
+      const created =
+        Array.isArray(
+          data
         )
+          ? data[0]
+          : data
 
-      const description =
-        String(
-          newDescription ||
-          ''
-        ).trim()
+      setNewCode(
+        ''
+      )
+
+      setNewDescription(
+        ''
+      )
+
+      setShowNewModal(
+        false
+      )
+
+      await loadWorkPackages(
+        selectedProjectId
+      )
+
+      setSuccessMessage(
+        created?.color
+          ? `${created.code} registered successfully. RitsuFlow assigned ${created.color}.`
+          : `${code} registered successfully.`
+      )
+    } catch (error) {
+      console.error(
+        'Work Packages - register:',
+        error
+      )
+
+      setErrorMessage(
+        error.message ||
+          'The Work Package could not be registered.'
+      )
+    } finally {
+      setCreating(
+        false
+      )
+    }
+  }
+
+
+  // ==========================================================
+  // EDIT DESCRIPTION
+  // ==========================================================
+
+  function beginEdit(
+    item
+  ) {
+    setEditingId(
+      item.id
+    )
+
+    setEditingDescription(
+      item.description ||
+        ''
+    )
+
+    setErrorMessage(
+      ''
+    )
+
+    setSuccessMessage(
+      ''
+    )
+  }
+
+
+  function cancelEdit() {
+    setEditingId(
+      ''
+    )
+
+    setEditingDescription(
+      ''
+    )
+  }
+
+
+  async function saveDescription(
+    item
+  ) {
+    const description =
+      String(
+        editingDescription ||
+        ''
+      ).trim()
+
+    if (
+      !description
+    ) {
+      setErrorMessage(
+        'The Work Package description is required.'
+      )
+
+      return
+    }
+
+    setSavingId(
+      item.id
+    )
+
+    setErrorMessage(
+      ''
+    )
+
+    setSuccessMessage(
+      ''
+    )
+
+    try {
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          'update_project_work_package_description',
+          {
+            target_work_package_id:
+              item.id,
+
+            target_description:
+              description,
+          }
+        )
 
       if (
-        code.length !== 3
+        error
       ) {
-        setErrorMessage(
-          'Work Package code must contain exactly 3 letters.'
-        )
-
-        return
+        throw error
       }
 
-      if (!description) {
-        setErrorMessage(
-          'Work Package description is required.'
-        )
+      setWorkPackages(
+        (
+          current
+        ) =>
+          current.map(
+            (
+              workPackage
+            ) =>
+              workPackage.id ===
+              item.id
+                ? {
+                    ...workPackage,
 
-        return
-      }
-
-      setCreating(true)
-      setErrorMessage('')
-      setSuccessMessage('')
-
-      try {
-        const {
-          data,
-          error,
-        } =
-          await supabase.rpc(
-            'register_project_work_package',
-            {
-              target_project_id:
-                selectedProjectId,
-
-              target_code:
-                code,
-
-              target_description:
-                description,
-            }
+                    description,
+                  }
+                : workPackage
           )
-
-        if (error) {
-          throw error
-        }
-
-        const created =
-          Array.isArray(data)
-            ? data[0]
-            : data
-
-        setNewCode('')
-        setNewDescription('')
-        setShowCreateModal(
-          false
-        )
-
-        await loadCatalog(
-          selectedProjectId
-        )
-
-        setSuccessMessage(
-          created?.color
-            ? `${code} was registered. RitsuFlow assigned ${created.color} as its project color.`
-            : `${code} was registered successfully.`
-        )
-      } catch (error) {
-        console.error(
-          'Work Package Database - create:',
-          error
-        )
-
-        setErrorMessage(
-          error.message ||
-            'The Work Package could not be registered.'
-        )
-      } finally {
-        setCreating(false)
-      }
-    }
-
-
-  // ==========================================================
-  // START DESCRIPTION EDIT
-  // ==========================================================
-
-  const beginDescriptionEdit =
-    (
-      item
-    ) => {
-      setEditingId(
-        item.id
       )
 
-      setEditingDescription(
-        item.description || ''
+      cancelEdit()
+
+      setSuccessMessage(
+        `${item.code} updated successfully.`
+      )
+    } catch (error) {
+      console.error(
+        'Work Packages - update:',
+        error
       )
 
-      setErrorMessage('')
-      setSuccessMessage('')
-    }
-
-
-  // ==========================================================
-  // CANCEL DESCRIPTION EDIT
-  // ==========================================================
-
-  const cancelDescriptionEdit =
-    () => {
-      setEditingId('')
-      setEditingDescription('')
-    }
-
-
-  // ==========================================================
-  // SAVE DESCRIPTION
-  // ==========================================================
-
-  const saveDescription =
-    async (
-      item
-    ) => {
-      const description =
-        String(
-          editingDescription ||
-          ''
-        ).trim()
-
-      if (!description) {
-        setErrorMessage(
-          'Work Package description is required.'
-        )
-
-        return
-      }
-
-      if (
-        description ===
-        String(
-          item.description ||
-          ''
-        ).trim()
-      ) {
-        cancelDescriptionEdit()
-        return
-      }
-
-      setSavingDescriptionId(
-        item.id
+      setErrorMessage(
+        error.message ||
+          'The description could not be updated.'
       )
-
-      setErrorMessage('')
-      setSuccessMessage('')
-
-      try {
-        const {
-          error,
-        } =
-          await supabase.rpc(
-            'update_project_work_package_description',
-            {
-              target_work_package_id:
-                item.id,
-
-              target_description:
-                description,
-            }
-          )
-
-        if (error) {
-          throw error
-        }
-
-        setCatalog(
-          (
-            current
-          ) =>
-            current.map(
-              (
-                currentItem
-              ) =>
-                currentItem.id ===
-                item.id
-                  ? {
-                      ...currentItem,
-                      description,
-                    }
-                  : currentItem
-            )
-        )
-
-        cancelDescriptionEdit()
-
-        setSuccessMessage(
-          `${item.code} description updated.`
-        )
-      } catch (error) {
-        console.error(
-          'Work Package Database - description:',
-          error
-        )
-
-        setErrorMessage(
-          error.message ||
-            'The Work Package description could not be updated.'
-        )
-      } finally {
-        setSavingDescriptionId(
-          ''
-        )
-      }
+    } finally {
+      setSavingId(
+        ''
+      )
     }
+  }
 
 
   // ==========================================================
   // ACTIVE / INACTIVE
   // ==========================================================
 
-  const setPackageActive =
-    async (
-      item,
-      nextStatus
-    ) => {
-      if (
-        !item?.id ||
-        changingStatusId
-      ) {
-        return
-      }
-
-      setChangingStatusId(
-        item.id
-      )
-
-      setErrorMessage('')
-      setSuccessMessage('')
-
-      try {
-        const {
-          error,
-        } =
-          await supabase.rpc(
-            'set_project_work_package_active',
-            {
-              target_work_package_id:
-                item.id,
-
-              target_is_active:
-                nextStatus,
-            }
-          )
-
-        if (error) {
-          throw error
-        }
-
-        setCatalog(
-          (
-            current
-          ) =>
-            current.map(
-              (
-                currentItem
-              ) =>
-                currentItem.id ===
-                item.id
-                  ? {
-                      ...currentItem,
-
-                      is_active:
-                        nextStatus,
-                    }
-                  : currentItem
-            )
-        )
-
-        setSuccessMessage(
-          nextStatus
-            ? `${item.code} is active again.`
-            : `${item.code} was deactivated. Historical planning remains preserved.`
-        )
-      } catch (error) {
-        console.error(
-          'Work Package Database - status:',
-          error
-        )
-
-        setErrorMessage(
-          error.message ||
-            'The Work Package status could not be changed.'
-        )
-      } finally {
-        setChangingStatusId(
-          ''
-        )
-      }
+  async function changeStatus(
+    item
+  ) {
+    if (
+      statusChangingId
+    ) {
+      return
     }
 
+    const nextStatus =
+      !item.is_active
 
-  // ==========================================================
-  // FILTERED CATALOG
-  // ==========================================================
-
-  const visibleCatalog =
-    useMemo(
-      () =>
-        catalog.filter(
-          (item) =>
-            showInactive ||
-            item.is_active
-        ),
-      [
-        catalog,
-        showInactive,
-      ]
+    setStatusChangingId(
+      item.id
     )
 
+    setErrorMessage(
+      ''
+    )
+
+    setSuccessMessage(
+      ''
+    )
+
+    try {
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          'set_project_work_package_active',
+          {
+            target_work_package_id:
+              item.id,
+
+            target_is_active:
+              nextStatus,
+          }
+        )
+
+      if (
+        error
+      ) {
+        throw error
+      }
+
+      setWorkPackages(
+        (
+          current
+        ) =>
+          current.map(
+            (
+              workPackage
+            ) =>
+              workPackage.id ===
+              item.id
+                ? {
+                    ...workPackage,
+
+                    is_active:
+                      nextStatus,
+                  }
+                : workPackage
+          )
+      )
+
+      setSuccessMessage(
+        nextStatus
+          ? `${item.code} activated.`
+          : `${item.code} deactivated.`
+      )
+    } catch (error) {
+      console.error(
+        'Work Packages - status:',
+        error
+      )
+
+      setErrorMessage(
+        error.message ||
+          'The Work Package status could not be changed.'
+      )
+    } finally {
+      setStatusChangingId(
+        ''
+      )
+    }
+  }
+
+
+  // ==========================================================
+  // FILTERS
+  // ==========================================================
 
   const activeCount =
     useMemo(
       () =>
-        catalog.filter(
-          (item) =>
+        workPackages.filter(
+          (
+            item
+          ) =>
             item.is_active
         ).length,
       [
-        catalog,
+        workPackages,
       ]
     )
 
 
   const inactiveCount =
-    catalog.length -
+    workPackages.length -
     activeCount
+
+
+  const visibleWorkPackages =
+    useMemo(
+      () =>
+        workPackages.filter(
+          (
+            item
+          ) =>
+            showInactive ||
+            item.is_active
+        ),
+      [
+        workPackages,
+        showInactive,
+      ]
+    )
 
 
   // ==========================================================
@@ -775,16 +853,9 @@ export default function WorkPackagesPage() {
           '24px 22px 50px',
 
         background:
-          'radial-gradient(circle at top right, rgba(8, 170, 150, 0.06), transparent 28%), #f8fafc',
-
-        fontFamily:
-          'sans-serif',
+          '#f8fafc',
       }}
     >
-
-      {/* ====================================================
-          HEADER
-      ===================================================== */}
 
       <section
         style={{
@@ -792,7 +863,6 @@ export default function WorkPackagesPage() {
             '26px',
         }}
       >
-
         <p
           style={{
             margin:
@@ -857,18 +927,12 @@ export default function WorkPackagesPage() {
           }}
         >
           Register the Work Packages available
-          to this project. The same catalog will
-          be shared by Master Plan, Lookahead
-          Planning, Weekly Planning and future
-          production-control modules.
+          for each project. Master Plan,
+          Lookahead Planning and Weekly Planning
+          will use the same catalog.
         </p>
-
       </section>
 
-
-      {/* ====================================================
-          PROJECT SELECTOR
-      ===================================================== */}
 
       <section
         style={{
@@ -888,223 +952,104 @@ export default function WorkPackagesPage() {
             '#ffffff',
         }}
       >
-
-        <div
+        <label
           style={{
             display:
-              'flex',
+              'block',
 
-            alignItems:
-              'flex-end',
+            marginBottom:
+              '6px',
 
-            justifyContent:
-              'space-between',
+            color:
+              '#36516d',
 
-            gap:
-              '18px',
+            fontSize:
+              '0.7rem',
 
-            flexWrap:
-              'wrap',
+            fontWeight:
+              900,
+
+            textTransform:
+              'uppercase',
           }}
         >
+          Project
+        </label>
 
-          <div
-            style={{
-              width:
-                'min(460px, 100%)',
-            }}
-          >
+        <select
+          value={
+            selectedProjectId
+          }
 
-            <label
-              style={{
-                display:
-                  'block',
+          disabled={
+            loadingProjects
+          }
 
-                marginBottom:
-                  '6px',
+          onChange={(
+            event
+          ) =>
+            handleProjectChange(
+              event.target.value
+            )
+          }
 
-                color:
-                  '#36516d',
+          style={{
+            width:
+              'min(460px, 100%)',
 
-                fontSize:
-                  '0.7rem',
+            height:
+              '42px',
 
-                fontWeight:
-                  900,
+            padding:
+              '0 12px',
 
-                textTransform:
-                  'uppercase',
+            border:
+              '1px solid #cbd5e1',
 
-                letterSpacing:
-                  '0.06em',
-              }}
-            >
-              Project
-            </label>
+            borderRadius:
+              '7px',
 
-            <select
-              value={
-                selectedProjectId
-              }
+            background:
+              '#ffffff',
 
-              disabled={
-                loadingProjects
-              }
+            color:
+              '#0f172a',
+          }}
+        >
+          <option value="">
+            -- Select a Project --
+          </option>
 
-              onChange={(
-                event
-              ) =>
-                handleProjectChange(
-                  event.target.value
-                )
-              }
+          {projects.map(
+            (
+              project
+            ) => (
+              <option
+                key={
+                  project.id
+                }
 
-              style={{
-                width:
-                  '100%',
-
-                height:
-                  '42px',
-
-                padding:
-                  '0 12px',
-
-                border:
-                  '1px solid #cbd5e1',
-
-                borderRadius:
-                  '7px',
-
-                background:
-                  '#ffffff',
-
-                color:
-                  '#0f172a',
-
-                fontSize:
-                  '0.86rem',
-
-                outline:
-                  'none',
-              }}
-            >
-
-              <option value="">
-                -- Select a Project --
-              </option>
-
-              {projects.map(
-                (
-                  project
-                ) => (
-                  <option
-                    key={
-                      project.id
-                    }
-
-                    value={
-                      project.id
-                    }
-                  >
-                    {project.code
-                      ? `${project.code} - `
-                      : ''}
-
-                    {project.name}
-                  </option>
-                )
-              )}
-
-            </select>
-
-          </div>
-
-
-          {selectedProject && (
-            <div
-              style={{
-                display:
-                  'flex',
-
-                alignItems:
-                  'center',
-
-                gap:
-                  '12px',
-
-                flexWrap:
-                  'wrap',
-              }}
-            >
-
-              <div
-                style={{
-                  padding:
-                    '7px 11px',
-
-                  borderRadius:
-                    '999px',
-
-                  background:
-                    '#e8faf6',
-
-                  color:
-                    '#087f73',
-
-                  fontSize:
-                    '0.7rem',
-
-                  fontWeight:
-                    900,
-                }}
+                value={
+                  project.id
+                }
               >
-                {activeCount} Active
-              </div>
+                {project.code
+                  ? `${project.code} - `
+                  : ''}
 
-              {inactiveCount >
-                0 && (
-                <div
-                  style={{
-                    padding:
-                      '7px 11px',
-
-                    borderRadius:
-                      '999px',
-
-                    background:
-                      '#f1f5f9',
-
-                    color:
-                      '#64748b',
-
-                    fontSize:
-                      '0.7rem',
-
-                    fontWeight:
-                      900,
-                  }}
-                >
-                  {inactiveCount} Inactive
-                </div>
-              )}
-
-            </div>
+                {project.name}
+              </option>
+            )
           )}
-
-        </div>
-
+        </select>
       </section>
 
-
-      {/* ====================================================
-          MESSAGES
-      ===================================================== */}
 
       {errorMessage && (
         <div
           style={{
             marginBottom:
-              '16px',
+              '14px',
 
             padding:
               '11px 14px',
@@ -1137,7 +1082,7 @@ export default function WorkPackagesPage() {
         <div
           style={{
             marginBottom:
-              '16px',
+              '14px',
 
             padding:
               '11px 14px',
@@ -1166,73 +1111,7 @@ export default function WorkPackagesPage() {
       )}
 
 
-      {/* ====================================================
-          NO PROJECT
-      ===================================================== */}
-
-      {!selectedProjectId && (
-        <section
-          style={{
-            padding:
-              '60px 20px',
-
-            border:
-              '1px dashed #cbd5e1',
-
-            borderRadius:
-              '12px',
-
-            background:
-              '#ffffff',
-
-            textAlign:
-              'center',
-          }}
-        >
-
-          <h2
-            style={{
-              margin:
-                '0 0 8px',
-
-              color:
-                '#0f172a',
-
-              fontSize:
-                '1rem',
-
-              fontWeight:
-                900,
-            }}
-          >
-            Select a project
-          </h2>
-
-          <p
-            style={{
-              margin:
-                0,
-
-              color:
-                '#64748b',
-
-              fontSize:
-                '0.8rem',
-            }}
-          >
-            The Work Package catalog belongs
-            to a specific project.
-          </p>
-
-        </section>
-      )}
-
-
-      {/* ====================================================
-          DATABASE
-      ===================================================== */}
-
-      {selectedProjectId && (
+      {selectedProject && (
         <section
           style={{
             overflow:
@@ -1246,14 +1125,8 @@ export default function WorkPackagesPage() {
 
             background:
               '#ffffff',
-
-            boxShadow:
-              '0 10px 28px rgba(15,23,42,0.04)',
           }}
         >
-
-          {/* HEADER */}
-
           <div
             style={{
               display:
@@ -1266,7 +1139,7 @@ export default function WorkPackagesPage() {
                 'space-between',
 
               gap:
-                '16px',
+                '15px',
 
               flexWrap:
                 'wrap',
@@ -1278,9 +1151,7 @@ export default function WorkPackagesPage() {
                 '1px solid #e6edf3',
             }}
           >
-
             <div>
-
               <h2
                 style={{
                   margin:
@@ -1296,11 +1167,9 @@ export default function WorkPackagesPage() {
                     900,
                 }}
               >
-                {selectedProject?.code
-                  ? `${selectedProject.code} · `
-                  : ''}
-
-                {selectedProject?.name}
+                {selectedProject.code}
+                {' · '}
+                {selectedProject.name}
               </h2>
 
               <p
@@ -1315,12 +1184,8 @@ export default function WorkPackagesPage() {
                     '0.72rem',
                 }}
               >
-                Work Package codes are permanent
-                project identifiers. Colors are
-                assigned automatically by
-                RitsuFlow.
+                {activeCount} active Work Packages
               </p>
-
             </div>
 
 
@@ -1331,12 +1196,8 @@ export default function WorkPackagesPage() {
 
                 gap:
                   '8px',
-
-                alignItems:
-                  'center',
               }}
             >
-
               {inactiveCount >
                 0 && (
                 <button
@@ -1357,10 +1218,9 @@ export default function WorkPackagesPage() {
                 >
                   {showInactive
                     ? 'Hide Inactive'
-                    : 'Show Inactive'}
+                    : `Show Inactive (${inactiveCount})`}
                 </button>
               )}
-
 
               <button
                 type="button"
@@ -1370,7 +1230,7 @@ export default function WorkPackagesPage() {
                   setNewDescription('')
                   setErrorMessage('')
                   setSuccessMessage('')
-                  setShowCreateModal(
+                  setShowNewModal(
                     true
                   )
                 }}
@@ -1381,75 +1241,24 @@ export default function WorkPackagesPage() {
               >
                 + New Work Package
               </button>
-
             </div>
-
           </div>
 
 
-          {/* TABLE */}
-
-          {loadingCatalog ? (
+          {loading ? (
             <div
               style={{
                 padding:
-                  '50px 20px',
+                  '50px',
 
                 textAlign:
                   'center',
 
                 color:
                   '#64748b',
-
-                fontSize:
-                  '0.8rem',
               }}
             >
               Loading Work Packages...
-            </div>
-          ) : visibleCatalog.length ===
-            0 ? (
-            <div
-              style={{
-                padding:
-                  '55px 20px',
-
-                textAlign:
-                  'center',
-              }}
-            >
-
-              <h3
-                style={{
-                  margin:
-                    '0 0 7px',
-
-                  color:
-                    '#0f172a',
-
-                  fontSize:
-                    '0.95rem',
-                }}
-              >
-                No Work Packages registered.
-              </h3>
-
-              <p
-                style={{
-                  margin:
-                    0,
-
-                  color:
-                    '#64748b',
-
-                  fontSize:
-                    '0.76rem',
-                }}
-              >
-                Register the first Work Package
-                for this project.
-              </p>
-
             </div>
           ) : (
             <div
@@ -1458,51 +1267,31 @@ export default function WorkPackagesPage() {
                   'auto',
               }}
             >
-
               <table
                 style={{
                   width:
                     '100%',
 
                   minWidth:
-                    '820px',
+                    '760px',
 
                   borderCollapse:
                     'collapse',
-
-                  fontSize:
-                    '0.76rem',
                 }}
               >
-
                 <thead>
                   <tr>
-
-                    <th
-                      style={{
-                        ...tableHeaderStyle,
-
-                        width:
-                          '80px',
-                      }}
-                    >
+                    <th style={headerStyle}>
                       COLOR
                     </th>
 
-                    <th
-                      style={{
-                        ...tableHeaderStyle,
-
-                        width:
-                          '120px',
-                      }}
-                    >
+                    <th style={headerStyle}>
                       CODE
                     </th>
 
                     <th
                       style={{
-                        ...tableHeaderStyle,
+                        ...headerStyle,
 
                         textAlign:
                           'left',
@@ -1511,46 +1300,18 @@ export default function WorkPackagesPage() {
                       DESCRIPTION
                     </th>
 
-                    <th
-                      style={{
-                        ...tableHeaderStyle,
-
-                        width:
-                          '120px',
-                      }}
-                    >
+                    <th style={headerStyle}>
                       STATUS
                     </th>
 
-                    <th
-                      style={{
-                        ...tableHeaderStyle,
-
-                        width:
-                          '125px',
-                      }}
-                    >
-                      CREATED
-                    </th>
-
-                    <th
-                      style={{
-                        ...tableHeaderStyle,
-
-                        width:
-                          '200px',
-                      }}
-                    >
+                    <th style={headerStyle}>
                       ACTIONS
                     </th>
-
                   </tr>
                 </thead>
 
-
                 <tbody>
-
-                  {visibleCatalog.map(
+                  {visibleWorkPackages.map(
                     (
                       item
                     ) => {
@@ -1573,21 +1334,11 @@ export default function WorkPackagesPage() {
                             opacity:
                               item.is_active
                                 ? 1
-                                : 0.58,
+                                : 0.55,
                           }}
                         >
-
-                          <td
-                            style={
-                              tableCellStyle
-                            }
-                          >
+                          <td style={cellStyle}>
                             <div
-                              title={
-                                item.color ||
-                                ''
-                              }
-
                               style={{
                                 width:
                                   '28px',
@@ -1599,28 +1350,19 @@ export default function WorkPackagesPage() {
                                   '0 auto',
 
                                 borderRadius:
-                                  '6px',
+                                  '5px',
 
                                 background:
                                   item.color ||
-                                  '#cbd5e1',
+                                  '#64748b',
 
                                 border:
-                                  '1px solid rgba(15,23,42,0.12)',
-
-                                boxShadow:
-                                  'inset 0 0 0 1px rgba(255,255,255,0.15)',
+                                  '1px solid #cbd5e1',
                               }}
                             />
                           </td>
 
-
-                          <td
-                            style={
-                              tableCellStyle
-                            }
-                          >
-
+                          <td style={cellStyle}>
                             <span
                               style={{
                                 display:
@@ -1633,10 +1375,10 @@ export default function WorkPackagesPage() {
                                   'center',
 
                                 minWidth:
-                                  '54px',
+                                  '55px',
 
                                 padding:
-                                  '6px 9px',
+                                  '6px 8px',
 
                                 borderRadius:
                                   '5px',
@@ -1650,29 +1392,20 @@ export default function WorkPackagesPage() {
 
                                 fontWeight:
                                   900,
-
-                                letterSpacing:
-                                  '0.06em',
                               }}
                             >
                               {item.code}
                             </span>
-
                           </td>
-
 
                           <td
                             style={{
-                              ...tableCellStyle,
+                              ...cellStyle,
 
                               textAlign:
                                 'left',
-
-                              padding:
-                                '8px 14px',
                             }}
                           >
-
                             {isEditing ? (
                               <input
                                 type="text"
@@ -1680,8 +1413,6 @@ export default function WorkPackagesPage() {
                                 value={
                                   editingDescription
                                 }
-
-                                autoFocus
 
                                 onChange={(
                                   event
@@ -1691,26 +1422,6 @@ export default function WorkPackagesPage() {
                                   )
                                 }
 
-                                onKeyDown={(
-                                  event
-                                ) => {
-                                  if (
-                                    event.key ===
-                                    'Enter'
-                                  ) {
-                                    saveDescription(
-                                      item
-                                    )
-                                  }
-
-                                  if (
-                                    event.key ===
-                                    'Escape'
-                                  ) {
-                                    cancelDescriptionEdit()
-                                  }
-                                }}
-
                                 style={{
                                   width:
                                     '100%',
@@ -1719,104 +1430,33 @@ export default function WorkPackagesPage() {
                                     '34px',
 
                                   padding:
-                                    '0 9px',
+                                    '0 8px',
 
                                   border:
                                     '1px solid #94a3b8',
 
                                   borderRadius:
                                     '5px',
-
-                                  outline:
-                                    'none',
-
-                                  fontSize:
-                                    '0.76rem',
                                 }}
                               />
                             ) : (
-                              <span
-                                style={{
-                                  color:
-                                    '#1e293b',
-
-                                  fontWeight:
-                                    700,
-                                }}
-                              >
+                              <strong>
                                 {item.description}
-                              </span>
-                            )}
-
-                          </td>
-
-
-                          <td
-                            style={
-                              tableCellStyle
-                            }
-                          >
-
-                            <span
-                              style={{
-                                display:
-                                  'inline-block',
-
-                                padding:
-                                  '5px 9px',
-
-                                borderRadius:
-                                  '999px',
-
-                                background:
-                                  item.is_active
-                                    ? '#dcfce7'
-                                    : '#f1f5f9',
-
-                                color:
-                                  item.is_active
-                                    ? '#166534'
-                                    : '#64748b',
-
-                                fontSize:
-                                  '0.66rem',
-
-                                fontWeight:
-                                  900,
-                              }}
-                            >
-                              {item.is_active
-                                ? 'Active'
-                                : 'Inactive'}
-                            </span>
-
-                          </td>
-
-
-                          <td
-                            style={
-                              tableCellStyle
-                            }
-                          >
-                            {formatDate(
-                              item.created_at
+                              </strong>
                             )}
                           </td>
 
+                          <td style={cellStyle}>
+                            {item.is_active
+                              ? 'Active'
+                              : 'Inactive'}
+                          </td>
 
-                          <td
-                            style={
-                              tableCellStyle
-                            }
-                          >
-
+                          <td style={cellStyle}>
                             <div
                               style={{
                                 display:
                                   'flex',
-
-                                alignItems:
-                                  'center',
 
                                 justifyContent:
                                   'center',
@@ -1825,14 +1465,13 @@ export default function WorkPackagesPage() {
                                   '6px',
                               }}
                             >
-
                               {isEditing ? (
                                 <>
                                   <button
                                     type="button"
 
                                     disabled={
-                                      savingDescriptionId ===
+                                      savingId ===
                                       item.id
                                     }
 
@@ -1853,7 +1492,7 @@ export default function WorkPackagesPage() {
                                     type="button"
 
                                     onClick={
-                                      cancelDescriptionEdit
+                                      cancelEdit
                                     }
 
                                     style={
@@ -1869,7 +1508,7 @@ export default function WorkPackagesPage() {
                                     type="button"
 
                                     onClick={() =>
-                                      beginDescriptionEdit(
+                                      beginEdit(
                                         item
                                       )
                                     }
@@ -1885,21 +1524,18 @@ export default function WorkPackagesPage() {
                                     type="button"
 
                                     disabled={
-                                      changingStatusId ===
+                                      statusChangingId ===
                                       item.id
                                     }
 
                                     onClick={() =>
-                                      setPackageActive(
-                                        item,
-                                        !item.is_active
+                                      changeStatus(
+                                        item
                                       )
                                     }
 
                                     style={
-                                      item.is_active
-                                        ? smallDeactivateButtonStyle
-                                        : smallActivateButtonStyle
+                                      smallButtonStyle
                                     }
                                   >
                                     {item.is_active
@@ -1908,32 +1544,21 @@ export default function WorkPackagesPage() {
                                   </button>
                                 </>
                               )}
-
                             </div>
-
                           </td>
-
                         </tr>
                       )
                     }
                   )}
-
                 </tbody>
-
               </table>
-
             </div>
           )}
-
         </section>
       )}
 
 
-      {/* ====================================================
-          CREATE WORK PACKAGE MODAL
-      ===================================================== */}
-
-      {showCreateModal && (
+      {showNewModal && (
         <div
           style={{
             position:
@@ -1954,242 +1579,131 @@ export default function WorkPackagesPage() {
             justifyContent:
               'center',
 
-            padding:
-              '20px',
-
             background:
-              'rgba(6, 27, 47, 0.55)',
+              'rgba(6,27,47,0.55)',
           }}
         >
-
           <div
             style={{
               width:
-                'min(460px, 96vw)',
+                'min(450px, 94vw)',
 
-              overflow:
-                'hidden',
+              padding:
+                '24px',
 
               borderRadius:
                 '12px',
 
               background:
                 '#ffffff',
-
-              boxShadow:
-                '0 28px 80px rgba(15,23,42,0.28)',
             }}
           >
-
-            <div
+            <h2
               style={{
-                padding:
-                  '20px 22px',
+                margin:
+                  '0 0 20px',
 
-                borderBottom:
-                  '1px solid #e2e8f0',
+                color:
+                  '#061b2f',
               }}
             >
+              Register Work Package
+            </h2>
 
-              <p
+            <form
+              onSubmit={
+                registerWorkPackage
+              }
+            >
+              <label style={labelStyle}>
+                Code
+              </label>
+
+              <input
+                type="text"
+
+                maxLength={
+                  3
+                }
+
+                required
+
+                value={
+                  newCode
+                }
+
+                placeholder="DRY"
+
+                onChange={(
+                  event
+                ) =>
+                  setNewCode(
+                    normalizeCode(
+                      event.target.value
+                    )
+                  )
+                }
+
                 style={{
-                  margin:
-                    '0 0 5px',
+                  ...inputStyle,
 
-                  color:
-                    '#009f8e',
+                  width:
+                    '120px',
 
-                  fontSize:
-                    '0.66rem',
+                  marginBottom:
+                    '16px',
 
                   fontWeight:
                     900,
-
-                  letterSpacing:
-                    '0.1em',
 
                   textTransform:
                     'uppercase',
                 }}
-              >
-                WORK PACKAGE DATABASE
-              </p>
+              />
 
-              <h2
+
+              <label style={labelStyle}>
+                Description
+              </label>
+
+              <input
+                type="text"
+
+                required
+
+                value={
+                  newDescription
+                }
+
+                placeholder="Drywall"
+
+                onChange={(
+                  event
+                ) =>
+                  setNewDescription(
+                    event.target.value
+                  )
+                }
+
                 style={{
-                  margin:
-                    0,
+                  ...inputStyle,
 
-                  color:
-                    '#061b2f',
-
-                  fontSize:
-                    '1.2rem',
-
-                  fontWeight:
-                    900,
-                }}
-              >
-                Register Work Package
-              </h2>
-
-            </div>
-
-
-            <form
-              onSubmit={
-                handleCreateWorkPackage
-              }
-
-              style={{
-                padding:
-                  '22px',
-              }}
-            >
-
-              <div
-                style={{
                   marginBottom:
-                    '17px',
+                    '16px',
                 }}
-              >
-
-                <label
-                  style={
-                    modalLabelStyle
-                  }
-                >
-                  Work Package Code
-                </label>
-
-                <input
-                  type="text"
-
-                  value={
-                    newCode
-                  }
-
-                  maxLength={
-                    3
-                  }
-
-                  autoFocus
-
-                  required
-
-                  placeholder="DRY"
-
-                  onChange={(
-                    event
-                  ) =>
-                    setNewCode(
-                      normalizeCode(
-                        event.target.value
-                      )
-                    )
-                  }
-
-                  style={{
-                    ...modalInputStyle,
-
-                    maxWidth:
-                      '120px',
-
-                    fontWeight:
-                      900,
-
-                    textTransform:
-                      'uppercase',
-
-                    letterSpacing:
-                      '0.08em',
-                  }}
-                />
-
-                <p
-                  style={{
-                    margin:
-                      '6px 0 0',
-
-                    color:
-                      '#7890a8',
-
-                    fontSize:
-                      '0.68rem',
-                  }}
-                >
-                  Exactly 3 letters. The code
-                  becomes the permanent project
-                  identifier.
-                </p>
-
-              </div>
+              />
 
 
               <div
                 style={{
-                  marginBottom:
-                    '18px',
-                }}
-              >
-
-                <label
-                  style={
-                    modalLabelStyle
-                  }
-                >
-                  Description
-                </label>
-
-                <input
-                  type="text"
-
-                  value={
-                    newDescription
-                  }
-
-                  required
-
-                  placeholder="Drywall"
-
-                  onChange={(
-                    event
-                  ) =>
-                    setNewDescription(
-                      event.target.value
-                    )
-                  }
-
-                  style={
-                    modalInputStyle
-                  }
-                />
-
-              </div>
-
-
-              <div
-                style={{
-                  display:
-                    'flex',
-
-                  alignItems:
-                    'center',
-
-                  gap:
-                    '10px',
-
                   marginBottom:
                     '20px',
 
                   padding:
-                    '11px 12px',
-
-                  border:
-                    '1px solid #dbeafe',
+                    '11px',
 
                   borderRadius:
-                    '7px',
+                    '6px',
 
                   background:
                     '#eff6ff',
@@ -2198,26 +1712,13 @@ export default function WorkPackagesPage() {
                     '#1e40af',
 
                   fontSize:
-                    '0.7rem',
-
-                  lineHeight:
-                    1.45,
+                    '0.72rem',
                 }}
               >
-                <span
-                  style={{
-                    fontSize:
-                      '1rem',
-                  }}
-                >
-                  🎨
-                </span>
-
-                <span>
-                  RitsuFlow will automatically
-                  assign an unused color to this
-                  Work Package.
-                </span>
+                RitsuFlow automatically assigns
+                a color that is not already used
+                by another Work Package in this
+                project.
               </div>
 
 
@@ -2233,16 +1734,11 @@ export default function WorkPackagesPage() {
                     '8px',
                 }}
               >
-
                 <button
                   type="button"
 
-                  disabled={
-                    creating
-                  }
-
                   onClick={() =>
-                    setShowCreateModal(
+                    setShowNewModal(
                       false
                     )
                   }
@@ -2253,7 +1749,6 @@ export default function WorkPackagesPage() {
                 >
                   Cancel
                 </button>
-
 
                 <button
                   type="submit"
@@ -2266,25 +1761,16 @@ export default function WorkPackagesPage() {
                   }
 
                   style={
-                    creating ||
-                    newCode.length !==
-                      3 ||
-                    !newDescription.trim()
-                      ? disabledPrimaryButtonStyle
-                      : primaryButtonStyle
+                    primaryButtonStyle
                   }
                 >
                   {creating
                     ? 'Registering...'
                     : 'Register Work Package'}
                 </button>
-
               </div>
-
             </form>
-
           </div>
-
         </div>
       )}
 
@@ -2292,10 +1778,6 @@ export default function WorkPackagesPage() {
   )
 }
 
-
-// ============================================================
-// STYLES
-// ============================================================
 
 const primaryButtonStyle = {
   minHeight:
@@ -2305,7 +1787,7 @@ const primaryButtonStyle = {
     '0 13px',
 
   border:
-    '1px solid #008f80',
+    'none',
 
   borderRadius:
     '6px',
@@ -2324,17 +1806,6 @@ const primaryButtonStyle = {
 
   cursor:
     'pointer',
-}
-
-
-const disabledPrimaryButtonStyle = {
-  ...primaryButtonStyle,
-
-  opacity:
-    0.45,
-
-  cursor:
-    'not-allowed',
 }
 
 
@@ -2368,12 +1839,54 @@ const secondaryButtonStyle = {
 }
 
 
+const headerStyle = {
+  padding:
+    '10px',
+
+  borderBottom:
+    '1px solid #cbd5e1',
+
+  background:
+    '#f8fafc',
+
+  color:
+    '#536a86',
+
+  fontSize:
+    '0.65rem',
+
+  fontWeight:
+    900,
+
+  textAlign:
+    'center',
+}
+
+
+const cellStyle = {
+  padding:
+    '10px',
+
+  borderBottom:
+    '1px solid #e6edf3',
+
+  color:
+    '#334155',
+
+  fontSize:
+    '0.76rem',
+
+  textAlign:
+    'center',
+}
+
+
 const smallButtonStyle = {
   minHeight:
-    '29px',
+    '28px',
 
   padding:
-    '0 9px',
+    '0 8px',
 
   border:
     '1px solid #cbd5e1',
@@ -2388,7 +1901,7 @@ const smallButtonStyle = {
     '#334155',
 
   fontSize:
-    '0.65rem',
+    '0.66rem',
 
   fontWeight:
     800,
@@ -2402,93 +1915,17 @@ const smallPrimaryButtonStyle = {
   ...smallButtonStyle,
 
   border:
-    '1px solid #0d9488',
+    '1px solid #009f8e',
 
   background:
-    '#0d9488',
+    '#009f8e',
 
   color:
     '#ffffff',
 }
 
 
-const smallDeactivateButtonStyle = {
-  ...smallButtonStyle,
-
-  border:
-    '1px solid #fecaca',
-
-  background:
-    '#fff1f2',
-
-  color:
-    '#be123c',
-}
-
-
-const smallActivateButtonStyle = {
-  ...smallButtonStyle,
-
-  border:
-    '1px solid #99f6e4',
-
-  background:
-    '#f0fdfa',
-
-  color:
-    '#0f766e',
-}
-
-
-const tableHeaderStyle = {
-  padding:
-    '10px 9px',
-
-  borderBottom:
-    '1px solid #cbd5e1',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#536a86',
-
-  textAlign:
-    'center',
-
-  fontSize:
-    '0.65rem',
-
-  fontWeight:
-    900,
-
-  letterSpacing:
-    '0.05em',
-
-  textTransform:
-    'uppercase',
-}
-
-
-const tableCellStyle = {
-  padding:
-    '8px 9px',
-
-  borderBottom:
-    '1px solid #e6edf3',
-
-  color:
-    '#536a86',
-
-  textAlign:
-    'center',
-
-  verticalAlign:
-    'middle',
-}
-
-
-const modalLabelStyle = {
+const labelStyle = {
   display:
     'block',
 
@@ -2506,7 +1943,7 @@ const modalLabelStyle = {
 }
 
 
-const modalInputStyle = {
+const inputStyle = {
   width:
     '100%',
 
@@ -2521,15 +1958,6 @@ const modalInputStyle = {
 
   borderRadius:
     '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '0.8rem',
 
   outline:
     'none',
