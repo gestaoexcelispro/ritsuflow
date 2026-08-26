@@ -26,9 +26,10 @@ import { supabase } from '../../../../lib/supabase';
 //
 // Manual rows:
 // - User can insert a row above or below.
-// - Manual row can select an available Master Plan Work Package.
-// - Already-used package codes cannot be selected again.
-// - Selecting a package converts the row to package_group.
+// - User-created manual rows can be deleted.
+// - Manual rows select from the organization Work Package Library.
+// - The Work Package UUID is the permanent identity.
+// - Selecting a package does NOT change the Master Plan.
 //
 // Koskela:
 // - Assessment belongs to the GROUPED sheet row.
@@ -41,59 +42,20 @@ const ID_WIDTH = 38;
 const PACKAGE_WIDTH = 100;
 const DESCRIPTION_WIDTH = 250;
 const DAY_WIDTH = 38;
-const KOSKELA_WIDTH = 110;
+const KOSKELA_WIDTH = 128;
 
 
 const KOSKELA_COLUMNS = [
-  {
-    key: 'projects_information',
-    label: 'Projects',
-  },
-  {
-    key: 'materials',
-    label: 'Materials',
-  },
-  {
-    key: 'labor',
-    label: 'Labor',
-  },
-  {
-    key: 'equipment',
-    label: 'Equipment',
-  },
-  {
-    key: 'space',
-    label: 'Space',
-  },
-  {
-    key: 'predecessor',
-    label: 'Predecessor',
-  },
-  {
-    key: 'external_conditions',
-    label: 'External Conditions',
-  },
+  { key: 'projects_information', label: 'Projects / Information' },
+  { key: 'materials', label: 'Materials' },
+  { key: 'labor', label: 'Labor' },
+  { key: 'equipment', label: 'Equipment' },
+  { key: 'space', label: 'Space' },
+  { key: 'predecessor', label: 'Predecessor' },
+  { key: 'external_conditions', label: 'External Conditions' },
 ];
 
 
-const SERVICE_COLORS = {
-  FUN: '#ff00ff',
-  PNS: '#8a2be2',
-  VTS: '#0000ff',
-  VEX: '#00cfd5',
-  LMI: '#00c853',
-  VIN: '#ff9900',
-  PIS: '#8b0000',
-  FOR: '#556b2f',
-  COB: '#b05070',
-  INS: '#4682b4',
-  BUF: '#000000',
-  PIN: '#daa520',
-  ESQ: '#d8cc63',
-  REV: '#d2691e',
-  SUP: '#ff0000',
-  TST: '#475569',
-};
 
 
 // ============================================================
@@ -256,10 +218,22 @@ function getPackageDates(
 
 
 function getServiceColor(
-  code
+  code,
+  workPackageCatalog = []
 ) {
+  const normalizedCode =
+    String(code || '')
+      .trim()
+      .toUpperCase();
+
   return (
-    SERVICE_COLORS[code] ||
+    workPackageCatalog.find(
+      (item) =>
+        String(item.code || '')
+          .trim()
+          .toUpperCase() ===
+        normalizedCode
+    )?.color ||
     '#64748b'
   );
 }
@@ -445,8 +419,8 @@ export default function LookaheadPage() {
 
 
   const [
-    masterPlanPackages,
-    setMasterPlanPackages,
+    organizationWorkPackages,
+    setOrganizationWorkPackages,
   ] = useState([]);
 
 
@@ -530,6 +504,12 @@ export default function LookaheadPage() {
   ] = useState(false);
 
 
+  const [
+    deletingRowId,
+    setDeletingRowId,
+  ] = useState('');
+
+
   // ==========================================================
   // SELECTED PLAN
   // ==========================================================
@@ -546,6 +526,22 @@ export default function LookaheadPage() {
       [
         plans,
         selectedPlanId,
+      ]
+    );
+
+
+  const selectedProject =
+    useMemo(
+      () =>
+        projects.find(
+          (project) =>
+            project.id ===
+            selectedProjectId
+        ) ||
+        null,
+      [
+        projects,
+        selectedProjectId,
       ]
     );
 
@@ -570,6 +566,7 @@ export default function LookaheadPage() {
               )
               .select(`
                 id,
+                organization_id,
                 code,
                 name,
                 status,
@@ -798,10 +795,6 @@ export default function LookaheadPage() {
             []
           );
 
-          setMasterPlanPackages(
-            []
-          );
-
           return;
 
         }
@@ -857,111 +850,6 @@ export default function LookaheadPage() {
             holidays
           );
 
-
-          // --------------------------------------------------
-          // MASTER PLAN PACKAGE / SERVICE OPTIONS
-          // --------------------------------------------------
-
-          const {
-            data:
-              packagesData,
-            error:
-              packagesError,
-          } =
-            await supabase
-              .from(
-                'master_plan_packages'
-              )
-              .select(`
-                id,
-                package_code,
-                service_name,
-                service_code,
-                sequence_number
-              `)
-              .eq(
-                'scenario_id',
-                masterPlanScenarioId
-              )
-              .not(
-                'package_code',
-                'is',
-                null
-              )
-              .order(
-                'sequence_number',
-                {
-                  ascending:
-                    true,
-                }
-              );
-
-
-          if (
-            packagesError
-          ) {
-            throw packagesError;
-          }
-
-
-          const uniquePackages =
-            [];
-
-
-          const seenCodes =
-            new Set();
-
-
-          (
-            packagesData ||
-            []
-          ).forEach(
-            (item) => {
-
-              const code =
-                String(
-                  item.package_code ||
-                  ''
-                )
-                  .trim()
-                  .toUpperCase();
-
-
-              if (
-                !code ||
-                seenCodes.has(
-                  code
-                )
-              ) {
-                return;
-              }
-
-
-              seenCodes.add(
-                code
-              );
-
-
-              uniquePackages.push({
-                code,
-
-                service_name:
-                  item.service_name ||
-                  code,
-
-                service_code:
-                  item.service_code ||
-                  '',
-              });
-
-            }
-          );
-
-
-          setMasterPlanPackages(
-            uniquePackages
-          );
-
         } catch (error) {
 
           console.error(
@@ -974,10 +862,6 @@ export default function LookaheadPage() {
             []
           );
 
-          setMasterPlanPackages(
-            []
-          );
-
 
           setErrorMessage(
             error.message ||
@@ -986,6 +870,63 @@ export default function LookaheadPage() {
 
         }
 
+      },
+      []
+    );
+
+
+  // ==========================================================
+  // LOAD ORGANIZATION WORK PACKAGE LIBRARY
+  // ==========================================================
+
+  const loadOrganizationWorkPackages =
+    useCallback(
+      async (
+        organizationId
+      ) => {
+
+        if (!organizationId) {
+          setOrganizationWorkPackages([]);
+          return;
+        }
+
+        try {
+          const {
+            data,
+            error,
+          } =
+            await supabase.rpc(
+              'get_organization_work_package_catalog',
+              {
+                target_organization_id:
+                  organizationId,
+              }
+            );
+
+          if (error) {
+            throw error;
+          }
+
+          setOrganizationWorkPackages(
+            (data || []).filter(
+              (item) =>
+                item.is_active
+            )
+          );
+
+        } catch (error) {
+          console.error(
+            'Lookahead - Work Package Library:',
+            error
+          );
+
+          setOrganizationWorkPackages([]);
+
+          setErrorMessage(
+            error.message ||
+            'The company Work Package Library could not be loaded.'
+          );
+        }
       },
       []
     );
@@ -1148,6 +1089,7 @@ export default function LookaheadPage() {
                 id,
                 lookahead_plan_id,
                 row_type,
+                organization_work_package_id,
                 package_code,
                 description,
                 row_order,
@@ -1416,6 +1358,24 @@ export default function LookaheadPage() {
   );
 
 
+  useEffect(
+    () => {
+
+      loadOrganizationWorkPackages(
+        selectedProject
+          ?.organization_id ||
+        null
+      );
+
+    },
+    [
+      selectedProject
+        ?.organization_id,
+      loadOrganizationWorkPackages,
+    ]
+  );
+
+
   // ==========================================================
   // PLAN CHANGE
   // ==========================================================
@@ -1463,180 +1423,91 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
-  // LOOKAHEAD-ONLY WORK PACKAGE CODE
-  //
-  // Manual rows represent additional work discovered during
-  // Lookahead planning. Their package code is created here and
-  // does NOT need to exist in the Master Plan.
-  //
-  // The Master Plan remains untouched.
+  // MANUAL ROW WORK PACKAGE
   // ==========================================================
 
-  const saveManualRowPackageCode =
+  const selectManualRowWorkPackage =
     async (
-      row
+      row,
+      organizationWorkPackageId
     ) => {
 
       if (
         !row?.id ||
-        row.row_type !==
-          'manual'
+        row.row_type !== 'manual'
       ) {
         return;
       }
 
+      const selectedPackage =
+        organizationWorkPackages.find(
+          (item) =>
+            item.id === organizationWorkPackageId
+        ) || null;
 
-      const nextCode =
-        String(
-          packageDrafts[
-            row.id
-          ] ||
-          ''
-        )
-          .trim()
-          .toUpperCase()
-          .replace(
-            /[^A-Z0-9]/g,
-            ''
-          )
-          .slice(
-            0,
-            3
-          );
-
-
-      const currentCode =
-        String(
-          row.package_code ||
-          ''
-        )
-          .trim()
-          .toUpperCase();
-
-
-      if (
-        nextCode ===
-        currentCode
-      ) {
-        return;
-      }
-
-
-      setSavingPackageRowId(
-        row.id
-      );
-
-      setErrorMessage(
-        ''
-      );
-
+      setSavingPackageRowId(row.id);
+      setErrorMessage('');
 
       try {
-
         const {
           error,
         } =
           await supabase
-            .from(
-              'lookahead_sheet_rows'
-            )
+            .from('lookahead_sheet_rows')
             .update({
-
-              row_type:
-                'manual',
-
+              organization_work_package_id:
+                selectedPackage?.id || null,
               package_code:
-                nextCode ||
-                null,
-
+                selectedPackage?.code || null,
               updated_at:
-                new Date()
-                  .toISOString(),
+                new Date().toISOString(),
             })
-            .eq(
-              'id',
-              row.id
-            );
+            .eq('id', row.id)
+            .eq('lookahead_plan_id', selectedPlanId)
+            .eq('row_type', 'manual');
 
-
-        if (
-          error
-        ) {
+        if (error) {
           throw error;
         }
 
-
         setSheetRows(
-          (
-            current
-          ) =>
+          (current) =>
             current.map(
-              (
-                currentRow
-              ) =>
-                currentRow.id ===
-                row.id
+              (currentRow) =>
+                currentRow.id === row.id
                   ? {
                       ...currentRow,
-
-                      row_type:
-                        'manual',
-
+                      organization_work_package_id:
+                        selectedPackage?.id || null,
                       package_code:
-                        nextCode ||
-                        null,
+                        selectedPackage?.code || null,
                     }
                   : currentRow
             )
         );
 
-
         setPackageDrafts(
-          (
-            current
-          ) => ({
-
+          (current) => ({
             ...current,
-
             [row.id]:
-              nextCode,
+              selectedPackage?.code || '',
           })
         );
 
       } catch (error) {
-
         console.error(
-          'Lookahead-only package code:',
+          'Lookahead Work Package selection:',
           error
         );
 
-
-        setPackageDrafts(
-          (
-            current
-          ) => ({
-
-            ...current,
-
-            [row.id]:
-              currentCode,
-          })
-        );
-
-
         setErrorMessage(
           error.message ||
-          'The Lookahead-only Work Package code could not be saved.'
+          'The Work Package could not be assigned to this Lookahead row.'
         );
 
       } finally {
-
-        setSavingPackageRowId(
-          ''
-        );
-
+        setSavingPackageRowId('');
       }
-
     };
 
 
@@ -2202,6 +2073,76 @@ export default function LookaheadPage() {
 
       }
 
+    };
+
+
+  // ==========================================================
+  // DELETE USER-CREATED MANUAL ROW
+  // ==========================================================
+
+  const deleteManualRow =
+    async (
+      row
+    ) => {
+
+      if (
+        !selectedPlanId ||
+        !row?.id ||
+        row.row_type !== 'manual' ||
+        deletingRowId
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          'Delete this user-created Lookahead row? Its grouped Koskela assessments will also be removed.'
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setDeletingRowId(row.id);
+      setOpenRowMenuId('');
+      setErrorMessage('');
+
+      try {
+        const {
+          error,
+        } =
+          await supabase.rpc(
+            'delete_lookahead_manual_sheet_row',
+            {
+              target_lookahead_plan_id:
+                selectedPlanId,
+              target_sheet_row_id:
+                row.id,
+            }
+          );
+
+        if (error) {
+          throw error;
+        }
+
+        await loadWorkspace(
+          selectedPlanId
+        );
+
+      } catch (error) {
+        console.error(
+          'Delete Lookahead row:',
+          error
+        );
+
+        setErrorMessage(
+          error.message ||
+          'The user-created Lookahead row could not be deleted.'
+        );
+
+      } finally {
+        setDeletingRowId('');
+      }
     };
 
 
@@ -3502,9 +3443,7 @@ export default function LookaheadPage() {
 
 
                       const color =
-                        getServiceColor(
-                          code
-                        );
+                        getServiceColor(code, organizationWorkPackages);
 
 
                       const textColor =
@@ -3665,6 +3604,35 @@ export default function LookaheadPage() {
                                   Insert Row Below
                                 </button>
 
+                                {row.row_type ===
+                                  'manual' && (
+                                  <button
+                                    type="button"
+
+                                    disabled={
+                                      deletingRowId ===
+                                      row.id
+                                    }
+
+                                    onClick={() =>
+                                      deleteManualRow(
+                                        row
+                                      )
+                                    }
+
+                                    style={{
+                                      ...menuButtonStyle,
+                                      color: '#b91c1c',
+                                      borderTop: '1px solid #e2e8f0',
+                                    }}
+                                  >
+                                    {deletingRowId ===
+                                    row.id
+                                      ? 'Deleting...'
+                                      : 'Delete Row'}
+                                  </button>
+                                )}
+
                               </div>
 
                             )}
@@ -3703,21 +3671,11 @@ export default function LookaheadPage() {
                             {row.row_type ===
                               'manual' ? (
 
-                              <input
-                                type="text"
-
+                              <select
                                 value={
-                                  packageDrafts[
-                                    row.id
-                                  ] ||
+                                  row.organization_work_package_id ||
                                   ''
                                 }
-
-                                maxLength={
-                                  3
-                                }
-
-                                placeholder="NEW"
 
                                 disabled={
                                   savingPackageRowId ===
@@ -3726,105 +3684,46 @@ export default function LookaheadPage() {
 
                                 onChange={(
                                   event
-                                ) => {
-
-                                  const nextCode =
-                                    String(
-                                      event.target
-                                        .value ||
-                                      ''
-                                    )
-                                      .toUpperCase()
-                                      .replace(
-                                        /[^A-Z0-9]/g,
-                                        ''
-                                      )
-                                      .slice(
-                                        0,
-                                        3
-                                      );
-
-
-                                  setPackageDrafts(
-                                    (
-                                      current
-                                    ) => ({
-
-                                      ...current,
-
-                                      [row.id]:
-                                        nextCode,
-                                    })
-                                  );
-
-                                }}
-
-                                onBlur={() =>
-                                  saveManualRowPackageCode(
-                                    row
+                                ) =>
+                                  selectManualRowWorkPackage(
+                                    row,
+                                    event.target.value
                                   )
                                 }
 
-                                onKeyDown={(
-                                  event
-                                ) => {
-
-                                  if (
-                                    event.key ===
-                                    'Enter'
-                                  ) {
-
-                                    event.currentTarget
-                                      .blur();
-
-                                  }
-
-                                }}
-
-                                title="Create a Lookahead-only Work Package code. This does not change the Master Plan."
+                                title="Select from the company Work Package Library"
 
                                 style={{
-                                  width:
-                                    '100%',
-
-                                  height:
-                                    '28px',
-
-                                  padding:
-                                    '0 6px',
-
-                                  border:
-                                    '1px solid #94a3b8',
-
-                                  borderRadius:
-                                    '4px',
-
-                                  background:
-                                    code
-                                      ? color
-                                      : '#ffffff',
-
-                                  color:
-                                    code
-                                      ? textColor
-                                      : '#334155',
-
-                                  fontSize:
-                                    '9px',
-
-                                  fontWeight:
-                                    800,
-
-                                  textAlign:
-                                    'center',
-
-                                  textTransform:
-                                    'uppercase',
-
-                                  outline:
-                                    'none',
+                                  width: '100%',
+                                  height: '30px',
+                                  padding: '0 5px',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: '4px',
+                                  background: '#ffffff',
+                                  color: '#0f172a',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
                                 }}
-                              />
+                              >
+                                <option value="">
+                                  Select...
+                                </option>
+
+                                {organizationWorkPackages.map(
+                                  (workPackage) => (
+                                    <option
+                                      key={
+                                        workPackage.id
+                                      }
+                                      value={
+                                        workPackage.id
+                                      }
+                                    >
+                                      {workPackage.code} · {workPackage.description}
+                                    </option>
+                                  )
+                                )}
+                              </select>
 
                             ) : code ? (
 
