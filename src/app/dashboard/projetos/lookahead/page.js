@@ -2221,6 +2221,56 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
+  // INSERT PACKAGE BUTTON
+  //
+  // Adds a new manual Lookahead row at the bottom of the sheet.
+  // The user can then:
+  // - select the Work Package in the PACKAGE column;
+  // - write a Lookahead-specific description;
+  // - assign Work Packages day-by-day using the timeline arrows.
+  //
+  // This does NOT modify the Master Plan.
+  // ==========================================================
+
+  const insertPackageRow =
+    async () => {
+
+      if (
+        !selectedPlanId ||
+        insertingRow
+      ) {
+        return;
+      }
+
+
+      if (
+        sheetRows.length ===
+        0
+      ) {
+
+        setErrorMessage(
+          'A Lookahead sheet row is required before a package can be inserted.'
+        );
+
+        return;
+      }
+
+
+      const anchorRow =
+        sheetRows[
+          sheetRows.length - 1
+        ];
+
+
+      await insertRow(
+        anchorRow,
+        'below'
+      );
+
+    };
+
+
+  // ==========================================================
   // DELETE USER-CREATED MANUAL ROW
   // ==========================================================
 
@@ -3032,24 +3082,24 @@ export default function LookaheadPage() {
           type="button"
 
           disabled={
-            !selectedPlanId
+            !selectedPlanId ||
+            insertingRow
           }
 
-          onClick={() => {
-
-            alert(
-              'Insert Package will be activated in the next scheduling step.'
-            );
-
-          }}
+          onClick={
+            insertPackageRow
+          }
 
           style={
-            selectedPlanId
+            selectedPlanId &&
+            !insertingRow
               ? primaryButtonStyle
               : disabledButtonStyle
           }
         >
-          ⚡ Insert Package
+          {insertingRow
+            ? '⚡ Inserting...'
+            : '⚡ Insert Package'}
         </button>
 
 
