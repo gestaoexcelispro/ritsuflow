@@ -427,6 +427,24 @@ export default function LookaheadPage() {
 
 
   const [
+    manualTimelineCells,
+    setManualTimelineCells,
+  ] = useState({});
+
+
+  const [
+    openTimelineCellKey,
+    setOpenTimelineCellKey,
+  ] = useState('');
+
+
+  const [
+    savingTimelineCellKey,
+    setSavingTimelineCellKey,
+  ] = useState('');
+
+
+  const [
     descriptionDrafts,
     setDescriptionDrafts,
   ] = useState({});
@@ -957,6 +975,7 @@ export default function LookaheadPage() {
           setReadiness({});
           setDescriptionDrafts({});
           setPackageDrafts({});
+          setManualTimelineCells({});
 
           return;
 
@@ -1339,6 +1358,58 @@ export default function LookaheadPage() {
 
           setReadiness(
             readinessMap
+          );
+
+
+
+          // --------------------------------------------------
+          // MANUAL LOOKAHEAD TIMELINE CELLS
+          // --------------------------------------------------
+
+          const {
+            data:
+              manualCells,
+            error:
+              manualCellsError,
+          } =
+            await supabase.rpc(
+              'get_lookahead_manual_timeline_cells',
+              {
+                target_lookahead_plan_id:
+                  planId,
+              }
+            );
+
+
+          if (
+            manualCellsError
+          ) {
+            throw manualCellsError;
+          }
+
+
+          const manualCellMap =
+            {};
+
+
+          (
+            manualCells ||
+            []
+          ).forEach(
+            (
+              cell
+            ) => {
+
+              manualCellMap[
+                `${cell.sheet_row_id}___${cell.work_date}`
+              ] = cell;
+
+            }
+          );
+
+
+          setManualTimelineCells(
+            manualCellMap
           );
 
         } catch (error) {
@@ -2216,6 +2287,188 @@ export default function LookaheadPage() {
       } finally {
         setDeletingRowId('');
       }
+    };
+
+
+  // ==========================================================
+  // MANUAL TIMELINE CELL
+  //
+  // Works like the Master Plan Actual-row cell:
+  // - empty cell shows a small arrow
+  // - open menu shows CODE + Description
+  // - selected cell shows only the colored 3-letter code
+  // ==========================================================
+
+  const setManualTimelineCell =
+    async (
+      row,
+      workDate,
+      organizationWorkPackageId
+    ) => {
+
+      if (
+        !row?.id ||
+        row.row_type !==
+          'manual' ||
+        !workDate
+      ) {
+        return;
+      }
+
+
+      const cellKey =
+        `${row.id}___${workDate}`;
+
+
+      setSavingTimelineCellKey(
+        cellKey
+      );
+
+      setOpenTimelineCellKey(
+        ''
+      );
+
+      setErrorMessage(
+        ''
+      );
+
+
+      try {
+
+        const {
+          data,
+          error,
+        } =
+          await supabase.rpc(
+            'set_lookahead_manual_timeline_cell',
+            {
+              target_sheet_row_id:
+                row.id,
+
+              target_work_date:
+                workDate,
+
+              target_organization_work_package_id:
+                organizationWorkPackageId ||
+                null,
+            }
+          );
+
+
+        if (
+          error
+        ) {
+          throw error;
+        }
+
+
+        if (
+          !organizationWorkPackageId
+        ) {
+
+          setManualTimelineCells(
+            (
+              current
+            ) => {
+
+              const next =
+                {
+                  ...current,
+                };
+
+
+              delete next[
+                cellKey
+              ];
+
+
+              return next;
+
+            }
+          );
+
+
+          return;
+
+        }
+
+
+        const savedCell =
+          Array.isArray(
+            data
+          )
+            ? data[0]
+            : data;
+
+
+        const selectedPackage =
+          organizationWorkPackages.find(
+            (
+              workPackage
+            ) =>
+              workPackage.id ===
+              organizationWorkPackageId
+          ) ||
+          null;
+
+
+        setManualTimelineCells(
+          (
+            current
+          ) => ({
+
+            ...current,
+
+            [cellKey]: {
+
+              ...savedCell,
+
+              sheet_row_id:
+                row.id,
+
+              work_date:
+                workDate,
+
+              organization_work_package_id:
+                organizationWorkPackageId,
+
+              package_code:
+                savedCell?.package_code ||
+                selectedPackage?.code ||
+                '',
+
+              package_description:
+                selectedPackage?.description ||
+                '',
+
+              package_color:
+                selectedPackage?.color ||
+                '#64748b',
+            },
+          })
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Manual Lookahead timeline cell:',
+          error
+        );
+
+
+        setErrorMessage(
+          error.message ||
+          'The Lookahead timeline cell could not be saved.'
+        );
+
+      } finally {
+
+        setSavingTimelineCellKey(
+          ''
+        );
+
+      }
+
     };
 
 
@@ -4263,6 +4516,450 @@ export default function LookaheadPage() {
                               day
                             ) => {
 
+                              // --------------------------------
+                              // MANUAL LOOKAHEAD ROW
+                              // --------------------------------
+
+                              if (
+                                row.row_type ===
+                                'manual'
+                              ) {
+
+                                const cellKey =
+                                  `${row.id}___${day.iso}`;
+
+
+                                const manualCell =
+                                  manualTimelineCells[
+                                    cellKey
+                                  ] ||
+                                  null;
+
+
+                                const selectedPackage =
+                                  manualCell
+                                    ? organizationWorkPackages.find(
+                                        (
+                                          workPackage
+                                        ) =>
+                                          workPackage.id ===
+                                          manualCell
+                                            .organization_work_package_id
+                                      ) ||
+                                      null
+                                    : null;
+
+
+                                const cellCode =
+                                  String(
+                                    manualCell?.package_code ||
+                                    selectedPackage?.code ||
+                                    ''
+                                  )
+                                    .trim()
+                                    .toUpperCase();
+
+
+                                const cellColor =
+                                  selectedPackage?.color ||
+                                  manualCell?.package_color ||
+                                  '#64748b';
+
+
+                                const cellTextColor =
+                                  getTextColor(
+                                    cellColor
+                                  );
+
+
+                                const cellSaving =
+                                  savingTimelineCellKey ===
+                                  cellKey;
+
+
+                                return (
+
+                                  <td
+                                    key={`${row.id}-${day.iso}`}
+
+                                    title={
+                                      day.isHoliday
+                                        ? day.holidayDescription
+                                        : cellCode
+                                          ? `${cellCode} · ${
+                                              selectedPackage?.description ||
+                                              manualCell?.package_description ||
+                                              ''
+                                            }`
+                                          : day.iso
+                                    }
+
+                                    style={{
+                                      ...bodyCellStyle,
+
+                                      width:
+                                        DAY_WIDTH,
+
+                                      minWidth:
+                                        DAY_WIDTH,
+
+                                      height:
+                                        '34px',
+
+                                      padding:
+                                        0,
+
+                                      position:
+                                        'relative',
+
+                                      background:
+                                        cellCode
+                                          ? cellColor
+                                          : day.isHoliday
+                                            ? '#fee2e2'
+                                            : day.isWeekend
+                                              ? '#f1f5f9'
+                                              : '#ffffff',
+
+                                      color:
+                                        cellCode
+                                          ? cellTextColor
+                                          : day.isHoliday
+                                            ? '#991b1b'
+                                            : '#64748b',
+
+                                      boxShadow:
+                                        day.isHoliday
+                                          ? 'inset 0 0 0 1px #fca5a5'
+                                          : 'none',
+                                    }}
+                                  >
+
+                                    {day.isHoliday &&
+                                    !cellCode ? (
+                                      'HOL'
+                                    ) : (
+                                      <>
+
+                                        <button
+                                          type="button"
+
+                                          disabled={
+                                            cellSaving
+                                          }
+
+                                          onClick={() => {
+
+                                            setOpenRowMenuId(
+                                              ''
+                                            );
+
+
+                                            setOpenPackageDropdownRowId(
+                                              ''
+                                            );
+
+
+                                            setOpenTimelineCellKey(
+                                              (
+                                                current
+                                              ) =>
+                                                current ===
+                                                cellKey
+                                                  ? ''
+                                                  : cellKey
+                                            );
+
+                                          }}
+
+                                          style={{
+                                            width:
+                                              '100%',
+
+                                            height:
+                                              '34px',
+
+                                            padding:
+                                              0,
+
+                                            border:
+                                              0,
+
+                                            background:
+                                              'transparent',
+
+                                            color:
+                                              cellCode
+                                                ? cellTextColor
+                                                : '#64748b',
+
+                                            fontSize:
+                                              cellCode
+                                                ? '10px'
+                                                : '9px',
+
+                                            fontWeight:
+                                              cellCode
+                                                ? 900
+                                                : 700,
+
+                                            cursor:
+                                              cellSaving
+                                                ? 'not-allowed'
+                                                : 'pointer',
+                                          }}
+                                        >
+                                          {cellCode ||
+                                            '▼'}
+                                        </button>
+
+
+                                        {openTimelineCellKey ===
+                                          cellKey && (
+
+                                          <div
+                                            style={{
+                                              position:
+                                                'absolute',
+
+                                              top:
+                                                '32px',
+
+                                              left:
+                                                0,
+
+                                              zIndex:
+                                                500,
+
+                                              width:
+                                                '280px',
+
+                                              maxHeight:
+                                                '270px',
+
+                                              overflowY:
+                                                'auto',
+
+                                              border:
+                                                '1px solid #cbd5e1',
+
+                                              borderRadius:
+                                                '6px',
+
+                                              background:
+                                                '#ffffff',
+
+                                              boxShadow:
+                                                '0 12px 30px rgba(15,23,42,0.20)',
+                                            }}
+                                          >
+
+                                            {cellCode && (
+
+                                              <button
+                                                type="button"
+
+                                                onClick={() =>
+                                                  setManualTimelineCell(
+                                                    row,
+                                                    day.iso,
+                                                    null
+                                                  )
+                                                }
+
+                                                style={{
+                                                  display:
+                                                    'block',
+
+                                                  width:
+                                                    '100%',
+
+                                                  padding:
+                                                    '8px 10px',
+
+                                                  border:
+                                                    0,
+
+                                                  borderBottom:
+                                                    '1px solid #e2e8f0',
+
+                                                  background:
+                                                    '#fff7ed',
+
+                                                  color:
+                                                    '#c2410c',
+
+                                                  textAlign:
+                                                    'left',
+
+                                                  fontSize:
+                                                    '10px',
+
+                                                  fontWeight:
+                                                    800,
+
+                                                  cursor:
+                                                    'pointer',
+                                                }}
+                                              >
+                                                Clear cell
+                                              </button>
+
+                                            )}
+
+
+                                            {organizationWorkPackages.map(
+                                              (
+                                                workPackage
+                                              ) => {
+
+                                                const optionColor =
+                                                  workPackage.color ||
+                                                  '#64748b';
+
+
+                                                const optionTextColor =
+                                                  getTextColor(
+                                                    optionColor
+                                                  );
+
+
+                                                return (
+
+                                                  <button
+                                                    key={
+                                                      workPackage.id
+                                                    }
+
+                                                    type="button"
+
+                                                    onClick={() =>
+                                                      setManualTimelineCell(
+                                                        row,
+                                                        day.iso,
+                                                        workPackage.id
+                                                      )
+                                                    }
+
+                                                    style={{
+                                                      display:
+                                                        'flex',
+
+                                                      alignItems:
+                                                        'center',
+
+                                                      gap:
+                                                        '10px',
+
+                                                      width:
+                                                        '100%',
+
+                                                      padding:
+                                                        '8px 10px',
+
+                                                      border:
+                                                        0,
+
+                                                      borderBottom:
+                                                        '1px solid #f1f5f9',
+
+                                                      background:
+                                                        '#ffffff',
+
+                                                      color:
+                                                        '#0f172a',
+
+                                                      textAlign:
+                                                        'left',
+
+                                                      cursor:
+                                                        'pointer',
+                                                    }}
+                                                  >
+
+                                                    <span
+                                                      style={{
+                                                        display:
+                                                          'inline-flex',
+
+                                                        alignItems:
+                                                          'center',
+
+                                                        justifyContent:
+                                                          'center',
+
+                                                        minWidth:
+                                                          '46px',
+
+                                                        padding:
+                                                          '4px 6px',
+
+                                                        borderRadius:
+                                                          '4px',
+
+                                                        background:
+                                                          optionColor,
+
+                                                        color:
+                                                          optionTextColor,
+
+                                                        fontSize:
+                                                          '10px',
+
+                                                        fontWeight:
+                                                          900,
+                                                      }}
+                                                    >
+                                                      {workPackage.code}
+                                                    </span>
+
+
+                                                    <span
+                                                      style={{
+                                                        flex:
+                                                          1,
+
+                                                        color:
+                                                          '#334155',
+
+                                                        fontSize:
+                                                          '10px',
+
+                                                        fontWeight:
+                                                          600,
+
+                                                        whiteSpace:
+                                                          'normal',
+                                                      }}
+                                                    >
+                                                      {workPackage.description}
+                                                    </span>
+
+                                                  </button>
+
+                                                );
+
+                                              }
+                                            )}
+
+                                          </div>
+
+                                        )}
+
+                                      </>
+                                    )}
+
+                                  </td>
+
+                                );
+
+                              }
+
+
+                              // --------------------------------
+                              // MASTER PLAN-DERIVED ROW
+                              // --------------------------------
+
                               const activeOccurrences =
                                 occurrences.filter(
                                   (
@@ -4574,6 +5271,11 @@ export default function LookaheadPage() {
 
               <span>
                 Each row = one Work Package
+              </span>
+
+
+              <span>
+                Manual row timeline ▼ = select Work Package
               </span>
 
             </div>
