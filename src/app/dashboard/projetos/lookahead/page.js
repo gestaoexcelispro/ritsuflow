@@ -21,8 +21,10 @@ import { supabase } from '../../../../lib/supabase';
 // One visual row per Work Package.
 //
 // Timeline:
-// - Individual Lookahead work-item occurrences remain separate.
-// - Multiple locations of the same package are shown on one row.
+// - Automatic rows come ONLY from Master Plan-backed work items.
+// - Individual Master Plan occurrences remain separate.
+// - Multiple locations of the same Master Plan package are shown on one row.
+// - Additional work appears only when the user creates a manual row.
 //
 // Manual rows:
 // - User can insert a row above or below.
@@ -1041,32 +1043,41 @@ export default function LookaheadPage() {
             (
               items ||
               []
-            ).map(
-              (item) => {
+            )
+              .map(
+                (item) => {
 
-                const packageData =
-                  Array.isArray(
-                    item
-                      .master_plan_packages
+                  const packageData =
+                    Array.isArray(
+                      item
+                        .master_plan_packages
+                    )
+                      ? item
+                          .master_plan_packages[0]
+                      : item
+                          .master_plan_packages;
+
+
+                  return {
+                    ...item,
+
+                    package:
+                      packageData ||
+                      null,
+                  };
+
+                }
+              )
+              .filter(
+                (item) =>
+                  Boolean(
+                    item.master_plan_package_id
                   )
-                    ? item
-                        .master_plan_packages[0]
-                    : item
-                        .master_plan_packages;
+              );
 
 
-                return {
-                  ...item,
-
-                  package:
-                    packageData ||
-                    null,
-                };
-
-              }
-            );
-
-
+          // Automatic Lookahead content comes only from Master Plan.
+          // Additional work is added explicitly through manual rows.
           setWorkItems(
             normalizedItems
           );
@@ -1116,10 +1127,66 @@ export default function LookaheadPage() {
           }
 
 
+          const masterPlanPackageCodes =
+            new Set(
+              normalizedItems
+                .map(
+                  (item) =>
+                    getPackageCode(
+                      item
+                    )
+                )
+                .filter(
+                  Boolean
+                )
+            );
+
+
           const loadedRows =
-            rows || [];
+            (
+              rows ||
+              []
+            ).filter(
+              (row) => {
+
+                if (
+                  row.row_type ===
+                  'manual'
+                ) {
+                  return true;
+                }
 
 
+                if (
+                  row.row_type !==
+                  'package_group'
+                ) {
+                  return true;
+                }
+
+
+                const rowCode =
+                  String(
+                    row.package_code ||
+                    ''
+                  )
+                    .trim()
+                    .toUpperCase();
+
+
+                return (
+                  rowCode &&
+                  masterPlanPackageCodes.has(
+                    rowCode
+                  )
+                );
+
+              }
+            );
+
+
+          // Safety net: package_group rows render only when backed
+          // by a Master Plan-derived Lookahead work item.
           setSheetRows(
             loadedRows
           );
