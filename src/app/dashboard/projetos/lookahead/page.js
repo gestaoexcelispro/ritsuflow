@@ -1890,6 +1890,90 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
+  // PROJECT CHANGE
+  //
+  // Clear the previously selected Lookahead plan immediately
+  // before switching projects. This prevents the previous
+  // project's plan/workspace from being loaded against the
+  // newly selected project while loadPlans() is still running.
+  // ==========================================================
+
+  const handleProjectChange =
+    (
+      projectId
+    ) => {
+
+      setSelectedPlanId(
+        ''
+      );
+
+      setPlans(
+        []
+      );
+
+      setWorkItems(
+        []
+      );
+
+      setSheetRows(
+        []
+      );
+
+      setReadiness(
+        {}
+      );
+
+      setDescriptionDrafts(
+        {}
+      );
+
+      setPackageDrafts(
+        {}
+      );
+
+      setManualTimelineCells(
+        {}
+      );
+
+      setMasterPlanHolidays(
+        []
+      );
+
+      setSelectedProjectId(
+        projectId
+      );
+
+      setErrorMessage(
+        ''
+      );
+
+
+      if (
+        projectId
+      ) {
+
+        window.history
+          .replaceState(
+            {},
+            '',
+            `/dashboard/projetos/lookahead?projectId=${projectId}`
+          );
+
+      } else {
+
+        window.history
+          .replaceState(
+            {},
+            '',
+            '/dashboard/projetos/lookahead'
+          );
+
+      }
+
+    };
+
+
+  // ==========================================================
   // PLAN CHANGE
   // ==========================================================
 
@@ -3443,32 +3527,11 @@ export default function LookaheadPage() {
 
             onChange={(
               event
-            ) => {
-
-              const projectId =
-                event.target
-                  .value;
-
-
-              setSelectedProjectId(
-                projectId
-              );
-
-
-              if (
-                projectId
-              ) {
-
-                window.history
-                  .replaceState(
-                    {},
-                    '',
-                    `/dashboard/projetos/lookahead?projectId=${projectId}`
-                  );
-
-              }
-
-            }}
+            ) =>
+              handleProjectChange(
+                event.target.value
+              )
+            }
 
             style={
               selectStyle
