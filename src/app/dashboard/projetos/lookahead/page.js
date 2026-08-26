@@ -20,14 +20,20 @@ import { supabase } from '../../../../lib/supabase';
 // ------------------------------------------------------------
 // One visual row per Work Package.
 //
-// Underlying Lookahead work-item occurrences remain independent.
+// Timeline:
+// - Individual Lookahead work-item occurrences remain separate.
+// - Multiple locations of the same package are shown on one row.
 //
-// Grouped Koskela selection:
-//   applies the selected readiness value to every occurrence
-//   represented by that package row.
+// Koskela:
+// - Assessment belongs to the GROUPED sheet row.
+// - One package row = one assessment per Koskela category.
 //
-// Holidays:
-//   inherited from the originating Master Plan scenario.
+// Example:
+//
+// VTS -> PROJECTS -> No
+//
+// creates ONE grouped constraint,
+// regardless of how many VTS location occurrences exist.
 // ============================================================
 
 
@@ -1078,18 +1084,19 @@ export default function LookaheadPage() {
 
 
           // --------------------------------------------------
-          // READINESS
+          // GROUPED KOSKELA READINESS
           // --------------------------------------------------
 
-          const ids =
-            normalizedItems.map(
-              (item) =>
-                item.id
+          const sheetRowIds =
+            loadedRows.map(
+              (row) =>
+                row.id
             );
 
 
           if (
-            ids.length === 0
+            sheetRowIds.length ===
+            0
           ) {
 
             setReadiness(
@@ -1109,17 +1116,19 @@ export default function LookaheadPage() {
           } =
             await supabase
               .from(
-                'lookahead_readiness_assessments'
+                'lookahead_sheet_readiness_assessments'
               )
               .select(`
                 id,
-                lookahead_work_item_id,
+                sheet_row_id,
                 category,
-                status
+                status,
+                created_at,
+                updated_at
               `)
               .in(
-                'lookahead_work_item_id',
-                ids
+                'sheet_row_id',
+                sheetRowIds
               );
 
 
@@ -1143,10 +1152,17 @@ export default function LookaheadPage() {
             ) => {
 
               readinessMap[
-                `${assessment.lookahead_work_item_id}___${assessment.category}`
+                `${assessment.sheet_row_id}___${assessment.category}`
               ] = {
+
                 id:
                   assessment.id,
+
+                sheet_row_id:
+                  assessment.sheet_row_id,
+
+                category:
+                  assessment.category,
 
                 status:
                   normalizeReadinessStatus(
@@ -1321,13 +1337,16 @@ export default function LookaheadPage() {
               '';
 
 
-            if (!date) {
+            if (
+              !date
+            ) {
               return;
             }
 
 
             map.set(
               date,
+
               holiday.descricao ||
               holiday.description ||
               'Holiday'
@@ -1433,10 +1452,9 @@ export default function LookaheadPage() {
                   dateB
                 ) {
 
-                  return dateA
-                    .localeCompare(
-                      dateB
-                    );
+                  return dateA.localeCompare(
+                    dateB
+                  );
 
                 }
 
@@ -1531,6 +1549,7 @@ export default function LookaheadPage() {
 
 
           result.push({
+
             date,
 
             iso,
@@ -1707,6 +1726,7 @@ export default function LookaheadPage() {
               'lookahead_sheet_rows'
             )
             .update({
+
               description:
                 nextValue,
 
@@ -1811,6 +1831,7 @@ export default function LookaheadPage() {
           await supabase.rpc(
             'insert_lookahead_sheet_row',
             {
+
               target_lookahead_plan_id:
                 selectedPlanId,
 
@@ -1859,85 +1880,30 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
-  // GROUPED READINESS STATUS
+  // GET GROUPED KOSKELA STATUS
   // ==========================================================
 
   const getGroupedReadiness =
     useCallback(
       (
-        occurrences,
+        sheetRowId,
         category
       ) => {
 
         if (
-          !occurrences ||
-          occurrences.length ===
-            0
+          !sheetRowId ||
+          !category
         ) {
           return 'not_assessed';
         }
 
 
-        const statuses =
-          occurrences.map(
-            (
-              item
-            ) =>
-              readiness[
-                `${item.id}___${category}`
-              ]?.status ||
-              'not_assessed'
-          );
-
-
-        if (
-          statuses.includes(
-            'constrained'
-          )
-        ) {
-          return 'constrained';
-        }
-
-
-        const applicable =
-          statuses.filter(
-            (
-              status
-            ) =>
-              status !==
-              'not_applicable'
-          );
-
-
-        if (
-          applicable.length >
-            0 &&
-          applicable.every(
-            (
-              status
-            ) =>
-              status ===
-              'clear'
-          )
-        ) {
-          return 'clear';
-        }
-
-
-        if (
-          statuses.every(
-            (
-              status
-            ) =>
-              status ===
-              'not_applicable'
-          )
-        ) {
-          return 'not_applicable';
-        }
-
-
-        return 'not_assessed';
+        return (
+          readiness[
+            `${sheetRowId}___${category}`
+          ]?.status ||
+          'not_assessed'
+        );
 
       },
       [
@@ -1948,52 +1914,34 @@ export default function LookaheadPage() {
 
   // ==========================================================
   // UPDATE GROUPED KOSKELA STATUS
-  //
-  // The visual row represents all package occurrences using
-  // that work-package code.
-  //
-  // Therefore changing one grouped Koskela selector updates
-  // that category for every occurrence represented by the row.
   // ==========================================================
 
   const handleGroupedReadinessChange =
     async (
       row,
-      occurrences,
       category,
       nextStatus
     ) => {
 
       if (
         !row?.id ||
-        !occurrences ||
-        occurrences.length ===
-          0
+        !category
       ) {
         return;
       }
 
 
-      const savingKey =
+      const readinessKey =
         `${row.id}___${category}`;
 
 
       setSavingGroupedReadiness(
-        savingKey
+        readinessKey
       );
 
       setErrorMessage(
         ''
       );
-
-
-      const workItemIds =
-        occurrences.map(
-          (
-            item
-          ) =>
-            item.id
-        );
 
 
       const previousReadiness =
@@ -2003,96 +1951,153 @@ export default function LookaheadPage() {
 
 
       // ------------------------------------------------------
-      // OPTIMISTIC UI UPDATE
+      // OPTIMISTIC UI
       // ------------------------------------------------------
 
       setReadiness(
         (
           current
-        ) => {
+        ) => ({
 
-          const next =
-            {
-              ...current,
-            };
+          ...current,
 
+          [readinessKey]: {
 
-          occurrences.forEach(
-            (
-              item
-            ) => {
+            ...current[
+              readinessKey
+            ],
 
-              const key =
-                `${item.id}___${category}`;
+            sheet_row_id:
+              row.id,
 
+            category,
 
-              if (
-                next[
-                  key
-                ]
-              ) {
-
-                next[
-                  key
-                ] = {
-                  ...next[
-                    key
-                  ],
-
-                  status:
-                    nextStatus,
-                };
-
-              }
-
-            }
-          );
-
-
-          return next;
-
-        }
+            status:
+              nextStatus,
+          },
+        })
       );
 
 
       try {
 
-        const {
-          error,
-        } =
-          await supabase
-            .from(
-              'lookahead_readiness_assessments'
-            )
-            .update({
-              status:
-                nextStatus,
-            })
-            .in(
-              'lookahead_work_item_id',
-              workItemIds
-            )
-            .eq(
-              'category',
-              category
-            );
+        const existing =
+          readiness[
+            readinessKey
+          ];
 
 
         if (
-          error
+          existing?.id
         ) {
-          throw error;
+
+          const {
+            error,
+          } =
+            await supabase
+              .from(
+                'lookahead_sheet_readiness_assessments'
+              )
+              .update({
+
+                status:
+                  nextStatus,
+
+                updated_at:
+                  new Date()
+                    .toISOString(),
+              })
+              .eq(
+                'id',
+                existing.id
+              );
+
+
+          if (
+            error
+          ) {
+            throw error;
+          }
+
+        } else {
+
+          const {
+            data,
+            error,
+          } =
+            await supabase
+              .from(
+                'lookahead_sheet_readiness_assessments'
+              )
+              .upsert(
+                {
+
+                  sheet_row_id:
+                    row.id,
+
+                  category,
+
+                  status:
+                    nextStatus,
+
+                  updated_at:
+                    new Date()
+                      .toISOString(),
+                },
+                {
+
+                  onConflict:
+                    'sheet_row_id,category',
+                }
+              )
+              .select(`
+                id,
+                sheet_row_id,
+                category,
+                status
+              `)
+              .single();
+
+
+          if (
+            error
+          ) {
+            throw error;
+          }
+
+
+          setReadiness(
+            (
+              current
+            ) => ({
+
+              ...current,
+
+              [readinessKey]: {
+
+                id:
+                  data.id,
+
+                sheet_row_id:
+                  data.sheet_row_id,
+
+                category:
+                  data.category,
+
+                status:
+                  normalizeReadinessStatus(
+                    data.status
+                  ),
+              },
+            })
+          );
+
         }
-
-
-        await loadWorkspace(
-          selectedPlanId
-        );
 
       } catch (error) {
 
         console.error(
-          'Grouped readiness update:',
+          'Grouped Koskela readiness:',
           error
         );
 
@@ -2104,7 +2109,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Koskela assessment could not be updated.'
+          'The Koskela assessment could not be saved.'
         );
 
       } finally {
@@ -2119,7 +2124,7 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
-  // CONSTRAINTS
+  // GROUPED CONSTRAINTS
   // ==========================================================
 
   const constrainedCells =
@@ -2130,9 +2135,9 @@ export default function LookaheadPage() {
           [];
 
 
-        workItems.forEach(
+        sheetRows.forEach(
           (
-            item
+            row
           ) => {
 
             KOSKELA_COLUMNS.forEach(
@@ -2142,7 +2147,7 @@ export default function LookaheadPage() {
 
                 const assessment =
                   readiness[
-                    `${item.id}___${column.key}`
+                    `${row.id}___${column.key}`
                   ];
 
 
@@ -2153,8 +2158,12 @@ export default function LookaheadPage() {
                 ) {
 
                   result.push({
-                    item,
+
+                    row,
+
                     column,
+
+                    assessment,
                   });
 
                 }
@@ -2170,7 +2179,7 @@ export default function LookaheadPage() {
 
       },
       [
-        workItems,
+        sheetRows,
         readiness,
       ]
     );
@@ -2183,6 +2192,7 @@ export default function LookaheadPage() {
   return (
     <div
       style={{
+
         padding:
           '18px 20px 40px',
 
@@ -2207,9 +2217,12 @@ export default function LookaheadPage() {
             '18px',
         }}
       >
+
         <h1
           style={{
-            margin: 0,
+
+            margin:
+              0,
 
             fontSize:
               '22px',
@@ -2220,6 +2233,7 @@ export default function LookaheadPage() {
         >
           LOOKAHEAD (MEDIUM TERM) &amp; KOSKELA MATRIX
         </h1>
+
       </div>
 
 
@@ -2229,6 +2243,7 @@ export default function LookaheadPage() {
 
       <div
         style={{
+
           display:
             'flex',
 
@@ -2254,6 +2269,7 @@ export default function LookaheadPage() {
               '250px',
           }}
         >
+
           <label
             style={
               labelStyle
@@ -2262,7 +2278,9 @@ export default function LookaheadPage() {
             Project
           </label>
 
+
           <select
+
             value={
               selectedProjectId
             }
@@ -2300,31 +2318,40 @@ export default function LookaheadPage() {
               selectStyle
             }
           >
+
             <option value="">
               -- Select a Project --
             </option>
+
 
             {projects.map(
               (
                 project
               ) => (
+
                 <option
                   key={
                     project.id
                   }
+
                   value={
                     project.id
                   }
                 >
+
                   {project.code
                     ? `${project.code} - `
                     : ''}
 
                   {project.name}
+
                 </option>
+
               )
             )}
+
           </select>
+
         </div>
 
 
@@ -2336,6 +2363,7 @@ export default function LookaheadPage() {
               '280px',
           }}
         >
+
           <label
             style={
               labelStyle
@@ -2344,7 +2372,9 @@ export default function LookaheadPage() {
             Scenario / Version (Lookahead)
           </label>
 
+
           <select
+
             value={
               selectedPlanId
             }
@@ -2366,14 +2396,17 @@ export default function LookaheadPage() {
               selectStyle
             }
           >
+
             <option value="">
               -- Select --
             </option>
+
 
             {plans.map(
               (
                 plan
               ) => (
+
                 <option
                   key={
                     plan.id
@@ -2383,18 +2416,25 @@ export default function LookaheadPage() {
                     plan.id
                   }
                 >
+
                   {plan.name}
 
                   {plan.status ===
                   'active'
                     ? ' · Active'
                     : ''}
+
                 </option>
+
               )
             )}
+
           </select>
+
         </div>
 
+
+        {/* SAVE */}
 
         <button
           type="button"
@@ -2407,7 +2447,10 @@ export default function LookaheadPage() {
         </button>
 
 
+        {/* INSERT PACKAGE */}
+
         <button
+
           type="button"
 
           disabled={
@@ -2432,6 +2475,8 @@ export default function LookaheadPage() {
         </button>
 
 
+        {/* UNDO */}
+
         <button
           type="button"
           disabled
@@ -2443,9 +2488,10 @@ export default function LookaheadPage() {
         </button>
 
 
-        {/* HOLIDAY BUTTON IS INFORMATIONAL NOW */}
+        {/* HOLIDAYS */}
 
         <button
+
           type="button"
 
           onClick={() => {
@@ -2494,15 +2540,21 @@ export default function LookaheadPage() {
               : secondaryButtonStyle
           }
         >
+
           📅 Holidays
+
           {masterPlanHolidays.length >
           0
             ? ` (${masterPlanHolidays.length})`
             : ''}
+
         </button>
 
 
+        {/* WEEKENDS */}
+
         <button
+
           type="button"
 
           onClick={() =>
@@ -2518,15 +2570,18 @@ export default function LookaheadPage() {
             secondaryButtonStyle
           }
         >
+
           {showWeekends
             ? 'Hide Weekends'
             : 'Show Weekends'}
+
         </button>
 
 
-        {/* WINDOW START */}
+        {/* START */}
 
         <div>
+
           <label
             style={
               labelStyle
@@ -2535,7 +2590,9 @@ export default function LookaheadPage() {
             Start of Week 1
           </label>
 
+
           <input
+
             type="date"
 
             value={
@@ -2555,12 +2612,14 @@ export default function LookaheadPage() {
               inputStyle
             }
           />
+
         </div>
 
 
         {/* HORIZON */}
 
         <div>
+
           <label
             style={
               labelStyle
@@ -2569,7 +2628,9 @@ export default function LookaheadPage() {
             Horizon
           </label>
 
+
           <select
+
             value={
               horizonWeeks
             }
@@ -2589,6 +2650,7 @@ export default function LookaheadPage() {
               inputStyle
             }
           >
+
             {[
               2,
               3,
@@ -2602,6 +2664,7 @@ export default function LookaheadPage() {
               (
                 weeks
               ) => (
+
                 <option
                   key={
                     weeks
@@ -2611,11 +2674,16 @@ export default function LookaheadPage() {
                     weeks
                   }
                 >
+
                   {weeks} Weeks
+
                 </option>
+
               )
             )}
+
           </select>
+
         </div>
 
       </div>
@@ -2626,8 +2694,10 @@ export default function LookaheadPage() {
       ===================================================== */}
 
       {errorMessage && (
+
         <div
           style={{
+
             marginBottom:
               '12px',
 
@@ -2652,6 +2722,7 @@ export default function LookaheadPage() {
         >
           {errorMessage}
         </div>
+
       )}
 
 
@@ -2661,6 +2732,7 @@ export default function LookaheadPage() {
 
       <div
         style={{
+
           display:
             'flex',
 
@@ -2673,6 +2745,7 @@ export default function LookaheadPage() {
       >
 
         <button
+
           type="button"
 
           onClick={() =>
@@ -2693,6 +2766,7 @@ export default function LookaheadPage() {
 
 
         <button
+
           type="button"
 
           onClick={() =>
@@ -2725,12 +2799,15 @@ export default function LookaheadPage() {
             emptyStyle
           }
         >
+
           <strong>
             No Project Selected
           </strong>
 
+
           <div
             style={{
+
               marginTop:
                 '6px',
 
@@ -2743,6 +2820,7 @@ export default function LookaheadPage() {
           >
             Select a project to open the Lookahead.
           </div>
+
         </div>
 
       )}
@@ -2759,6 +2837,7 @@ export default function LookaheadPage() {
 
           <div
             style={{
+
               overflowX:
                 'auto',
 
@@ -2777,6 +2856,7 @@ export default function LookaheadPage() {
 
               <div
                 style={{
+
                   padding:
                     '40px',
 
@@ -2794,6 +2874,7 @@ export default function LookaheadPage() {
 
               <table
                 style={{
+
                   borderCollapse:
                     'collapse',
 
@@ -2829,11 +2910,13 @@ export default function LookaheadPage() {
                   <tr>
 
                     <th
+
                       rowSpan={
                         3
                       }
 
                       style={{
+
                         ...headerCellStyle,
 
                         width:
@@ -2846,11 +2929,13 @@ export default function LookaheadPage() {
 
 
                     <th
+
                       rowSpan={
                         3
                       }
 
                       style={{
+
                         ...headerCellStyle,
 
                         width:
@@ -2865,11 +2950,13 @@ export default function LookaheadPage() {
 
 
                     <th
+
                       rowSpan={
                         3
                       }
 
                       style={{
+
                         ...headerCellStyle,
 
                         width:
@@ -2884,11 +2971,13 @@ export default function LookaheadPage() {
 
 
                     <th
+
                       rowSpan={
                         3
                       }
 
                       style={{
+
                         ...headerCellStyle,
 
                         width:
@@ -2908,6 +2997,7 @@ export default function LookaheadPage() {
                       ) => (
 
                         <th
+
                           key={
                             week.weekNumber
                           }
@@ -2918,16 +3008,19 @@ export default function LookaheadPage() {
                           }
 
                           style={{
+
                             ...headerCellStyle,
 
                             background:
                               '#e2e8f0',
                           }}
                         >
+
                           WEEK{' '}
                           {
                             week.weekNumber
                           }
+
                         </th>
 
                       )
@@ -2935,11 +3028,13 @@ export default function LookaheadPage() {
 
 
                     <th
+
                       colSpan={
                         KOSKELA_COLUMNS.length
                       }
 
                       style={{
+
                         ...headerCellStyle,
 
                         background:
@@ -2962,6 +3057,7 @@ export default function LookaheadPage() {
                       ) => (
 
                         <th
+
                           key={`weekday-${day.iso}`}
 
                           title={
@@ -2971,6 +3067,7 @@ export default function LookaheadPage() {
                           }
 
                           style={{
+
                             ...calendarHeaderStyle,
 
                             background:
@@ -2986,11 +3083,13 @@ export default function LookaheadPage() {
                                 : '#334155',
                           }}
                         >
+
                           {day.isHoliday
                             ? 'HOL'
                             : getDayLabel(
                                 day.date
                               )}
+
                         </th>
 
                       )
@@ -3003,6 +3102,7 @@ export default function LookaheadPage() {
                       ) => (
 
                         <th
+
                           key={
                             column.key
                           }
@@ -3012,6 +3112,7 @@ export default function LookaheadPage() {
                           }
 
                           style={{
+
                             ...headerCellStyle,
 
                             width:
@@ -3024,7 +3125,9 @@ export default function LookaheadPage() {
                               'normal',
                           }}
                         >
+
                           {column.label}
+
                         </th>
 
                       )
@@ -3043,6 +3146,7 @@ export default function LookaheadPage() {
                       ) => (
 
                         <th
+
                           key={`date-${day.iso}`}
 
                           title={
@@ -3052,6 +3156,7 @@ export default function LookaheadPage() {
                           }
 
                           style={{
+
                             ...calendarHeaderStyle,
 
                             background:
@@ -3067,9 +3172,11 @@ export default function LookaheadPage() {
                                 : '#334155',
                           }}
                         >
+
                           {formatShortDate(
                             day.date
                           )}
+
                         </th>
 
                       )
@@ -3136,6 +3243,7 @@ export default function LookaheadPage() {
 
                           <td
                             style={{
+
                               ...bodyCellStyle,
 
                               width:
@@ -3153,6 +3261,7 @@ export default function LookaheadPage() {
                           >
 
                             <button
+
                               type="button"
 
                               onClick={() =>
@@ -3168,6 +3277,7 @@ export default function LookaheadPage() {
                               }
 
                               style={{
+
                                 width:
                                   '100%',
 
@@ -3201,6 +3311,7 @@ export default function LookaheadPage() {
 
                               <div
                                 style={{
+
                                   position:
                                     'absolute',
 
@@ -3234,6 +3345,7 @@ export default function LookaheadPage() {
                               >
 
                                 <button
+
                                   type="button"
 
                                   disabled={
@@ -3256,6 +3368,7 @@ export default function LookaheadPage() {
 
 
                                 <button
+
                                   type="button"
 
                                   disabled={
@@ -3298,6 +3411,7 @@ export default function LookaheadPage() {
 
                           <td
                             style={{
+
                               ...bodyCellStyle,
 
                               width:
@@ -3315,6 +3429,7 @@ export default function LookaheadPage() {
 
                               <span
                                 style={{
+
                                   display:
                                     'inline-block',
 
@@ -3350,6 +3465,7 @@ export default function LookaheadPage() {
 
                               <span
                                 style={{
+
                                   color:
                                     '#94a3b8',
 
@@ -3369,6 +3485,7 @@ export default function LookaheadPage() {
 
                           <td
                             style={{
+
                               ...bodyCellStyle,
 
                               width:
@@ -3386,6 +3503,7 @@ export default function LookaheadPage() {
                           >
 
                             <input
+
                               type="text"
 
                               value={
@@ -3415,6 +3533,7 @@ export default function LookaheadPage() {
                                   (
                                     current
                                   ) => ({
+
                                     ...current,
 
                                     [row.id]:
@@ -3452,6 +3571,7 @@ export default function LookaheadPage() {
                               }
 
                               style={{
+
                                 width:
                                   '100%',
 
@@ -3527,6 +3647,7 @@ export default function LookaheadPage() {
 
                               <div
                                 style={{
+
                                   marginTop:
                                     '2px',
 
@@ -3540,12 +3661,15 @@ export default function LookaheadPage() {
                                     '8px',
                                 }}
                               >
+
                                 {occurrences.length}{' '}
                                 package occurrence
+
                                 {occurrences.length ===
                                 1
                                   ? ''
                                   : 's'}
+
                               </div>
 
                             )}
@@ -3610,6 +3734,7 @@ export default function LookaheadPage() {
                               return (
 
                                 <td
+
                                   key={`${row.id}-${day.iso}`}
 
                                   title={
@@ -3624,6 +3749,7 @@ export default function LookaheadPage() {
                                   }
 
                                   style={{
+
                                     ...bodyCellStyle,
 
                                     width:
@@ -3670,11 +3796,13 @@ export default function LookaheadPage() {
                                         : 'none',
                                   }}
                                 >
+
                                   {active
                                     ? code
                                     : day.isHoliday
                                       ? 'HOL'
                                       : ''}
+
                                 </td>
 
                               );
@@ -3684,7 +3812,7 @@ export default function LookaheadPage() {
 
 
                           {/* ==================================
-                              KOSKELA MATRIX
+                              GROUPED KOSKELA MATRIX
                           =================================== */}
 
                           {KOSKELA_COLUMNS.map(
@@ -3694,7 +3822,7 @@ export default function LookaheadPage() {
 
                               const status =
                                 getGroupedReadiness(
-                                  occurrences,
+                                  row.id,
                                   column.key
                                 );
 
@@ -3710,18 +3838,18 @@ export default function LookaheadPage() {
 
 
                               const disabled =
-                                occurrences.length ===
-                                  0 ||
                                 savingGroupedReadiness ===
-                                  savingKey;
+                                savingKey;
 
 
                               return (
 
                                 <td
+
                                   key={`${row.id}-${column.key}`}
 
                                   style={{
+
                                     ...bodyCellStyle,
 
                                     padding:
@@ -3730,6 +3858,7 @@ export default function LookaheadPage() {
                                 >
 
                                   <select
+
                                     value={
                                       status
                                     }
@@ -3743,21 +3872,19 @@ export default function LookaheadPage() {
                                     ) =>
                                       handleGroupedReadinessChange(
                                         row,
-                                        occurrences,
                                         column.key,
                                         event.target
                                           .value
                                       )
                                     }
 
-                                    title={
-                                      occurrences.length >
-                                      1
-                                        ? `Applies to all ${occurrences.length} ${code} package occurrences.`
-                                        : ''
-                                    }
+                                    title={`Grouped Koskela assessment for ${
+                                      code ||
+                                      'this Lookahead row'
+                                    }.`}
 
                                     style={{
+
                                       width:
                                         '100%',
 
@@ -3793,21 +3920,26 @@ export default function LookaheadPage() {
                                           : 1,
                                     }}
                                   >
+
                                     <option value="not_assessed">
                                       —
                                     </option>
+
 
                                     <option value="clear">
                                       Yes
                                     </option>
 
+
                                     <option value="constrained">
                                       No
                                     </option>
 
+
                                     <option value="not_applicable">
                                       N/A
                                     </option>
+
                                   </select>
 
                                 </td>
@@ -3837,6 +3969,7 @@ export default function LookaheadPage() {
 
             <div
               style={{
+
                 display:
                   'flex',
 
@@ -3859,41 +3992,50 @@ export default function LookaheadPage() {
                   '9px',
               }}
             >
+
               <strong>
                 LEGEND:
               </strong>
+
 
               <span>
                 🟢 Yes - Cleared
               </span>
 
+
               <span>
                 🔴 No - Active Constraint
               </span>
+
 
               <span>
                 ⚪ Not Assessed
               </span>
 
+
               <span>
                 🟥 HOL - Master Plan Holiday
               </span>
+
 
               <span>
                 Each row = one Work Package
               </span>
 
+
               <span>
-                Timeline blocks = individual locations
+                Koskela = grouped package assessment
               </span>
+
             </div>
 
           </div>
+
         )}
 
 
       {/* ====================================================
-          CONSTRAINT DETAILS
+          GROUPED CONSTRAINT DETAILS
       ===================================================== */}
 
       {selectedProjectId &&
@@ -3903,6 +4045,7 @@ export default function LookaheadPage() {
 
           <div
             style={{
+
               border:
                 '1px solid #cbd5e1',
 
@@ -3913,6 +4056,7 @@ export default function LookaheadPage() {
 
             <div
               style={{
+
                 padding:
                   '12px 14px',
 
@@ -3935,6 +4079,7 @@ export default function LookaheadPage() {
 
               <div
                 style={{
+
                   padding:
                     '40px 20px',
 
@@ -3955,6 +4100,7 @@ export default function LookaheadPage() {
 
               <table
                 style={{
+
                   width:
                     '100%',
 
@@ -3967,29 +4113,55 @@ export default function LookaheadPage() {
               >
 
                 <thead>
+
                   <tr>
 
-                    <th style={headerCellStyle}>
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
                       PACKAGE
                     </th>
 
-                    <th style={headerCellStyle}>
-                      LOCATION
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
+                      DESCRIPTION
                     </th>
 
-                    <th style={headerCellStyle}>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
                       CONSTRAINT
                     </th>
 
-                    <th style={headerCellStyle}>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
                       STATUS
                     </th>
 
-                    <th style={headerCellStyle}>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
                       SOURCE
                     </th>
 
                   </tr>
+
                 </thead>
 
 
@@ -3997,12 +4169,16 @@ export default function LookaheadPage() {
 
                   {constrainedCells.map(
                     ({
-                      item,
+                      row,
                       column,
+                      assessment,
                     }) => (
 
                       <tr
-                        key={`${item.id}-${column.key}`}
+                        key={
+                          assessment.id ||
+                          `${row.id}-${column.key}`
+                        }
                       >
 
                         <td
@@ -4010,20 +4186,22 @@ export default function LookaheadPage() {
                             bodyCellStyle
                           }
                         >
-                          {getPackageCode(
-                            item
-                          )}
+                          {row.package_code ||
+                            '—'}
                         </td>
 
+
                         <td
-                          style={
-                            bodyCellStyle
-                          }
+                          style={{
+                            ...bodyCellStyle,
+                            textAlign:
+                              'left',
+                          }}
                         >
-                          {getLocationName(
-                            item
-                          )}
+                          {row.description ||
+                            '—'}
                         </td>
+
 
                         <td
                           style={
@@ -4033,6 +4211,7 @@ export default function LookaheadPage() {
                           {column.label}
                         </td>
 
+
                         <td
                           style={
                             bodyCellStyle
@@ -4041,15 +4220,18 @@ export default function LookaheadPage() {
                           Active
                         </td>
 
+
                         <td
                           style={
                             bodyCellStyle
                           }
                         >
-                          {item.package_source ===
-                          'lookahead'
+
+                          {row.row_type ===
+                          'manual'
                             ? 'Lookahead'
                             : 'Master Plan'}
+
                         </td>
 
                       </tr>
@@ -4064,6 +4246,7 @@ export default function LookaheadPage() {
             )}
 
           </div>
+
         )}
 
 
@@ -4095,6 +4278,7 @@ export default function LookaheadPage() {
 // ============================================================
 
 const labelStyle = {
+
   display:
     'block',
 
@@ -4110,6 +4294,7 @@ const labelStyle = {
 
 
 const selectStyle = {
+
   width:
     '100%',
 
@@ -4131,6 +4316,7 @@ const selectStyle = {
 
 
 const inputStyle = {
+
   height:
     '36px',
 
@@ -4149,6 +4335,7 @@ const inputStyle = {
 
 
 const headerCellStyle = {
+
   border:
     '1px solid #cbd5e1',
 
@@ -4173,6 +4360,7 @@ const headerCellStyle = {
 
 
 const calendarHeaderStyle = {
+
   ...headerCellStyle,
 
   width:
@@ -4190,6 +4378,7 @@ const calendarHeaderStyle = {
 
 
 const bodyCellStyle = {
+
   border:
     '1px solid #e2e8f0',
 
@@ -4211,6 +4400,7 @@ const bodyCellStyle = {
 
 
 const primaryButtonStyle = {
+
   height:
     '36px',
 
@@ -4241,6 +4431,7 @@ const primaryButtonStyle = {
 
 
 const secondaryButtonStyle = {
+
   height:
     '36px',
 
@@ -4271,6 +4462,7 @@ const secondaryButtonStyle = {
 
 
 const holidayButtonStyle = {
+
   ...secondaryButtonStyle,
 
   border:
@@ -4285,6 +4477,7 @@ const holidayButtonStyle = {
 
 
 const disabledButtonStyle = {
+
   ...secondaryButtonStyle,
 
   opacity:
@@ -4296,6 +4489,7 @@ const disabledButtonStyle = {
 
 
 const tabStyle = {
+
   padding:
     '9px 14px',
 
@@ -4326,6 +4520,7 @@ const tabStyle = {
 
 
 const activeTabStyle = {
+
   ...tabStyle,
 
   background:
@@ -4337,6 +4532,7 @@ const activeTabStyle = {
 
 
 const menuButtonStyle = {
+
   display:
     'block',
 
@@ -4373,6 +4569,7 @@ const menuButtonStyle = {
 
 
 const emptyStyle = {
+
   padding:
     '50px 20px',
 
