@@ -47,6 +47,11 @@ const baseNavigationGroups = [
         href: '/dashboard/projects/locations',
         icon: 'LB',
       },
+      {
+        label: 'Work Packages',
+        href: '/dashboard/projects/work-packages',
+        icon: 'PK',
+      },
     ],
   },
 
@@ -188,15 +193,6 @@ export default function DashboardLayout({
 
   // =======================================================
   // PLATFORM OWNER NAVIGATION AUTHORIZATION
-  // =======================================================
-  //
-  // This only controls whether the Platform section is
-  // visible in navigation.
-  //
-  // The Platform Organizations page must ALSO perform its
-  // own server-side authorization.
-  //
-  // Hiding a link is never considered a security boundary.
   // =======================================================
 
   useEffect(() => {
@@ -532,13 +528,6 @@ export default function DashboardLayout({
           )}
 
 
-          {/*
-            Prevent any temporary visual placeholder from
-            appearing while platform authorization loads.
-
-            Customer users simply never see the Platform
-            section.
-          */}
           {!platformAuthorizationLoaded &&
             null}
         </nav>
