@@ -572,6 +572,12 @@ export default function LookaheadPage() {
   ] = useState(false);
 
 
+  const [
+    savingLookahead,
+    setSavingLookahead,
+  ] = useState(false);
+
+
   // ==========================================================
   // SELECTED PLAN
   // ==========================================================
@@ -1567,6 +1573,320 @@ export default function LookaheadPage() {
       loadOrganizationWorkPackages,
     ]
   );
+
+
+  // ==========================================================
+  // SAVE LOOKAHEAD
+  //
+  // Persists:
+  // - Start of Week 1
+  // - Horizon
+  // - Lookahead window finish
+  // - Any edited row descriptions still pending in the UI
+  //
+  // Timeline cells, Koskela assessments, package selections and
+  // inserted packages are already persisted at the moment the
+  // user changes them. This button acts as the explicit save for
+  // Lookahead-level settings and any remaining description edits.
+  // ==========================================================
+
+  const saveLookahead =
+    async () => {
+
+      if (
+        !selectedPlanId ||
+        savingLookahead
+      ) {
+        return;
+      }
+
+
+      const parsedStart =
+        parseDate(
+          windowStart
+        );
+
+
+      if (
+        !parsedStart
+      ) {
+
+        setErrorMessage(
+          'Start of Week 1 is required.'
+        );
+
+        return;
+
+      }
+
+
+      const normalizedWeeks =
+        Number(
+          horizonWeeks
+        );
+
+
+      if (
+        !Number.isInteger(
+          normalizedWeeks
+        ) ||
+        normalizedWeeks < 1
+      ) {
+
+        setErrorMessage(
+          'Horizon must be at least 1 week.'
+        );
+
+        return;
+
+      }
+
+
+      const calculatedFinish =
+        toIsoDate(
+          addDays(
+            parsedStart,
+            normalizedWeeks * 7 - 1
+          )
+        );
+
+
+      setSavingLookahead(
+        true
+      );
+
+      setErrorMessage(
+        ''
+      );
+
+
+      try {
+
+        // ----------------------------------------------------
+        // 1. SAVE LOOKAHEAD PLAN SETTINGS
+        // ----------------------------------------------------
+
+        const {
+          error:
+            planError,
+        } =
+          await supabase
+            .from(
+              'lookahead_plans'
+            )
+            .update({
+
+              window_start_date:
+                windowStart,
+
+              window_finish_date:
+                calculatedFinish,
+
+              horizon_weeks:
+                normalizedWeeks,
+
+              updated_at:
+                new Date()
+                  .toISOString(),
+            })
+            .eq(
+              'id',
+              selectedPlanId
+            );
+
+
+        if (
+          planError
+        ) {
+          throw planError;
+        }
+
+
+        // ----------------------------------------------------
+        // 2. SAVE ANY DESCRIPTION DRAFTS THAT CHANGED
+        // ----------------------------------------------------
+
+        const changedRows =
+          sheetRows.filter(
+            (
+              row
+            ) =>
+              String(
+                descriptionDrafts[
+                  row.id
+                ] ||
+                ''
+              ).trim() !==
+              String(
+                row.description ||
+                ''
+              ).trim()
+          );
+
+
+        if (
+          changedRows.length >
+          0
+        ) {
+
+          const descriptionResults =
+            await Promise.all(
+              changedRows.map(
+                async (
+                  row
+                ) => {
+
+                  const nextDescription =
+                    String(
+                      descriptionDrafts[
+                        row.id
+                      ] ||
+                      ''
+                    ).trim();
+
+
+                  const {
+                    error,
+                  } =
+                    await supabase
+                      .from(
+                        'lookahead_sheet_rows'
+                      )
+                      .update({
+
+                        description:
+                          nextDescription,
+
+                        updated_at:
+                          new Date()
+                            .toISOString(),
+                      })
+                      .eq(
+                        'id',
+                        row.id
+                      )
+                      .eq(
+                        'lookahead_plan_id',
+                        selectedPlanId
+                      );
+
+
+                  if (
+                    error
+                  ) {
+                    throw error;
+                  }
+
+
+                  return {
+                    id:
+                      row.id,
+
+                    description:
+                      nextDescription,
+                  };
+
+                }
+              )
+            );
+
+
+          const descriptionMap =
+            new Map(
+              descriptionResults.map(
+                (
+                  item
+                ) => [
+                  item.id,
+                  item.description,
+                ]
+              )
+            );
+
+
+          setSheetRows(
+            (
+              current
+            ) =>
+              current.map(
+                (
+                  row
+                ) =>
+                  descriptionMap.has(
+                    row.id
+                  )
+                    ? {
+                        ...row,
+
+                        description:
+                          descriptionMap.get(
+                            row.id
+                          ),
+                      }
+                    : row
+              )
+          );
+
+        }
+
+
+        // ----------------------------------------------------
+        // 3. UPDATE LOCAL PLAN STATE WITHOUT FULL RELOAD
+        // ----------------------------------------------------
+
+        setPlans(
+          (
+            current
+          ) =>
+            current.map(
+              (
+                plan
+              ) =>
+                plan.id ===
+                selectedPlanId
+                  ? {
+                      ...plan,
+
+                      window_start_date:
+                        windowStart,
+
+                      window_finish_date:
+                        calculatedFinish,
+
+                      horizon_weeks:
+                        normalizedWeeks,
+
+                      updated_at:
+                        new Date()
+                          .toISOString(),
+                    }
+                  : plan
+            )
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          'Save Lookahead:',
+          error
+        );
+
+
+        setErrorMessage(
+          error.message ||
+          'The Lookahead could not be saved.'
+        );
+
+      } finally {
+
+        setSavingLookahead(
+          false
+        );
+
+      }
+
+    };
 
 
   // ==========================================================
@@ -3269,13 +3589,28 @@ export default function LookaheadPage() {
 
 
         <button
+
           type="button"
-          disabled
+
+          disabled={
+            !selectedPlanId ||
+            savingLookahead
+          }
+
+          onClick={
+            saveLookahead
+          }
+
           style={
-            disabledButtonStyle
+            selectedPlanId &&
+            !savingLookahead
+              ? secondaryButtonStyle
+              : disabledButtonStyle
           }
         >
-          💾 Save
+          {savingLookahead
+            ? '💾 Saving...'
+            : '💾 Save'}
         </button>
 
 
