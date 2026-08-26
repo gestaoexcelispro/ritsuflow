@@ -14,40 +14,27 @@ import { supabase } from '../../../../lib/supabase';
 // RitsuFlow™
 // LOOKAHEAD PLANNING
 //
-// Step 14F.1
+// Step 14F.1A
 //
-// Restores the original Lookahead + Koskela workspace
-// architecture on top of the normalized backend.
+// Architecture:
 //
-// CURRENT STEP
-// ------------------------------------------------------------
-// ✓ projects
-// ✓ active Lookahead plan
-// ✓ inherited Master Plan packages
-// ✓ Lookahead-only packages
-// ✓ Lookahead calendar
-// ✓ 7 Koskela readiness dimensions
-// ✓ readiness persistence
-// ✓ weekend visibility
-// ✓ horizon visibility
-// ✓ Constraints Details tab foundation
+// ID
+// PACKAGE
+// EDITABLE LOOKAHEAD DESCRIPTION
+// TIME GRID
+// KOSKELA FLOW MATRIX
 //
-// NEXT STEP
-// ------------------------------------------------------------
-// - Insert Package modal
-// - Master Plan working-day engine
-// - predecessor + lag
-// - holidays
-// - horizontal drag
-// - propagation
-// - Undo for scheduling edits
+// Master Plan package identity remains immutable.
+// Lookahead description is editable independently.
 // ============================================================
 
 
 const DAY_WIDTH = 38;
 const ID_WIDTH = 44;
-const DESCRIPTION_WIDTH = 250;
+const PACKAGE_WIDTH = 72;
+const DESCRIPTION_WIDTH = 280;
 const KOSKELA_WIDTH = 90;
+
 
 const KOSKELA_COLUMNS = [
   {
@@ -80,6 +67,7 @@ const KOSKELA_COLUMNS = [
   },
 ];
 
+
 const SERVICE_COLORS = {
   FUN: '#ff00ff',
   PNS: '#8a2be2',
@@ -100,47 +88,78 @@ const SERVICE_COLORS = {
 };
 
 
+// ============================================================
+// DATE HELPERS
+// ============================================================
+
 function parseDate(value) {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
-  const date = new Date(`${value}T00:00:00`);
+  const date =
+    new Date(
+      `${value}T00:00:00`
+    );
 
-  return Number.isNaN(date.getTime())
+  return Number.isNaN(
+    date.getTime()
+  )
     ? null
     : date;
 }
 
 
 function toIsoDate(date) {
-  if (!date) return '';
+  if (!date) {
+    return '';
+  }
 
-  const year = date.getFullYear();
+  const year =
+    date.getFullYear();
 
-  const month = String(
-    date.getMonth() + 1
-  ).padStart(2, '0');
+  const month =
+    String(
+      date.getMonth() + 1
+    ).padStart(
+      2,
+      '0'
+    );
 
-  const day = String(
-    date.getDate()
-  ).padStart(2, '0');
+  const day =
+    String(
+      date.getDate()
+    ).padStart(
+      2,
+      '0'
+    );
 
   return `${year}-${month}-${day}`;
 }
 
 
-function addDays(date, amount) {
-  const result = new Date(date);
+function addDays(
+  date,
+  amount
+) {
+  const result =
+    new Date(date);
 
   result.setDate(
-    result.getDate() + amount
+    result.getDate() +
+      amount
   );
 
   return result;
 }
 
 
-function formatShortDate(date) {
-  if (!date) return '';
+function formatShortDate(
+  date
+) {
+  if (!date) {
+    return '';
+  }
 
   return new Intl.DateTimeFormat(
     'en-US',
@@ -153,7 +172,9 @@ function formatShortDate(date) {
 
 
 function getDayLabel(date) {
-  if (!date) return '';
+  if (!date) {
+    return '';
+  }
 
   return new Intl.DateTimeFormat(
     'en-US',
@@ -164,17 +185,26 @@ function getDayLabel(date) {
 }
 
 
-function getPackageDates(item) {
-  const packageData = item.package;
+// ============================================================
+// PACKAGE HELPERS
+// ============================================================
+
+function getPackageDates(
+  item
+) {
+  const packageData =
+    item.package;
 
   const start =
     item.lookahead_start_date ||
-    packageData?.scheduled_start_date ||
+    packageData
+      ?.scheduled_start_date ||
     null;
 
   const finish =
     item.lookahead_finish_date ||
-    packageData?.scheduled_finish_date ||
+    packageData
+      ?.scheduled_finish_date ||
     null;
 
   return {
@@ -184,71 +214,116 @@ function getPackageDates(item) {
 }
 
 
-function getPackageCode(item) {
+function getPackageCode(
+  item
+) {
   return (
     item.package_code ||
-    item.package?.package_code ||
+    item.package
+      ?.package_code ||
     ''
   );
 }
 
 
-function getServiceName(item) {
+function getServiceName(
+  item
+) {
   return (
     item.service_name ||
-    item.package?.service_name ||
+    item.package
+      ?.service_name ||
     ''
   );
 }
 
 
-function getLocationName(item) {
+function getLocationName(
+  item
+) {
   return (
     item.location_name ||
-    item.package?.location_name ||
+    item.package
+      ?.location_name ||
     'Unassigned Location'
   );
 }
 
 
-function getLocationPath(item) {
+function getLocationPath(
+  item
+) {
   return (
     item.location_path ||
-    item.package?.location_path ||
+    item.package
+      ?.location_path ||
     getLocationName(item)
   );
 }
 
 
-function getServiceColor(code) {
+function getServiceColor(
+  code
+) {
   return (
-    SERVICE_COLORS[code] ||
+    SERVICE_COLORS[
+      code
+    ] ||
     '#64748b'
   );
 }
 
 
-function getTextColor(background) {
+function getTextColor(
+  background
+) {
   const hex =
-    background.replace('#', '');
+    String(
+      background || ''
+    ).replace(
+      '#',
+      ''
+    );
 
-  if (hex.length !== 6) {
+  if (
+    hex.length !== 6
+  ) {
     return '#ffffff';
   }
 
   const r =
-    parseInt(hex.slice(0, 2), 16);
+    parseInt(
+      hex.slice(
+        0,
+        2
+      ),
+      16
+    );
 
   const g =
-    parseInt(hex.slice(2, 4), 16);
+    parseInt(
+      hex.slice(
+        2,
+        4
+      ),
+      16
+    );
 
   const b =
-    parseInt(hex.slice(4, 6), 16);
+    parseInt(
+      hex.slice(
+        4,
+        6
+      ),
+      16
+    );
 
   const yiq =
-    (r * 299 +
+    (
+      r * 299 +
       g * 587 +
-      b * 114) /
+      b * 114
+    ) /
     1000;
 
   return yiq >= 150
@@ -257,16 +332,30 @@ function getTextColor(background) {
 }
 
 
-function normalizeReadinessStatus(value) {
-  if (value === 'clear') {
+// ============================================================
+// READINESS HELPERS
+// ============================================================
+
+function normalizeReadinessStatus(
+  value
+) {
+  if (
+    value === 'clear'
+  ) {
     return 'clear';
   }
 
-  if (value === 'constrained') {
+  if (
+    value ===
+    'constrained'
+  ) {
     return 'constrained';
   }
 
-  if (value === 'not_applicable') {
+  if (
+    value ===
+    'not_applicable'
+  ) {
     return 'not_applicable';
   }
 
@@ -274,40 +363,59 @@ function normalizeReadinessStatus(value) {
 }
 
 
-function readinessStyle(status) {
+function readinessStyle(
+  status
+) {
   switch (status) {
     case 'clear':
       return {
-        background: '#dcfce7',
-        color: '#166534',
-        border: '#86efac',
+        background:
+          '#dcfce7',
+        color:
+          '#166534',
+        border:
+          '#86efac',
       };
 
     case 'constrained':
       return {
-        background: '#fee2e2',
-        color: '#991b1b',
-        border: '#fca5a5',
+        background:
+          '#fee2e2',
+        color:
+          '#991b1b',
+        border:
+          '#fca5a5',
       };
 
     case 'not_applicable':
       return {
-        background: '#f1f5f9',
-        color: '#64748b',
-        border: '#cbd5e1',
+        background:
+          '#f1f5f9',
+        color:
+          '#64748b',
+        border:
+          '#cbd5e1',
       };
 
     default:
       return {
-        background: '#ffffff',
-        color: '#64748b',
-        border: '#cbd5e1',
+        background:
+          '#ffffff',
+        color:
+          '#64748b',
+        border:
+          '#cbd5e1',
       };
   }
 }
 
 
+// ============================================================
+// MAIN PAGE
+// ============================================================
+
 export default function LookaheadPage() {
+
   const [
     projects,
     setProjects,
@@ -337,6 +445,16 @@ export default function LookaheadPage() {
     readiness,
     setReadiness,
   ] = useState({});
+
+  const [
+    descriptionDrafts,
+    setDescriptionDrafts,
+  ] = useState({});
+
+  const [
+    savingDescriptionId,
+    setSavingDescriptionId,
+  ] = useState('');
 
   const [
     activeTab,
@@ -394,74 +512,137 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
-  // PROJECTS
+  // LOAD PROJECTS
   // ==========================================================
 
   const loadProjects =
-    useCallback(async () => {
-      try {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('projects')
-          .select(
-            `
-              id,
-              code,
-              name,
-              status,
-              created_at
-            `
-          )
-          .neq(
-            'status',
-            'archived'
-          )
-          .order(
-            'created_at',
-            {
-              ascending: false,
-            }
+    useCallback(
+      async () => {
+
+        try {
+
+          const {
+            data,
+            error,
+          } =
+            await supabase
+              .from(
+                'projects'
+              )
+              .select(`
+                id,
+                code,
+                name,
+                status,
+                created_at
+              `)
+              .neq(
+                'status',
+                'archived'
+              )
+              .order(
+                'created_at',
+                {
+                  ascending:
+                    false,
+                }
+              );
+
+
+          if (error) {
+            throw error;
+          }
+
+
+          const loaded =
+            data || [];
+
+
+          setProjects(
+            loaded
           );
 
-        if (error) {
-          throw error;
+
+          const params =
+            new URLSearchParams(
+              window
+                .location
+                .search
+            );
+
+
+          const projectId =
+            params.get(
+              'projectId'
+            );
+
+
+          if (
+            projectId &&
+            loaded.some(
+              (project) =>
+                project.id ===
+                projectId
+            )
+          ) {
+
+            setSelectedProjectId(
+              projectId
+            );
+
+          }
+
+        } catch (error) {
+
+          console.error(
+            'Lookahead projects:',
+            error
+          );
+
+          setErrorMessage(
+            error.message ||
+            'Projects could not be loaded.'
+          );
+
         }
 
-        setProjects(data || []);
-      } catch (error) {
-        console.error(error);
-
-        setErrorMessage(
-          error.message ||
-            'Projects could not be loaded.'
-        );
-      }
-    }, []);
+      },
+      []
+    );
 
 
   // ==========================================================
-  // LOOKAHEAD PLANS
+  // LOAD LOOKAHEAD PLANS
   // ==========================================================
 
   const loadPlans =
     useCallback(
-      async (projectId) => {
+      async (
+        projectId
+      ) => {
+
         if (!projectId) {
+
           setPlans([]);
           setSelectedPlanId('');
+          setWorkItems([]);
+
           return;
+
         }
 
+
         try {
+
           const {
             data,
             error,
-          } = await supabase
-            .from('lookahead_plans')
-            .select(
-              `
+          } =
+            await supabase
+              .from(
+                'lookahead_plans'
+              )
+              .select(`
                 id,
                 project_id,
                 master_plan_scenario_id,
@@ -472,27 +653,33 @@ export default function LookaheadPage() {
                 status,
                 created_at,
                 updated_at
-              `
-            )
-            .eq(
-              'project_id',
-              projectId
-            )
-            .order(
-              'created_at',
-              {
-                ascending: false,
-              }
-            );
+              `)
+              .eq(
+                'project_id',
+                projectId
+              )
+              .order(
+                'created_at',
+                {
+                  ascending:
+                    false,
+                }
+              );
+
 
           if (error) {
             throw error;
           }
 
+
           const loadedPlans =
             data || [];
 
-          setPlans(loadedPlans);
+
+          setPlans(
+            loadedPlans
+          );
+
 
           const active =
             loadedPlans.find(
@@ -501,83 +688,118 @@ export default function LookaheadPage() {
                 'active'
             );
 
+
           const nextPlan =
             active ||
             loadedPlans[0] ||
             null;
 
+
           setSelectedPlanId(
-            nextPlan?.id || ''
+            nextPlan?.id ||
+            ''
           );
 
+
           if (nextPlan) {
+
             setWindowStart(
-              nextPlan.window_start_date ||
-                ''
+              nextPlan
+                .window_start_date ||
+              ''
             );
 
             setHorizonWeeks(
               Number(
-                nextPlan.horizon_weeks ||
-                  6
+                nextPlan
+                  .horizon_weeks ||
+                6
               )
             );
+
           }
+
         } catch (error) {
-          console.error(error);
+
+          console.error(
+            'Lookahead plans:',
+            error
+          );
 
           setErrorMessage(
             error.message ||
-              'Lookahead plans could not be loaded.'
+            'Lookahead plans could not be loaded.'
           );
+
         }
+
       },
       []
     );
 
 
   // ==========================================================
-  // WORK ITEMS + READINESS
+  // LOAD WORK ITEMS + READINESS
   // ==========================================================
 
   const loadWorkspace =
     useCallback(
-      async (planId) => {
+      async (
+        planId
+      ) => {
+
         if (!planId) {
+
           setWorkItems([]);
           setReadiness({});
+          setDescriptionDrafts({});
+
           return;
+
         }
+
 
         setLoading(true);
         setErrorMessage('');
 
+
         try {
+
           const {
             data: items,
-            error: itemsError,
-          } = await supabase
-            .from(
-              'lookahead_work_items'
-            )
-            .select(
-              `
+            error:
+              itemsError,
+          } =
+            await supabase
+              .from(
+                'lookahead_work_items'
+              )
+              .select(`
                 id,
                 lookahead_plan_id,
                 project_id,
                 master_plan_package_id,
+
                 package_source,
+
                 package_code,
                 service_name,
                 service_code,
+
+                lookahead_description,
+
                 location_name,
                 location_path,
+
                 duration_working_days,
+
                 start_rule,
                 predecessor_lookahead_work_item_id,
                 lag_working_days,
+
                 lookahead_start_date,
                 lookahead_finish_date,
+
                 readiness_status,
                 priority,
                 notes,
@@ -597,132 +819,264 @@ export default function LookaheadPage() {
                   sequence_number,
                   sequence_group_id
                 )
-              `
-            )
-            .eq(
-              'lookahead_plan_id',
-              planId
-            );
+              `)
+              .eq(
+                'lookahead_plan_id',
+                planId
+              );
 
-          if (itemsError) {
+
+          if (
+            itemsError
+          ) {
             throw itemsError;
           }
 
+
           const normalized =
-            (items || [])
-              .map((item) => {
-                const packageData =
-                  Array.isArray(
-                    item.master_plan_packages
-                  )
-                    ? item
-                        .master_plan_packages[0]
-                    : item.master_plan_packages;
+            (
+              items || []
+            )
+              .map(
+                (item) => {
 
-                return {
-                  ...item,
-                  package:
-                    packageData ||
-                    null,
-                };
-              })
-              .sort((a, b) => {
-                const pathA =
-                  getLocationPath(a);
+                  const packageData =
+                    Array.isArray(
+                      item
+                        .master_plan_packages
+                    )
+                      ? item
+                          .master_plan_packages[0]
+                      : item
+                          .master_plan_packages;
 
-                const pathB =
-                  getLocationPath(b);
 
-                const byLocation =
-                  pathA.localeCompare(
-                    pathB
+                  return {
+                    ...item,
+                    package:
+                      packageData ||
+                      null,
+                  };
+
+                }
+              )
+              .sort(
+                (
+                  a,
+                  b
+                ) => {
+
+                  const startA =
+                    getPackageDates(
+                      a
+                    ).start ||
+                    '';
+
+                  const startB =
+                    getPackageDates(
+                      b
+                    ).start ||
+                    '';
+
+
+                  if (
+                    startA !==
+                    startB
+                  ) {
+                    return startA.localeCompare(
+                      startB
+                    );
+                  }
+
+
+                  const sequenceA =
+                    Number(
+                      a.package
+                        ?.sequence_number ??
+                      999999
+                    );
+
+                  const sequenceB =
+                    Number(
+                      b.package
+                        ?.sequence_number ??
+                      999999
+                    );
+
+
+                  if (
+                    sequenceA !==
+                    sequenceB
+                  ) {
+                    return (
+                      sequenceA -
+                      sequenceB
+                    );
+                  }
+
+
+                  return getLocationPath(
+                    a
+                  ).localeCompare(
+                    getLocationPath(
+                      b
+                    )
                   );
 
-                if (byLocation !== 0) {
-                  return byLocation;
                 }
+              );
 
-                const startA =
-                  getPackageDates(a)
-                    .start || '';
 
-                const startB =
-                  getPackageDates(b)
-                    .start || '';
+          setWorkItems(
+            normalized
+          );
 
-                return startA.localeCompare(
-                  startB
-                );
-              });
 
-          setWorkItems(normalized);
+          // --------------------------------------------------
+          // DESCRIPTION DRAFTS
+          // --------------------------------------------------
+
+          const nextDescriptions =
+            {};
+
+
+          normalized.forEach(
+            (item) => {
+
+              const fallback =
+                [
+                  getServiceName(
+                    item
+                  ),
+                  getLocationName(
+                    item
+                  ),
+                ]
+                  .filter(
+                    Boolean
+                  )
+                  .join(
+                    ' · '
+                  );
+
+
+              nextDescriptions[
+                item.id
+              ] =
+                item
+                  .lookahead_description ||
+                fallback;
+
+            }
+          );
+
+
+          setDescriptionDrafts(
+            nextDescriptions
+          );
+
 
           const ids =
             normalized.map(
-              (item) => item.id
+              (item) =>
+                item.id
             );
 
-          if (ids.length === 0) {
-            setReadiness({});
+
+          if (
+            ids.length === 0
+          ) {
+
+            setReadiness(
+              {}
+            );
+
             return;
+
           }
 
+
           const {
-            data: assessments,
+            data:
+              assessments,
             error:
               assessmentError,
-          } = await supabase
-            .from(
-              'lookahead_readiness_assessments'
-            )
-            .select(
-              `
+          } =
+            await supabase
+              .from(
+                'lookahead_readiness_assessments'
+              )
+              .select(`
                 id,
                 lookahead_work_item_id,
                 category,
                 status
-              `
-            )
-            .in(
-              'lookahead_work_item_id',
-              ids
-            );
+              `)
+              .in(
+                'lookahead_work_item_id',
+                ids
+              );
 
-          if (assessmentError) {
+
+          if (
+            assessmentError
+          ) {
             throw assessmentError;
           }
 
-          const readinessMap = {};
+
+          const readinessMap =
+            {};
+
 
           (
-            assessments || []
+            assessments ||
+            []
           ).forEach(
-            (assessment) => {
+            (
+              assessment
+            ) => {
+
               readinessMap[
                 `${assessment.lookahead_work_item_id}___${assessment.category}`
               ] = {
-                id: assessment.id,
+                id:
+                  assessment.id,
+
                 status:
                   normalizeReadinessStatus(
                     assessment.status
                   ),
               };
+
             }
           );
+
 
           setReadiness(
             readinessMap
           );
+
         } catch (error) {
-          console.error(error);
+
+          console.error(
+            'Lookahead workspace:',
+            error
+          );
 
           setErrorMessage(
             error.message ||
-              'The Lookahead workspace could not be loaded.'
+            'The Lookahead workspace could not be loaded.'
           );
+
         } finally {
-          setLoading(false);
+
+          setLoading(
+            false
+          );
+
         }
+
       },
       []
     );
@@ -732,29 +1086,44 @@ export default function LookaheadPage() {
   // INITIAL LOAD
   // ==========================================================
 
-  useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+  useEffect(
+    () => {
+      loadProjects();
+    },
+    [
+      loadProjects,
+    ]
+  );
 
 
-  useEffect(() => {
-    loadPlans(
-      selectedProjectId
-    );
-  }, [
-    selectedProjectId,
-    loadPlans,
-  ]);
+  useEffect(
+    () => {
+
+      loadPlans(
+        selectedProjectId
+      );
+
+    },
+    [
+      selectedProjectId,
+      loadPlans,
+    ]
+  );
 
 
-  useEffect(() => {
-    loadWorkspace(
-      selectedPlanId
-    );
-  }, [
-    selectedPlanId,
-    loadWorkspace,
-  ]);
+  useEffect(
+    () => {
+
+      loadWorkspace(
+        selectedPlanId
+      );
+
+    },
+    [
+      selectedPlanId,
+      loadWorkspace,
+    ]
+  );
 
 
   // ==========================================================
@@ -762,28 +1131,42 @@ export default function LookaheadPage() {
   // ==========================================================
 
   const handlePlanChange =
-    (planId) => {
-      setSelectedPlanId(planId);
+    (
+      planId
+    ) => {
+
+      setSelectedPlanId(
+        planId
+      );
+
 
       const plan =
         plans.find(
           (item) =>
-            item.id === planId
+            item.id ===
+            planId
         );
 
+
       if (plan) {
+
         setWindowStart(
-          plan.window_start_date ||
-            ''
+          plan
+            .window_start_date ||
+          ''
         );
+
 
         setHorizonWeeks(
           Number(
-            plan.horizon_weeks ||
-              6
+            plan
+              .horizon_weeks ||
+            6
           )
         );
+
       }
+
     };
 
 
@@ -792,54 +1175,80 @@ export default function LookaheadPage() {
   // ==========================================================
 
   const allCalendarDays =
-    useMemo(() => {
-      if (!windowStart) {
-        return [];
-      }
+    useMemo(
+      () => {
 
-      const start =
-        parseDate(windowStart);
+        if (
+          !windowStart
+        ) {
+          return [];
+        }
 
-      if (!start) {
-        return [];
-      }
 
-      const result = [];
-
-      const totalDays =
-        Math.max(
-          1,
-          Number(horizonWeeks)
-        ) * 7;
-
-      for (
-        let index = 0;
-        index < totalDays;
-        index += 1
-      ) {
-        const date =
-          addDays(
-            start,
-            index
+        const start =
+          parseDate(
+            windowStart
           );
 
-        const day =
-          date.getDay();
 
-        result.push({
-          date,
-          iso: toIsoDate(date),
-          isWeekend:
-            day === 0 ||
-            day === 6,
-        });
-      }
+        if (!start) {
+          return [];
+        }
 
-      return result;
-    }, [
-      windowStart,
-      horizonWeeks,
-    ]);
+
+        const result =
+          [];
+
+
+        const totalDays =
+          Math.max(
+            1,
+            Number(
+              horizonWeeks
+            )
+          ) * 7;
+
+
+        for (
+          let index = 0;
+          index <
+          totalDays;
+          index += 1
+        ) {
+
+          const date =
+            addDays(
+              start,
+              index
+            );
+
+
+          const day =
+            date.getDay();
+
+
+          result.push({
+            date,
+            iso:
+              toIsoDate(
+                date
+              ),
+            isWeekend:
+              day === 0 ||
+              day === 6,
+          });
+
+        }
+
+
+        return result;
+
+      },
+      [
+        windowStart,
+        horizonWeeks,
+      ]
+    );
 
 
   const visibleDays =
@@ -859,48 +1268,204 @@ export default function LookaheadPage() {
 
 
   const weekGroups =
-    useMemo(() => {
-      const groups = [];
+    useMemo(
+      () => {
 
-      allCalendarDays.forEach(
-        (day, index) => {
-          const weekNumber =
-            Math.floor(index / 7) +
-            1;
+        const groups =
+          [];
 
-          let group =
-            groups.find(
-              (item) =>
-                item.weekNumber ===
-                weekNumber
+
+        allCalendarDays.forEach(
+          (
+            day,
+            index
+          ) => {
+
+            const weekNumber =
+              Math.floor(
+                index / 7
+              ) + 1;
+
+
+            let group =
+              groups.find(
+                (item) =>
+                  item.weekNumber ===
+                  weekNumber
+              );
+
+
+            if (!group) {
+
+              group = {
+                weekNumber,
+                days: [],
+              };
+
+
+              groups.push(
+                group
+              );
+
+            }
+
+
+            if (
+              showWeekends ||
+              !day.isWeekend
+            ) {
+
+              group.days.push(
+                day
+              );
+
+            }
+
+          }
+        );
+
+
+        return groups.filter(
+          (group) =>
+            group.days.length >
+            0
+        );
+
+      },
+      [
+        allCalendarDays,
+        showWeekends,
+      ]
+    );
+
+
+  // ==========================================================
+  // SAVE LOOKAHEAD DESCRIPTION
+  // ==========================================================
+
+  const saveLookaheadDescription =
+    async (
+      itemId
+    ) => {
+
+      const item =
+        workItems.find(
+          (
+            workItem
+          ) =>
+            workItem.id ===
+            itemId
+        );
+
+
+      if (!item) {
+        return;
+      }
+
+
+      const nextValue =
+        String(
+          descriptionDrafts[
+            itemId
+          ] || ''
+        ).trim();
+
+
+      const fallback =
+        [
+          getServiceName(
+            item
+          ),
+          getLocationName(
+            item
+          ),
+        ]
+          .filter(
+            Boolean
+          )
+          .join(
+            ' · '
+          );
+
+
+      const valueToPersist =
+        nextValue ===
+        fallback
+          ? null
+          : nextValue ||
+            null;
+
+
+      setSavingDescriptionId(
+        itemId
+      );
+
+
+      try {
+
+        const {
+          error,
+        } =
+          await supabase
+            .from(
+              'lookahead_work_items'
+            )
+            .update({
+              lookahead_description:
+                valueToPersist,
+            })
+            .eq(
+              'id',
+              itemId
             );
 
-          if (!group) {
-            group = {
-              weekNumber,
-              days: [],
-            };
 
-            groups.push(group);
-          }
-
-          if (
-            showWeekends ||
-            !day.isWeekend
-          ) {
-            group.days.push(day);
-          }
+        if (error) {
+          throw error;
         }
-      );
 
-      return groups.filter(
-        (group) =>
-          group.days.length > 0
-      );
-    }, [
-      allCalendarDays,
-      showWeekends,
-    ]);
+
+        setWorkItems(
+          (
+            current
+          ) =>
+            current.map(
+              (
+                workItem
+              ) =>
+                workItem.id ===
+                itemId
+                  ? {
+                      ...workItem,
+                      lookahead_description:
+                        valueToPersist,
+                    }
+                  : workItem
+            )
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Lookahead description update:',
+          error
+        );
+
+
+        setErrorMessage(
+          error.message ||
+          'The Lookahead description could not be saved.'
+        );
+
+      } finally {
+
+        setSavingDescriptionId(
+          ''
+        );
+
+      }
+
+    };
 
 
   // ==========================================================
@@ -913,22 +1478,34 @@ export default function LookaheadPage() {
       category,
       status
     ) => {
+
       const key =
         `${itemId}___${category}`;
 
-      const existing =
-        readiness[key];
 
-      if (!existing?.id) {
+      const existing =
+        readiness[
+          key
+        ];
+
+
+      if (
+        !existing?.id
+      ) {
         return;
       }
+
 
       const previous =
         existing.status;
 
+
       setReadiness(
-        (current) => ({
+        (
+          current
+        ) => ({
           ...current,
+
           [key]: {
             ...existing,
             status,
@@ -936,90 +1513,138 @@ export default function LookaheadPage() {
         })
       );
 
-      setSavingReadiness(key);
+
+      setSavingReadiness(
+        key
+      );
+
 
       try {
+
         const {
           error,
-        } = await supabase
-          .from(
-            'lookahead_readiness_assessments'
-          )
-          .update({
-            status,
-          })
-          .eq(
-            'id',
-            existing.id
-          );
+        } =
+          await supabase
+            .from(
+              'lookahead_readiness_assessments'
+            )
+            .update({
+              status,
+            })
+            .eq(
+              'id',
+              existing.id
+            );
+
 
         if (error) {
           throw error;
         }
 
+
         await loadWorkspace(
           selectedPlanId
         );
+
       } catch (error) {
-        console.error(error);
+
+        console.error(
+          'Readiness update:',
+          error
+        );
+
 
         setReadiness(
-          (current) => ({
+          (
+            current
+          ) => ({
             ...current,
+
             [key]: {
               ...existing,
-              status: previous,
+              status:
+                previous,
             },
           })
         );
 
+
         setErrorMessage(
           error.message ||
-            'Readiness could not be updated.'
+          'Readiness could not be updated.'
         );
+
       } finally {
-        setSavingReadiness('');
+
+        setSavingReadiness(
+          ''
+        );
+
       }
+
     };
 
 
   // ==========================================================
-  // ACTIVE CONSTRAINTS
+  // CONSTRAINED CELLS
   // ==========================================================
 
   const constrainedCells =
-    useMemo(() => {
-      const rows = [];
+    useMemo(
+      () => {
 
-      workItems.forEach(
-        (item) => {
-          KOSKELA_COLUMNS.forEach(
-            (column) => {
-              const key =
-                `${item.id}___${column.key}`;
+        const rows =
+          [];
 
-              const assessment =
-                readiness[key];
 
-              if (
-                assessment?.status ===
-                'constrained'
-              ) {
-                rows.push({
-                  item,
-                  column,
-                });
+        workItems.forEach(
+          (
+            item
+          ) => {
+
+            KOSKELA_COLUMNS.forEach(
+              (
+                column
+              ) => {
+
+                const key =
+                  `${item.id}___${column.key}`;
+
+
+                const assessment =
+                  readiness[
+                    key
+                  ];
+
+
+                if (
+                  assessment
+                    ?.status ===
+                  'constrained'
+                ) {
+
+                  rows.push({
+                    item,
+                    column,
+                  });
+
+                }
+
               }
-            }
-          );
-        }
-      );
+            );
 
-      return rows;
-    }, [
-      workItems,
-      readiness,
-    ]);
+          }
+        );
+
+
+        return rows;
+
+      },
+      [
+        workItems,
+        readiness,
+      ]
+    );
 
 
   // ==========================================================
@@ -1029,26 +1654,34 @@ export default function LookaheadPage() {
   return (
     <div
       style={{
-        padding: '18px 20px 40px',
-        minHeight: '100%',
-        background: '#f8fafc',
-        color: '#0f172a',
+        padding:
+          '18px 20px 40px',
+        minHeight:
+          '100%',
+        background:
+          '#f8fafc',
+        color:
+          '#0f172a',
       }}
     >
+
       {/* ====================================================
           TITLE
       ===================================================== */}
 
       <div
         style={{
-          marginBottom: '18px',
+          marginBottom:
+            '18px',
         }}
       >
         <h1
           style={{
             margin: 0,
-            fontSize: '22px',
-            fontWeight: 800,
+            fontSize:
+              '22px',
+            fontWeight:
+              800,
           }}
         >
           LOOKAHEAD (MEDIUM TERM) &amp; KOSKELA MATRIX
@@ -1062,24 +1695,37 @@ export default function LookaheadPage() {
 
       <div
         style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: '12px',
-          flexWrap: 'wrap',
-          marginBottom: '14px',
+          display:
+            'flex',
+          alignItems:
+            'flex-end',
+          gap:
+            '12px',
+          flexWrap:
+            'wrap',
+          marginBottom:
+            '14px',
         }}
       >
+
+        {/* PROJECT */}
+
         <div
           style={{
-            minWidth: '250px',
+            minWidth:
+              '250px',
           }}
         >
           <label
             style={{
-              display: 'block',
-              marginBottom: '5px',
-              fontSize: '11px',
-              fontWeight: 700,
+              display:
+                'block',
+              marginBottom:
+                '5px',
+              fontSize:
+                '11px',
+              fontWeight:
+                700,
             }}
           >
             Project
@@ -1089,19 +1735,47 @@ export default function LookaheadPage() {
             value={
               selectedProjectId
             }
-            onChange={(event) => {
+            onChange={(
+              event
+            ) => {
+
+              const projectId =
+                event.target
+                  .value;
+
+
               setSelectedProjectId(
-                event.target.value
+                projectId
               );
+
+
+              if (
+                projectId
+              ) {
+
+                window.history
+                  .replaceState(
+                    {},
+                    '',
+                    `/dashboard/projetos/lookahead?projectId=${projectId}`
+                  );
+
+              }
+
             }}
             style={{
-              width: '100%',
-              height: '36px',
-              padding: '0 10px',
+              width:
+                '100%',
+              height:
+                '36px',
+              padding:
+                '0 10px',
               border:
                 '1px solid #cbd5e1',
-              borderRadius: '6px',
-              background: '#fff',
+              borderRadius:
+                '6px',
+              background:
+                '#fff',
             }}
           >
             <option value="">
@@ -1109,10 +1783,16 @@ export default function LookaheadPage() {
             </option>
 
             {projects.map(
-              (project) => (
+              (
+                project
+              ) => (
                 <option
-                  key={project.id}
-                  value={project.id}
+                  key={
+                    project.id
+                  }
+                  value={
+                    project.id
+                  }
                 >
                   {project.code
                     ? `${project.code} - `
@@ -1125,40 +1805,57 @@ export default function LookaheadPage() {
         </div>
 
 
+        {/* PLAN */}
+
         <div
           style={{
-            minWidth: '280px',
+            minWidth:
+              '280px',
           }}
         >
           <label
             style={{
-              display: 'block',
-              marginBottom: '5px',
-              fontSize: '11px',
-              fontWeight: 700,
+              display:
+                'block',
+              marginBottom:
+                '5px',
+              fontSize:
+                '11px',
+              fontWeight:
+                700,
             }}
           >
             Scenario / Version (Lookahead)
           </label>
 
           <select
-            value={selectedPlanId}
+            value={
+              selectedPlanId
+            }
             disabled={
               !selectedProjectId
             }
-            onChange={(event) =>
+            onChange={(
+              event
+            ) =>
               handlePlanChange(
-                event.target.value
+                event.target
+                  .value
               )
             }
             style={{
-              width: '100%',
-              height: '36px',
-              padding: '0 10px',
+              width:
+                '100%',
+              height:
+                '36px',
+              padding:
+                '0 10px',
               border:
                 '1px solid #cbd5e1',
-              borderRadius: '6px',
-              background: '#fff',
+              borderRadius:
+                '6px',
+              background:
+                '#fff',
             }}
           >
             <option value="">
@@ -1166,10 +1863,16 @@ export default function LookaheadPage() {
             </option>
 
             {plans.map(
-              (plan) => (
+              (
+                plan
+              ) => (
                 <option
-                  key={plan.id}
-                  value={plan.id}
+                  key={
+                    plan.id
+                  }
+                  value={
+                    plan.id
+                  }
                 >
                   {plan.name}
                   {plan.status ===
@@ -1183,22 +1886,30 @@ export default function LookaheadPage() {
         </div>
 
 
+        {/* SAVE */}
+
         <button
           type="button"
           disabled
-          title="Scenario persistence will be restored in a later step."
-          style={disabledButtonStyle}
+          title="Scenario persistence will be restored later."
+          style={
+            disabledButtonStyle
+          }
         >
           💾 Save
         </button>
 
 
+        {/* INSERT PACKAGE */}
+
         <button
           type="button"
-          disabled={!selectedPlanId}
+          disabled={
+            !selectedPlanId
+          }
           onClick={() => {
             alert(
-              'Insert Package is the next implementation step. The backend foundation is already ready.'
+              'Insert Package is the next implementation step.'
             );
           }}
           style={
@@ -1211,35 +1922,49 @@ export default function LookaheadPage() {
         </button>
 
 
+        {/* UNDO */}
+
         <button
           type="button"
           disabled
-          title="Undo will be activated with schedule editing."
-          style={disabledButtonStyle}
+          title="Undo will be enabled with schedule editing."
+          style={
+            disabledButtonStyle
+          }
         >
           Undo
         </button>
 
 
+        {/* HOLIDAYS */}
+
         <button
           type="button"
           disabled
-          title="Holiday management will be connected to the Master Plan calendar in the scheduling step."
-          style={disabledButtonStyle}
+          title="Holiday management will be connected with scheduling."
+          style={
+            disabledButtonStyle
+          }
         >
           📅 Holidays
         </button>
 
 
+        {/* WEEKENDS */}
+
         <button
           type="button"
           onClick={() =>
             setShowWeekends(
-              (current) =>
+              (
+                current
+              ) =>
                 !current
             )
           }
-          style={secondaryButtonStyle}
+          style={
+            secondaryButtonStyle
+          }
         >
           {showWeekends
             ? 'Hide Weekends'
@@ -1247,13 +1972,19 @@ export default function LookaheadPage() {
         </button>
 
 
+        {/* START */}
+
         <div>
           <label
             style={{
-              display: 'block',
-              marginBottom: '5px',
-              fontSize: '11px',
-              fontWeight: 700,
+              display:
+                'block',
+              marginBottom:
+                '5px',
+              fontSize:
+                '11px',
+              fontWeight:
+                700,
             }}
           >
             Start of Week 1
@@ -1261,59 +1992,98 @@ export default function LookaheadPage() {
 
           <input
             type="date"
-            value={windowStart}
-            onChange={(event) =>
+            value={
+              windowStart
+            }
+            onChange={(
+              event
+            ) =>
               setWindowStart(
-                event.target.value
+                event.target
+                  .value
               )
             }
             style={{
-              height: '36px',
-              padding: '0 8px',
+              height:
+                '36px',
+              padding:
+                '0 8px',
               border:
                 '1px solid #cbd5e1',
-              borderRadius: '6px',
-              background: '#fff',
+              borderRadius:
+                '6px',
+              background:
+                '#fff',
             }}
           />
         </div>
 
 
+        {/* HORIZON */}
+
         <div>
           <label
             style={{
-              display: 'block',
-              marginBottom: '5px',
-              fontSize: '11px',
-              fontWeight: 700,
+              display:
+                'block',
+              marginBottom:
+                '5px',
+              fontSize:
+                '11px',
+              fontWeight:
+                700,
             }}
           >
             Horizon
           </label>
 
           <select
-            value={horizonWeeks}
-            onChange={(event) =>
+            value={
+              horizonWeeks
+            }
+            onChange={(
+              event
+            ) =>
               setHorizonWeeks(
                 Number(
-                  event.target.value
+                  event.target
+                    .value
                 )
               )
             }
             style={{
-              height: '36px',
-              padding: '0 8px',
+              height:
+                '36px',
+              padding:
+                '0 8px',
               border:
                 '1px solid #cbd5e1',
-              borderRadius: '6px',
-              background: '#fff',
+              borderRadius:
+                '6px',
+              background:
+                '#fff',
             }}
           >
-            {[2, 3, 4, 5, 6, 8, 10, 12].map(
-              (weeks) => (
+            {[
+              2,
+              3,
+              4,
+              5,
+              6,
+              8,
+              10,
+              12,
+            ].map(
+              (
+                weeks
+              ) => (
                 <option
-                  key={weeks}
-                  value={weeks}
+                  key={
+                    weeks
+                  }
+                  value={
+                    weeks
+                  }
                 >
                   {weeks} Weeks
                 </option>
@@ -1321,6 +2091,7 @@ export default function LookaheadPage() {
             )}
           </select>
         </div>
+
       </div>
 
 
@@ -1331,14 +2102,20 @@ export default function LookaheadPage() {
       {errorMessage && (
         <div
           style={{
-            marginBottom: '12px',
-            padding: '10px 12px',
+            marginBottom:
+              '12px',
+            padding:
+              '10px 12px',
             border:
               '1px solid #fecaca',
-            borderRadius: '6px',
-            background: '#fef2f2',
-            color: '#b91c1c',
-            fontSize: '12px',
+            borderRadius:
+              '6px',
+            background:
+              '#fef2f2',
+            color:
+              '#b91c1c',
+            fontSize:
+              '12px',
           }}
         >
           {errorMessage}
@@ -1352,18 +2129,24 @@ export default function LookaheadPage() {
 
       <div
         style={{
-          display: 'flex',
-          gap: '4px',
-          marginTop: '8px',
+          display:
+            'flex',
+          gap:
+            '4px',
+          marginTop:
+            '8px',
         }}
       >
         <button
           type="button"
           onClick={() =>
-            setActiveTab('sheet')
+            setActiveTab(
+              'sheet'
+            )
           }
           style={
-            activeTab === 'sheet'
+            activeTab ===
+            'sheet'
               ? activeTabStyle
               : tabStyle
           }
@@ -1397,11 +2180,14 @@ export default function LookaheadPage() {
       {!selectedProjectId && (
         <div
           style={{
-            padding: '60px 20px',
+            padding:
+              '60px 20px',
             border:
               '1px solid #e2e8f0',
-            background: '#fff',
-            textAlign: 'center',
+            background:
+              '#fff',
+            textAlign:
+              'center',
           }}
         >
           <strong>
@@ -1410,76 +2196,119 @@ export default function LookaheadPage() {
 
           <div
             style={{
-              marginTop: '6px',
-              color: '#64748b',
-              fontSize: '12px',
+              marginTop:
+                '6px',
+              color:
+                '#64748b',
+              fontSize:
+                '12px',
             }}
           >
-            Select a project from the
-            menu above to open the
-            Lookahead.
+            Select a project from the menu above to open the Lookahead.
           </div>
         </div>
       )}
 
 
       {/* ====================================================
-          SHEET
+          LOOKAHEAD SHEET
       ===================================================== */}
 
       {selectedProjectId &&
         selectedPlanId &&
-        activeTab === 'sheet' && (
+        activeTab ===
+          'sheet' && (
+
           <div
             style={{
-              overflowX: 'auto',
+              overflowX:
+                'auto',
               border:
                 '1px solid #cbd5e1',
-              background: '#fff',
+              background:
+                '#fff',
             }}
           >
+
             {loading ? (
+
               <div
                 style={{
-                  padding: '40px',
-                  textAlign: 'center',
-                  color: '#64748b',
+                  padding:
+                    '40px',
+                  textAlign:
+                    'center',
+                  color:
+                    '#64748b',
                 }}
               >
                 Loading Lookahead...
               </div>
+
             ) : (
+
               <table
                 style={{
                   borderCollapse:
                     'collapse',
+
                   minWidth:
                     ID_WIDTH +
+                    PACKAGE_WIDTH +
                     DESCRIPTION_WIDTH +
                     visibleDays.length *
                       DAY_WIDTH +
                     KOSKELA_COLUMNS.length *
                       KOSKELA_WIDTH,
-                  width: '100%',
-                  tableLayout: 'fixed',
-                  fontSize: '10px',
+
+                  width:
+                    '100%',
+
+                  tableLayout:
+                    'fixed',
+
+                  fontSize:
+                    '10px',
                 }}
               >
+
+                {/* ==================================================
+                    HEADER
+                =================================================== */}
+
                 <thead>
+
                   {/* WEEK HEADER */}
 
                   <tr>
+
                     <th
                       rowSpan={3}
                       style={{
                         ...headerCellStyle,
-                        width: ID_WIDTH,
+                        width:
+                          ID_WIDTH,
                         minWidth:
                           ID_WIDTH,
                       }}
                     >
                       ID
                     </th>
+
+
+                    <th
+                      rowSpan={3}
+                      style={{
+                        ...headerCellStyle,
+                        width:
+                          PACKAGE_WIDTH,
+                        minWidth:
+                          PACKAGE_WIDTH,
+                      }}
+                    >
+                      PACKAGE
+                    </th>
+
 
                     <th
                       rowSpan={3}
@@ -1494,14 +2323,18 @@ export default function LookaheadPage() {
                       DESCRIPTION
                     </th>
 
+
                     {weekGroups.map(
-                      (week) => (
+                      (
+                        week
+                      ) => (
                         <th
                           key={
                             week.weekNumber
                           }
                           colSpan={
-                            week.days.length
+                            week.days
+                              .length
                           }
                           style={{
                             ...headerCellStyle,
@@ -1517,6 +2350,7 @@ export default function LookaheadPage() {
                       )
                     )}
 
+
                     <th
                       colSpan={
                         KOSKELA_COLUMNS.length
@@ -1525,23 +2359,29 @@ export default function LookaheadPage() {
                         ...headerCellStyle,
                         background:
                           '#f1f5f9',
-                        fontWeight: 800,
+                        fontWeight:
+                          800,
                       }}
                     >
                       KOSKELA FLOW MATRIX
                     </th>
+
                   </tr>
 
 
-                  {/* DAY NAME */}
+                  {/* WEEKDAY */}
 
                   <tr>
+
                     {visibleDays.map(
-                      (day) => (
+                      (
+                        day
+                      ) => (
                         <th
                           key={`weekday-${day.iso}`}
                           style={{
                             ...calendarHeaderStyle,
+
                             background:
                               day.isWeekend
                                 ? '#e2e8f0'
@@ -1555,17 +2395,25 @@ export default function LookaheadPage() {
                       )
                     )}
 
+
                     {KOSKELA_COLUMNS.map(
-                      (column) => (
+                      (
+                        column
+                      ) => (
                         <th
-                          key={column.key}
+                          key={
+                            column.key
+                          }
                           rowSpan={2}
                           style={{
                             ...headerCellStyle,
+
                             width:
                               KOSKELA_WIDTH,
+
                             minWidth:
                               KOSKELA_WIDTH,
+
                             whiteSpace:
                               'normal',
                           }}
@@ -1574,18 +2422,23 @@ export default function LookaheadPage() {
                         </th>
                       )
                     )}
+
                   </tr>
 
 
                   {/* DATE */}
 
                   <tr>
+
                     {visibleDays.map(
-                      (day) => (
+                      (
+                        day
+                      ) => (
                         <th
                           key={`date-${day.iso}`}
                           style={{
                             ...calendarHeaderStyle,
+
                             background:
                               day.isWeekend
                                 ? '#e2e8f0'
@@ -1598,50 +2451,77 @@ export default function LookaheadPage() {
                         </th>
                       )
                     )}
+
                   </tr>
+
                 </thead>
 
 
+                {/* ==================================================
+                    BODY
+                =================================================== */}
+
                 <tbody>
+
                   {workItems.map(
-                    (item, index) => {
+                    (
+                      item,
+                      index
+                    ) => {
+
                       const code =
                         getPackageCode(
                           item
                         );
+
 
                       const service =
                         getServiceName(
                           item
                         );
 
+
                       const location =
                         getLocationName(
                           item
                         );
+
 
                       const locationPath =
                         getLocationPath(
                           item
                         );
 
+
                       const dates =
                         getPackageDates(
                           item
                         );
+
 
                       const color =
                         getServiceColor(
                           code
                         );
 
+
                       const textColor =
                         getTextColor(
                           color
                         );
 
+
                       return (
-                        <tr key={item.id}>
+                        <tr
+                          key={
+                            item.id
+                          }
+                        >
+
+                          {/* ==========================================
+                              ID
+                          =========================================== */}
+
                           <td
                             style={
                               bodyCellStyle
@@ -1650,42 +2530,100 @@ export default function LookaheadPage() {
                             {index + 1}
                           </td>
 
+
+                          {/* ==========================================
+                              PACKAGE
+                          =========================================== */}
+
                           <td
                             style={{
                               ...bodyCellStyle,
+
+                              width:
+                                PACKAGE_WIDTH,
+
+                              minWidth:
+                                PACKAGE_WIDTH,
+
                               padding:
-                                '5px 7px',
-                              textAlign:
-                                'left',
+                                '4px',
                             }}
                           >
+
                             <div
                               style={{
                                 display:
                                   'flex',
+
+                                flexDirection:
+                                  'column',
+
                                 alignItems:
                                   'center',
-                                gap: '6px',
+
+                                justifyContent:
+                                  'center',
+
+                                gap:
+                                  '3px',
                               }}
                             >
+
+                              <span
+                                style={{
+                                  minWidth:
+                                    '38px',
+
+                                  padding:
+                                    '4px 6px',
+
+                                  borderRadius:
+                                    '4px',
+
+                                  background:
+                                    color,
+
+                                  color:
+                                    textColor,
+
+                                  fontSize:
+                                    '10px',
+
+                                  fontWeight:
+                                    900,
+
+                                  textAlign:
+                                    'center',
+                                }}
+                              >
+                                {code ||
+                                  '—'}
+                              </span>
+
+
                               <span
                                 style={{
                                   padding:
-                                    '2px 5px',
+                                    '1px 4px',
+
                                   borderRadius:
                                     '3px',
+
                                   background:
                                     item.package_source ===
                                     'lookahead'
                                       ? '#0f172a'
                                       : '#e2e8f0',
+
                                   color:
                                     item.package_source ===
                                     'lookahead'
-                                      ? '#fff'
+                                      ? '#ffffff'
                                       : '#475569',
+
                                   fontSize:
-                                    '8px',
+                                    '7px',
+
                                   fontWeight:
                                     800,
                                 }}
@@ -1696,34 +2634,197 @@ export default function LookaheadPage() {
                                   : 'MP'}
                               </span>
 
-                              <strong>
-                                {location}
-                              </strong>
                             </div>
+
+                          </td>
+
+
+                          {/* ==========================================
+                              EDITABLE LOOKAHEAD DESCRIPTION
+                          =========================================== */}
+
+                          <td
+                            style={{
+                              ...bodyCellStyle,
+
+                              width:
+                                DESCRIPTION_WIDTH,
+
+                              minWidth:
+                                DESCRIPTION_WIDTH,
+
+                              padding:
+                                '4px 6px',
+
+                              textAlign:
+                                'left',
+                            }}
+                          >
+
+                            <input
+                              type="text"
+
+                              value={
+                                descriptionDrafts[
+                                  item.id
+                                ] || ''
+                              }
+
+                              onChange={(
+                                event
+                              ) => {
+
+                                const value =
+                                  event.target
+                                    .value;
+
+
+                                setDescriptionDrafts(
+                                  (
+                                    current
+                                  ) => ({
+                                    ...current,
+
+                                    [item.id]:
+                                      value,
+                                  })
+                                );
+
+                              }}
+
+                              onBlur={() =>
+                                saveLookaheadDescription(
+                                  item.id
+                                )
+                              }
+
+                              onKeyDown={(
+                                event
+                              ) => {
+
+                                if (
+                                  event.key ===
+                                  'Enter'
+                                ) {
+
+                                  event.currentTarget.blur();
+
+                                }
+
+                              }}
+
+                              disabled={
+                                savingDescriptionId ===
+                                item.id
+                              }
+
+                              title={
+                                locationPath
+                              }
+
+                              style={{
+                                width:
+                                  '100%',
+
+                                minWidth:
+                                  0,
+
+                                padding:
+                                  '5px 6px',
+
+                                border:
+                                  '1px solid transparent',
+
+                                borderRadius:
+                                  '4px',
+
+                                background:
+                                  savingDescriptionId ===
+                                  item.id
+                                    ? '#f8fafc'
+                                    : '#ffffff',
+
+                                color:
+                                  '#1e293b',
+
+                                fontSize:
+                                  '10px',
+
+                                fontWeight:
+                                  600,
+
+                                outline:
+                                  'none',
+                              }}
+
+                              onFocus={(
+                                event
+                              ) => {
+
+                                event.currentTarget.style.borderColor =
+                                  '#94a3b8';
+
+                                event.currentTarget.style.background =
+                                  '#f8fafc';
+
+                              }}
+
+                              onBlurCapture={(
+                                event
+                              ) => {
+
+                                event.currentTarget.style.borderColor =
+                                  'transparent';
+
+                                event.currentTarget.style.background =
+                                  '#ffffff';
+
+                              }}
+                            />
+
 
                             <div
                               style={{
                                 marginTop:
-                                  '3px',
+                                  '2px',
+
+                                paddingLeft:
+                                  '6px',
+
                                 color:
-                                  '#64748b',
+                                  '#94a3b8',
+
                                 fontSize:
-                                  '9px',
+                                  '8px',
+
+                                overflow:
+                                  'hidden',
+
+                                textOverflow:
+                                  'ellipsis',
+
+                                whiteSpace:
+                                  'nowrap',
                               }}
                               title={
                                 locationPath
                               }
                             >
-                              {code}
-                              {service
-                                ? ` · ${service}`
-                                : ''}
+                              {location}
                             </div>
+
                           </td>
 
 
+                          {/* ==========================================
+                              TIMELINE
+                          =========================================== */}
+
                           {visibleDays.map(
-                            (day) => {
+                            (
+                              day
+                            ) => {
+
                               const isActive =
                                 dates.start &&
                                 dates.finish &&
@@ -1732,33 +2833,42 @@ export default function LookaheadPage() {
                                 day.iso <=
                                   dates.finish;
 
+
                               return (
                                 <td
                                   key={`${item.id}-${day.iso}`}
                                   title={
                                     isActive
-                                      ? `${code} · ${service}`
+                                      ? `${code} · ${service} · ${location}`
                                       : day.iso
                                   }
                                   style={{
                                     ...bodyCellStyle,
+
                                     width:
                                       DAY_WIDTH,
+
                                     minWidth:
                                       DAY_WIDTH,
+
                                     height:
                                       '34px',
-                                    padding: 0,
+
+                                    padding:
+                                      0,
+
                                     background:
                                       isActive
                                         ? color
                                         : day.isWeekend
                                           ? '#f1f5f9'
                                           : '#fff',
+
                                     color:
                                       isActive
                                         ? textColor
                                         : '#94a3b8',
+
                                     fontWeight:
                                       isActive
                                         ? 800
@@ -1770,30 +2880,47 @@ export default function LookaheadPage() {
                                     : ''}
                                 </td>
                               );
+
                             }
                           )}
 
 
+                          {/* ==========================================
+                              KOSKELA MATRIX
+                          =========================================== */}
+
                           {KOSKELA_COLUMNS.map(
-                            (column) => {
+                            (
+                              column
+                            ) => {
+
                               const key =
                                 `${item.id}___${column.key}`;
 
+
                               const assessment =
-                                readiness[key];
+                                readiness[
+                                  key
+                                ];
+
 
                               const status =
-                                assessment?.status ||
+                                assessment
+                                  ?.status ||
                                 'not_assessed';
+
 
                               const style =
                                 readinessStyle(
                                   status
                                 );
 
+
                               return (
                                 <td
-                                  key={key}
+                                  key={
+                                    key
+                                  }
                                   style={{
                                     ...bodyCellStyle,
                                     padding:
@@ -1804,37 +2931,46 @@ export default function LookaheadPage() {
                                     value={
                                       status
                                     }
+
                                     disabled={
                                       !assessment ||
                                       savingReadiness ===
                                         key
                                     }
+
                                     onChange={(
                                       event
                                     ) =>
                                       handleReadinessChange(
                                         item.id,
                                         column.key,
-                                        event
-                                          .target
+                                        event.target
                                           .value
                                       )
                                     }
+
                                     style={{
                                       width:
                                         '100%',
+
                                       height:
                                         '26px',
+
                                       border:
                                         `1px solid ${style.border}`,
+
                                       borderRadius:
                                         '4px',
+
                                       background:
                                         style.background,
+
                                       color:
                                         style.color,
+
                                       fontSize:
                                         '9px',
+
                                       fontWeight:
                                         700,
                                     }}
@@ -1857,48 +2993,71 @@ export default function LookaheadPage() {
                                   </select>
                                 </td>
                               );
+
                             }
                           )}
+
                         </tr>
                       );
+
                     }
                   )}
 
 
-                  {/* ADD ROW PLACEHOLDER */}
+                  {/* ================================================
+                      ADD NEW ROW
+                  ================================================= */}
 
                   <tr>
+
                     <td
                       style={
                         bodyCellStyle
                       }
                     />
 
+
+                    <td
+                      style={
+                        bodyCellStyle
+                      }
+                    />
+
+
                     <td
                       style={{
                         ...bodyCellStyle,
+
                         textAlign:
                           'left',
-                        padding: '7px',
+
+                        padding:
+                          '7px',
                       }}
                     >
                       <button
                         type="button"
                         onClick={() => {
                           alert(
-                            'Add New Row will use the Lookahead-only package flow in Step 14F.2.'
+                            'Add New Row will be connected to the Lookahead-only package flow in the next step.'
                           );
                         }}
                         style={{
-                          border: 0,
+                          border:
+                            0,
+
                           background:
                             'transparent',
+
                           color:
                             '#2563eb',
+
                           fontSize:
                             '10px',
+
                           fontWeight:
                             700,
+
                           cursor:
                             'pointer',
                         }}
@@ -1906,6 +3065,7 @@ export default function LookaheadPage() {
                         + Add New Row
                       </button>
                     </td>
+
 
                     <td
                       colSpan={
@@ -1916,25 +3076,42 @@ export default function LookaheadPage() {
                         bodyCellStyle
                       }
                     />
+
                   </tr>
+
                 </tbody>
+
               </table>
+
             )}
 
 
-            {/* LEGEND */}
+            {/* ==================================================
+                LEGEND
+            =================================================== */}
 
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '18px',
-                flexWrap: 'wrap',
+                display:
+                  'flex',
+
+                alignItems:
+                  'center',
+
+                gap:
+                  '18px',
+
+                flexWrap:
+                  'wrap',
+
                 padding:
                   '10px 12px',
+
                 borderTop:
                   '1px solid #cbd5e1',
-                fontSize: '9px',
+
+                fontSize:
+                  '9px',
               }}
             >
               <strong>
@@ -1961,6 +3138,7 @@ export default function LookaheadPage() {
                 LA = Lookahead-only
               </span>
             </div>
+
           </div>
         )}
 
@@ -1973,59 +3151,82 @@ export default function LookaheadPage() {
         selectedPlanId &&
         activeTab ===
           'constraints' && (
+
           <div
             style={{
               border:
                 '1px solid #cbd5e1',
-              background: '#fff',
+
+              background:
+                '#fff',
             }}
           >
+
             <div
               style={{
                 padding:
                   '12px 14px',
+
                 borderBottom:
                   '1px solid #e2e8f0',
-                fontWeight: 800,
-                fontSize: '12px',
+
+                fontWeight:
+                  800,
+
+                fontSize:
+                  '12px',
               }}
             >
               CONSTRAINTS DETAILS
             </div>
 
+
             {constrainedCells.length ===
             0 ? (
+
               <div
                 style={{
                   padding:
                     '40px 20px',
+
                   textAlign:
                     'center',
+
                   color:
                     '#64748b',
+
                   fontSize:
                     '12px',
                 }}
               >
                 🎉 No active constraints at the moment.
               </div>
+
             ) : (
+
               <table
                 style={{
-                  width: '100%',
+                  width:
+                    '100%',
+
                   borderCollapse:
                     'collapse',
-                  fontSize: '10px',
+
+                  fontSize:
+                    '10px',
                 }}
               >
+
                 <thead>
+
                   <tr>
+
                     <th
                       style={
                         headerCellStyle
                       }
                     >
-                      TASK
+                      DESCRIPTION
                     </th>
 
                     <th
@@ -2033,7 +3234,15 @@ export default function LookaheadPage() {
                         headerCellStyle
                       }
                     >
-                      TASK CODE
+                      PACKAGE
+                    </th>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
+                      LOCATION
                     </th>
 
                     <th
@@ -2059,24 +3268,41 @@ export default function LookaheadPage() {
                     >
                       SOURCE
                     </th>
+
                   </tr>
+
                 </thead>
 
+
                 <tbody>
+
                   {constrainedCells.map(
                     ({
                       item,
                       column,
                     }) => (
+
                       <tr
                         key={`${item.id}-${column.key}`}
                       >
+
                         <td
                           style={
                             bodyCellStyle
                           }
                         >
-                          {getLocationName(
+                          {descriptionDrafts[
+                            item.id
+                          ] ||
+                            ''}
+                        </td>
+
+                        <td
+                          style={
+                            bodyCellStyle
+                          }
+                        >
+                          {getPackageCode(
                             item
                           )}
                         </td>
@@ -2086,7 +3312,7 @@ export default function LookaheadPage() {
                             bodyCellStyle
                           }
                         >
-                          {getPackageCode(
+                          {getLocationName(
                             item
                           )}
                         </td>
@@ -2117,38 +3343,56 @@ export default function LookaheadPage() {
                             ? 'Lookahead'
                             : 'Master Plan'}
                         </td>
+
                       </tr>
+
                     )
                   )}
+
                 </tbody>
+
               </table>
+
             )}
+
           </div>
         )}
 
 
       {/* ====================================================
-          SELECTED PROJECT BUT NO PLAN
+          PROJECT HAS NO LOOKAHEAD PLAN
       ===================================================== */}
 
       {selectedProjectId &&
         !selectedPlanId &&
         !loading && (
+
           <div
             style={{
-              padding: '50px 20px',
+              padding:
+                '50px 20px',
+
               border:
                 '1px solid #e2e8f0',
-              background: '#fff',
-              textAlign: 'center',
-              color: '#64748b',
-              fontSize: '12px',
+
+              background:
+                '#fff',
+
+              textAlign:
+                'center',
+
+              color:
+                '#64748b',
+
+              fontSize:
+                '12px',
             }}
           >
-            This project does not have a
-            Lookahead plan yet.
+            This project does not have a Lookahead plan yet.
           </div>
+
         )}
+
     </div>
   );
 }
@@ -2159,76 +3403,174 @@ export default function LookaheadPage() {
 // ============================================================
 
 const headerCellStyle = {
-  border: '1px solid #cbd5e1',
-  padding: '5px 4px',
-  background: '#f8fafc',
-  color: '#334155',
-  textAlign: 'center',
-  fontSize: '9px',
-  fontWeight: 800,
+  border:
+    '1px solid #cbd5e1',
+
+  padding:
+    '5px 4px',
+
+  background:
+    '#f8fafc',
+
+  color:
+    '#334155',
+
+  textAlign:
+    'center',
+
+  fontSize:
+    '9px',
+
+  fontWeight:
+    800,
 };
+
 
 const calendarHeaderStyle = {
   ...headerCellStyle,
-  width: DAY_WIDTH,
-  minWidth: DAY_WIDTH,
-  padding: '3px 1px',
-  fontSize: '8px',
+
+  width:
+    DAY_WIDTH,
+
+  minWidth:
+    DAY_WIDTH,
+
+  padding:
+    '3px 1px',
+
+  fontSize:
+    '8px',
 };
+
 
 const bodyCellStyle = {
-  border: '1px solid #e2e8f0',
-  padding: '3px',
-  background: '#fff',
-  color: '#334155',
-  textAlign: 'center',
-  verticalAlign: 'middle',
+  border:
+    '1px solid #e2e8f0',
+
+  padding:
+    '3px',
+
+  background:
+    '#fff',
+
+  color:
+    '#334155',
+
+  textAlign:
+    'center',
+
+  verticalAlign:
+    'middle',
 };
+
 
 const primaryButtonStyle = {
-  height: '36px',
-  padding: '0 12px',
-  border: '1px solid #2563eb',
-  borderRadius: '6px',
-  background: '#2563eb',
-  color: '#fff',
-  fontSize: '11px',
-  fontWeight: 700,
-  cursor: 'pointer',
+  height:
+    '36px',
+
+  padding:
+    '0 12px',
+
+  border:
+    '1px solid #2563eb',
+
+  borderRadius:
+    '6px',
+
+  background:
+    '#2563eb',
+
+  color:
+    '#fff',
+
+  fontSize:
+    '11px',
+
+  fontWeight:
+    700,
+
+  cursor:
+    'pointer',
 };
 
+
 const secondaryButtonStyle = {
-  height: '36px',
-  padding: '0 12px',
-  border: '1px solid #cbd5e1',
-  borderRadius: '6px',
-  background: '#fff',
-  color: '#334155',
-  fontSize: '11px',
-  fontWeight: 700,
-  cursor: 'pointer',
+  height:
+    '36px',
+
+  padding:
+    '0 12px',
+
+  border:
+    '1px solid #cbd5e1',
+
+  borderRadius:
+    '6px',
+
+  background:
+    '#fff',
+
+  color:
+    '#334155',
+
+  fontSize:
+    '11px',
+
+  fontWeight:
+    700,
+
+  cursor:
+    'pointer',
 };
+
 
 const disabledButtonStyle = {
   ...secondaryButtonStyle,
-  opacity: 0.45,
-  cursor: 'not-allowed',
+
+  opacity:
+    0.45,
+
+  cursor:
+    'not-allowed',
 };
 
+
 const tabStyle = {
-  padding: '9px 14px',
-  border: '1px solid #cbd5e1',
-  borderBottom: 0,
-  borderRadius: '6px 6px 0 0',
-  background: '#e2e8f0',
-  color: '#475569',
-  fontSize: '10px',
-  fontWeight: 700,
-  cursor: 'pointer',
+  padding:
+    '9px 14px',
+
+  border:
+    '1px solid #cbd5e1',
+
+  borderBottom:
+    0,
+
+  borderRadius:
+    '6px 6px 0 0',
+
+  background:
+    '#e2e8f0',
+
+  color:
+    '#475569',
+
+  fontSize:
+    '10px',
+
+  fontWeight:
+    700,
+
+  cursor:
+    'pointer',
 };
+
 
 const activeTabStyle = {
   ...tabStyle,
-  background: '#fff',
-  color: '#0f172a',
+
+  background:
+    '#fff',
+
+  color:
+    '#0f172a',
 };
