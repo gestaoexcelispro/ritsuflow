@@ -457,6 +457,12 @@ export default function LookaheadPage() {
 
 
   const [
+    packageDrafts,
+    setPackageDrafts,
+  ] = useState({});
+
+
+  const [
     activeTab,
     setActiveTab,
   ] = useState(
@@ -1001,6 +1007,7 @@ export default function LookaheadPage() {
           setSheetRows([]);
           setReadiness({});
           setDescriptionDrafts({});
+          setPackageDrafts({});
 
           return;
 
@@ -1195,6 +1202,32 @@ export default function LookaheadPage() {
 
           setDescriptionDrafts(
             nextDescriptions
+          );
+
+
+          const nextPackageDrafts =
+            {};
+
+
+          loadedRows.forEach(
+            (row) => {
+
+              nextPackageDrafts[
+                row.id
+              ] =
+                String(
+                  row.package_code ||
+                  ''
+                )
+                  .trim()
+                  .toUpperCase();
+
+            }
+          );
+
+
+          setPackageDrafts(
+            nextPackageDrafts
           );
 
 
@@ -1430,74 +1463,62 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
-  // AVAILABLE PACKAGES FOR A MANUAL ROW
+  // LOOKAHEAD-ONLY WORK PACKAGE CODE
   //
-  // Manual Lookahead rows may reuse any Work Package from the
-  // originating Master Plan. The package code does not need to
-  // be unique across manual rows because each added row can
-  // represent additional Lookahead-only work with its own
-  // editable description.
+  // Manual rows represent additional work discovered during
+  // Lookahead planning. Their package code is created here and
+  // does NOT need to exist in the Master Plan.
+  //
+  // The Master Plan remains untouched.
   // ==========================================================
 
-  const getAvailablePackagesForRow =
-    useCallback(
-      () => {
-
-        return masterPlanPackages;
-
-      },
-      [
-        masterPlanPackages,
-      ]
-    );
-
-
-  // ==========================================================
-  // SELECT PACKAGE FOR MANUAL ROW
-  // ==========================================================
-
-  const handleManualRowPackageChange =
+  const saveManualRowPackageCode =
     async (
-      row,
-      packageCode
+      row
     ) => {
 
       if (
         !row?.id ||
-        !packageCode
+        row.row_type !==
+          'manual'
       ) {
         return;
       }
 
 
-      const normalizedCode =
+      const nextCode =
         String(
-          packageCode
+          packageDrafts[
+            row.id
+          ] ||
+          ''
+        )
+          .trim()
+          .toUpperCase()
+          .replace(
+            /[^A-Z0-9]/g,
+            ''
+          )
+          .slice(
+            0,
+            3
+          );
+
+
+      const currentCode =
+        String(
+          row.package_code ||
+          ''
         )
           .trim()
           .toUpperCase();
 
 
-      const selectedPackage =
-        masterPlanPackages.find(
-          (
-            item
-          ) =>
-            item.code ===
-            normalizedCode
-        );
-
-
       if (
-        !selectedPackage
+        nextCode ===
+        currentCode
       ) {
-
-        setErrorMessage(
-          'The selected Work Package is not available in the originating Master Plan.'
-        );
-
         return;
-
       }
 
 
@@ -1508,22 +1529,6 @@ export default function LookaheadPage() {
       setErrorMessage(
         ''
       );
-
-
-      const currentDescription =
-        String(
-          descriptionDrafts[
-            row.id
-          ] ||
-          row.description ||
-          ''
-        ).trim();
-
-
-      const nextDescription =
-        currentDescription ||
-        selectedPackage.service_name ||
-        normalizedCode;
 
 
       try {
@@ -1541,10 +1546,8 @@ export default function LookaheadPage() {
                 'manual',
 
               package_code:
-                normalizedCode,
-
-              description:
-                nextDescription,
+                nextCode ||
+                null,
 
               updated_at:
                 new Date()
@@ -1580,17 +1583,15 @@ export default function LookaheadPage() {
                         'manual',
 
                       package_code:
-                        normalizedCode,
-
-                      description:
-                        nextDescription,
+                        nextCode ||
+                        null,
                     }
                   : currentRow
             )
         );
 
 
-        setDescriptionDrafts(
+        setPackageDrafts(
           (
             current
           ) => ({
@@ -1598,21 +1599,34 @@ export default function LookaheadPage() {
             ...current,
 
             [row.id]:
-              nextDescription,
+              nextCode,
           })
         );
 
       } catch (error) {
 
         console.error(
-          'Lookahead package selection:',
+          'Lookahead-only package code:',
           error
+        );
+
+
+        setPackageDrafts(
+          (
+            current
+          ) => ({
+
+            ...current,
+
+            [row.id]:
+              currentCode,
+          })
         );
 
 
         setErrorMessage(
           error.message ||
-          'The Work Package could not be assigned to this Lookahead row.'
+          'The Lookahead-only Work Package code could not be saved.'
         );
 
       } finally {
@@ -3477,6 +3491,8 @@ export default function LookaheadPage() {
 
 
                       const occurrences =
+                        row.row_type ===
+                          'package_group' &&
                         code
                           ? workItemsByPackage[
                               code
@@ -3494,12 +3510,6 @@ export default function LookaheadPage() {
                       const textColor =
                         getTextColor(
                           color
-                        );
-
-
-                      const availablePackages =
-                        getAvailablePackagesForRow(
-                          row
                         );
 
 
@@ -3693,11 +3703,21 @@ export default function LookaheadPage() {
                             {row.row_type ===
                               'manual' ? (
 
-                              <select
+                              <input
+                                type="text"
 
                                 value={
-                                  code
+                                  packageDrafts[
+                                    row.id
+                                  ] ||
+                                  ''
                                 }
+
+                                maxLength={
+                                  3
+                                }
+
+                                placeholder="NEW"
 
                                 disabled={
                                   savingPackageRowId ===
@@ -3709,22 +3729,59 @@ export default function LookaheadPage() {
                                 ) => {
 
                                   const nextCode =
-                                    event.target
-                                      .value;
+                                    String(
+                                      event.target
+                                        .value ||
+                                      ''
+                                    )
+                                      .toUpperCase()
+                                      .replace(
+                                        /[^A-Z0-9]/g,
+                                        ''
+                                      )
+                                      .slice(
+                                        0,
+                                        3
+                                      );
 
+
+                                  setPackageDrafts(
+                                    (
+                                      current
+                                    ) => ({
+
+                                      ...current,
+
+                                      [row.id]:
+                                        nextCode,
+                                    })
+                                  );
+
+                                }}
+
+                                onBlur={() =>
+                                  saveManualRowPackageCode(
+                                    row
+                                  )
+                                }
+
+                                onKeyDown={(
+                                  event
+                                ) => {
 
                                   if (
-                                    nextCode
+                                    event.key ===
+                                    'Enter'
                                   ) {
 
-                                    handleManualRowPackageChange(
-                                      row,
-                                      nextCode
-                                    );
+                                    event.currentTarget
+                                      .blur();
 
                                   }
 
                                 }}
+
+                                title="Create a Lookahead-only Work Package code. This does not change the Master Plan."
 
                                 style={{
                                   width:
@@ -3733,57 +3790,41 @@ export default function LookaheadPage() {
                                   height:
                                     '28px',
 
+                                  padding:
+                                    '0 6px',
+
                                   border:
-                                    '1px solid #cbd5e1',
+                                    '1px solid #94a3b8',
 
                                   borderRadius:
                                     '4px',
 
                                   background:
-                                    '#ffffff',
+                                    code
+                                      ? color
+                                      : '#ffffff',
 
                                   color:
-                                    '#334155',
+                                    code
+                                      ? textColor
+                                      : '#334155',
 
                                   fontSize:
                                     '9px',
 
                                   fontWeight:
-                                    700,
+                                    800,
 
-                                  cursor:
-                                    'pointer',
+                                  textAlign:
+                                    'center',
+
+                                  textTransform:
+                                    'uppercase',
+
+                                  outline:
+                                    'none',
                                 }}
-                              >
-
-                                <option value="">
-                                  Select...
-                                </option>
-
-
-                                {availablePackages.map(
-                                  (
-                                    packageOption
-                                  ) => (
-
-                                    <option
-                                      key={
-                                        packageOption.code
-                                      }
-
-                                      value={
-                                        packageOption.code
-                                      }
-                                    >
-                                      {packageOption.code}
-                                      {' · '}
-                                      {packageOption.service_name}
-                                    </option>
-
-                                  )
-                                )}
-
-                              </select>
+                              />
 
                             ) : code ? (
 
