@@ -501,6 +501,12 @@ export default function LookaheadPage() {
 
 
   const [
+    openPackageDropdownRowId,
+    setOpenPackageDropdownRowId,
+  ] = useState('');
+
+
+  const [
     insertingRow,
     setInsertingRow,
   ] = useState(false);
@@ -3550,7 +3556,13 @@ export default function LookaheadPage() {
                             <button
                               type="button"
 
-                              onClick={() =>
+                              onClick={() => {
+
+                                setOpenPackageDropdownRowId(
+                                  ''
+                                );
+
+
                                 setOpenRowMenuId(
                                   (
                                     current
@@ -3559,8 +3571,9 @@ export default function LookaheadPage() {
                                     row.id
                                       ? ''
                                       : row.id
-                                )
-                              }
+                                );
+
+                              }}
 
                               style={{
                                 width:
@@ -3738,59 +3751,297 @@ export default function LookaheadPage() {
                             {row.row_type ===
                               'manual' ? (
 
-                              <select
-                                value={
-                                  row.organization_work_package_id ||
-                                  ''
-                                }
-
-                                disabled={
-                                  savingPackageRowId ===
-                                  row.id
-                                }
-
-                                onChange={(
-                                  event
-                                ) =>
-                                  selectManualRowWorkPackage(
-                                    row,
-                                    event.target.value
-                                  )
-                                }
-
-                                title="Select from the company Work Package Library"
-
+                              <div
                                 style={{
-                                  width: '100%',
-                                  height: '30px',
-                                  padding: '0 5px',
-                                  border: '1px solid #cbd5e1',
-                                  borderRadius: '4px',
-                                  background: '#ffffff',
-                                  color: '#0f172a',
-                                  fontSize: '10px',
-                                  fontWeight: 700,
+                                  position:
+                                    'relative',
+
+                                  width:
+                                    '100%',
                                 }}
                               >
-                                <option value="">
-                                  Select...
-                                </option>
 
-                                {organizationWorkPackages.map(
-                                  (workPackage) => (
-                                    <option
-                                      key={
-                                        workPackage.id
+                                <button
+                                  type="button"
+
+                                  disabled={
+                                    savingPackageRowId ===
+                                    row.id
+                                  }
+
+                                  onClick={() =>
+                                    setOpenPackageDropdownRowId(
+                                      (
+                                        current
+                                      ) =>
+                                        current ===
+                                        row.id
+                                          ? ''
+                                          : row.id
+                                    )
+                                  }
+
+                                  title={
+                                    code
+                                      ? `Selected Work Package: ${code}`
+                                      : 'Select Work Package'
+                                  }
+
+                                  style={{
+                                    width:
+                                      '100%',
+
+                                    height:
+                                      '30px',
+
+                                    padding:
+                                      '0 6px',
+
+                                    border:
+                                      '1px solid #cbd5e1',
+
+                                    borderRadius:
+                                      '4px',
+
+                                    background:
+                                      code
+                                        ? color
+                                        : '#ffffff',
+
+                                    color:
+                                      code
+                                        ? textColor
+                                        : '#475569',
+
+                                    fontSize:
+                                      '10px',
+
+                                    fontWeight:
+                                      800,
+
+                                    textAlign:
+                                      'center',
+
+                                    cursor:
+                                      savingPackageRowId ===
+                                      row.id
+                                        ? 'not-allowed'
+                                        : 'pointer',
+                                  }}
+                                >
+                                  {code || 'Select...'}
+                                </button>
+
+
+                                {openPackageDropdownRowId ===
+                                  row.id && (
+
+                                  <div
+                                    style={{
+                                      position:
+                                        'absolute',
+
+                                      top:
+                                        '34px',
+
+                                      left:
+                                        0,
+
+                                      zIndex:
+                                        300,
+
+                                      width:
+                                        '280px',
+
+                                      maxHeight:
+                                        '260px',
+
+                                      overflowY:
+                                        'auto',
+
+                                      border:
+                                        '1px solid #cbd5e1',
+
+                                      borderRadius:
+                                        '6px',
+
+                                      background:
+                                        '#ffffff',
+
+                                      boxShadow:
+                                        '0 12px 28px rgba(15,23,42,0.18)',
+                                    }}
+                                  >
+
+                                    {organizationWorkPackages.map(
+                                      (
+                                        workPackage
+                                      ) => {
+
+                                        const optionColor =
+                                          workPackage.color ||
+                                          '#64748b';
+
+
+                                        const optionTextColor =
+                                          getTextColor(
+                                            optionColor
+                                          );
+
+
+                                        return (
+
+                                          <button
+                                            key={
+                                              workPackage.id
+                                            }
+
+                                            type="button"
+
+                                            onClick={async () => {
+
+                                              setOpenPackageDropdownRowId(
+                                                ''
+                                              );
+
+
+                                              await selectManualRowWorkPackage(
+                                                row,
+                                                workPackage.id
+                                              );
+
+                                            }}
+
+                                            style={{
+                                              display:
+                                                'flex',
+
+                                              alignItems:
+                                                'center',
+
+                                              gap:
+                                                '10px',
+
+                                              width:
+                                                '100%',
+
+                                              padding:
+                                                '8px 10px',
+
+                                              border:
+                                                0,
+
+                                              borderBottom:
+                                                '1px solid #f1f5f9',
+
+                                              background:
+                                                '#ffffff',
+
+                                              color:
+                                                '#0f172a',
+
+                                              textAlign:
+                                                'left',
+
+                                              cursor:
+                                                'pointer',
+                                            }}
+                                          >
+
+                                            <span
+                                              style={{
+                                                display:
+                                                  'inline-flex',
+
+                                                alignItems:
+                                                  'center',
+
+                                                justifyContent:
+                                                  'center',
+
+                                                minWidth:
+                                                  '46px',
+
+                                                padding:
+                                                  '4px 6px',
+
+                                                borderRadius:
+                                                  '4px',
+
+                                                background:
+                                                  optionColor,
+
+                                                color:
+                                                  optionTextColor,
+
+                                                fontSize:
+                                                  '10px',
+
+                                                fontWeight:
+                                                  900,
+                                              }}
+                                            >
+                                              {workPackage.code}
+                                            </span>
+
+
+                                            <span
+                                              style={{
+                                                flex:
+                                                  1,
+
+                                                color:
+                                                  '#334155',
+
+                                                fontSize:
+                                                  '10px',
+
+                                                fontWeight:
+                                                  600,
+
+                                                whiteSpace:
+                                                  'normal',
+                                              }}
+                                            >
+                                              {workPackage.description}
+                                            </span>
+
+                                          </button>
+
+                                        );
+
                                       }
-                                      value={
-                                        workPackage.id
-                                      }
-                                    >
-                                      {workPackage.code} · {workPackage.description}
-                                    </option>
-                                  )
+                                    )}
+
+
+                                    {organizationWorkPackages.length ===
+                                      0 && (
+
+                                      <div
+                                        style={{
+                                          padding:
+                                            '12px',
+
+                                          color:
+                                            '#64748b',
+
+                                          fontSize:
+                                            '10px',
+
+                                          textAlign:
+                                            'center',
+                                        }}
+                                      >
+                                        No active Work Packages are registered.
+                                      </div>
+
+                                    )}
+
+                                  </div>
+
                                 )}
-                              </select>
+
+                              </div>
 
                             ) : code ? (
 
