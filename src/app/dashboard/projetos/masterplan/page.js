@@ -3,27 +3,48 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../../../../contexts/LanguageContext';
 import { supabase } from '../../../../lib/supabase';
 
-// Cores e Labels com suporte a 2 idiomas
-const DEFAULT_SERVICOS_CORES = {
-  '': { labelPt: '', labelEn: '', color: 'transparent', text: '#000' },
-  'FUN': { labelPt: 'Fundação', labelEn: 'Foundation', color: '#ff00ff', text: '#fff' },
-  'PNS': { labelPt: 'Painelização LSF', labelEn: 'LSF Paneling', color: '#8a2be2', text: '#fff' },
-  'VTS': { labelPt: 'Verticalização LSF', labelEn: 'LSF Verticalization', color: '#0000ff', text: '#fff' },
-  'VEX': { labelPt: 'Vedações Externas', labelEn: 'Exterior Enclosures', color: '#00ffff', text: '#000' },
-  'LMI': { labelPt: 'Lã Mineral', labelEn: 'Mineral Wool', color: '#00ff00', text: '#000' },
-  'VIN': { labelPt: 'Vedações Internas', labelEn: 'Interior Enclosures', color: '#ff9900', text: '#fff' },
-  'PIS': { labelPt: 'Pisos', labelEn: 'Flooring', color: '#8b0000', text: '#fff' },
-  'FOR': { labelPt: 'Forros', labelEn: 'Ceilings', color: '#556b2f', text: '#fff' },
-  'COB': { labelPt: 'Calhas, Rufos e Cobertura', labelEn: 'Gutters, Flashings & Roof', color: '#b05070', text: '#fff' },
-  'INS': { labelPt: 'Instalações', labelEn: 'Installations', color: '#4682b4', text: '#fff' },
-  'BUF': { labelPt: 'Buffer', labelEn: 'Buffer', color: '#000000', text: '#fff' },
-  'PIN': { labelPt: 'Pintura', labelEn: 'Painting', color: '#daa520', text: '#fff' },
-  'ESQ': { labelPt: 'Esquadrias', labelEn: 'Frames / Windows', color: '#f0e68c', text: '#000' },
-  'REV': { labelPt: 'Outros Revestimentos', labelEn: 'Other Coatings', color: '#d2691e', text: '#fff' },
-  'SUP': { labelPt: 'Ação para Suprimentos', labelEn: 'Supply Action', color: '#ff0000', text: '#fff' },
-  'OFF': { labelPt: 'Fim de Semana', labelEn: 'Weekend', color: '#a0aec0', text: '#fff' },
-  'FER': { labelPt: 'Feriado', labelEn: 'Holiday', color: '#e53e3e', text: '#fff' },
+// ============================================================
+// MASTER PLAN - SHARED WORK PACKAGE CATALOG INTEGRATION
+// Work Package Database is authoritative for package identity,
+// description, color and selectable planning activities.
+// ============================================================
+
+// ============================================================
+// SYSTEM CALENDAR MARKERS
+// ============================================================
+//
+// IMPORTANT:
+// Work Packages are NOT hard-coded in Master Plan anymore.
+//
+// All project Work Packages now come from:
+// public.project_work_packages
+//
+// These three entries are system/calendar markers only.
+// They are not user Work Packages.
+// ============================================================
+const SYSTEM_CALENDAR_CODES = {
+  '': {
+    labelPt: '',
+    labelEn: '',
+    color: 'transparent',
+    text: '#000'
+  },
+
+  OFF: {
+    labelPt: 'Fim de Semana',
+    labelEn: 'Weekend',
+    color: '#a0aec0',
+    text: '#fff'
+  },
+
+  FER: {
+    labelPt: 'Feriado',
+    labelEn: 'Holiday',
+    color: '#e53e3e',
+    text: '#fff'
+  }
 };
+
 
 // Função auxiliar para calcular contraste de cor de texto (branco ou preto) dependendo da cor de fundo
 const getContrastYIQ = (hexcolor) => {
@@ -45,65 +66,6 @@ const normalizeText = (value = '') =>
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .trim();
-
-const buildServiceAcronym = (service, index, usedCodes) => {
-  const rawCode = normalizeText(service?.service_code || '').replace(/[^A-Z0-9]/g, '');
-  const serviceName = String(service?.service_name || '').trim();
-  const normalizedName = normalizeText(serviceName);
-
-  // Reuse the established RitsuFlow Master Plan codes whenever the service
-  // name matches one of the existing standard activities.
-  const standardMatch = Object.entries(DEFAULT_SERVICOS_CORES).find(([key, info]) => {
-    if (!key) return false;
-    return normalizeText(info.labelEn) === normalizedName || normalizeText(info.labelPt) === normalizedName;
-  });
-
-  let baseCode = standardMatch?.[0] || '';
-
-  // Only accept a database service code when it is already a valid visual
-  // package code (maximum 3 characters).
-  if (!baseCode && rawCode.length >= 1 && rawCode.length <= 3) {
-    baseCode = rawCode;
-  }
-
-  // Otherwise build a compact acronym from the service name.
-  if (!baseCode) {
-    const words = normalizedName
-      .replace(/[^A-Z0-9 ]/g, ' ')
-      .split(/\s+/)
-      .filter(Boolean);
-
-    if (words.length >= 2) {
-      baseCode = words.slice(0, 3).map((word) => word[0]).join('');
-    } else if (words.length === 1) {
-      baseCode = words[0].slice(0, 3);
-    } else {
-      baseCode = `S${index + 1}`.slice(0, 3);
-    }
-  }
-
-  baseCode = baseCode.slice(0, 3) || 'SRV';
-
-  // Keep codes unique while respecting the three-character limit.
-  if (!usedCodes.has(baseCode)) {
-    usedCodes.add(baseCode);
-    return baseCode;
-  }
-
-  for (let n = 1; n <= 99; n += 1) {
-    const suffix = String(n);
-    const candidate = `${baseCode.slice(0, Math.max(1, 3 - suffix.length))}${suffix}`.slice(0, 3);
-    if (!usedCodes.has(candidate)) {
-      usedCodes.add(candidate);
-      return candidate;
-    }
-  }
-
-  const fallback = `S${index + 1}`.slice(-3);
-  usedCodes.add(fallback);
-  return fallback;
-};
-
 
 // ----------------------------------------------------
 // MASTER PLAN LOCATION STRUCTURE INTEGRATION
@@ -380,13 +342,54 @@ export default function MasterPlanPage() {
   const [dataFim, setDataFim] = useState('2026-10-31');
   const [ocultarFinaisDeSemana, setOcultarFinaisDeSemana] = useState(false);
 
-  // ESTADO PARA SERVIÇOS CUSTOMIZADOS (Cores e Atividades Dinâmicas)
+  // ============================================================
+  // SHARED PROJECT WORK PACKAGE CATALOG
+  // ============================================================
+  //
+  // project_work_packages is now the source of truth for Work Package
+  // identity, description and color.
+  //
+  // OFF / FER are calendar markers, not Work Packages, so they remain
+  // system-level visual definitions.
+  //
+  // servicosCustomizados is kept temporarily as a legacy compatibility
+  // layer for previously saved Master Plan scenarios.
   const [servicosProjeto, setServicosProjeto] = useState({});
   const [servicosCustomizados, setServicosCustomizados] = useState({});
+
+  // ----------------------------------------------------------
+  // LEGACY SCENARIO FALLBACK
+  // ----------------------------------------------------------
+  //
+  // Old scenarios may still contain plan_data.customServices.
+  // They remain readable during migration, but they can NEVER
+  // override a Work Package registered in the shared database.
+  //
+  // New Work Packages must be registered in:
+  // public.project_work_packages
+  // ----------------------------------------------------------
+  const servicosCustomizadosLegados =
+    Object.fromEntries(
+      Object.entries(
+        servicosCustomizados
+      ).filter(
+        ([code]) =>
+          code !== '' &&
+          code !== 'OFF' &&
+          code !== 'FER' &&
+          !servicosProjeto[
+            code
+          ]
+      )
+    );
+
   const servicosCores = {
-    ...DEFAULT_SERVICOS_CORES,
     ...servicosProjeto,
-    ...servicosCustomizados
+    ...servicosCustomizadosLegados,
+
+    '': SYSTEM_CALENDAR_CODES[''],
+    OFF: SYSTEM_CALENDAR_CODES.OFF,
+    FER: SYSTEM_CALENDAR_CODES.FER
   };
 
   // MODAL DE NOVA ATIVIDADE
@@ -1967,7 +1970,12 @@ export default function MasterPlanPage() {
         return;
       }
 
-      const [locationsResult, servicesResult, scenariosResult] = await Promise.all([
+      const [
+        locationsResult,
+        workPackagesResult,
+        servicesResult,
+        scenariosResult
+      ] = await Promise.all([
         supabase
           .from('locations')
           .select(`
@@ -1983,6 +1991,27 @@ export default function MasterPlanPage() {
           .order('sequence_number', { ascending: true })
           .order('name', { ascending: true }),
 
+        // ----------------------------------------------------
+        // SHARED WORK PACKAGE DATABASE
+        // ----------------------------------------------------
+        // This is the authoritative source for selectable Master Plan
+        // Work Packages, descriptions and colors.
+        supabase.rpc(
+          'get_project_work_packages',
+          {
+            target_project_id:
+              projetoSelecionado
+          }
+        ),
+
+        // ----------------------------------------------------
+        // LEGACY PROJECT SERVICES
+        // ----------------------------------------------------
+        // Retained only during the migration stage because
+        // master_plan_packages.project_service_id still references
+        // public.project_services.
+        //
+        // We NEVER store a project_work_packages UUID in that old FK.
         supabase
           .from('project_services')
           .select(`
@@ -2020,6 +2049,7 @@ export default function MasterPlanPage() {
 
       const loadError =
         locationsResult.error ||
+        workPackagesResult.error ||
         servicesResult.error ||
         scenariosResult.error;
 
@@ -2078,40 +2108,152 @@ export default function MasterPlanPage() {
         ].filter(Boolean)
       );
 
-      const palette = [
-        '#2b6cb0',
-        '#805ad5',
-        '#319795',
-        '#d69e2e',
-        '#c05621',
-        '#2f855a',
-        '#4a5568',
-        '#b83280'
-      ];
+      // ======================================================
+      // SHARED PROJECT WORK PACKAGE CATALOG
+      // ======================================================
+      //
+      // Work Package code, standard description and color now come
+      // from public.project_work_packages.
+      //
+      // project_services is consulted only to preserve the existing
+      // master_plan_packages.project_service_id foreign-key linkage
+      // while the normalized schema is migrated in a later step.
+      //
+      // A catalog Work Package that has no matching legacy
+      // project_services row remains perfectly valid in Master Plan;
+      // its project_service_id is simply persisted as NULL.
+      // ======================================================
 
-      const projectServiceMap = {};
-      const usedServiceCodes = new Set(
-        Object.keys(DEFAULT_SERVICOS_CORES).filter(Boolean)
+      const legacyProjectServices =
+        servicesResult.data || [];
+
+      const findLegacyProjectService = (
+        workPackage
+      ) => {
+        const packageCode =
+          normalizeText(
+            workPackage?.code ||
+            ''
+          ).replace(
+            /[^A-Z0-9]/g,
+            ''
+          );
+
+        const packageDescription =
+          normalizeText(
+            workPackage?.description ||
+            ''
+          );
+
+        return (
+          legacyProjectServices.find(
+            (service) =>
+              normalizeText(
+                service?.service_code ||
+                ''
+              ).replace(
+                /[^A-Z0-9]/g,
+                ''
+              ) === packageCode
+          ) ||
+          legacyProjectServices.find(
+            (service) =>
+              normalizeText(
+                service?.service_name ||
+                ''
+              ) === packageDescription
+          ) ||
+          null
+        );
+      };
+
+      const projectWorkPackageMap =
+        {};
+
+      (
+        workPackagesResult.data ||
+        []
+      ).forEach(
+        (workPackage) => {
+          const code =
+            normalizeText(
+              workPackage?.code ||
+              ''
+            ).replace(
+              /[^A-Z]/g,
+              ''
+            );
+
+          if (
+            code.length !== 3
+          ) {
+            console.warn(
+              'Master Plan - ignored invalid Work Package code:',
+              workPackage
+            );
+            return;
+          }
+
+          const color =
+            String(
+              workPackage?.color ||
+              '#64748b'
+            ).toUpperCase();
+
+          const legacyService =
+            findLegacyProjectService(
+              workPackage
+            );
+
+          projectWorkPackageMap[
+            code
+          ] = {
+            labelPt:
+              workPackage.description ||
+              code,
+
+            labelEn:
+              workPackage.description ||
+              code,
+
+            color,
+
+            text:
+              getContrastYIQ(
+                color
+              ),
+
+            // IMPORTANT:
+            // This remains the legacy public.project_services UUID
+            // when a compatible service exists. It is NOT the
+            // project_work_packages UUID.
+            projectServiceId:
+              legacyService?.id ||
+              null,
+
+            // Persistent shared Work Package identity. This stays
+            // available inside the Master Plan scenario snapshot and
+            // prepares the normalized schema migration.
+            projectWorkPackageId:
+              workPackage.id,
+
+            sourceServiceCode:
+              legacyService?.service_code ||
+              code,
+
+            unit:
+              legacyService?.unit ||
+              '',
+
+            source:
+              'project_work_packages'
+          };
+        }
       );
 
-      (servicesResult.data || []).forEach((service, index) => {
-        const code = buildServiceAcronym(service, index, usedServiceCodes);
-
-        const existing = DEFAULT_SERVICOS_CORES[code];
-        const color = existing?.color || palette[index % palette.length];
-
-        projectServiceMap[code] = {
-          labelPt: service.service_name || code,
-          labelEn: service.service_name || code,
-          color,
-          text: existing?.text || getContrastYIQ(color),
-          projectServiceId: service.id,
-          sourceServiceCode: service.service_code || null,
-          unit: service.unit || ''
-        };
-      });
-
-      setServicosProjeto(projectServiceMap);
+      setServicosProjeto(
+        projectWorkPackageMap
+      );
 
       const mappedVersions = (scenariosResult.data || []).map(mapearRegistroVersao);
       setVersoes(mappedVersions);
@@ -4295,6 +4437,7 @@ ${
           locationId: location.locationId || null,
           locationPath: location.label || '',
           projectServiceId: service?.projectServiceId || null,
+          projectWorkPackageId: service?.projectWorkPackageId || null,
           tipoInicio:
             isFirstGeneratedPackage &&
             sequenceStartType === 'data'
@@ -4472,6 +4615,10 @@ ${
         '',
       projectServiceId:
         selectedService?.projectServiceId ||
+        null,
+
+      projectWorkPackageId:
+        selectedService?.projectWorkPackageId ||
         null,
 
       tipoInicio: tipoInicio,
