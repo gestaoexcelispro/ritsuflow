@@ -14,20 +14,26 @@ import {
 
 // ============================================================
 // RitsuFlow™
-// WORK PACKAGE DATABASE
+// WORK PACKAGE LIBRARY
 //
-// PROJECT-LEVEL MASTER DATA
+// ORGANIZATION-LEVEL MASTER DATA
 //
-// The user defines:
+// The company defines:
 // - 3-letter Work Package code
 // - description
 //
 // RitsuFlow defines:
 // - UUID
-// - unique project color
+// - organization-wide unique color
 //
-// Creating a Work Package here DOES NOT add it to Master Plan,
-// Lookahead, or Weekly Planning.
+// A Work Package registered here becomes available to every
+// project belonging to the same organization.
+//
+// Registering a Work Package here DOES NOT automatically assign
+// it to every project. Project assignment is handled separately.
+//
+// The UUID is the permanent identity. Code and description are
+// editable without breaking project references.
 // ============================================================
 
 
@@ -111,14 +117,9 @@ function getTextColor(
 
 export default function WorkPackagesPage() {
   const [
-    projects,
-    setProjects,
-  ] = useState([])
-
-  const [
-    selectedProjectId,
-    setSelectedProjectId,
-  ] = useState('')
+    organization,
+    setOrganization,
+  ] = useState(null)
 
   const [
     workPackages,
@@ -128,11 +129,11 @@ export default function WorkPackagesPage() {
   const [
     loading,
     setLoading,
-  ] = useState(false)
+  ] = useState(true)
 
   const [
-    loadingProjects,
-    setLoadingProjects,
+    loadingOrganization,
+    setLoadingOrganization,
   ] = useState(true)
 
   const [
@@ -166,6 +167,11 @@ export default function WorkPackagesPage() {
   ] = useState('')
 
   const [
+    editingCode,
+    setEditingCode,
+  ] = useState('')
+
+  const [
     editingDescription,
     setEditingDescription,
   ] = useState('')
@@ -192,33 +198,21 @@ export default function WorkPackagesPage() {
 
 
   // ==========================================================
-  // SELECTED PROJECT
+  // LOAD CURRENT ORGANIZATION
+  //
+  // The page is intentionally NOT project-scoped.
+  //
+  // RLS / tenant membership must expose only the organization
+  // the current company user is allowed to operate.
+  //
+  // If more than one organization is visible, this page refuses
+  // to guess which company catalog should be edited.
   // ==========================================================
 
-  const selectedProject =
-    useMemo(
-      () =>
-        projects.find(
-          (project) =>
-            project.id ===
-            selectedProjectId
-        ) ||
-        null,
-      [
-        projects,
-        selectedProjectId,
-      ]
-    )
-
-
-  // ==========================================================
-  // LOAD PROJECTS
-  // ==========================================================
-
-  const loadProjects =
+  const loadOrganization =
     useCallback(
       async () => {
-        setLoadingProjects(
+        setLoadingOrganization(
           true
         )
 
@@ -233,25 +227,21 @@ export default function WorkPackagesPage() {
           } =
             await supabase
               .from(
-                'projects'
+                'organizations'
               )
               .select(`
                 id,
-                code,
-                name,
-                status,
-                created_at
+                name
               `)
-              .neq(
-                'status',
-                'archived'
-              )
               .order(
-                'created_at',
+                'name',
                 {
                   ascending:
-                    false,
+                    true,
                 }
+              )
+              .limit(
+                2
               )
 
           if (
@@ -260,48 +250,54 @@ export default function WorkPackagesPage() {
             throw error
           }
 
-          const loaded =
+          const visibleOrganizations =
             data || []
 
-          setProjects(
-            loaded
-          )
-
-          const params =
-            new URLSearchParams(
-              window.location
-                .search
-            )
-
-          const projectId =
-            params.get(
-              'projectId'
-            )
-
           if (
-            projectId &&
-            loaded.some(
-              (project) =>
-                project.id ===
-                projectId
-            )
+            visibleOrganizations.length ===
+            0
           ) {
-            setSelectedProjectId(
-              projectId
+            throw new Error(
+              'No organization is available for this account.'
             )
           }
+
+          if (
+            visibleOrganizations.length >
+            1
+          ) {
+            throw new Error(
+              'More than one organization is visible to this account. RitsuFlow will not guess which company Work Package Library should be edited.'
+            )
+          }
+
+          setOrganization(
+            visibleOrganizations[0]
+          )
+
+          return visibleOrganizations[0]
         } catch (error) {
           console.error(
-            'Work Packages - projects:',
+            'Work Packages - organization:',
             error
+          )
+
+          setOrganization(
+            null
+          )
+
+          setWorkPackages(
+            []
           )
 
           setErrorMessage(
             error.message ||
-              'Projects could not be loaded.'
+              'The organization could not be loaded.'
           )
+
+          return null
         } finally {
-          setLoadingProjects(
+          setLoadingOrganization(
             false
           )
         }
@@ -311,19 +307,23 @@ export default function WorkPackagesPage() {
 
 
   // ==========================================================
-  // LOAD CATALOG
+  // LOAD ORGANIZATION CATALOG
   // ==========================================================
 
   const loadWorkPackages =
     useCallback(
       async (
-        projectId
+        organizationId
       ) => {
         if (
-          !projectId
+          !organizationId
         ) {
           setWorkPackages(
             []
+          )
+
+          setLoading(
+            false
           )
 
           return
@@ -343,10 +343,10 @@ export default function WorkPackagesPage() {
             error,
           } =
             await supabase.rpc(
-              'get_project_work_package_catalog',
+              'get_organization_work_package_catalog',
               {
-                target_project_id:
-                  projectId,
+                target_organization_id:
+                  organizationId,
               }
             )
 
@@ -361,7 +361,7 @@ export default function WorkPackagesPage() {
           )
         } catch (error) {
           console.error(
-            'Work Packages - catalog:',
+            'Work Packages - organization catalog:',
             error
           )
 
@@ -371,7 +371,7 @@ export default function WorkPackagesPage() {
 
           setErrorMessage(
             error.message ||
-              'The Work Package Database could not be loaded.'
+              'The company Work Package Library could not be loaded.'
           )
         } finally {
           setLoading(
@@ -385,68 +385,48 @@ export default function WorkPackagesPage() {
 
   useEffect(
     () => {
-      loadProjects()
+      let active =
+        true
+
+      async function initialize() {
+        const loadedOrganization =
+          await loadOrganization()
+
+        if (
+          !active
+        ) {
+          return
+        }
+
+        if (
+          loadedOrganization?.id
+        ) {
+          await loadWorkPackages(
+            loadedOrganization.id
+          )
+        } else {
+          setLoading(
+            false
+          )
+        }
+      }
+
+      initialize()
+
+      return () => {
+        active =
+          false
+      }
     },
     [
-      loadProjects,
-    ]
-  )
-
-
-  useEffect(
-    () => {
-      loadWorkPackages(
-        selectedProjectId
-      )
-    },
-    [
-      selectedProjectId,
+      loadOrganization,
       loadWorkPackages,
     ]
   )
 
 
   // ==========================================================
-  // PROJECT CHANGE
-  // ==========================================================
-
-  function handleProjectChange(
-    projectId
-  ) {
-    setSelectedProjectId(
-      projectId
-    )
-
-    setErrorMessage(
-      ''
-    )
-
-    setSuccessMessage(
-      ''
-    )
-
-    if (
-      projectId
-    ) {
-      window.history
-        .replaceState(
-          {},
-          '',
-          `/dashboard/projects/work-packages?projectId=${projectId}`
-        )
-    } else {
-      window.history
-        .replaceState(
-          {},
-          '',
-          '/dashboard/projects/work-packages'
-        )
-    }
-  }
-
-
-  // ==========================================================
-  // REGISTER WORK PACKAGE
+  // REGISTER ORGANIZATION WORK PACKAGE
   // ==========================================================
 
   async function registerWorkPackage(
@@ -455,7 +435,7 @@ export default function WorkPackagesPage() {
     event.preventDefault()
 
     if (
-      !selectedProjectId ||
+      !organization?.id ||
       creating
     ) {
       return
@@ -510,10 +490,10 @@ export default function WorkPackagesPage() {
         error,
       } =
         await supabase.rpc(
-          'register_project_work_package',
+          'register_organization_work_package',
           {
-            target_project_id:
-              selectedProjectId,
+            target_organization_id:
+              organization.id,
 
             target_code:
               code,
@@ -549,12 +529,12 @@ export default function WorkPackagesPage() {
       )
 
       await loadWorkPackages(
-        selectedProjectId
+        organization.id
       )
 
       setSuccessMessage(
         created?.color
-          ? `${created.code} registered successfully. RitsuFlow assigned ${created.color}.`
+          ? `${created.code} registered successfully. RitsuFlow assigned ${created.color} to the company library.`
           : `${code} registered successfully.`
       )
     } catch (error) {
@@ -576,7 +556,11 @@ export default function WorkPackagesPage() {
 
 
   // ==========================================================
-  // EDIT DESCRIPTION
+  // EDIT CODE + DESCRIPTION
+  //
+  // UUID remains unchanged.
+  // Example:
+  // PIS -> FLR
   // ==========================================================
 
   function beginEdit(
@@ -584,6 +568,11 @@ export default function WorkPackagesPage() {
   ) {
     setEditingId(
       item.id
+    )
+
+    setEditingCode(
+      item.code ||
+        ''
     )
 
     setEditingDescription(
@@ -606,20 +595,39 @@ export default function WorkPackagesPage() {
       ''
     )
 
+    setEditingCode(
+      ''
+    )
+
     setEditingDescription(
       ''
     )
   }
 
 
-  async function saveDescription(
+  async function saveWorkPackage(
     item
   ) {
+    const code =
+      normalizeCode(
+        editingCode
+      )
+
     const description =
       String(
         editingDescription ||
         ''
       ).trim()
+
+    if (
+      code.length !== 3
+    ) {
+      setErrorMessage(
+        'The Work Package code must contain exactly 3 letters.'
+      )
+
+      return
+    }
 
     if (
       !description
@@ -645,13 +653,17 @@ export default function WorkPackagesPage() {
 
     try {
       const {
+        data,
         error,
       } =
         await supabase.rpc(
-          'update_project_work_package_description',
+          'update_organization_work_package',
           {
             target_work_package_id:
               item.id,
+
+            target_code:
+              code,
 
             target_description:
               description,
@@ -663,6 +675,13 @@ export default function WorkPackagesPage() {
       ) {
         throw error
       }
+
+      const updated =
+        Array.isArray(
+          data
+        )
+          ? data[0]
+          : data
 
       setWorkPackages(
         (
@@ -677,7 +696,17 @@ export default function WorkPackagesPage() {
                 ? {
                     ...workPackage,
 
-                    description,
+                    code:
+                      updated?.code ||
+                      code,
+
+                    description:
+                      updated?.description ||
+                      description,
+
+                    color:
+                      updated?.color ||
+                      workPackage.color,
                   }
                 : workPackage
           )
@@ -686,7 +715,10 @@ export default function WorkPackagesPage() {
       cancelEdit()
 
       setSuccessMessage(
-        `${item.code} updated successfully.`
+        item.code !==
+          code
+          ? `${item.code} changed to ${code} successfully. Existing project references remain linked to the same Work Package.`
+          : `${code} updated successfully.`
       )
     } catch (error) {
       console.error(
@@ -696,7 +728,7 @@ export default function WorkPackagesPage() {
 
       setErrorMessage(
         error.message ||
-          'The description could not be updated.'
+          'The Work Package could not be updated.'
       )
     } finally {
       setSavingId(
@@ -739,7 +771,7 @@ export default function WorkPackagesPage() {
         error,
       } =
         await supabase.rpc(
-          'set_project_work_package_active',
+          'set_organization_work_package_active',
           {
             target_work_package_id:
               item.id,
@@ -777,8 +809,8 @@ export default function WorkPackagesPage() {
 
       setSuccessMessage(
         nextStatus
-          ? `${item.code} activated.`
-          : `${item.code} deactivated.`
+          ? `${item.code} activated for the company library.`
+          : `${item.code} deactivated for the company library.`
       )
     } catch (error) {
       console.error(
@@ -884,7 +916,7 @@ export default function WorkPackagesPage() {
               'uppercase',
           }}
         >
-          PROJECT FOUNDATION
+          WORKSPACE
         </p>
 
         <h1
@@ -905,13 +937,13 @@ export default function WorkPackagesPage() {
               '-0.035em',
           }}
         >
-          Work Package Database
+          Work Package Library
         </h1>
 
         <p
           style={{
             maxWidth:
-              '760px',
+              '820px',
 
             margin:
               '12px 0 0',
@@ -926,122 +958,11 @@ export default function WorkPackagesPage() {
               1.6,
           }}
         >
-          Register the Work Packages available
-          for each project. Master Plan,
-          Lookahead Planning and Weekly Planning
-          will use the same catalog.
+          Manage the company&apos;s shared Work Package
+          definitions. Packages registered here become available
+          for selection across every project in the organization,
+          while each project decides which packages it uses.
         </p>
-      </section>
-
-
-      <section
-        style={{
-          marginBottom:
-            '18px',
-
-          padding:
-            '18px',
-
-          border:
-            '1px solid #d9e2ec',
-
-          borderRadius:
-            '12px',
-
-          background:
-            '#ffffff',
-        }}
-      >
-        <label
-          style={{
-            display:
-              'block',
-
-            marginBottom:
-              '6px',
-
-            color:
-              '#36516d',
-
-            fontSize:
-              '0.7rem',
-
-            fontWeight:
-              900,
-
-            textTransform:
-              'uppercase',
-          }}
-        >
-          Project
-        </label>
-
-        <select
-          value={
-            selectedProjectId
-          }
-
-          disabled={
-            loadingProjects
-          }
-
-          onChange={(
-            event
-          ) =>
-            handleProjectChange(
-              event.target.value
-            )
-          }
-
-          style={{
-            width:
-              'min(460px, 100%)',
-
-            height:
-              '42px',
-
-            padding:
-              '0 12px',
-
-            border:
-              '1px solid #cbd5e1',
-
-            borderRadius:
-              '7px',
-
-            background:
-              '#ffffff',
-
-            color:
-              '#0f172a',
-          }}
-        >
-          <option value="">
-            -- Select a Project --
-          </option>
-
-          {projects.map(
-            (
-              project
-            ) => (
-              <option
-                key={
-                  project.id
-                }
-
-                value={
-                  project.id
-                }
-              >
-                {project.code
-                  ? `${project.code} - `
-                  : ''}
-
-                {project.name}
-              </option>
-            )
-          )}
-        </select>
       </section>
 
 
@@ -1111,258 +1032,330 @@ export default function WorkPackagesPage() {
       )}
 
 
-      {selectedProject && (
-        <section
+      <section
+        style={{
+          overflow:
+            'hidden',
+
+          border:
+            '1px solid #d9e2ec',
+
+          borderRadius:
+            '12px',
+
+          background:
+            '#ffffff',
+        }}
+      >
+        <div
           style={{
-            overflow:
-              'hidden',
+            display:
+              'flex',
 
-            border:
-              '1px solid #d9e2ec',
+            alignItems:
+              'center',
 
-            borderRadius:
-              '12px',
+            justifyContent:
+              'space-between',
 
-            background:
-              '#ffffff',
+            gap:
+              '15px',
+
+            flexWrap:
+              'wrap',
+
+            padding:
+              '17px 18px',
+
+            borderBottom:
+              '1px solid #e6edf3',
           }}
         >
+          <div>
+            <h2
+              style={{
+                margin:
+                  0,
+
+                color:
+                  '#061b2f',
+
+                fontSize:
+                  '1rem',
+
+                fontWeight:
+                  900,
+              }}
+            >
+              {loadingOrganization
+                ? 'Loading organization...'
+                : organization?.name ||
+                  'Company Work Package Library'}
+            </h2>
+
+            <p
+              style={{
+                margin:
+                  '5px 0 0',
+
+                color:
+                  '#7890a8',
+
+                fontSize:
+                  '0.72rem',
+              }}
+            >
+              {activeCount} active Work Packages
+              {' · '}
+              Shared across the organization
+            </p>
+          </div>
+
+
           <div
             style={{
               display:
                 'flex',
 
-              alignItems:
-                'center',
-
-              justifyContent:
-                'space-between',
-
               gap:
-                '15px',
+                '8px',
 
               flexWrap:
                 'wrap',
-
-              padding:
-                '17px 18px',
-
-              borderBottom:
-                '1px solid #e6edf3',
             }}
           >
-            <div>
-              <h2
-                style={{
-                  margin:
-                    0,
-
-                  color:
-                    '#061b2f',
-
-                  fontSize:
-                    '1rem',
-
-                  fontWeight:
-                    900,
-                }}
-              >
-                {selectedProject.code}
-                {' · '}
-                {selectedProject.name}
-              </h2>
-
-              <p
-                style={{
-                  margin:
-                    '5px 0 0',
-
-                  color:
-                    '#7890a8',
-
-                  fontSize:
-                    '0.72rem',
-                }}
-              >
-                {activeCount} active Work Packages
-              </p>
-            </div>
-
-
-            <div
-              style={{
-                display:
-                  'flex',
-
-                gap:
-                  '8px',
-              }}
-            >
-              {inactiveCount >
-                0 && (
-                <button
-                  type="button"
-
-                  onClick={() =>
-                    setShowInactive(
-                      (
-                        current
-                      ) =>
-                        !current
-                    )
-                  }
-
-                  style={
-                    secondaryButtonStyle
-                  }
-                >
-                  {showInactive
-                    ? 'Hide Inactive'
-                    : `Show Inactive (${inactiveCount})`}
-                </button>
-              )}
-
+            {inactiveCount >
+              0 && (
               <button
                 type="button"
 
-                onClick={() => {
-                  setNewCode('')
-                  setNewDescription('')
-                  setErrorMessage('')
-                  setSuccessMessage('')
-                  setShowNewModal(
-                    true
+                onClick={() =>
+                  setShowInactive(
+                    (
+                      current
+                    ) =>
+                      !current
                   )
-                }}
+                }
 
                 style={
-                  primaryButtonStyle
+                  secondaryButtonStyle
                 }
               >
-                + New Work Package
+                {showInactive
+                  ? 'Hide Inactive'
+                  : `Show Inactive (${inactiveCount})`}
               </button>
-            </div>
+            )}
+
+            <button
+              type="button"
+
+              disabled={
+                !organization?.id ||
+                loadingOrganization
+              }
+
+              onClick={() => {
+                setNewCode('')
+                setNewDescription('')
+                setErrorMessage('')
+                setSuccessMessage('')
+                setShowNewModal(
+                  true
+                )
+              }}
+
+              style={{
+                ...primaryButtonStyle,
+
+                opacity:
+                  !organization?.id ||
+                  loadingOrganization
+                    ? 0.55
+                    : 1,
+
+                cursor:
+                  !organization?.id ||
+                  loadingOrganization
+                    ? 'not-allowed'
+                    : 'pointer',
+              }}
+            >
+              + New Work Package
+            </button>
           </div>
+        </div>
 
 
-          {loading ? (
-            <div
+        {loading ||
+        loadingOrganization ? (
+          <div
+            style={{
+              padding:
+                '50px',
+
+              textAlign:
+                'center',
+
+              color:
+                '#64748b',
+            }}
+          >
+            Loading Work Packages...
+          </div>
+        ) : (
+          <div
+            style={{
+              overflowX:
+                'auto',
+            }}
+          >
+            <table
               style={{
-                padding:
-                  '50px',
+                width:
+                  '100%',
 
-                textAlign:
-                  'center',
+                minWidth:
+                  '820px',
 
-                color:
-                  '#64748b',
+                borderCollapse:
+                  'collapse',
               }}
             >
-              Loading Work Packages...
-            </div>
-          ) : (
-            <div
-              style={{
-                overflowX:
-                  'auto',
-              }}
-            >
-              <table
-                style={{
-                  width:
-                    '100%',
+              <thead>
+                <tr>
+                  <th style={headerStyle}>
+                    COLOR
+                  </th>
 
-                  minWidth:
-                    '760px',
+                  <th style={headerStyle}>
+                    CODE
+                  </th>
 
-                  borderCollapse:
-                    'collapse',
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th style={headerStyle}>
-                      COLOR
-                    </th>
+                  <th
+                    style={{
+                      ...headerStyle,
 
-                    <th style={headerStyle}>
-                      CODE
-                    </th>
+                      textAlign:
+                        'left',
+                    }}
+                  >
+                    DESCRIPTION
+                  </th>
 
-                    <th
-                      style={{
-                        ...headerStyle,
+                  <th style={headerStyle}>
+                    STATUS
+                  </th>
 
-                        textAlign:
-                          'left',
-                      }}
-                    >
-                      DESCRIPTION
-                    </th>
+                  <th style={headerStyle}>
+                    ACTIONS
+                  </th>
+                </tr>
+              </thead>
 
-                    <th style={headerStyle}>
-                      STATUS
-                    </th>
+              <tbody>
+                {visibleWorkPackages.map(
+                  (
+                    item
+                  ) => {
+                    const textColor =
+                      getTextColor(
+                        item.color
+                      )
 
-                    <th style={headerStyle}>
-                      ACTIONS
-                    </th>
-                  </tr>
-                </thead>
+                    const isEditing =
+                      editingId ===
+                      item.id
 
-                <tbody>
-                  {visibleWorkPackages.map(
-                    (
-                      item
-                    ) => {
-                      const textColor =
-                        getTextColor(
-                          item.color
-                        )
+                    return (
+                      <tr
+                        key={
+                          item.id
+                        }
 
-                      const isEditing =
-                        editingId ===
-                        item.id
+                        style={{
+                          opacity:
+                            item.is_active
+                              ? 1
+                              : 0.55,
+                        }}
+                      >
+                        <td style={cellStyle}>
+                          <div
+                            style={{
+                              width:
+                                '28px',
 
-                      return (
-                        <tr
-                          key={
-                            item.id
-                          }
+                              height:
+                                '28px',
 
-                          style={{
-                            opacity:
-                              item.is_active
-                                ? 1
-                                : 0.55,
-                          }}
-                        >
-                          <td style={cellStyle}>
-                            <div
+                              margin:
+                                '0 auto',
+
+                              borderRadius:
+                                '5px',
+
+                              background:
+                                item.color ||
+                                '#64748b',
+
+                              border:
+                                '1px solid #cbd5e1',
+                            }}
+                          />
+                        </td>
+
+                        <td style={cellStyle}>
+                          {isEditing ? (
+                            <input
+                              type="text"
+
+                              maxLength={
+                                3
+                              }
+
+                              value={
+                                editingCode
+                              }
+
+                              onChange={(
+                                event
+                              ) =>
+                                setEditingCode(
+                                  normalizeCode(
+                                    event.target.value
+                                  )
+                                )
+                              }
+
                               style={{
                                 width:
-                                  '28px',
+                                  '82px',
 
                                 height:
-                                  '28px',
+                                  '34px',
 
-                                margin:
-                                  '0 auto',
+                                padding:
+                                  '0 8px',
+
+                                border:
+                                  '1px solid #94a3b8',
 
                                 borderRadius:
                                   '5px',
 
-                                background:
-                                  item.color ||
-                                  '#64748b',
+                                textAlign:
+                                  'center',
 
-                                border:
-                                  '1px solid #cbd5e1',
+                                fontWeight:
+                                  900,
+
+                                textTransform:
+                                  'uppercase',
                               }}
                             />
-                          </td>
-
-                          <td style={cellStyle}>
+                          ) : (
                             <span
                               style={{
                                 display:
@@ -1396,166 +1389,205 @@ export default function WorkPackagesPage() {
                             >
                               {item.code}
                             </span>
-                          </td>
+                          )}
+                        </td>
 
-                          <td
+                        <td
+                          style={{
+                            ...cellStyle,
+
+                            textAlign:
+                              'left',
+                          }}
+                        >
+                          {isEditing ? (
+                            <input
+                              type="text"
+
+                              value={
+                                editingDescription
+                              }
+
+                              onChange={(
+                                event
+                              ) =>
+                                setEditingDescription(
+                                  event.target.value
+                                )
+                              }
+
+                              style={{
+                                width:
+                                  '100%',
+
+                                height:
+                                  '34px',
+
+                                padding:
+                                  '0 8px',
+
+                                border:
+                                  '1px solid #94a3b8',
+
+                                borderRadius:
+                                  '5px',
+                              }}
+                            />
+                          ) : (
+                            <strong>
+                              {item.description}
+                            </strong>
+                          )}
+                        </td>
+
+                        <td style={cellStyle}>
+                          {item.is_active
+                            ? 'Active'
+                            : 'Inactive'}
+                        </td>
+
+                        <td style={cellStyle}>
+                          <div
                             style={{
-                              ...cellStyle,
+                              display:
+                                'flex',
 
-                              textAlign:
-                                'left',
+                              justifyContent:
+                                'center',
+
+                              gap:
+                                '6px',
                             }}
                           >
                             {isEditing ? (
-                              <input
-                                type="text"
+                              <>
+                                <button
+                                  type="button"
 
-                                value={
-                                  editingDescription
-                                }
+                                  disabled={
+                                    savingId ===
+                                    item.id
+                                  }
 
-                                onChange={(
-                                  event
-                                ) =>
-                                  setEditingDescription(
-                                    event.target.value
-                                  )
-                                }
+                                  onClick={() =>
+                                    saveWorkPackage(
+                                      item
+                                    )
+                                  }
 
-                                style={{
-                                  width:
-                                    '100%',
+                                  style={
+                                    smallPrimaryButtonStyle
+                                  }
+                                >
+                                  {savingId ===
+                                  item.id
+                                    ? 'Saving...'
+                                    : 'Save'}
+                                </button>
 
-                                  height:
-                                    '34px',
+                                <button
+                                  type="button"
 
-                                  padding:
-                                    '0 8px',
+                                  disabled={
+                                    savingId ===
+                                    item.id
+                                  }
 
-                                  border:
-                                    '1px solid #94a3b8',
+                                  onClick={
+                                    cancelEdit
+                                  }
 
-                                  borderRadius:
-                                    '5px',
-                                }}
-                              />
+                                  style={
+                                    smallButtonStyle
+                                  }
+                                >
+                                  Cancel
+                                </button>
+                              </>
                             ) : (
-                              <strong>
-                                {item.description}
-                              </strong>
-                            )}
-                          </td>
+                              <>
+                                <button
+                                  type="button"
 
-                          <td style={cellStyle}>
-                            {item.is_active
-                              ? 'Active'
-                              : 'Inactive'}
-                          </td>
+                                  onClick={() =>
+                                    beginEdit(
+                                      item
+                                    )
+                                  }
 
-                          <td style={cellStyle}>
-                            <div
-                              style={{
-                                display:
-                                  'flex',
+                                  style={
+                                    smallButtonStyle
+                                  }
+                                >
+                                  Edit
+                                </button>
 
-                                justifyContent:
-                                  'center',
+                                <button
+                                  type="button"
 
-                                gap:
-                                  '6px',
-                              }}
-                            >
-                              {isEditing ? (
-                                <>
-                                  <button
-                                    type="button"
+                                  disabled={
+                                    statusChangingId ===
+                                    item.id
+                                  }
 
-                                    disabled={
-                                      savingId ===
-                                      item.id
-                                    }
+                                  onClick={() =>
+                                    changeStatus(
+                                      item
+                                    )
+                                  }
 
-                                    onClick={() =>
-                                      saveDescription(
-                                        item
-                                      )
-                                    }
-
-                                    style={
-                                      smallPrimaryButtonStyle
-                                    }
-                                  >
-                                    Save
-                                  </button>
-
-                                  <button
-                                    type="button"
-
-                                    onClick={
-                                      cancelEdit
-                                    }
-
-                                    style={
-                                      smallButtonStyle
-                                    }
-                                  >
-                                    Cancel
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-
-                                    onClick={() =>
-                                      beginEdit(
-                                        item
-                                      )
-                                    }
-
-                                    style={
-                                      smallButtonStyle
-                                    }
-                                  >
-                                    Edit
-                                  </button>
-
-                                  <button
-                                    type="button"
-
-                                    disabled={
-                                      statusChangingId ===
-                                      item.id
-                                    }
-
-                                    onClick={() =>
-                                      changeStatus(
-                                        item
-                                      )
-                                    }
-
-                                    style={
-                                      smallButtonStyle
-                                    }
-                                  >
-                                    {item.is_active
+                                  style={
+                                    smallButtonStyle
+                                  }
+                                >
+                                  {statusChangingId ===
+                                  item.id
+                                    ? 'Saving...'
+                                    : item.is_active
                                       ? 'Deactivate'
                                       : 'Activate'}
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    }
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  }
+                )}
+
+                {visibleWorkPackages.length ===
+                  0 && (
+                  <tr>
+                    <td
+                      colSpan={
+                        5
+                      }
+
+                      style={{
+                        padding:
+                          '48px 20px',
+
+                        textAlign:
+                          'center',
+
+                        color:
+                          '#7890a8',
+
+                        fontSize:
+                          '0.8rem',
+                      }}
+                    >
+                      No Work Packages are registered in this
+                      company library yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
 
       {showNewModal && (
@@ -1601,7 +1633,7 @@ export default function WorkPackagesPage() {
             <h2
               style={{
                 margin:
-                  '0 0 20px',
+                  '0 0 8px',
 
                 color:
                   '#061b2f',
@@ -1609,6 +1641,25 @@ export default function WorkPackagesPage() {
             >
               Register Work Package
             </h2>
+
+            <p
+              style={{
+                margin:
+                  '0 0 20px',
+
+                color:
+                  '#64748b',
+
+                fontSize:
+                  '0.76rem',
+
+                lineHeight:
+                  1.5,
+              }}
+            >
+              This Work Package will become available to all
+              projects in {organization?.name || 'this organization'}.
+            </p>
 
             <form
               onSubmit={
@@ -1632,7 +1683,7 @@ export default function WorkPackagesPage() {
                   newCode
                 }
 
-                placeholder="DRY"
+                placeholder="FLR"
 
                 onChange={(
                   event
@@ -1675,7 +1726,7 @@ export default function WorkPackagesPage() {
                   newDescription
                 }
 
-                placeholder="Drywall"
+                placeholder="Flooring"
 
                 onChange={(
                   event
@@ -1713,12 +1764,15 @@ export default function WorkPackagesPage() {
 
                   fontSize:
                     '0.72rem',
+
+                  lineHeight:
+                    1.5,
                 }}
               >
-                RitsuFlow automatically assigns
-                a color that is not already used
-                by another Work Package in this
-                project.
+                RitsuFlow automatically assigns a color that is
+                not already used by another Work Package in this
+                organization. The same Work Package keeps the
+                same color across projects.
               </div>
 
 
@@ -1736,6 +1790,10 @@ export default function WorkPackagesPage() {
               >
                 <button
                   type="button"
+
+                  disabled={
+                    creating
+                  }
 
                   onClick={() =>
                     setShowNewModal(
@@ -1760,9 +1818,25 @@ export default function WorkPackagesPage() {
                     !newDescription.trim()
                   }
 
-                  style={
-                    primaryButtonStyle
-                  }
+                  style={{
+                    ...primaryButtonStyle,
+
+                    opacity:
+                      creating ||
+                      newCode.length !==
+                        3 ||
+                      !newDescription.trim()
+                        ? 0.55
+                        : 1,
+
+                    cursor:
+                      creating ||
+                      newCode.length !==
+                        3 ||
+                      !newDescription.trim()
+                        ? 'not-allowed'
+                        : 'pointer',
+                  }}
                 >
                   {creating
                     ? 'Registering...'
