@@ -1430,75 +1430,24 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
-  // PACKAGE CODES ALREADY USED IN SHEET
-  // ==========================================================
-
-  const usedPackageCodes =
-    useMemo(
-      () => {
-
-        return new Set(
-          sheetRows
-            .map(
-              (row) =>
-                String(
-                  row.package_code ||
-                  ''
-                )
-                  .trim()
-                  .toUpperCase()
-            )
-            .filter(
-              Boolean
-            )
-        );
-
-      },
-      [
-        sheetRows,
-      ]
-    );
-
-
-  // ==========================================================
   // AVAILABLE PACKAGES FOR A MANUAL ROW
+  //
+  // Manual Lookahead rows may reuse any Work Package from the
+  // originating Master Plan. The package code does not need to
+  // be unique across manual rows because each added row can
+  // represent additional Lookahead-only work with its own
+  // editable description.
   // ==========================================================
 
   const getAvailablePackagesForRow =
     useCallback(
-      (
-        row
-      ) => {
+      () => {
 
-        return masterPlanPackages.filter(
-          (
-            packageOption
-          ) => {
-
-            if (
-              packageOption.code ===
-              String(
-                row.package_code ||
-                ''
-              )
-                .trim()
-                .toUpperCase()
-            ) {
-              return true;
-            }
-
-
-            return !usedPackageCodes.has(
-              packageOption.code
-            );
-
-          }
-        );
+        return masterPlanPackages;
 
       },
       [
         masterPlanPackages,
-        usedPackageCodes,
       ]
     );
 
@@ -1552,28 +1501,6 @@ export default function LookaheadPage() {
       }
 
 
-      if (
-        usedPackageCodes.has(
-          normalizedCode
-        ) &&
-        String(
-          row.package_code ||
-          ''
-        )
-          .trim()
-          .toUpperCase() !==
-          normalizedCode
-      ) {
-
-        setErrorMessage(
-          `${normalizedCode} already exists in this Lookahead sheet.`
-        );
-
-        return;
-
-      }
-
-
       setSavingPackageRowId(
         row.id
       );
@@ -1611,7 +1538,7 @@ export default function LookaheadPage() {
             .update({
 
               row_type:
-                'package_group',
+                'manual',
 
               package_code:
                 normalizedCode,
@@ -1650,7 +1577,7 @@ export default function LookaheadPage() {
                       ...currentRow,
 
                       row_type:
-                        'package_group',
+                        'manual',
 
                       package_code:
                         normalizedCode,
@@ -1683,23 +1610,10 @@ export default function LookaheadPage() {
         );
 
 
-        if (
-          error?.code ===
-          '23505'
-        ) {
-
-          setErrorMessage(
-            `${normalizedCode} already exists in this Lookahead sheet.`
-          );
-
-        } else {
-
-          setErrorMessage(
-            error.message ||
-            'The Work Package could not be assigned to this row.'
-          );
-
-        }
+        setErrorMessage(
+          error.message ||
+          'The Work Package could not be assigned to this Lookahead row.'
+        );
 
       } finally {
 
@@ -3777,12 +3691,13 @@ export default function LookaheadPage() {
                           >
 
                             {row.row_type ===
-                              'manual' &&
-                            !code ? (
+                              'manual' ? (
 
                               <select
 
-                                value=""
+                                value={
+                                  code
+                                }
 
                                 disabled={
                                   savingPackageRowId ===
