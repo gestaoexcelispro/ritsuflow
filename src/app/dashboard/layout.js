@@ -108,7 +108,7 @@ const baseNavigationGroups = [
       },
       {
         label: 'Constraint Log',
-        href: '/dashboard/projetos/constraints',
+        href: '/dashboard/projects/constraints',
         icon: 'CL',
       },
     ],
@@ -171,11 +171,13 @@ export default function DashboardLayout({
       []
     )
 
+
   const [
     isCollapsed,
     setIsCollapsed,
   ] =
     useState(false)
+
 
   const [
     isMobileOpen,
@@ -183,17 +185,42 @@ export default function DashboardLayout({
   ] =
     useState(false)
 
+
   const [
     isPlatformOwner,
     setIsPlatformOwner,
   ] =
     useState(false)
 
+
   const [
     platformAuthorizationLoaded,
     setPlatformAuthorizationLoaded,
   ] =
     useState(false)
+
+
+  // =======================================================
+  // COLLAPSIBLE NAVIGATION GROUPS
+  //
+  // true  = module/pages visible
+  // false = module/pages hidden
+  //
+  // All modules start open.
+  // =======================================================
+
+  const [
+    expandedGroups,
+    setExpandedGroups,
+  ] =
+    useState({
+      Workspace: true,
+      'Field Management': true,
+      Planning: true,
+      Control: true,
+      Administration: true,
+      Platform: true,
+    })
 
 
   // =======================================================
@@ -224,16 +251,23 @@ export default function DashboardLayout({
           )
 
           setIsPlatformOwner(false)
-          setPlatformAuthorizationLoaded(true)
+
+          setPlatformAuthorizationLoaded(
+            true
+          )
 
           return
         }
+
 
         setIsPlatformOwner(
           data === true
         )
 
-        setPlatformAuthorizationLoaded(true)
+
+        setPlatformAuthorizationLoaded(
+          true
+        )
 
       } catch (error) {
         console.error(
@@ -242,65 +276,100 @@ export default function DashboardLayout({
         )
 
         if (mounted) {
-          setIsPlatformOwner(false)
-          setPlatformAuthorizationLoaded(true)
+          setIsPlatformOwner(
+            false
+          )
+
+          setPlatformAuthorizationLoaded(
+            true
+          )
         }
       }
     }
 
+
     loadPlatformAuthorization()
+
 
     return () => {
       mounted = false
     }
+
   }, [
     supabase,
   ])
 
 
+  // =======================================================
+  // NAVIGATION GROUPS
+  // =======================================================
+
   const navigationGroups =
-    useMemo(() => {
-      if (
-        isPlatformOwner
-      ) {
-        return [
-          ...baseNavigationGroups,
-          platformNavigationGroup,
-        ]
-      }
+    useMemo(
+      () => {
 
-      return baseNavigationGroups
-    }, [
-      isPlatformOwner,
-    ])
+        if (
+          isPlatformOwner
+        ) {
+          return [
+            ...baseNavigationGroups,
+            platformNavigationGroup,
+          ]
+        }
 
 
-  function isActive(href) {
+        return baseNavigationGroups
+
+      },
+      [
+        isPlatformOwner,
+      ]
+    )
+
+
+  // =======================================================
+  // ACTIVE ROUTE
+  // =======================================================
+
+  function isActive(
+    href
+  ) {
+
     if (
       href === '/dashboard'
     ) {
       return (
-        pathname === '/dashboard' ||
-        pathname === '/dashboard/'
+        pathname ===
+          '/dashboard' ||
+        pathname ===
+          '/dashboard/'
       )
     }
+
 
     if (
       href ===
       '/dashboard/projects'
     ) {
-      return pathname === href
+      return (
+        pathname ===
+        href
+      )
     }
+
 
     if (
       href ===
       '/dashboard/field-management/workforce'
     ) {
       return (
-        pathname === href ||
-        pathname === `${href}/`
+        pathname ===
+          href ||
+        pathname ===
+          `${href}/`
       )
     }
+
 
     return pathname.startsWith(
       href
@@ -308,11 +377,19 @@ export default function DashboardLayout({
   }
 
 
+  // =======================================================
+  // CURRENT MODULE
+  // =======================================================
+
   const currentNavigationGroup =
     navigationGroups.find(
-      (group) =>
+      (
+        group
+      ) =>
         group.items.some(
-          (item) =>
+          (
+            item
+          ) =>
             isActive(
               item.href
             )
@@ -320,14 +397,22 @@ export default function DashboardLayout({
     )
 
 
+  // =======================================================
+  // CURRENT PAGE
+  // =======================================================
+
   const currentNavigationItem =
     navigationGroups
       .flatMap(
-        (group) =>
+        (
+          group
+        ) =>
           group.items
       )
       .find(
-        (item) =>
+        (
+          item
+        ) =>
           isActive(
             item.href
           )
@@ -346,7 +431,93 @@ export default function DashboardLayout({
     'Overview'
 
 
+  // =======================================================
+  // KEEP ACTIVE MODULE OPEN
+  //
+  // If user navigates directly to a page, its parent module
+  // automatically opens.
+  // =======================================================
+
+  useEffect(
+    () => {
+
+      if (
+        !currentNavigationGroup
+          ?.label
+      ) {
+        return
+      }
+
+
+      const activeGroupLabel =
+        currentNavigationGroup
+          .label
+
+
+      setExpandedGroups(
+        (
+          current
+        ) => {
+
+          if (
+            current[
+              activeGroupLabel
+            ]
+          ) {
+            return current
+          }
+
+
+          return {
+            ...current,
+
+            [activeGroupLabel]:
+              true,
+          }
+
+        }
+      )
+
+    },
+    [
+      currentNavigationGroup
+        ?.label,
+    ]
+  )
+
+
+  // =======================================================
+  // TOGGLE MODULE
+  // =======================================================
+
+  function toggleGroup(
+    groupLabel
+  ) {
+
+    setExpandedGroups(
+      (
+        current
+      ) => ({
+
+        ...current,
+
+        [groupLabel]:
+          !current[
+            groupLabel
+          ],
+
+      })
+    )
+
+  }
+
+
+  // =======================================================
+  // SIDEBAR TOGGLE
+  // =======================================================
+
   function toggleNavigation() {
+
     if (
       typeof window !==
         'undefined' &&
@@ -356,23 +527,31 @@ export default function DashboardLayout({
         )
         .matches
     ) {
+
       setIsMobileOpen(
-        (currentState) =>
+        (
+          currentState
+        ) =>
           !currentState
       )
 
       return
     }
 
+
     setIsCollapsed(
-      (currentState) =>
+      (
+        currentState
+      ) =>
         !currentState
     )
   }
 
 
   function closeMobileNavigation() {
-    setIsMobileOpen(false)
+    setIsMobileOpen(
+      false
+    )
   }
 
 
@@ -387,9 +566,17 @@ export default function DashboardLayout({
       ? styles.sidebarMobileOpen
       : '',
   ]
-    .filter(Boolean)
-    .join(' ')
+    .filter(
+      Boolean
+    )
+    .join(
+      ' '
+    )
 
+
+  // =======================================================
+  // RENDER
+  // =======================================================
 
   return (
     <div
@@ -397,162 +584,397 @@ export default function DashboardLayout({
         styles.shell
       }
     >
+
+      {/* ===================================================
+          MOBILE OVERLAY
+      =================================================== */}
+
       {isMobileOpen && (
+
         <button
           type="button"
+
           className={
             styles.mobileOverlay
           }
+
           onClick={
             closeMobileNavigation
           }
+
           aria-label="Close navigation"
         />
+
       )}
 
+
+      {/* ===================================================
+          SIDEBAR
+      =================================================== */}
 
       <aside
         className={
           sidebarClassName
         }
       >
+
+        {/* =================================================
+            BRAND
+        ================================================= */}
+
         <div
           className={
             styles.sidebarHeader
           }
         >
+
           <Link
             href="/"
+
             className={
               styles.brand
             }
+
             onClick={
               closeMobileNavigation
             }
+
             aria-label="RitsuFlow home"
           >
+
             <Image
               src="/logo-white.png"
+
               alt="RitsuFlow"
-              width={1600}
-              height={900}
+
+              width={
+                1600
+              }
+
+              height={
+                900
+              }
+
               priority
+
               className={
                 styles.brandLogo
               }
             />
+
           </Link>
+
         </div>
 
+
+        {/* =================================================
+            NAVIGATION
+        ================================================= */}
 
         <nav
           className={
             styles.navigation
           }
+
           aria-label="RitsuFlow navigation"
         >
+
           {navigationGroups.map(
-            (group) => (
-              <div
-                className={
-                  styles.navigationGroup
-                }
-                key={
+            (
+              group
+            ) => {
+
+              const isGroupExpanded =
+                expandedGroups[
                   group.label
-                }
-              >
-                <p
+                ] !== false
+
+
+              const isCurrentGroup =
+                currentNavigationGroup
+                  ?.label ===
+                group.label
+
+
+              return (
+
+                <div
                   className={
-                    styles.navigationLabel
+                    styles.navigationGroup
                   }
-                >
-                  {
+
+                  key={
                     group.label
                   }
-                </p>
+                >
 
+                  {/* =========================================
+                      MODULE HEADER
+                  ========================================= */}
 
-                {group.items.map(
-                  (item) => {
-                    const active =
-                      isActive(
-                        item.href
+                  <button
+                    type="button"
+
+                    onClick={() =>
+                      toggleGroup(
+                        group.label
                       )
+                    }
 
-                    const linkClassName = [
-                      styles.navigationLink,
+                    title={
+                      isGroupExpanded
+                        ? `Hide ${group.label}`
+                        : `Show ${group.label}`
+                    }
 
-                      active
-                        ? styles.navigationLinkActive
-                        : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')
+                    aria-expanded={
+                      isGroupExpanded
+                    }
 
+                    style={{
+                      display:
+                        'flex',
 
-                    return (
-                      <Link
-                        href={
-                          item.href
-                        }
+                      alignItems:
+                        'center',
+
+                      justifyContent:
+                        'space-between',
+
+                      width:
+                        '100%',
+
+                      margin:
+                        0,
+
+                      padding:
+                        isCollapsed
+                          ? '8px 4px'
+                          : '8px 10px',
+
+                      border:
+                        0,
+
+                      background:
+                        isCurrentGroup
+                          ? 'rgba(255,255,255,0.06)'
+                          : 'transparent',
+
+                      color:
+                        'inherit',
+
+                      font:
+                        'inherit',
+
+                      textAlign:
+                        'left',
+
+                      cursor:
+                        'pointer',
+
+                      borderRadius:
+                        '6px',
+
+                      transition:
+                        'background 0.15s ease',
+                    }}
+                  >
+
+                    {!isCollapsed && (
+
+                      <span
                         className={
-                          linkClassName
+                          styles.navigationLabel
                         }
-                        onClick={
-                          closeMobileNavigation
-                        }
-                        key={
-                          item.href
-                        }
-                      >
-                        <span
-                          className={
-                            styles.navigationIcon
-                          }
-                        >
-                          {
-                            item.icon
-                          }
-                        </span>
 
-                        <span
-                          className={
-                            styles.navigationText
-                          }
-                        >
-                          {
-                            item.label
-                          }
-                        </span>
-                      </Link>
-                    )
-                  }
-                )}
-              </div>
-            )
+                        style={{
+                          margin:
+                            0,
+
+                          padding:
+                            0,
+                        }}
+                      >
+                        {
+                          group.label
+                        }
+                      </span>
+
+                    )}
+
+
+                    {!isCollapsed && (
+
+                      <span
+                        aria-hidden="true"
+
+                        style={{
+                          display:
+                            'inline-flex',
+
+                          alignItems:
+                            'center',
+
+                          justifyContent:
+                            'center',
+
+                          width:
+                            '18px',
+
+                          height:
+                            '18px',
+
+                          color:
+                            '#94a3b8',
+
+                          fontSize:
+                            '10px',
+
+                          fontWeight:
+                            900,
+
+                          transform:
+                            isGroupExpanded
+                              ? 'rotate(0deg)'
+                              : 'rotate(-90deg)',
+
+                          transition:
+                            'transform 0.15s ease',
+                        }}
+                      >
+                        ▼
+                      </span>
+
+                    )}
+
+                  </button>
+
+
+                  {/* =========================================
+                      MODULE ITEMS
+                  ========================================= */}
+
+                  {(
+                    isGroupExpanded ||
+                    isCollapsed
+                  ) && (
+
+                    <div>
+
+                      {group.items.map(
+                        (
+                          item
+                        ) => {
+
+                          const active =
+                            isActive(
+                              item.href
+                            )
+
+
+                          const linkClassName = [
+                            styles.navigationLink,
+
+                            active
+                              ? styles.navigationLinkActive
+                              : '',
+                          ]
+                            .filter(
+                              Boolean
+                            )
+                            .join(
+                              ' '
+                            )
+
+
+                          return (
+
+                            <Link
+                              href={
+                                item.href
+                              }
+
+                              className={
+                                linkClassName
+                              }
+
+                              onClick={
+                                closeMobileNavigation
+                              }
+
+                              key={
+                                item.href
+                              }
+                            >
+
+                              <span
+                                className={
+                                  styles.navigationIcon
+                                }
+                              >
+                                {
+                                  item.icon
+                                }
+                              </span>
+
+
+                              <span
+                                className={
+                                  styles.navigationText
+                                }
+                              >
+                                {
+                                  item.label
+                                }
+                              </span>
+
+                            </Link>
+
+                          )
+
+                        }
+                      )}
+
+                    </div>
+
+                  )}
+
+                </div>
+
+              )
+
+            }
           )}
 
 
           {!platformAuthorizationLoaded &&
             null}
+
         </nav>
 
+
+        {/* =================================================
+            SIDEBAR FOOTER
+        ================================================= */}
 
         <div
           className={
             styles.sidebarFooter
           }
         >
+
           <div
             className={
               styles.developmentStatus
             }
           >
+
             <div
               className={
                 styles.statusTitle
               }
             >
+
               <span
                 className={
                   styles.statusDot
@@ -560,7 +982,9 @@ export default function DashboardLayout({
               />
 
               Private development
+
             </div>
+
 
             <p
               className={
@@ -570,6 +994,7 @@ export default function DashboardLayout({
               RitsuFlow is currently under
               active development.
             </p>
+
           </div>
 
 
@@ -578,6 +1003,7 @@ export default function DashboardLayout({
               styles.logoutArea
             }
           >
+
             <LogoutButton
               label={
                 isCollapsed
@@ -585,34 +1011,51 @@ export default function DashboardLayout({
                   : 'Logout'
               }
             />
+
           </div>
+
         </div>
+
       </aside>
 
+
+      {/* ===================================================
+          WORKSPACE
+      =================================================== */}
 
       <div
         className={
           styles.workspace
         }
       >
+
+        {/* =================================================
+            TOPBAR
+        ================================================= */}
+
         <header
           className={
             styles.topbar
           }
         >
+
           <div
             className={
               styles.topbarLeft
             }
           >
+
             <button
               type="button"
+
               className={
                 styles.menuButton
               }
+
               onClick={
                 toggleNavigation
               }
+
               aria-label="Toggle navigation"
             >
               ☰
@@ -624,6 +1067,7 @@ export default function DashboardLayout({
                 styles.pageIdentity
               }
             >
+
               <p
                 className={
                   styles.pageCategory
@@ -634,6 +1078,7 @@ export default function DashboardLayout({
                 }
               </p>
 
+
               <h1
                 className={
                   styles.pageTitle
@@ -643,7 +1088,9 @@ export default function DashboardLayout({
                   currentTitle
                 }
               </h1>
+
             </div>
+
           </div>
 
 
@@ -652,8 +1099,13 @@ export default function DashboardLayout({
               styles.topbarRight
             }
           />
+
         </header>
 
+
+        {/* =================================================
+            PAGE CONTENT
+        ================================================= */}
 
         <main
           className={
@@ -662,7 +1114,9 @@ export default function DashboardLayout({
         >
           {children}
         </main>
+
       </div>
+
     </div>
   )
 }
