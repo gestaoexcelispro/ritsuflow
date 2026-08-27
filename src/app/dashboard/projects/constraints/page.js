@@ -7,8 +7,6 @@ import React, {
   useState,
 } from 'react';
 
-import { createPortal } from 'react-dom';
-
 import { supabase } from '../../../../lib/supabase';
 
 
@@ -856,12 +854,6 @@ export default function ConstraintLogPage() {
     loading,
     setLoading,
   ] = useState(false);
-
-
-  const [
-    headerActionsTarget,
-    setHeaderActionsTarget,
-  ] = useState(null);
 
 
   const [
@@ -1774,48 +1766,115 @@ export default function ConstraintLogPage() {
   useEffect(
     () => {
 
-      const resolveHeaderTarget =
+      const publishHeaderState =
         () => {
 
-          const explicitTarget =
-            document.querySelector(
-              '[class*="topbarRight"]'
-            );
-
-          const fallbackHeader =
-            document.querySelector(
-              'header'
-            );
-
-          setHeaderActionsTarget(
-            explicitTarget ||
-            fallbackHeader
-              ?.lastElementChild ||
-            null
+          window.dispatchEvent(
+            new CustomEvent(
+              'ritsuflow:constraint-header-state',
+              {
+                detail: {
+                  projects,
+                  selectedProjectId,
+                  loading,
+                },
+              }
+            )
           );
 
         };
 
 
-      resolveHeaderTarget();
+      publishHeaderState();
+
+    },
+    [
+      projects,
+      selectedProjectId,
+      loading,
+    ]
+  );
 
 
-      const frame =
-        window.requestAnimationFrame(
-          resolveHeaderTarget
+  useEffect(
+    () => {
+
+      function handleHeaderProjectChange(
+        event
+      ) {
+
+        handleProjectChange(
+          event.detail?.projectId ||
+          ''
         );
+
+      }
+
+
+      function handleHeaderRefresh() {
+
+        if (
+          selectedProjectId
+        ) {
+          loadConstraintLog(
+            selectedProjectId
+          );
+        }
+
+      }
+
+
+      function handleHeaderAddConstraint() {
+
+        if (
+          selectedProjectId
+        ) {
+          openCreateModal();
+        }
+
+      }
+
+
+      window.addEventListener(
+        'ritsuflow:constraint-project-change',
+        handleHeaderProjectChange
+      );
+
+      window.addEventListener(
+        'ritsuflow:constraint-refresh',
+        handleHeaderRefresh
+      );
+
+      window.addEventListener(
+        'ritsuflow:constraint-add',
+        handleHeaderAddConstraint
+      );
 
 
       return () => {
 
-        window.cancelAnimationFrame(
-          frame
+        window.removeEventListener(
+          'ritsuflow:constraint-project-change',
+          handleHeaderProjectChange
+        );
+
+        window.removeEventListener(
+          'ritsuflow:constraint-refresh',
+          handleHeaderRefresh
+        );
+
+        window.removeEventListener(
+          'ritsuflow:constraint-add',
+          handleHeaderAddConstraint
         );
 
       };
 
     },
-    []
+    [
+      selectedProjectId,
+      loadConstraintLog,
+    ]
   );
 
 
@@ -3992,101 +4051,6 @@ export default function ConstraintLogPage() {
 
   return (
     <div style={pageStyle}>
-
-      {/* ======================================================
-          CONSTRAINT PAGE HEADER CONTROLS
-      ====================================================== */}
-
-      {headerActionsTarget &&
-        createPortal(
-
-          <div style={headerControlsStyle}>
-
-            <div style={headerProjectControlStyle}>
-
-              <span style={headerProjectLabelStyle}>
-                Project
-              </span>
-
-
-              <select
-                value={
-                  selectedProjectId
-                }
-                onChange={(
-                  event
-                ) =>
-                  handleProjectChange(
-                    event.target.value
-                  )
-                }
-                style={headerProjectSelectStyle}
-                aria-label="Constraint project"
-              >
-
-                <option value="">
-                  -- Select a Project --
-                </option>
-
-                {projects.map(
-                  (project) => (
-                    <option
-                      key={
-                        project.id
-                      }
-                      value={
-                        project.id
-                      }
-                    >
-                      {project.code
-                        ? `${project.code} - `
-                        : ''}
-
-                      {project.name}
-                    </option>
-                  )
-                )}
-
-              </select>
-
-            </div>
-
-
-            {selectedProjectId && (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() =>
-                  loadConstraintLog(
-                    selectedProjectId
-                  )
-                }
-                style={headerRefreshButtonStyle}
-              >
-                {loading
-                  ? 'Refreshing...'
-                  : 'Refresh'}
-              </button>
-            )}
-
-
-            {selectedProjectId && (
-              <button
-                type="button"
-                onClick={
-                  openCreateModal
-                }
-                style={headerAddButtonStyle}
-              >
-                + Add Constraint
-              </button>
-            )}
-
-          </div>,
-
-          headerActionsTarget
-        )}
-
 
       {errorMessage && (
         <MessageBox type="error">
@@ -8320,163 +8284,6 @@ const sectionSupportingTextStyle = {
 const sectionContentStyle = {
   padding:
     '10px 14px 12px',
-};
-
-
-// ============================================================
-// CONSTRAINT HEADER CONTROLS
-// ============================================================
-
-const headerControlsStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'flex-end',
-
-  gap:
-    '8px',
-
-  width:
-    '100%',
-
-  flexWrap:
-    'nowrap',
-};
-
-
-const headerProjectControlStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '7px',
-
-  minWidth:
-    0,
-};
-
-
-const headerProjectLabelStyle = {
-  color:
-    '#64748b',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    900,
-
-  textTransform:
-    'uppercase',
-
-  letterSpacing:
-    '0.05em',
-
-  whiteSpace:
-    'nowrap',
-};
-
-
-const headerProjectSelectStyle = {
-  width:
-    '250px',
-
-  maxWidth:
-    '30vw',
-
-  height:
-    '36px',
-
-  padding:
-    '0 9px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    600,
-};
-
-
-const headerRefreshButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 11px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    800,
-
-  cursor:
-    'pointer',
-};
-
-
-const headerAddButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 13px',
-
-  border:
-    '1px solid #2563eb',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#2563eb',
-
-  color:
-    '#ffffff',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
-
-  whiteSpace:
-    'nowrap',
 };
 
 
