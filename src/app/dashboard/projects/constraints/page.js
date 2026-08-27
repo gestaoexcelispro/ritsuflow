@@ -692,6 +692,7 @@ function getForecastAssessment(
 
 
 async function getPerformedBy() {
+
   try {
 
     const {
@@ -1024,7 +1025,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // RECOVERY ACTION PLAN — SQL 105
+  // RECOVERY ACTION PLAN
   // ==========================================================
 
   const [
@@ -1080,7 +1081,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // PROJECT
+  // SELECTED PROJECT
   // ==========================================================
 
   const selectedProject =
@@ -1552,7 +1553,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // LOAD CONSTRAINT HISTORY
+  // LOAD HISTORY
   // ==========================================================
 
   const loadConstraintHistory =
@@ -2216,7 +2217,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // SAVE CONSTRAINT DETAILS
+  // SAVE DETAILS
   // ==========================================================
 
   async function saveManagementDetails() {
@@ -2337,7 +2338,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // ADD CONSTRAINT COMMENT
+  // COMMENT
   // ==========================================================
 
   async function addManagementComment() {
@@ -2420,9 +2421,6 @@ export default function ConstraintLogPage() {
 
   // ==========================================================
   // UPDATE FORECAST
-  //
-  // IMPORTANT:
-  // New date ALWAYS requires a reason.
   // ==========================================================
 
   async function updateForecast() {
@@ -2523,6 +2521,14 @@ export default function ConstraintLogPage() {
 
   async function reopenConstraint() {
 
+    if (
+      !managedConstraint ||
+      savingAction
+    ) {
+      return;
+    }
+
+
     const reason =
       String(
         managementNote ||
@@ -2599,6 +2605,12 @@ export default function ConstraintLogPage() {
 
     } catch (error) {
 
+      console.error(
+        'Reopen Constraint:',
+        error
+      );
+
+
       setHistoryError(
         error.message ||
         'Constraint could not be reopened.'
@@ -2614,7 +2626,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // CONSTRAINT LIFECYCLE
+  // LIFECYCLE
   // ==========================================================
 
   async function executeLifecycleAction(
@@ -2850,7 +2862,6 @@ export default function ConstraintLogPage() {
 
   // ==========================================================
   // CREATE RECOVERY ACTION
-  // SQL 105
   // ==========================================================
 
   async function createRecoveryAction() {
@@ -3873,7 +3884,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // FORECAST / ACTION PLAN SUMMARY
+  // FORECAST
   // ==========================================================
 
   const managedForecast =
@@ -3937,6 +3948,56 @@ export default function ConstraintLogPage() {
     );
 
 
+  // ==========================================================
+  // REOPEN VALIDATION
+  //
+  // Date + reason are BOTH mandatory.
+  // ==========================================================
+
+  const reopenValidation =
+    useMemo(
+      () => {
+
+        const hasDate =
+          Boolean(
+            forecastDate
+          );
+
+
+        const reason =
+          String(
+            managementNote ||
+            ''
+          ).trim();
+
+
+        const hasReason =
+          Boolean(
+            reason
+          );
+
+
+        return {
+          hasDate,
+          hasReason,
+
+          canSubmit:
+            hasDate &&
+            hasReason,
+        };
+
+      },
+      [
+        forecastDate,
+        managementNote,
+      ]
+    );
+
+
+  // ==========================================================
+  // ACTION PLAN SUMMARY
+  // ==========================================================
+
   const actionPlanSummary =
     useMemo(
       () => {
@@ -3987,7 +4048,7 @@ export default function ConstraintLogPage() {
           ).length;
 
 
-        const activeActions =
+        const active =
           open +
           inProgress;
 
@@ -4019,8 +4080,7 @@ export default function ConstraintLogPage() {
 
           inProgress,
 
-          active:
-            activeActions,
+          active,
 
           completed,
 
@@ -4096,7 +4156,7 @@ export default function ConstraintLogPage() {
               'Recovery Possible',
 
             description:
-              `${actionPlanSummary.protectionActions} active action${actionPlanSummary.protectionActions === 1 ? '' : 's'} may protect the Required By date.`,
+              `${actionPlanSummary.protectionActions} active plan-protection action${actionPlanSummary.protectionActions === 1 ? '' : 's'}.`,
           };
         }
 
@@ -4109,7 +4169,7 @@ export default function ConstraintLogPage() {
               'Schedule Exposed',
 
             description:
-              'No active plan-protection action currently offsets the exposure.',
+              'Current forecast exceeds the Required By date.',
           };
         }
 
@@ -4123,7 +4183,7 @@ export default function ConstraintLogPage() {
               'Action Plan Active',
 
             description:
-              'Recovery actions are being executed.',
+              'Recovery actions are currently being executed.',
           };
         }
 
@@ -4302,8 +4362,6 @@ export default function ConstraintLogPage() {
       {selectedProjectId && (
         <>
 
-          {/* KPI */}
-
           <div style={summaryGridStyle}>
 
             <SummaryCard
@@ -4332,8 +4390,6 @@ export default function ConstraintLogPage() {
 
           </div>
 
-
-          {/* FILTERS */}
 
           <div style={filtersStyle}>
 
@@ -4496,8 +4552,6 @@ export default function ConstraintLogPage() {
           </div>
 
 
-          {/* TABLE */}
-
           <div
             style={
               tableContainerStyle
@@ -4507,6 +4561,11 @@ export default function ConstraintLogPage() {
             {loading ? (
               <div style={emptyStyle}>
                 Loading Constraint Log...
+              </div>
+            ) : filteredConstraints.length ===
+              0 ? (
+              <div style={emptyStyle}>
+                No constraints found.
               </div>
             ) : (
               <table style={tableStyle}>
@@ -4776,8 +4835,6 @@ export default function ConstraintLogPage() {
             }
           >
 
-            {/* HEADER */}
-
             <div
               style={
                 managementHeaderStyle
@@ -4878,8 +4935,6 @@ export default function ConstraintLogPage() {
 
             </div>
 
-
-            {/* BODY */}
 
             <div
               style={
@@ -5136,7 +5191,7 @@ export default function ConstraintLogPage() {
               </ManagementSection>
 
 
-              {/* RESOLUTION FORECAST */}
+              {/* FORECAST */}
 
               <ManagementSection
                 title="Resolution Forecast"
@@ -5315,9 +5370,7 @@ export default function ConstraintLogPage() {
               </ManagementSection>
 
 
-              {/* ==================================================
-                  ACTION PLAN — SQL 105
-              ================================================== */}
+              {/* ACTION PLAN */}
 
               <ManagementSection
                 title="Action Plan"
@@ -5679,7 +5732,7 @@ export default function ConstraintLogPage() {
                           '5px',
                       }}
                     >
-                      If management can eliminate, reduce, transfer or recover the constraint's effect, add an Action Plan.
+                      Add a Recovery Action when management can eliminate, reduce, transfer or recover the constraint's effect.
                     </div>
                   </div>
                 ) : (
@@ -6050,7 +6103,7 @@ export default function ConstraintLogPage() {
                   'resolve' && (
                   <LifecycleActionPanel
                     title="Resolve Constraint"
-                    description="The underlying problem has been solved. It will still require verification before readiness is released."
+                    description="The underlying problem has been solved. Verification is still required before readiness is released."
                     label="Resolution Note *"
                     value={
                       managementNote
@@ -6136,6 +6189,8 @@ export default function ConstraintLogPage() {
                 )}
 
 
+                {/* REOPEN */}
+
                 {activeManagementPanel ===
                   'reopen' && (
                   <ActionPanel
@@ -6160,9 +6215,17 @@ export default function ConstraintLogPage() {
                       date={
                         forecastDate
                       }
-                      setDate={
-                        setForecastDate
-                      }
+                      setDate={(
+                        value
+                      ) => {
+                        setForecastDate(
+                          value
+                        );
+
+                        if (value) {
+                          setHistoryError('');
+                        }
+                      }}
                       preview={
                         forecastPreview
                       }
@@ -6178,34 +6241,163 @@ export default function ConstraintLogPage() {
                         }
                         onChange={(
                           event
-                        ) =>
+                        ) => {
+
+                          const value =
+                            event.target.value;
+
+
                           setManagementNote(
-                            event.target.value
-                          )
-                        }
+                            value
+                          );
+
+
+                          if (
+                            value.trim()
+                          ) {
+                            setHistoryError('');
+                          }
+
+                        }}
                         placeholder="Example: Supplier did not deliver on the previously confirmed date."
                         style={
                           smallTextareaStyle
                         }
                       />
+
+
+                      {!reopenValidation.hasReason && (
+                        <div
+                          style={
+                            inlineValidationStyle
+                          }
+                        >
+                          A reason is required because the Planned Resolution Date is being revised.
+                        </div>
+                      )}
+
+
+                      {!reopenValidation.hasDate && (
+                        <div
+                          style={
+                            inlineValidationStyle
+                          }
+                        >
+                          A new Planned Resolution Date is required.
+                        </div>
+                      )}
+
                     </ModalField>
 
 
-                    <ActionButtons
-                      saving={
-                        savingAction
+                    <div
+                      style={
+                        reopenTransitionStyle
                       }
-                      confirmLabel="Confirm Reopen"
-                      warning
-                      onCancel={() =>
-                        setActiveManagementPanel(
-                          null
-                        )
+                    >
+
+                      <div>
+                        <div
+                          style={
+                            metaLabelStyle
+                          }
+                        >
+                          Current Status
+                        </div>
+
+                        <strong>
+                          Resolved
+                        </strong>
+                      </div>
+
+
+                      <div
+                        style={
+                          reopenArrowStyle
+                        }
+                      >
+                        →
+                      </div>
+
+
+                      <div>
+                        <div
+                          style={
+                            metaLabelStyle
+                          }
+                        >
+                          New Status
+                        </div>
+
+                        <strong
+                          style={{
+                            color:
+                              '#1d4ed8',
+                          }}
+                        >
+                          In Progress
+                        </strong>
+                      </div>
+
+                    </div>
+
+
+                    <div
+                      style={
+                        rightActionsStyle
                       }
-                      onConfirm={
-                        reopenConstraint
-                      }
-                    />
+                    >
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveManagementPanel(
+                            null
+                          );
+
+                          setManagementNote('');
+
+                          setHistoryError('');
+                        }}
+                        style={
+                          secondaryButtonStyle
+                        }
+                      >
+                        Cancel
+                      </button>
+
+
+                      <button
+                        type="button"
+                        disabled={
+                          savingAction ||
+                          !reopenValidation.canSubmit
+                        }
+                        onClick={
+                          reopenConstraint
+                        }
+                        style={{
+                          ...warningPrimaryButtonStyle,
+
+                          opacity:
+                            savingAction ||
+                            !reopenValidation.canSubmit
+                              ? 0.45
+                              : 1,
+
+                          cursor:
+                            savingAction ||
+                            !reopenValidation.canSubmit
+                              ? 'not-allowed'
+                              : 'pointer',
+                        }}
+                      >
+                        {savingAction
+                          ? 'Reopening...'
+                          : 'Confirm Reopen'}
+                      </button>
+
+                    </div>
 
                   </ActionPanel>
                 )}
@@ -6460,8 +6652,6 @@ export default function ConstraintLogPage() {
 
             </div>
 
-
-            {/* FOOTER */}
 
             <div
               style={
@@ -6899,11 +7089,8 @@ function SummaryCard({
   description,
 }) {
   return (
-    <div
-      style={
-        summaryCardStyle
-      }
-    >
+    <div style={summaryCardStyle}>
+
       <div
         style={
           summaryLabelStyle
@@ -6927,6 +7114,7 @@ function SummaryCard({
       >
         {description}
       </div>
+
     </div>
   );
 }
@@ -6942,6 +7130,7 @@ function MiniSummary({
         miniSummaryStyle
       }
     >
+
       <div
         style={
           metaLabelStyle
@@ -6957,6 +7146,7 @@ function MiniSummary({
       >
         {value ?? '—'}
       </div>
+
     </div>
   );
 }
@@ -6968,6 +7158,7 @@ function FilterField({
 }) {
   return (
     <div>
+
       <label
         style={
           filterLabelStyle
@@ -6977,6 +7168,7 @@ function FilterField({
       </label>
 
       {children}
+
     </div>
   );
 }
@@ -6993,6 +7185,7 @@ function ModalField({
           '14px',
       }}
     >
+
       <label
         style={
           modalLabelStyle
@@ -7002,6 +7195,7 @@ function ModalField({
       </label>
 
       {children}
+
     </div>
   );
 }
@@ -7018,6 +7212,7 @@ function ManagementSection({
         sectionStyle
       }
     >
+
       <h3
         style={
           sectionTitleStyle
@@ -7044,6 +7239,7 @@ function ManagementSection({
       >
         {children}
       </div>
+
     </section>
   );
 }
@@ -7059,10 +7255,12 @@ function ForecastCard({
     <div
       style={{
         ...forecastCardStyle,
+
         background:
           alert
             ? '#fef2f2'
             : '#f8fafc',
+
         borderColor:
           alert
             ? '#fecaca'
@@ -7082,12 +7280,15 @@ function ForecastCard({
         style={{
           marginTop:
             '5px',
+
           color:
             alert
               ? '#b91c1c'
               : '#0f172a',
+
           fontSize:
             '12px',
+
           fontWeight:
             900,
         }}
@@ -7099,12 +7300,15 @@ function ForecastCard({
         style={{
           marginTop:
             '4px',
+
           color:
             alert
               ? '#991b1b'
               : '#64748b',
+
           fontSize:
             '8px',
+
           lineHeight:
             1.4,
         }}
@@ -7151,6 +7355,7 @@ function ForecastDateFields({
 
 
       <div>
+
         <div
           style={
             metaLabelStyle
@@ -7180,6 +7385,7 @@ function ForecastDateFields({
             requiredBy
           )}
         </div>
+
       </div>
 
     </div>
@@ -7195,10 +7401,13 @@ function StatusBadge({
     <span
       style={{
         ...badgeBaseStyle,
+
         background:
           style.background,
+
         border:
           `1px solid ${style.border}`,
+
         color:
           style.color,
       }}
@@ -7217,18 +7426,22 @@ function LifecycleStage({
     <span
       style={{
         ...lifecycleStageStyle,
+
         borderColor:
           active
             ? '#2563eb'
             : '#e2e8f0',
+
         background:
           active
             ? '#eff6ff'
             : '#ffffff',
+
         color:
           active
             ? '#1d4ed8'
             : '#64748b',
+
         fontWeight:
           active
             ? 900
@@ -7302,9 +7515,12 @@ function LifecycleButton({
       onClick={onClick}
       style={{
         ...lifecycleButtonStyle,
+
         background,
+
         border:
           `1px solid ${border}`,
+
         color,
       }}
     >
@@ -7316,8 +7532,10 @@ function LifecycleButton({
         style={{
           marginTop:
             '4px',
+
           color:
             '#64748b',
+
           fontSize:
             '8px',
         }}
@@ -7345,6 +7563,7 @@ function ActionPanel({
         style={{
           fontSize:
             '11px',
+
           fontWeight:
             900,
         }}
@@ -7356,10 +7575,13 @@ function ActionPanel({
         style={{
           marginTop:
             '4px',
+
           color:
             '#64748b',
+
           fontSize:
             '9px',
+
           lineHeight:
             1.5,
         }}
@@ -8762,6 +8984,35 @@ const reopenNoticeStyle = {
   background: '#fff7ed',
   color: '#9a3412',
   fontSize: '9px',
+};
+
+
+const inlineValidationStyle = {
+  marginTop: '6px',
+  color: '#b91c1c',
+  fontSize: '8px',
+  fontWeight: 700,
+};
+
+
+const reopenTransitionStyle = {
+  display: 'grid',
+  gridTemplateColumns:
+    '1fr auto 1fr',
+  alignItems: 'center',
+  gap: '12px',
+  marginBottom: '14px',
+  padding: '12px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '7px',
+  background: '#ffffff',
+};
+
+
+const reopenArrowStyle = {
+  color: '#cbd5e1',
+  fontSize: '20px',
+  fontWeight: 900,
 };
 
 
