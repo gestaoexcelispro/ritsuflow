@@ -142,6 +142,30 @@ const PRIORITY_OPTIONS = [
 ];
 
 
+const IMPACT_OPTIONS = [
+  {
+    value: 'none',
+    label: 'None',
+  },
+  {
+    value: 'low',
+    label: 'Low',
+  },
+  {
+    value: 'moderate',
+    label: 'Moderate',
+  },
+  {
+    value: 'high',
+    label: 'High',
+  },
+  {
+    value: 'critical',
+    label: 'Critical',
+  },
+];
+
+
 const RESPONSE_APPROACH_OPTIONS = [
   {
     value: 'eliminate_cause',
@@ -545,6 +569,124 @@ function getPriorityStyle(
 }
 
 
+function getImpactStyle(
+  impact
+) {
+  switch (
+    normalizeText(impact)
+  ) {
+    case 'critical':
+      return {
+        background: '#fee2e2',
+        border: '#ef4444',
+        color: '#991b1b',
+      };
+
+    case 'high':
+      return {
+        background: '#fff7ed',
+        border: '#fdba74',
+        color: '#c2410c',
+      };
+
+    case 'moderate':
+      return {
+        background: '#fefce8',
+        border: '#fde047',
+        color: '#854d0e',
+      };
+
+    case 'low':
+      return {
+        background: '#f0fdf4',
+        border: '#86efac',
+        color: '#166534',
+      };
+
+    case 'none':
+      return {
+        background: '#f8fafc',
+        border: '#cbd5e1',
+        color: '#64748b',
+      };
+
+    default:
+      return {
+        background: '#f8fafc',
+        border: '#cbd5e1',
+        color: '#475569',
+      };
+  }
+}
+
+
+function formatResolvedDate(
+  value
+) {
+  if (!value) {
+    return '—';
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat(
+    'en-US',
+    {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+    }
+  ).format(date);
+}
+
+
+function extractConstraintId(
+  value
+) {
+  if (!value) {
+    return null;
+  }
+
+  if (
+    typeof value ===
+    'string'
+  ) {
+    return value;
+  }
+
+  if (
+    Array.isArray(value)
+  ) {
+    return extractConstraintId(
+      value[0]
+    );
+  }
+
+  if (
+    typeof value ===
+    'object'
+  ) {
+    return (
+      value.id ||
+      value.constraint_id ||
+      value.created_constraint_id ||
+      null
+    );
+  }
+
+  return null;
+}
+
+
 function getEffectivenessStyle(
   effectiveness
 ) {
@@ -735,6 +877,9 @@ function createInitialConstraintForm() {
     priority:
       'medium',
 
+    impact:
+      'moderate',
+
     blocking:
       true,
   };
@@ -757,12 +902,17 @@ function createManagementForm(
 
     priority:
       constraint
+        ?.priority ||
+      constraint
         ?.base_priority ||
       constraint
         ?.legacy_priority ||
-      constraint
-        ?.priority ||
       'medium',
+
+    impact:
+      constraint
+        ?.impact ||
+      'moderate',
 
     description:
       constraint
@@ -891,8 +1041,8 @@ export default function ConstraintLogPage() {
 
 
   const [
-    exposureFilter,
-    setExposureFilter,
+    impactFilter,
+    setImpactFilter,
   ] = useState('');
 
 
@@ -1227,9 +1377,107 @@ export default function ConstraintLogPage() {
           }
 
 
-          const loadedConstraints =
+          const overviewConstraints =
             constraintData ||
             [];
+
+
+          if (
+            overviewConstraints.length ===
+            0
+          ) {
+
+            setConstraints([]);
+            setAffectedWork([]);
+            setLookaheadItems({});
+            setMasterPlanPackages({});
+
+            return;
+          }
+
+
+          const overviewConstraintIds =
+            overviewConstraints.map(
+              (constraint) =>
+                constraint.id
+            );
+
+
+          const {
+            data:
+              constraintMetaData,
+
+            error:
+              constraintMetaError,
+          } =
+            await supabase
+              .from('constraints')
+              .select(`
+                id,
+                priority,
+                impact,
+                resolved_at
+              `)
+              .in(
+                'id',
+                overviewConstraintIds
+              );
+
+
+          if (
+            constraintMetaError
+          ) {
+            throw constraintMetaError;
+          }
+
+
+          const constraintMetaMap =
+            Object.fromEntries(
+              (
+                constraintMetaData ||
+                []
+              ).map(
+                (item) => [
+                  item.id,
+                  item,
+                ]
+              )
+            );
+
+
+          const loadedConstraints =
+            overviewConstraints.map(
+              (constraint) => {
+
+                const meta =
+                  constraintMetaMap[
+                    constraint.id
+                  ] ||
+                  {};
+
+
+                return {
+                  ...constraint,
+
+                  priority:
+                    meta.priority ||
+                    constraint.priority ||
+                    constraint.base_priority ||
+                    'medium',
+
+                  impact:
+                    meta.impact ||
+                    constraint.impact ||
+                    'moderate',
+
+                  resolved_at:
+                    meta.resolved_at ||
+                    constraint.resolved_at ||
+                    null,
+                };
+
+              }
+            );
 
 
           setConstraints(
@@ -1720,20 +1968,75 @@ export default function ConstraintLogPage() {
         }
 
 
-        setManagedConstraint(data);
+        const {
+          data:
+            constraintMeta,
+
+          error:
+            constraintMetaError,
+        } =
+          await supabase
+            .from('constraints')
+            .select(`
+              id,
+              priority,
+              impact,
+              resolved_at
+            `)
+            .eq(
+              'id',
+              constraintId
+            )
+            .single();
+
+
+        if (
+          constraintMetaError
+        ) {
+          throw constraintMetaError;
+        }
+
+
+        const mergedConstraint = {
+          ...data,
+
+          priority:
+            constraintMeta
+              ?.priority ||
+            data.priority ||
+            data.base_priority ||
+            'medium',
+
+          impact:
+            constraintMeta
+              ?.impact ||
+            data.impact ||
+            'moderate',
+
+          resolved_at:
+            constraintMeta
+              ?.resolved_at ||
+            data.resolved_at ||
+            null,
+        };
+
+
+        setManagedConstraint(
+          mergedConstraint
+        );
 
 
         setManagementForm(
           createManagementForm(
-            data
+            mergedConstraint
           )
         );
 
 
         setForecastDate(
-          data
+          mergedConstraint
             .target_resolution_date ||
-          data
+          mergedConstraint
             .required_by_date ||
           ''
         );
@@ -1916,7 +2219,7 @@ export default function ConstraintLogPage() {
     setStatusFilter('');
     setCategoryFilter('');
     setPriorityFilter('');
-    setExposureFilter('');
+    setImpactFilter('');
     setResponsibleFilter('');
     setSuccessMessage('');
     setErrorMessage('');
@@ -2025,6 +2328,9 @@ export default function ConstraintLogPage() {
 
 
       const {
+        data:
+          createdConstraintData,
+
         error,
       } =
         await supabase.rpc(
@@ -2069,6 +2375,47 @@ export default function ConstraintLogPage() {
 
       if (error) {
         throw error;
+      }
+
+
+      const createdConstraintId =
+        extractConstraintId(
+          createdConstraintData
+        );
+
+
+      if (
+        createdConstraintId
+      ) {
+
+        const {
+          error:
+            impactError,
+        } =
+          await supabase.rpc(
+            'set_constraint_impact_with_history',
+            {
+              target_constraint_id:
+                createdConstraintId,
+
+              target_impact:
+                createForm.impact,
+
+              target_comment:
+                'Impact defined during constraint creation.',
+
+              target_performed_by:
+                performedBy,
+            }
+          );
+
+
+        if (
+          impactError
+        ) {
+          throw impactError;
+        }
+
       }
 
 
@@ -2375,6 +2722,46 @@ export default function ConstraintLogPage() {
 
       if (error) {
         throw error;
+      }
+
+
+      if (
+        managementForm.impact !==
+        (
+          managedConstraint.impact ||
+          'moderate'
+        )
+      ) {
+
+        const {
+          error:
+            impactError,
+        } =
+          await supabase.rpc(
+            'set_constraint_impact_with_history',
+            {
+              target_constraint_id:
+                managedConstraint.id,
+
+              target_impact:
+                managementForm.impact,
+
+              target_comment:
+                managementForm.comment ||
+                'Constraint impact updated.',
+
+              target_performed_by:
+                performedBy,
+            }
+          );
+
+
+        if (
+          impactError
+        ) {
+          throw impactError;
+        }
+
       }
 
 
@@ -3707,12 +4094,17 @@ export default function ConstraintLogPage() {
             ).length,
 
 
-          exposed:
+          highImpact:
             constraints.filter(
               (constraint) =>
-                constraint
-                  .schedule_exposure_status ===
-                'exposed'
+                [
+                  'high',
+                  'critical',
+                ].includes(
+                  normalizeText(
+                    constraint.impact
+                  )
+                )
             ).length,
 
 
@@ -3814,8 +4206,10 @@ export default function ConstraintLogPage() {
 
             if (
               priorityFilter &&
-              constraint
-                .effective_priority !==
+              normalizeText(
+                constraint.priority ||
+                constraint.base_priority
+              ) !==
               priorityFilter
             ) {
               return false;
@@ -3823,10 +4217,11 @@ export default function ConstraintLogPage() {
 
 
             if (
-              exposureFilter &&
-              constraint
-                .schedule_exposure_status !==
-              exposureFilter
+              impactFilter &&
+              normalizeText(
+                constraint.impact
+              ) !==
+              impactFilter
             ) {
               return false;
             }
@@ -3853,7 +4248,7 @@ export default function ConstraintLogPage() {
         statusFilter,
         categoryFilter,
         priorityFilter,
-        exposureFilter,
+        impactFilter,
         responsibleFilter,
         getConstraintAffectedWork,
       ]
@@ -4087,11 +4482,11 @@ export default function ConstraintLogPage() {
               />
 
               <SummaryCard
-                label="Schedule Exposed"
-                value={summary.exposed}
-                description="Forecast exceeds Required By"
+                label="High / Critical Impact"
+                value={summary.highImpact}
+                description="Potentially significant production effect"
                 alert={
-                  summary.exposed >
+                  summary.highImpact >
                   0
                 }
               />
@@ -4218,7 +4613,7 @@ export default function ConstraintLogPage() {
                   </FilterField>
 
 
-                  <FilterField label="Effective Priority">
+                  <FilterField label="Priority">
                     <select
                       value={
                         priorityFilter
@@ -4256,15 +4651,15 @@ export default function ConstraintLogPage() {
                   </FilterField>
 
 
-                  <FilterField label="Exposure">
+                  <FilterField label="Impact">
                     <select
                       value={
-                        exposureFilter
+                        impactFilter
                       }
                       onChange={(
                         event
                       ) =>
-                        setExposureFilter(
+                        setImpactFilter(
                           event.target.value
                         )
                       }
@@ -4272,16 +4667,23 @@ export default function ConstraintLogPage() {
                     >
 
                       <option value="">
-                        All Exposure
+                        All Impact
                       </option>
 
-                      <option value="exposed">
-                        Exposed
-                      </option>
-
-                      <option value="protected">
-                        Protected
-                      </option>
+                      {IMPACT_OPTIONS.map(
+                        (impact) => (
+                          <option
+                            key={
+                              impact.value
+                            }
+                            value={
+                              impact.value
+                            }
+                          >
+                            {impact.label}
+                          </option>
+                        )
+                      )}
 
                     </select>
                   </FilterField>
@@ -4345,10 +4747,10 @@ export default function ConstraintLogPage() {
                           'REFERENCE',
                           'PACKAGE / LOCATION',
                           'STATUS',
-                          'BASE',
-                          'EFFECTIVE',
-                          'EXPOSURE',
+                          'PRIORITY',
+                          'IMPACT',
                           'PLANNED RESOLUTION',
+                          'ACTUAL RESOLUTION',
                           'RESPONSIBLE',
                           '',
                         ].map(
@@ -4385,15 +4787,6 @@ export default function ConstraintLogPage() {
                             managedConstraint
                               ?.id ===
                             constraint.id;
-
-
-                          const effectiveAuto =
-                            constraint
-                              .effective_priority ===
-                              'critical' &&
-                            constraint
-                              .base_priority !==
-                              'critical';
 
 
                           return (
@@ -4491,14 +4884,14 @@ export default function ConstraintLogPage() {
                                 <StatusBadge
                                   label={
                                     formatLabel(
-                                      constraint
-                                        .base_priority
+                                      constraint.priority ||
+                                      constraint.base_priority
                                     )
                                   }
                                   style={
                                     getPriorityStyle(
-                                      constraint
-                                        .base_priority
+                                      constraint.priority ||
+                                      constraint.base_priority
                                     )
                                   }
                                 />
@@ -4508,45 +4901,18 @@ export default function ConstraintLogPage() {
 
                               <td style={bodyCellStyle}>
 
-                                <div style={effectivePriorityStackStyle}>
-
-                                  <StatusBadge
-                                    label={
-                                      formatLabel(
-                                        constraint
-                                          .effective_priority
-                                      )
-                                    }
-                                    style={
-                                      getPriorityStyle(
-                                        constraint
-                                          .effective_priority
-                                      )
-                                    }
-                                  />
-
-
-                                  {effectiveAuto && (
-                                    <span style={autoLabelStyle}>
-                                      AUTO
-                                    </span>
-                                  )}
-
-                                </div>
-
-                              </td>
-
-
-                              <td style={bodyCellStyle}>
-
-                                <ExposureBadge
-                                  status={
-                                    constraint
-                                      .schedule_exposure_status
+                                <StatusBadge
+                                  label={
+                                    formatLabel(
+                                      constraint.impact ||
+                                      'moderate'
+                                    )
                                   }
-                                  days={
-                                    constraint
-                                      .schedule_exposure_days
+                                  style={
+                                    getImpactStyle(
+                                      constraint.impact ||
+                                      'moderate'
+                                    )
                                   }
                                 />
 
@@ -4564,13 +4930,17 @@ export default function ConstraintLogPage() {
                                   )}
                                 </strong>
 
-                                <div style={secondaryTextStyle}>
-                                  Required{' '}
-                                  {formatDate(
+                              </td>
+
+
+                              <td style={bodyCellStyle}>
+
+                                <strong>
+                                  {formatResolvedDate(
                                     constraint
-                                      .required_by_date
+                                      .resolved_at
                                   )}
-                                </div>
+                                </strong>
 
                               </td>
 
@@ -4680,18 +5050,22 @@ export default function ConstraintLogPage() {
 
                       <div>
                         <span style={drawerMetaLabelStyle}>
-                          Base
+                          Priority
                         </span>
 
                         <StatusBadge
                           label={
                             formatLabel(
                               managedConstraint
+                                .priority ||
+                              managedConstraint
                                 .base_priority
                             )
                           }
                           style={
                             getPriorityStyle(
+                              managedConstraint
+                                .priority ||
                               managedConstraint
                                 .base_priority
                             )
@@ -4702,27 +5076,22 @@ export default function ConstraintLogPage() {
 
                       <div>
                         <span style={drawerMetaLabelStyle}>
-                          Effective
+                          Impact
                         </span>
 
                         <StatusBadge
                           label={
-                            managedConstraint
-                              .effective_priority ===
-                              'critical' &&
-                            managedConstraint
-                              .base_priority !==
-                              'critical'
-                              ? 'Critical · Auto'
-                              : formatLabel(
-                                  managedConstraint
-                                    .effective_priority
-                                )
+                            formatLabel(
+                              managedConstraint
+                                .impact ||
+                              'moderate'
+                            )
                           }
                           style={
-                            getPriorityStyle(
+                            getImpactStyle(
                               managedConstraint
-                                .effective_priority
+                                .impact ||
+                              'moderate'
                             )
                           }
                         />
@@ -4758,33 +5127,25 @@ export default function ConstraintLogPage() {
                 <div style={drawerSummaryStyle}>
 
                   <DrawerMetric
-                    label="Exposure"
+                    label="Planned Resolution"
                     value={
-                      getExposureLabel(
+                      formatDate(
                         managedConstraint
-                          .schedule_exposure_days
+                          .target_resolution_date ||
+                        managedConstraint
+                          .required_by_date
                       )
-                    }
-                    alert={
-                      managedConstraint
-                        .schedule_exposure_status ===
-                      'exposed'
                     }
                   />
 
 
                   <DrawerMetric
-                    label="Outlook"
+                    label="Actual Resolution"
                     value={
-                      getOutlookLabel(
+                      formatResolvedDate(
                         managedConstraint
-                          .current_outlook
+                          .resolved_at
                       )
-                    }
-                    alert={
-                      managedConstraint
-                        .schedule_exposure_status ===
-                      'exposed'
                     }
                   />
 
@@ -4902,7 +5263,7 @@ export default function ConstraintLogPage() {
 
 
                         <ModalField
-                          label="Base Priority"
+                          label="Priority"
                         >
                           <select
                             disabled={
@@ -4954,16 +5315,57 @@ export default function ConstraintLogPage() {
                         </ModalField>
 
 
-                        {managedConstraint
-                          .effective_priority ===
-                          'critical' &&
-                          managedConstraint
-                            .base_priority !==
-                            'critical' && (
-                          <div style={autoPriorityNoticeStyle}>
-                            Effective Priority is currently <strong>Critical</strong> because Planned Resolution exceeds Required By. Base Priority remains unchanged.
-                          </div>
-                        )}
+                        <ModalField
+                          label="Impact"
+                        >
+                          <select
+                            disabled={
+                              TERMINAL_CONSTRAINT_STATUSES.includes(
+                                managedConstraint.status
+                              )
+                            }
+                            value={
+                              managementForm
+                                .impact
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              setManagementForm(
+                                (
+                                  current
+                                ) => ({
+                                  ...current,
+
+                                  impact:
+                                    event
+                                      .target
+                                      .value,
+                                })
+                              )
+                            }
+                            style={
+                              modalInputStyle
+                            }
+                          >
+                            {IMPACT_OPTIONS.map(
+                              (
+                                option
+                              ) => (
+                                <option
+                                  key={
+                                    option.value
+                                  }
+                                  value={
+                                    option.value
+                                  }
+                                >
+                                  {option.label}
+                                </option>
+                              )
+                            )}
+                          </select>
+                        </ModalField>
 
 
                         <ModalField
@@ -5620,7 +6022,7 @@ export default function ConstraintLogPage() {
 
 
                         <ForecastCard
-                          label="Schedule Exposure"
+                          label="Forecast Variance"
                           value={
                             getExposureLabel(
                               managedConstraint
@@ -5631,8 +6033,8 @@ export default function ConstraintLogPage() {
                             managedConstraint
                               .schedule_exposure_status ===
                               'exposed'
-                              ? 'Production plan is currently exposed'
-                              : 'Current forecast protects the Required By date'
+                              ? 'Current forecast is later than Required By'
+                              : 'Current forecast is on or before Required By'
                           }
                           alert={
                             managedConstraint
@@ -5659,37 +6061,6 @@ export default function ConstraintLogPage() {
                         />
 
                       </div>
-
-
-                      {managedConstraint
-                        .schedule_exposure_status ===
-                        'exposed' && (
-                        <div style={criticalEscalationStyle}>
-
-                          <div>
-
-                            <strong>
-                              Automatic Priority Escalation
-                            </strong>
-
-                            <div style={noticeTextStyle}>
-                              Planned Resolution exceeds Required By, so Effective Priority is automatically Critical.
-                            </div>
-
-                          </div>
-
-
-                          <StatusBadge
-                            label="Critical · Auto"
-                            style={
-                              getPriorityStyle(
-                                'critical'
-                              )
-                            }
-                          />
-
-                        </div>
-                      )}
 
 
                       {[
@@ -6661,7 +7032,7 @@ export default function ConstraintLogPage() {
 
 
               <ModalField
-                label="Base Priority"
+                label="Priority"
               >
                 <select
                   value={
@@ -6688,6 +7059,51 @@ export default function ConstraintLogPage() {
                   }
                 >
                   {PRIORITY_OPTIONS.map(
+                    (option) => (
+                      <option
+                        key={
+                          option.value
+                        }
+                        value={
+                          option.value
+                        }
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </ModalField>
+
+
+              <ModalField
+                label="Impact"
+              >
+                <select
+                  value={
+                    createForm.impact
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setCreateForm(
+                      (
+                        current
+                      ) => ({
+                        ...current,
+
+                        impact:
+                          event
+                            .target
+                            .value,
+                      })
+                    )
+                  }
+                  style={
+                    modalInputStyle
+                  }
+                >
+                  {IMPACT_OPTIONS.map(
                     (option) => (
                       <option
                         key={
