@@ -8364,6 +8364,24 @@ const summaryDescriptionStyle = {
 // REGISTER FILTERS
 // ============================================================
 
+const filterLabelStyle = {
+  display:
+    'block',
+
+  marginBottom:
+    '5px',
+
+  color:
+    '#475569',
+
+  fontSize:
+    '11px',
+
+  fontWeight:
+    800,
+};
+
+
 const registerFiltersStyle = {
   display:
     'grid',
