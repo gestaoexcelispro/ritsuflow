@@ -5225,6 +5225,36 @@ export default function LookaheadPage() {
                                   cellKey;
 
 
+                                if (
+                                  day.isWeekend
+                                ) {
+
+                                  return (
+
+                                    <td
+                                      key={`${row.id}-${day.iso}`}
+                                      title="Weekend - non-working day"
+                                      style={{
+                                        ...bodyCellStyle,
+                                        width: DAY_WIDTH,
+                                        minWidth: DAY_WIDTH,
+                                        height: '34px',
+                                        padding: 0,
+                                        background: '#f1f5f9',
+                                        color: '#94a3b8',
+                                        fontSize: '9px',
+                                        fontWeight: 800,
+                                        textAlign: 'center',
+                                      }}
+                                    >
+                                      OFF
+                                    </td>
+
+                                  );
+
+                                }
+
+
                                 return (
 
                                   <td
@@ -5626,7 +5656,9 @@ export default function LookaheadPage() {
                                       day.iso >=
                                         dates.start &&
                                       day.iso <=
-                                        dates.finish
+                                        dates.finish &&
+                                      !day.isWeekend &&
+                                      !day.isHoliday
                                     );
 
                                   }
