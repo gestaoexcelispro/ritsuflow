@@ -106,6 +106,11 @@ const baseNavigationGroups = [
         href: '/dashboard/projetos/semanal',
         icon: 'WP',
       },
+      {
+        label: 'Constraint Log',
+        href: '/dashboard/projetos/constraints',
+        icon: 'CL',
+      },
     ],
   },
 
