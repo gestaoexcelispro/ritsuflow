@@ -1067,26 +1067,6 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // SELECTED PROJECT
-  // ==========================================================
-
-  const selectedProject =
-    useMemo(
-      () =>
-        projects.find(
-          (project) =>
-            project.id ===
-            selectedProjectId
-        ) ||
-        null,
-      [
-        projects,
-        selectedProjectId,
-      ]
-    );
-
-
-  // ==========================================================
   // LOAD PROJECTS
   // ==========================================================
 
@@ -4021,42 +4001,25 @@ export default function ConstraintLogPage() {
     <div style={pageStyle}>
 
       {/* ======================================================
-          PAGE ACTIONS
+          PROJECT TOOLBAR
       ====================================================== */}
 
-      <div style={pageActionsStyle}>
+      <div style={projectToolbarStyle}>
 
-        {selectedProjectId && (
-          <button
-            type="button"
-            onClick={
-              openCreateModal
-            }
-            style={
-              primaryButtonStyle
-            }
+        <div style={projectToolbarLeftStyle}>
+
+          <label
+            htmlFor="constraint-project-selector"
+            style={projectToolbarLabelStyle}
           >
-            + Add Constraint
-          </button>
-        )}
+            Project
+          </label>
 
-      </div>
-
-
-      {/* ======================================================
-          PROJECT
-      ====================================================== */}
-
-      <SectionCard
-        title="Project"
-        subtitle="Select the project whose constraints you want to manage."
-      >
-
-        <div style={projectControlsStyle}>
 
           <div style={projectSelectStyle}>
 
             <select
+              id="constraint-project-selector"
               value={
                 selectedProjectId
               }
@@ -4117,22 +4080,24 @@ export default function ConstraintLogPage() {
             </button>
           )}
 
-
-          {selectedProject && (
-            <div style={projectBadgeStyle}>
-
-              {selectedProject.code
-                ? `${selectedProject.code} · `
-                : ''}
-
-              {selectedProject.name}
-
-            </div>
-          )}
-
         </div>
 
-      </SectionCard>
+
+        {selectedProjectId && (
+          <button
+            type="button"
+            onClick={
+              openCreateModal
+            }
+            style={
+              primaryButtonStyle
+            }
+          >
+            + Add Constraint
+          </button>
+        )}
+
+      </div>
 
 
       {errorMessage && (
@@ -8338,21 +8303,6 @@ const pageStyle = {
 };
 
 
-const pageActionsStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'flex-end',
-
-  alignItems:
-    'center',
-
-  marginBottom:
-    '14px',
-};
-
-
 // ============================================================
 // STANDARD PAGE SECTIONS
 // ============================================================
@@ -8421,10 +8371,43 @@ const sectionContentStyle = {
 
 
 // ============================================================
-// PROJECT
+// PROJECT TOOLBAR
 // ============================================================
 
-const projectControlsStyle = {
+const projectToolbarStyle = {
+  display:
+    'flex',
+
+  alignItems:
+    'center',
+
+  justifyContent:
+    'space-between',
+
+  gap:
+    '14px',
+
+  marginBottom:
+    '14px',
+
+  padding:
+    '12px 14px',
+
+  border:
+    '1px solid #e2e8f0',
+
+  borderRadius:
+    '9px',
+
+  background:
+    '#ffffff',
+
+  minHeight:
+    '68px',
+};
+
+
+const projectToolbarLeftStyle = {
   display:
     'flex',
 
@@ -8434,17 +8417,41 @@ const projectControlsStyle = {
   gap:
     '10px',
 
+  minWidth:
+    0,
+
+  flex:
+    1,
+
   flexWrap:
     'wrap',
 };
 
 
+const projectToolbarLabelStyle = {
+  color:
+    '#0f172a',
+
+  fontSize:
+    '14px',
+
+  fontWeight:
+    900,
+
+  lineHeight:
+    1.2,
+
+  whiteSpace:
+    'nowrap',
+};
+
+
 const projectSelectStyle = {
   width:
-    'min(430px,100%)',
+    'min(460px,100%)',
 
   flex:
-    '0 1 430px',
+    '0 1 460px',
 };
 
 
@@ -8456,7 +8463,7 @@ const inputStyle = {
     '44px',
 
   padding:
-    '0 9px',
+    '0 11px',
 
   border:
     '1px solid #cbd5e1',
@@ -8466,30 +8473,15 @@ const inputStyle = {
 
   background:
     '#ffffff',
-};
-
-
-const projectBadgeStyle = {
-  padding:
-    '9px 11px',
-
-  border:
-    '1px solid #dbeafe',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#eff6ff',
 
   color:
-    '#1e40af',
+    '#0f172a',
 
   fontSize:
-    '13px',
+    '14px',
 
   fontWeight:
-    800,
+    500,
 };
 
 
