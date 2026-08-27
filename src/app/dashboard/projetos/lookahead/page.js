@@ -6654,7 +6654,7 @@ export default function LookaheadPage() {
                                     ) =>
                                       `${getPackageCode(
                                         item
-                                      )} · ${getPackageDescription(
+                                      )} · ${getServiceName(
                                         item
                                       )}`
                                   )
