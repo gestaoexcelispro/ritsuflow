@@ -12,11 +12,9 @@ import { supabase } from '../../../../lib/supabase';
 
 // ============================================================
 // RitsuFlow™
-// CENTRALIZED CONSTRAINT MANAGEMENT
+// CONSTRAINT MANAGEMENT
 //
-// CENTERED MANAGEMENT WORKSPACE
-//
-// LIFECYCLE:
+// CONSTRAINT LIFECYCLE
 //
 // OPEN
 //   ↓
@@ -27,7 +25,25 @@ import { supabase } from '../../../../lib/supabase';
 //   ├── VERIFY & CLEAR → CLEARED
 //   └── REOPEN → IN PROGRESS
 //
-// CANCELLED = separate terminal state.
+// CANCELLED = terminal alternative
+//
+//
+// ACTION PLAN LIFECYCLE
+//
+// OPEN
+//   ↓
+// IN PROGRESS
+//   ↓
+// COMPLETED
+//   ↓
+// EFFECTIVENESS EVALUATION
+//
+// CANCELLED = terminal alternative
+//
+// IMPORTANT:
+//
+// Completing a Recovery Action DOES NOT automatically
+// resolve or clear the parent Constraint.
 //
 // ============================================================
 
@@ -36,7 +52,7 @@ import { supabase } from '../../../../lib/supabase';
 // CONSTANTS
 // ============================================================
 
-const ACTIVE_STATUSES = [
+const ACTIVE_CONSTRAINT_STATUSES = [
   'open',
   'in_progress',
   'waiting',
@@ -44,7 +60,7 @@ const ACTIVE_STATUSES = [
 ];
 
 
-const TERMINAL_STATUSES = [
+const TERMINAL_CONSTRAINT_STATUSES = [
   'cleared',
   'cancelled',
 ];
@@ -134,6 +150,70 @@ const PRIORITY_OPTIONS = [
 ];
 
 
+const RESPONSE_APPROACH_OPTIONS = [
+  {
+    value: 'eliminate_cause',
+    label: 'Eliminate Cause',
+  },
+  {
+    value: 'reduce_impact',
+    label: 'Reduce Impact',
+  },
+  {
+    value: 'alternative_solution',
+    label: 'Alternative Solution',
+  },
+  {
+    value: 'transfer_responsibility',
+    label: 'Transfer Responsibility',
+  },
+  {
+    value: 'accept_impact',
+    label: 'Accept Impact',
+  },
+  {
+    value: 'escalate',
+    label: 'Escalate',
+  },
+];
+
+
+const EXPECTED_IMPACT_OPTIONS = [
+  {
+    value: 'protect_required_by',
+    label: 'Protect Required By Date',
+  },
+  {
+    value: 'reduce_delay',
+    label: 'Reduce Schedule Exposure',
+  },
+  {
+    value: 'no_schedule_effect',
+    label: 'No Schedule Effect',
+  },
+  {
+    value: 'other',
+    label: 'Other',
+  },
+];
+
+
+const EFFECTIVENESS_OPTIONS = [
+  {
+    value: 'effective',
+    label: 'Effective',
+  },
+  {
+    value: 'partially_effective',
+    label: 'Partially Effective',
+  },
+  {
+    value: 'ineffective',
+    label: 'Ineffective',
+  },
+];
+
+
 const CATEGORY_LABELS =
   Object.fromEntries(
     CATEGORY_OPTIONS.map(
@@ -178,6 +258,15 @@ const ACTION_TYPE_LABELS = {
 
   cancelled:
     'Constraint Cancelled',
+
+  action_plan_added:
+    'Recovery Action Added',
+
+  action_plan_completed:
+    'Recovery Action Completed',
+
+  action_effectiveness_evaluated:
+    'Recovery Effectiveness Evaluated',
 };
 
 
@@ -185,41 +274,24 @@ const ACTION_TYPE_LABELS = {
 // HELPERS
 // ============================================================
 
-function normalizeText(
-  value
-) {
-  return String(
-    value || ''
-  )
+function normalizeText(value) {
+  return String(value || '')
     .trim()
     .toLowerCase();
 }
 
 
-function formatLabel(
-  value
-) {
+function formatLabel(value) {
   if (!value) {
     return '—';
   }
 
-
-  if (
-    CATEGORY_LABELS[
-      value
-    ]
-  ) {
-    return CATEGORY_LABELS[
-      value
-    ];
+  if (CATEGORY_LABELS[value]) {
+    return CATEGORY_LABELS[value];
   }
 
-
   return String(value)
-    .replace(
-      /_/g,
-      ' '
-    )
+    .replace(/_/g, ' ')
     .replace(
       /\b\w/g,
       (character) =>
@@ -228,20 +300,16 @@ function formatLabel(
 }
 
 
-function formatDate(
-  value
-) {
+function formatDate(value) {
   if (!value) {
     return '—';
   }
-
 
   const date =
     new Date(
       `${value}T00:00:00`
     );
 
-
   if (
     Number.isNaN(
       date.getTime()
@@ -250,34 +318,24 @@ function formatDate(
     return value;
   }
 
-
   return new Intl.DateTimeFormat(
     'en-US',
     {
-      month:
-        'short',
-
-      day:
-        '2-digit',
-
-      year:
-        'numeric',
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
     }
   ).format(date);
 }
 
 
-function formatDateTime(
-  value
-) {
+function formatDateTime(value) {
   if (!value) {
     return '—';
   }
 
-
   const date =
     new Date(value);
-
 
   if (
     Number.isNaN(
@@ -287,24 +345,14 @@ function formatDateTime(
     return value;
   }
 
-
   return new Intl.DateTimeFormat(
     'en-US',
     {
-      month:
-        'short',
-
-      day:
-        '2-digit',
-
-      year:
-        'numeric',
-
-      hour:
-        '2-digit',
-
-      minute:
-        '2-digit',
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     }
   ).format(date);
 }
@@ -317,21 +365,11 @@ function getConstraintReference(
     return 'CON-UNKNOWN';
   }
 
-
   const compact =
-    String(
-      constraintId
-    )
-      .replace(
-        /-/g,
-        ''
-      )
-      .slice(
-        0,
-        6
-      )
+    String(constraintId)
+      .replace(/-/g, '')
+      .slice(0, 6)
       .toUpperCase();
-
 
   return `CON-${compact}`;
 }
@@ -347,14 +385,12 @@ function getSourceLabel(
     return 'Lookahead / Koskela';
   }
 
-
   if (
     constraint
       ?.lookahead_work_item_id
   ) {
     return 'Lookahead';
   }
-
 
   if (
     constraint
@@ -363,14 +399,11 @@ function getSourceLabel(
     return 'Master Plan';
   }
 
-
   return 'Manual / Project';
 }
 
 
-function getStatusLabel(
-  status
-) {
+function getStatusLabel(status) {
   switch (status) {
 
     case 'open':
@@ -391,10 +424,11 @@ function getStatusLabel(
     case 'cancelled':
       return 'Cancelled';
 
+    case 'completed':
+      return 'Completed';
+
     default:
-      return formatLabel(
-        status
-      );
+      return formatLabel(status);
   }
 }
 
@@ -406,105 +440,66 @@ function getActionTypeLabel(
     return 'History Entry';
   }
 
-
   return (
     ACTION_TYPE_LABELS[
       actionType
     ] ||
-    formatLabel(
-      actionType
-    )
+    formatLabel(actionType)
   );
 }
 
 
-function getStatusStyle(
-  status
-) {
+function getStatusStyle(status) {
   switch (status) {
 
     case 'open':
       return {
-        background:
-          '#fee2e2',
-
-        border:
-          '#fca5a5',
-
-        color:
-          '#991b1b',
+        background: '#fee2e2',
+        border: '#fca5a5',
+        color: '#991b1b',
       };
 
     case 'in_progress':
       return {
-        background:
-          '#dbeafe',
-
-        border:
-          '#93c5fd',
-
-        color:
-          '#1d4ed8',
+        background: '#dbeafe',
+        border: '#93c5fd',
+        color: '#1d4ed8',
       };
 
     case 'waiting':
       return {
-        background:
-          '#fef3c7',
-
-        border:
-          '#fcd34d',
-
-        color:
-          '#92400e',
+        background: '#fef3c7',
+        border: '#fcd34d',
+        color: '#92400e',
       };
 
     case 'resolved':
       return {
-        background:
-          '#ede9fe',
-
-        border:
-          '#c4b5fd',
-
-        color:
-          '#6d28d9',
+        background: '#ede9fe',
+        border: '#c4b5fd',
+        color: '#6d28d9',
       };
 
     case 'cleared':
+    case 'completed':
       return {
-        background:
-          '#dcfce7',
-
-        border:
-          '#86efac',
-
-        color:
-          '#166534',
+        background: '#dcfce7',
+        border: '#86efac',
+        color: '#166534',
       };
 
     case 'cancelled':
       return {
-        background:
-          '#f1f5f9',
-
-        border:
-          '#cbd5e1',
-
-        color:
-          '#64748b',
+        background: '#f1f5f9',
+        border: '#cbd5e1',
+        color: '#64748b',
       };
 
     default:
       return {
-        background:
-          '#f8fafc',
-
-        border:
-          '#cbd5e1',
-
-        color:
-          '#475569',
+        background: '#f8fafc',
+        border: '#cbd5e1',
+        color: '#475569',
       };
   }
 }
@@ -514,69 +509,78 @@ function getPriorityStyle(
   priority
 ) {
   switch (
-    normalizeText(
-      priority
-    )
+    normalizeText(priority)
   ) {
 
     case 'critical':
       return {
-        background:
-          '#fee2e2',
-
-        border:
-          '#ef4444',
-
-        color:
-          '#991b1b',
+        background: '#fee2e2',
+        border: '#ef4444',
+        color: '#991b1b',
       };
 
     case 'high':
       return {
-        background:
-          '#fff7ed',
-
-        border:
-          '#fdba74',
-
-        color:
-          '#c2410c',
+        background: '#fff7ed',
+        border: '#fdba74',
+        color: '#c2410c',
       };
 
     case 'medium':
       return {
-        background:
-          '#fefce8',
-
-        border:
-          '#fde047',
-
-        color:
-          '#854d0e',
+        background: '#fefce8',
+        border: '#fde047',
+        color: '#854d0e',
       };
 
     case 'low':
       return {
-        background:
-          '#f0fdf4',
-
-        border:
-          '#86efac',
-
-        color:
-          '#166534',
+        background: '#f0fdf4',
+        border: '#86efac',
+        color: '#166534',
       };
 
     default:
       return {
-        background:
-          '#f8fafc',
+        background: '#f8fafc',
+        border: '#cbd5e1',
+        color: '#64748b',
+      };
+  }
+}
 
-        border:
-          '#cbd5e1',
 
-        color:
-          '#64748b',
+function getEffectivenessStyle(
+  effectiveness
+) {
+  switch (effectiveness) {
+
+    case 'effective':
+      return {
+        background: '#dcfce7',
+        border: '#86efac',
+        color: '#166534',
+      };
+
+    case 'partially_effective':
+      return {
+        background: '#fef3c7',
+        border: '#fcd34d',
+        color: '#92400e',
+      };
+
+    case 'ineffective':
+      return {
+        background: '#fee2e2',
+        border: '#fca5a5',
+        color: '#991b1b',
+      };
+
+    default:
+      return {
+        background: '#f1f5f9',
+        border: '#cbd5e1',
+        color: '#64748b',
       };
   }
 }
@@ -593,18 +597,15 @@ function dateDifferenceDays(
     return null;
   }
 
-
   const start =
     new Date(
       `${fromDate}T00:00:00`
     );
 
-
   const finish =
     new Date(
       `${toDate}T00:00:00`
     );
-
 
   if (
     Number.isNaN(
@@ -616,7 +617,6 @@ function dateDifferenceDays(
   ) {
     return null;
   }
-
 
   return Math.round(
     (
@@ -633,31 +633,20 @@ function getForecastAssessment(
 ) {
   if (!constraint) {
     return {
-      variance:
-        null,
-
-      varianceLabel:
-        '—',
-
-      outlook:
-        'Not Evaluated',
-
-      delayed:
-        false,
+      variance: null,
+      varianceLabel: '—',
+      delayed: false,
     };
   }
-
 
   const requiredBy =
     constraint
       .required_by_date;
 
-
   const forecast =
     constraint
       .target_resolution_date ||
     requiredBy;
-
 
   const variance =
     dateDifferenceDays(
@@ -665,82 +654,44 @@ function getForecastAssessment(
       forecast
     );
 
-
-  if (
-    variance === null
-  ) {
+  if (variance === null) {
     return {
-      variance:
-        null,
-
-      varianceLabel:
-        '—',
-
-      outlook:
-        'Not Evaluated',
-
-      delayed:
-        false,
+      variance: null,
+      varianceLabel: '—',
+      delayed: false,
     };
   }
 
-
-  if (
-    variance > 0
-  ) {
+  if (variance > 0) {
     return {
       variance,
-
       varianceLabel:
         `+${variance} day${variance === 1 ? '' : 's'}`,
-
-      outlook:
-        'Delay Expected',
-
-      delayed:
-        true,
+      delayed: true,
     };
   }
 
-
-  if (
-    variance < 0
-  ) {
+  if (variance < 0) {
     return {
       variance,
-
       varianceLabel:
         `${Math.abs(
           variance
         )} day${Math.abs(variance) === 1 ? '' : 's'} early`,
-
-      outlook:
-        'Ahead of Required Date',
-
-      delayed:
-        false,
+      delayed: false,
     };
   }
 
-
   return {
-    variance:
-      0,
-
+    variance: 0,
     varianceLabel:
       'On required date',
-
-    outlook:
-      'On Time',
-
-    delayed:
-      false,
+    delayed: false,
   };
 }
 
 
 async function getPerformedBy() {
-
   try {
 
     const {
@@ -749,15 +700,12 @@ async function getPerformedBy() {
       await supabase.auth
         .getUser();
 
-
     const user =
       data?.user;
-
 
     if (!user) {
       return null;
     }
-
 
     return (
       user.user_metadata
@@ -768,20 +716,16 @@ async function getPerformedBy() {
       null
     );
 
-  } catch (
-    error
-  ) {
+  } catch (error) {
 
     console.error(
       'Constraint actor:',
       error
     );
 
-
     return null;
 
   }
-
 }
 
 
@@ -850,6 +794,29 @@ function createManagementForm(
 
     comment:
       '',
+  };
+}
+
+
+function createRecoveryActionForm() {
+  return {
+    response_approach:
+      'alternative_solution',
+
+    action_title:
+      '',
+
+    action_description:
+      '',
+
+    responsible_party:
+      '',
+
+    due_date:
+      '',
+
+    expected_impact:
+      'protect_required_by',
   };
 }
 
@@ -977,7 +944,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // CENTERED MANAGEMENT WORKSPACE
+  // MANAGEMENT WORKSPACE
   // ==========================================================
 
   const [
@@ -1007,7 +974,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // MANAGEMENT ACTION PANEL
+  // CONSTRAINT ACTION PANEL
   // ==========================================================
 
   const [
@@ -1035,7 +1002,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // HISTORY
+  // CONSTRAINT HISTORY
   // ==========================================================
 
   const [
@@ -1057,16 +1024,70 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // SELECTED PROJECT
+  // RECOVERY ACTION PLAN — SQL 105
+  // ==========================================================
+
+  const [
+    recoveryActions,
+    setRecoveryActions,
+  ] = useState([]);
+
+
+  const [
+    loadingRecoveryActions,
+    setLoadingRecoveryActions,
+  ] = useState(false);
+
+
+  const [
+    recoveryActionForm,
+    setRecoveryActionForm,
+  ] = useState(
+    createRecoveryActionForm()
+  );
+
+
+  const [
+    savingRecoveryAction,
+    setSavingRecoveryAction,
+  ] = useState(false);
+
+
+  const [
+    selectedRecoveryActionId,
+    setSelectedRecoveryActionId,
+  ] = useState(null);
+
+
+  const [
+    recoveryActionNote,
+    setRecoveryActionNote,
+  ] = useState('');
+
+
+  const [
+    effectivenessValue,
+    setEffectivenessValue,
+  ] = useState(
+    'effective'
+  );
+
+
+  const [
+    recoveryActionPanel,
+    setRecoveryActionPanel,
+  ] = useState(null);
+
+
+  // ==========================================================
+  // PROJECT
   // ==========================================================
 
   const selectedProject =
     useMemo(
       () =>
         projects.find(
-          (
-            project
-          ) =>
+          (project) =>
             project.id ===
             selectedProjectId
         ) ||
@@ -1086,10 +1107,7 @@ export default function ConstraintLogPage() {
     useCallback(
       async () => {
 
-        setErrorMessage(
-          ''
-        );
-
+        setErrorMessage('');
 
         try {
 
@@ -1098,9 +1116,7 @@ export default function ConstraintLogPage() {
             error,
           } =
             await supabase
-              .from(
-                'projects'
-              )
+              .from('projects')
               .select(`
                 id,
                 organization_id,
@@ -1127,68 +1143,54 @@ export default function ConstraintLogPage() {
           }
 
 
-          const loadedProjects =
-            data ||
-            [];
+          const rows =
+            data || [];
 
 
-          setProjects(
-            loadedProjects
-          );
+          setProjects(rows);
 
 
           const params =
             new URLSearchParams(
-              window.location
-                .search
+              window.location.search
             );
 
 
-          const requestedProjectId =
+          const requested =
             params.get(
               'projectId'
             );
 
 
           if (
-            requestedProjectId &&
-            loadedProjects.some(
-              (
-                project
-              ) =>
+            requested &&
+            rows.some(
+              (project) =>
                 project.id ===
-                requestedProjectId
+                requested
             )
           ) {
-
             setSelectedProjectId(
-              requestedProjectId
+              requested
             );
 
-
             return;
-
           }
 
 
           if (
-            loadedProjects.length ===
+            rows.length ===
             1
           ) {
-
             setSelectedProjectId(
-              loadedProjects[0]
-                .id
+              rows[0].id
             );
-
           }
 
-        } catch (
-          error
-        ) {
+        } catch (error) {
 
           console.error(
-            'Constraint Log projects:',
+            'Projects:',
             error
           );
 
@@ -1223,18 +1225,11 @@ export default function ConstraintLogPage() {
           setMasterPlanPackages({});
 
           return;
-
         }
 
 
-        setLoading(
-          true
-        );
-
-
-        setErrorMessage(
-          ''
-        );
+        setLoading(true);
+        setErrorMessage('');
 
 
         try {
@@ -1247,37 +1242,29 @@ export default function ConstraintLogPage() {
               constraintError,
           } =
             await supabase
-              .from(
-                'constraints'
-              )
+              .from('constraints')
               .select(`
                 id,
                 project_id,
-
                 lookahead_work_item_id,
                 master_plan_package_id,
                 readiness_assessment_id,
-
                 category,
                 title,
                 description,
                 action_required,
                 responsible_party,
-
                 required_by_date,
                 target_resolution_date,
-
                 status,
                 blocking,
                 priority,
-
                 action_started_at,
                 resolved_at,
                 verified_at,
                 verified_by,
                 verification_notes,
                 cleared_at,
-
                 created_at,
                 updated_at
               `)
@@ -1321,25 +1308,22 @@ export default function ConstraintLogPage() {
             setMasterPlanPackages({});
 
             return;
-
           }
 
 
           const constraintIds =
             loadedConstraints.map(
-              (
-                constraint
-              ) =>
+              (constraint) =>
                 constraint.id
             );
 
 
           const {
             data:
-              affectedWorkData,
+              affectedData,
 
             error:
-              affectedWorkError,
+              affectedError,
           } =
             await supabase
               .from(
@@ -1359,67 +1343,56 @@ export default function ConstraintLogPage() {
 
 
           if (
-            affectedWorkError
+            affectedError
           ) {
-            throw affectedWorkError;
+            throw affectedError;
           }
 
 
-          const loadedAffectedWork =
-            affectedWorkData ||
+          const loadedAffected =
+            affectedData ||
             [];
 
 
           setAffectedWork(
-            loadedAffectedWork
+            loadedAffected
           );
 
 
-          const allLookaheadIds =
+          const lookaheadIds =
             Array.from(
               new Set([
-                ...loadedAffectedWork
+                ...loadedAffected
                   .map(
-                    (
-                      item
-                    ) =>
+                    (item) =>
                       item
                         .lookahead_work_item_id
                   )
-                  .filter(
-                    Boolean
-                  ),
+                  .filter(Boolean),
 
                 ...loadedConstraints
                   .map(
-                    (
-                      constraint
-                    ) =>
+                    (constraint) =>
                       constraint
                         .lookahead_work_item_id
                   )
-                  .filter(
-                    Boolean
-                  ),
+                  .filter(Boolean),
               ])
             );
 
 
-          let nextLookaheadMap =
+          let lookaheadMap =
             {};
 
 
           if (
-            allLookaheadIds.length >
+            lookaheadIds.length >
             0
           ) {
 
             const {
-              data:
-                lookaheadData,
-
-              error:
-                lookaheadError,
+              data,
+              error,
             } =
               await supabase
                 .from(
@@ -1440,100 +1413,77 @@ export default function ConstraintLogPage() {
                 `)
                 .in(
                   'id',
-                  allLookaheadIds
+                  lookaheadIds
                 );
 
 
-            if (
-              lookaheadError
-            ) {
-              throw lookaheadError;
+            if (error) {
+              throw error;
             }
 
 
-            nextLookaheadMap =
+            lookaheadMap =
               Object.fromEntries(
-                (
-                  lookaheadData ||
-                  []
-                ).map(
-                  (
-                    item
-                  ) => [
+                (data || []).map(
+                  (item) => [
                     item.id,
                     item,
                   ]
                 )
               );
-
           }
 
 
           setLookaheadItems(
-            nextLookaheadMap
+            lookaheadMap
           );
 
 
-          const allMasterIds =
+          const masterIds =
             Array.from(
               new Set([
-                ...loadedAffectedWork
+                ...loadedAffected
                   .map(
-                    (
-                      item
-                    ) =>
+                    (item) =>
                       item
                         .master_plan_package_id
                   )
-                  .filter(
-                    Boolean
-                  ),
+                  .filter(Boolean),
 
                 ...loadedConstraints
                   .map(
-                    (
-                      constraint
-                    ) =>
+                    (constraint) =>
                       constraint
                         .master_plan_package_id
                   )
-                  .filter(
-                    Boolean
-                  ),
+                  .filter(Boolean),
 
                 ...Object
                   .values(
-                    nextLookaheadMap
+                    lookaheadMap
                   )
                   .map(
-                    (
-                      item
-                    ) =>
+                    (item) =>
                       item
                         .master_plan_package_id
                   )
-                  .filter(
-                    Boolean
-                  ),
+                  .filter(Boolean),
               ])
             );
 
 
-          let nextMasterPlanMap =
+          let masterMap =
             {};
 
 
           if (
-            allMasterIds.length >
+            masterIds.length >
             0
           ) {
 
             const {
-              data:
-                masterPlanData,
-
-              error:
-                masterPlanError,
+              data,
+              error,
             } =
               await supabase
                 .from(
@@ -1552,59 +1502,47 @@ export default function ConstraintLogPage() {
                 `)
                 .in(
                   'id',
-                  allMasterIds
+                  masterIds
                 );
 
 
-            if (
-              masterPlanError
-            ) {
-              throw masterPlanError;
+            if (error) {
+              throw error;
             }
 
 
-            nextMasterPlanMap =
+            masterMap =
               Object.fromEntries(
-                (
-                  masterPlanData ||
-                  []
-                ).map(
-                  (
-                    item
-                  ) => [
+                (data || []).map(
+                  (item) => [
                     item.id,
                     item,
                   ]
                 )
               );
-
           }
 
 
           setMasterPlanPackages(
-            nextMasterPlanMap
+            masterMap
           );
 
-        } catch (
-          error
-        ) {
+        } catch (error) {
 
           console.error(
-            'Constraint Management:',
+            'Constraint Log:',
             error
           );
 
 
           setErrorMessage(
             error.message ||
-            'The Constraint Log could not be loaded.'
+            'Constraint Log could not be loaded.'
           );
 
         } finally {
 
-          setLoading(
-            false
-          );
+          setLoading(false);
 
         }
 
@@ -1614,7 +1552,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // LOAD HISTORY
+  // LOAD CONSTRAINT HISTORY
   // ==========================================================
 
   const loadConstraintHistory =
@@ -1628,14 +1566,7 @@ export default function ConstraintLogPage() {
         }
 
 
-        setLoadingHistory(
-          true
-        );
-
-
-        setHistoryError(
-          ''
-        );
+        setLoadingHistory(true);
 
 
         try {
@@ -1651,19 +1582,14 @@ export default function ConstraintLogPage() {
               .select(`
                 id,
                 constraint_id,
-
                 status_from,
                 status_to,
-
                 previous_target_resolution_date,
                 new_target_resolution_date,
-
                 comment,
-
                 action_type,
                 performed_by,
                 performed_by_user_id,
-
                 created_at
               `)
               .eq(
@@ -1685,16 +1611,13 @@ export default function ConstraintLogPage() {
 
 
           setConstraintHistory(
-            data ||
-            []
+            data || []
           );
 
-        } catch (
-          error
-        ) {
+        } catch (error) {
 
           console.error(
-            'Constraint history:',
+            'Constraint History:',
             error
           );
 
@@ -1706,7 +1629,104 @@ export default function ConstraintLogPage() {
 
         } finally {
 
-          setLoadingHistory(
+          setLoadingHistory(false);
+
+        }
+
+      },
+      []
+    );
+
+
+  // ==========================================================
+  // LOAD RECOVERY ACTIONS
+  // ==========================================================
+
+  const loadRecoveryActions =
+    useCallback(
+      async (
+        constraintId
+      ) => {
+
+        if (!constraintId) {
+          setRecoveryActions([]);
+          return;
+        }
+
+
+        setLoadingRecoveryActions(
+          true
+        );
+
+
+        try {
+
+          const {
+            data,
+            error,
+          } =
+            await supabase
+              .from(
+                'constraint_actions'
+              )
+              .select(`
+                id,
+                constraint_id,
+                project_id,
+                response_approach,
+                action_title,
+                action_description,
+                responsible_party,
+                due_date,
+                status,
+                expected_impact,
+                effectiveness,
+                effectiveness_notes,
+                completed_at,
+                cancelled_at,
+                created_by,
+                created_by_user_id,
+                created_at,
+                updated_at
+              `)
+              .eq(
+                'constraint_id',
+                constraintId
+              )
+              .order(
+                'created_at',
+                {
+                  ascending:
+                    true,
+                }
+              );
+
+
+          if (error) {
+            throw error;
+          }
+
+
+          setRecoveryActions(
+            data || []
+          );
+
+        } catch (error) {
+
+          console.error(
+            'Recovery Actions:',
+            error
+          );
+
+
+          setHistoryError(
+            error.message ||
+            'Action Plan could not be loaded.'
+          );
+
+        } finally {
+
+          setLoadingRecoveryActions(
             false
           );
 
@@ -1745,37 +1765,29 @@ export default function ConstraintLogPage() {
           error,
         } =
           await supabase
-            .from(
-              'constraints'
-            )
+            .from('constraints')
             .select(`
               id,
               project_id,
-
               lookahead_work_item_id,
               master_plan_package_id,
               readiness_assessment_id,
-
               category,
               title,
               description,
               action_required,
               responsible_party,
-
               required_by_date,
               target_resolution_date,
-
               status,
               blocking,
               priority,
-
               action_started_at,
               resolved_at,
               verified_at,
               verified_by,
               verification_notes,
               cleared_at,
-
               created_at,
               updated_at
             `)
@@ -1791,9 +1803,7 @@ export default function ConstraintLogPage() {
         }
 
 
-        setManagedConstraint(
-          data
-        );
+        setManagedConstraint(data);
 
 
         setManagementForm(
@@ -1812,15 +1822,22 @@ export default function ConstraintLogPage() {
         );
 
 
-        await loadConstraintHistory(
-          constraintId
-        );
+        await Promise.all([
+          loadConstraintHistory(
+            constraintId
+          ),
+
+          loadRecoveryActions(
+            constraintId
+          ),
+        ]);
 
       },
       [
         selectedProjectId,
         loadConstraintLog,
         loadConstraintHistory,
+        loadRecoveryActions,
       ]
     );
 
@@ -1831,9 +1848,7 @@ export default function ConstraintLogPage() {
 
   useEffect(
     () => {
-
       loadProjects();
-
     },
     [
       loadProjects,
@@ -1843,11 +1858,9 @@ export default function ConstraintLogPage() {
 
   useEffect(
     () => {
-
       loadConstraintLog(
         selectedProjectId
       );
-
     },
     [
       selectedProjectId,
@@ -1868,15 +1881,13 @@ export default function ConstraintLogPage() {
       projectId
     );
 
-
     setSearchTerm('');
     setStatusFilter('');
     setCategoryFilter('');
     setPriorityFilter('');
     setResponsibleFilter('');
-    setErrorMessage('');
     setSuccessMessage('');
-
+    setErrorMessage('');
 
     closeManagementModal();
 
@@ -1909,16 +1920,11 @@ export default function ConstraintLogPage() {
   // ==========================================================
 
   function openCreateModal() {
-
     setCreateForm(
       createInitialConstraintForm()
     );
 
-
-    setShowCreateModal(
-      true
-    );
-
+    setShowCreateModal(true);
   }
 
 
@@ -1943,7 +1949,7 @@ export default function ConstraintLogPage() {
       ).trim();
 
 
-    const responsibleParty =
+    const responsible =
       String(
         createForm
           .responsible_party ||
@@ -1951,7 +1957,7 @@ export default function ConstraintLogPage() {
       ).trim();
 
 
-    const requiredAction =
+    const action =
       String(
         createForm
           .action_required ||
@@ -1961,8 +1967,8 @@ export default function ConstraintLogPage() {
 
     if (
       !title ||
-      !responsibleParty ||
-      !requiredAction ||
+      !responsible ||
+      !action ||
       !createForm
         .required_by_date
     ) {
@@ -1971,15 +1977,11 @@ export default function ConstraintLogPage() {
         'Title, Responsible Party, Required Action and Required By Date are required.'
       );
 
-
       return;
-
     }
 
 
-    setCreatingConstraint(
-      true
-    );
+    setCreatingConstraint(true);
 
 
     try {
@@ -1989,7 +1991,6 @@ export default function ConstraintLogPage() {
 
 
       const {
-        data,
         error,
       } =
         await supabase.rpc(
@@ -2009,10 +2010,10 @@ export default function ConstraintLogPage() {
               null,
 
             target_action_required:
-              requiredAction,
+              action,
 
             target_responsible_party:
-              responsibleParty,
+              responsible,
 
             target_required_by_date:
               createForm
@@ -2037,32 +2038,17 @@ export default function ConstraintLogPage() {
       }
 
 
-      setShowCreateModal(
-        false
-      );
-
-
-      setSuccessMessage(
-        `Constraint ${getConstraintReference(
-          Array.isArray(
-            data
-          )
-            ? data[0]
-            : data
-        )} created successfully.`
-      );
+      setShowCreateModal(false);
 
 
       await loadConstraintLog(
         selectedProjectId
       );
 
-    } catch (
-      error
-    ) {
+    } catch (error) {
 
       console.error(
-        'Create constraint:',
+        'Create Constraint:',
         error
       );
 
@@ -2074,9 +2060,7 @@ export default function ConstraintLogPage() {
 
     } finally {
 
-      setCreatingConstraint(
-        false
-      );
+      setCreatingConstraint(false);
 
     }
 
@@ -2113,48 +2097,89 @@ export default function ConstraintLogPage() {
 
 
     setManagementNote('');
-    setActiveManagementPanel(null);
-    setConstraintHistory([]);
+
+    setActiveManagementPanel(
+      null
+    );
+
     setHistoryError('');
 
+    setRecoveryActionForm(
+      createRecoveryActionForm()
+    );
+
+    setRecoveryActionPanel(
+      null
+    );
+
+    setSelectedRecoveryActionId(
+      null
+    );
+
+    setRecoveryActionNote('');
+
+    setEffectivenessValue(
+      'effective'
+    );
 
     setShowManagementModal(
       true
     );
 
 
-    await loadConstraintHistory(
-      constraint.id
-    );
+    await Promise.all([
+      loadConstraintHistory(
+        constraint.id
+      ),
+
+      loadRecoveryActions(
+        constraint.id
+      ),
+    ]);
 
   }
 
 
   function closeManagementModal() {
 
-    setShowManagementModal(
-      false
-    );
+    setShowManagementModal(false);
 
-
-    setManagedConstraint(
-      null
-    );
-
+    setManagedConstraint(null);
 
     setManagementForm(
       createManagementForm()
     );
 
-
     setActiveManagementPanel(
       null
     );
 
-
     setManagementNote('');
+
     setForecastDate('');
+
     setConstraintHistory([]);
+
+    setRecoveryActions([]);
+
+    setRecoveryActionForm(
+      createRecoveryActionForm()
+    );
+
+    setRecoveryActionPanel(
+      null
+    );
+
+    setSelectedRecoveryActionId(
+      null
+    );
+
+    setRecoveryActionNote('');
+
+    setEffectivenessValue(
+      'effective'
+    );
+
     setHistoryError('');
 
   }
@@ -2166,13 +2191,10 @@ export default function ConstraintLogPage() {
 
     setHistoryError('');
 
-
     setManagementNote('');
 
 
-    if (
-      managedConstraint
-    ) {
+    if (managedConstraint) {
       setForecastDate(
         managedConstraint
           .target_resolution_date ||
@@ -2184,9 +2206,7 @@ export default function ConstraintLogPage() {
 
 
     setActiveManagementPanel(
-      (
-        current
-      ) =>
+      (current) =>
         current === panel
           ? null
           : panel
@@ -2196,7 +2216,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // SAVE DETAILS
+  // SAVE CONSTRAINT DETAILS
   // ==========================================================
 
   async function saveManagementDetails() {
@@ -2234,20 +2254,12 @@ export default function ConstraintLogPage() {
         'Responsible Party and Required Action are required.'
       );
 
-
       return;
-
     }
 
 
-    setSavingDetails(
-      true
-    );
-
-
-    setHistoryError(
-      ''
-    );
+    setSavingDetails(true);
+    setHistoryError('');
 
 
     try {
@@ -2302,12 +2314,10 @@ export default function ConstraintLogPage() {
         managedConstraint.id
       );
 
-    } catch (
-      error
-    ) {
+    } catch (error) {
 
       console.error(
-        'Save constraint details:',
+        'Save Details:',
         error
       );
 
@@ -2319,9 +2329,7 @@ export default function ConstraintLogPage() {
 
     } finally {
 
-      setSavingDetails(
-        false
-      );
+      setSavingDetails(false);
 
     }
 
@@ -2329,18 +2337,10 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // ADD COMMENT
+  // ADD CONSTRAINT COMMENT
   // ==========================================================
 
   async function addManagementComment() {
-
-    if (
-      !managedConstraint ||
-      savingAction
-    ) {
-      return;
-    }
-
 
     const note =
       String(
@@ -2350,25 +2350,16 @@ export default function ConstraintLogPage() {
 
 
     if (!note) {
-
       setHistoryError(
         'Comment is required.'
       );
 
-
       return;
-
     }
 
 
-    setSavingAction(
-      true
-    );
-
-
-    setHistoryError(
-      ''
-    );
+    setSavingAction(true);
+    setHistoryError('');
 
 
     try {
@@ -2401,22 +2392,17 @@ export default function ConstraintLogPage() {
 
 
       setManagementNote('');
-      setActiveManagementPanel(null);
+
+      setActiveManagementPanel(
+        null
+      );
 
 
       await refreshManagedConstraint(
         managedConstraint.id
       );
 
-    } catch (
-      error
-    ) {
-
-      console.error(
-        'Add constraint comment:',
-        error
-      );
-
+    } catch (error) {
 
       setHistoryError(
         error.message ||
@@ -2425,9 +2411,7 @@ export default function ConstraintLogPage() {
 
     } finally {
 
-      setSavingAction(
-        false
-      );
+      setSavingAction(false);
 
     }
 
@@ -2436,59 +2420,42 @@ export default function ConstraintLogPage() {
 
   // ==========================================================
   // UPDATE FORECAST
+  //
+  // IMPORTANT:
+  // New date ALWAYS requires a reason.
   // ==========================================================
 
   async function updateForecast() {
 
-    if (
-      !managedConstraint ||
-      savingAction
-    ) {
-      return;
-    }
-
-
-    const note =
+    const reason =
       String(
         managementNote ||
         ''
       ).trim();
 
 
-    if (
-      !forecastDate
-    ) {
+    if (!forecastDate) {
 
       setHistoryError(
         'New Planned Resolution Date is required.'
       );
 
-
       return;
-
     }
 
 
-    if (!note) {
+    if (!reason) {
 
       setHistoryError(
-        'Reason for forecast change is required.'
+        'Reason for Date Change is required.'
       );
 
-
       return;
-
     }
 
 
-    setSavingAction(
-      true
-    );
-
-
-    setHistoryError(
-      ''
-    );
+    setSavingAction(true);
+    setHistoryError('');
 
 
     try {
@@ -2510,7 +2477,7 @@ export default function ConstraintLogPage() {
               forecastDate,
 
             target_reason:
-              note,
+              reason,
 
             target_performed_by:
               performedBy,
@@ -2524,22 +2491,17 @@ export default function ConstraintLogPage() {
 
 
       setManagementNote('');
-      setActiveManagementPanel(null);
+
+      setActiveManagementPanel(
+        null
+      );
 
 
       await refreshManagedConstraint(
         managedConstraint.id
       );
 
-    } catch (
-      error
-    ) {
-
-      console.error(
-        'Update forecast:',
-        error
-      );
-
+    } catch (error) {
 
       setHistoryError(
         error.message ||
@@ -2548,9 +2510,7 @@ export default function ConstraintLogPage() {
 
     } finally {
 
-      setSavingAction(
-        false
-      );
+      setSavingAction(false);
 
     }
 
@@ -2558,34 +2518,10 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // REOPEN RESOLVED CONSTRAINT
-  // SQL 104
+  // REOPEN CONSTRAINT
   // ==========================================================
 
   async function reopenConstraint() {
-
-    if (
-      !managedConstraint ||
-      savingAction
-    ) {
-      return;
-    }
-
-
-    if (
-      managedConstraint.status !==
-      'resolved'
-    ) {
-
-      setHistoryError(
-        'Only a Resolved constraint can be reopened.'
-      );
-
-
-      return;
-
-    }
-
 
     const reason =
       String(
@@ -2594,40 +2530,28 @@ export default function ConstraintLogPage() {
       ).trim();
 
 
-    if (
-      !forecastDate
-    ) {
+    if (!forecastDate) {
 
       setHistoryError(
         'New Planned Resolution Date is required.'
       );
 
-
       return;
-
     }
 
 
     if (!reason) {
 
       setHistoryError(
-        'Reason for reopening is required.'
+        'Reason for Reopening and Date Change is required.'
       );
 
-
       return;
-
     }
 
 
-    setSavingAction(
-      true
-    );
-
-
-    setHistoryError(
-      ''
-    );
+    setSavingAction(true);
+    setHistoryError('');
 
 
     try {
@@ -2663,22 +2587,17 @@ export default function ConstraintLogPage() {
 
 
       setManagementNote('');
-      setActiveManagementPanel(null);
+
+      setActiveManagementPanel(
+        null
+      );
 
 
       await refreshManagedConstraint(
         managedConstraint.id
       );
 
-    } catch (
-      error
-    ) {
-
-      console.error(
-        'Reopen constraint:',
-        error
-      );
-
+    } catch (error) {
 
       setHistoryError(
         error.message ||
@@ -2687,9 +2606,7 @@ export default function ConstraintLogPage() {
 
     } finally {
 
-      setSavingAction(
-        false
-      );
+      setSavingAction(false);
 
     }
 
@@ -2697,20 +2614,12 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // LIFECYCLE
+  // CONSTRAINT LIFECYCLE
   // ==========================================================
 
   async function executeLifecycleAction(
     action
   ) {
-
-    if (
-      !managedConstraint ||
-      savingAction
-    ) {
-      return;
-    }
-
 
     const note =
       String(
@@ -2738,14 +2647,12 @@ export default function ConstraintLogPage() {
         functionName =
           'start_constraint_action_with_history';
 
-
         parameters = {
           target_constraint_id:
             managedConstraint.id,
 
           target_comment:
-            note ||
-            null,
+            note || null,
 
           target_performed_by:
             performedBy,
@@ -2759,18 +2666,15 @@ export default function ConstraintLogPage() {
         if (!note) {
 
           setHistoryError(
-            'Reason for waiting is required.'
+            'Reason for Waiting is required.'
           );
 
-
           return;
-
         }
 
 
         functionName =
           'set_constraint_waiting_with_history';
-
 
         parameters = {
           target_constraint_id:
@@ -2791,14 +2695,12 @@ export default function ConstraintLogPage() {
         functionName =
           'resume_constraint_action_with_history';
 
-
         parameters = {
           target_constraint_id:
             managedConstraint.id,
 
           target_comment:
-            note ||
-            null,
+            note || null,
 
           target_performed_by:
             performedBy,
@@ -2815,15 +2717,12 @@ export default function ConstraintLogPage() {
             'Resolution Note is required.'
           );
 
-
           return;
-
         }
 
 
         functionName =
           'resolve_constraint_with_history';
-
 
         parameters = {
           target_constraint_id:
@@ -2847,15 +2746,12 @@ export default function ConstraintLogPage() {
             'Verification Note is required.'
           );
 
-
           return;
-
         }
 
 
         functionName =
           'verify_and_clear_constraint_with_history';
-
 
         parameters = {
           target_constraint_id:
@@ -2879,15 +2775,12 @@ export default function ConstraintLogPage() {
             'Cancellation Reason is required.'
           );
 
-
           return;
-
         }
 
 
         functionName =
           'cancel_constraint_with_history';
-
 
         parameters = {
           target_constraint_id:
@@ -2904,20 +2797,12 @@ export default function ConstraintLogPage() {
 
 
       default:
-
         return;
-
     }
 
 
-    setSavingAction(
-      true
-    );
-
-
-    setHistoryError(
-      ''
-    );
+    setSavingAction(true);
+    setHistoryError('');
 
 
     try {
@@ -2937,35 +2822,560 @@ export default function ConstraintLogPage() {
 
 
       setManagementNote('');
-      setActiveManagementPanel(null);
+
+      setActiveManagementPanel(
+        null
+      );
 
 
       await refreshManagedConstraint(
         managedConstraint.id
       );
 
-    } catch (
-      error
+    } catch (error) {
+
+      setHistoryError(
+        error.message ||
+        'Constraint status could not be changed.'
+      );
+
+    } finally {
+
+      setSavingAction(false);
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // CREATE RECOVERY ACTION
+  // SQL 105
+  // ==========================================================
+
+  async function createRecoveryAction() {
+
+    if (
+      !managedConstraint ||
+      savingRecoveryAction
+    ) {
+      return;
+    }
+
+
+    const title =
+      String(
+        recoveryActionForm
+          .action_title ||
+        ''
+      ).trim();
+
+
+    const responsible =
+      String(
+        recoveryActionForm
+          .responsible_party ||
+        ''
+      ).trim();
+
+
+    if (!title) {
+
+      setHistoryError(
+        'Recovery Action is required.'
+      );
+
+      return;
+    }
+
+
+    if (!responsible) {
+
+      setHistoryError(
+        'Recovery Action Responsible Party is required.'
+      );
+
+      return;
+    }
+
+
+    if (
+      !recoveryActionForm
+        .due_date
     ) {
 
+      setHistoryError(
+        'Recovery Action Due Date is required.'
+      );
+
+      return;
+    }
+
+
+    setSavingRecoveryAction(
+      true
+    );
+
+    setHistoryError('');
+
+
+    try {
+
+      const performedBy =
+        await getPerformedBy();
+
+
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          'create_constraint_action_with_history',
+          {
+            target_constraint_id:
+              managedConstraint.id,
+
+            target_response_approach:
+              recoveryActionForm
+                .response_approach,
+
+            target_action_title:
+              title,
+
+            target_action_description:
+              recoveryActionForm
+                .action_description ||
+              null,
+
+            target_responsible_party:
+              responsible,
+
+            target_due_date:
+              recoveryActionForm
+                .due_date,
+
+            target_expected_impact:
+              recoveryActionForm
+                .expected_impact,
+
+            target_performed_by:
+              performedBy,
+          }
+        );
+
+
+      if (error) {
+        throw error;
+      }
+
+
+      setRecoveryActionForm(
+        createRecoveryActionForm()
+      );
+
+
+      setRecoveryActionPanel(
+        null
+      );
+
+
+      await refreshManagedConstraint(
+        managedConstraint.id
+      );
+
+    } catch (error) {
+
       console.error(
-        'Constraint lifecycle:',
+        'Create Recovery Action:',
         error
       );
 
 
       setHistoryError(
         error.message ||
-        'Constraint lifecycle action could not be completed.'
+        'Recovery Action could not be created.'
       );
 
     } finally {
 
-      setSavingAction(
+      setSavingRecoveryAction(
         false
       );
 
     }
+
+  }
+
+
+  // ==========================================================
+  // START RECOVERY ACTION
+  // ==========================================================
+
+  async function startRecoveryAction(
+    actionId
+  ) {
+
+    setSavingRecoveryAction(
+      true
+    );
+
+    setHistoryError('');
+
+
+    try {
+
+      const performedBy =
+        await getPerformedBy();
+
+
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          'start_constraint_action_plan_item_with_history',
+          {
+            target_action_id:
+              actionId,
+
+            target_comment:
+              recoveryActionNote ||
+              null,
+
+            target_performed_by:
+              performedBy,
+          }
+        );
+
+
+      if (error) {
+        throw error;
+      }
+
+
+      closeRecoveryActionPanel();
+
+
+      await refreshManagedConstraint(
+        managedConstraint.id
+      );
+
+    } catch (error) {
+
+      setHistoryError(
+        error.message ||
+        'Recovery Action could not be started.'
+      );
+
+    } finally {
+
+      setSavingRecoveryAction(
+        false
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // COMPLETE RECOVERY ACTION
+  // ==========================================================
+
+  async function completeRecoveryAction(
+    actionId
+  ) {
+
+    const note =
+      String(
+        recoveryActionNote ||
+        ''
+      ).trim();
+
+
+    if (!note) {
+
+      setHistoryError(
+        'Completion Note is required.'
+      );
+
+      return;
+    }
+
+
+    setSavingRecoveryAction(
+      true
+    );
+
+    setHistoryError('');
+
+
+    try {
+
+      const performedBy =
+        await getPerformedBy();
+
+
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          'complete_constraint_action_with_history',
+          {
+            target_action_id:
+              actionId,
+
+            target_completion_note:
+              note,
+
+            target_performed_by:
+              performedBy,
+          }
+        );
+
+
+      if (error) {
+        throw error;
+      }
+
+
+      closeRecoveryActionPanel();
+
+
+      await refreshManagedConstraint(
+        managedConstraint.id
+      );
+
+    } catch (error) {
+
+      setHistoryError(
+        error.message ||
+        'Recovery Action could not be completed.'
+      );
+
+    } finally {
+
+      setSavingRecoveryAction(
+        false
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // EVALUATE EFFECTIVENESS
+  // ==========================================================
+
+  async function evaluateRecoveryAction(
+    actionId
+  ) {
+
+    const note =
+      String(
+        recoveryActionNote ||
+        ''
+      ).trim();
+
+
+    if (!note) {
+
+      setHistoryError(
+        'Effectiveness Notes are required.'
+      );
+
+      return;
+    }
+
+
+    setSavingRecoveryAction(
+      true
+    );
+
+    setHistoryError('');
+
+
+    try {
+
+      const performedBy =
+        await getPerformedBy();
+
+
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          'evaluate_constraint_action_effectiveness_with_history',
+          {
+            target_action_id:
+              actionId,
+
+            target_effectiveness:
+              effectivenessValue,
+
+            target_notes:
+              note,
+
+            target_performed_by:
+              performedBy,
+          }
+        );
+
+
+      if (error) {
+        throw error;
+      }
+
+
+      closeRecoveryActionPanel();
+
+
+      await refreshManagedConstraint(
+        managedConstraint.id
+      );
+
+    } catch (error) {
+
+      setHistoryError(
+        error.message ||
+        'Effectiveness could not be evaluated.'
+      );
+
+    } finally {
+
+      setSavingRecoveryAction(
+        false
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // CANCEL RECOVERY ACTION
+  // ==========================================================
+
+  async function cancelRecoveryAction(
+    actionId
+  ) {
+
+    const reason =
+      String(
+        recoveryActionNote ||
+        ''
+      ).trim();
+
+
+    if (!reason) {
+
+      setHistoryError(
+        'Cancellation Reason is required.'
+      );
+
+      return;
+    }
+
+
+    setSavingRecoveryAction(
+      true
+    );
+
+    setHistoryError('');
+
+
+    try {
+
+      const performedBy =
+        await getPerformedBy();
+
+
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          'cancel_constraint_action_with_history',
+          {
+            target_action_id:
+              actionId,
+
+            target_reason:
+              reason,
+
+            target_performed_by:
+              performedBy,
+          }
+        );
+
+
+      if (error) {
+        throw error;
+      }
+
+
+      closeRecoveryActionPanel();
+
+
+      await refreshManagedConstraint(
+        managedConstraint.id
+      );
+
+    } catch (error) {
+
+      setHistoryError(
+        error.message ||
+        'Recovery Action could not be cancelled.'
+      );
+
+    } finally {
+
+      setSavingRecoveryAction(
+        false
+      );
+
+    }
+
+  }
+
+
+  function openRecoveryActionPanel(
+    actionId,
+    panel
+  ) {
+
+    setSelectedRecoveryActionId(
+      actionId
+    );
+
+    setRecoveryActionPanel(
+      panel
+    );
+
+    setRecoveryActionNote('');
+
+    setEffectivenessValue(
+      'effective'
+    );
+
+    setHistoryError('');
+
+  }
+
+
+  function closeRecoveryActionPanel() {
+
+    setSelectedRecoveryActionId(
+      null
+    );
+
+    setRecoveryActionPanel(
+      null
+    );
+
+    setRecoveryActionNote('');
+
+    setEffectivenessValue(
+      'effective'
+    );
 
   }
 
@@ -2983,9 +3393,7 @@ export default function ConstraintLogPage() {
 
 
         affectedWork.forEach(
-          (
-            relationship
-          ) => {
+          (relationship) => {
 
             if (
               !map[
@@ -2993,13 +3401,11 @@ export default function ConstraintLogPage() {
                   .constraint_id
               ]
             ) {
-
               map[
                 relationship
                   .constraint_id
               ] =
                 [];
-
             }
 
 
@@ -3032,8 +3438,7 @@ export default function ConstraintLogPage() {
         const relationships =
           affectedWorkByConstraint[
             constraint.id
-          ] ||
-          [];
+          ] || [];
 
 
         const candidates =
@@ -3041,9 +3446,7 @@ export default function ConstraintLogPage() {
 
 
         relationships.forEach(
-          (
-            relationship
-          ) => {
+          (relationship) => {
 
             if (
               relationship
@@ -3057,14 +3460,7 @@ export default function ConstraintLogPage() {
                 ];
 
 
-              if (
-                item &&
-                (
-                  item.package_code ||
-                  item.location_path ||
-                  item.location_name
-                )
-              ) {
+              if (item) {
 
                 candidates.push({
                   key:
@@ -3087,12 +3483,12 @@ export default function ConstraintLogPage() {
                     'Unassigned Location',
 
                   startDate:
-                    item.lookahead_start_date ||
-                    null,
+                    item
+                      .lookahead_start_date,
 
                   finishDate:
-                    item.lookahead_finish_date ||
-                    null,
+                    item
+                      .lookahead_finish_date,
                 });
 
               }
@@ -3135,12 +3531,12 @@ export default function ConstraintLogPage() {
                     'Unassigned Location',
 
                   startDate:
-                    item.scheduled_start_date ||
-                    null,
+                    item
+                      .scheduled_start_date,
 
                   finishDate:
-                    item.scheduled_finish_date ||
-                    null,
+                    item
+                      .scheduled_finish_date,
                 });
 
               }
@@ -3156,9 +3552,7 @@ export default function ConstraintLogPage() {
 
 
         candidates.forEach(
-          (
-            item
-          ) => {
+          (item) => {
 
             const key =
               `${normalizeText(
@@ -3169,9 +3563,7 @@ export default function ConstraintLogPage() {
 
 
             const existing =
-              unique.get(
-                key
-              );
+              unique.get(key);
 
 
             if (
@@ -3210,97 +3602,15 @@ export default function ConstraintLogPage() {
 
   const managedAffectedWork =
     useMemo(
-      () => {
-
-        if (
-          !managedConstraint
-        ) {
-          return [];
-        }
-
-
-        return getConstraintAffectedWork(
-          managedConstraint
-        );
-
-      },
+      () =>
+        managedConstraint
+          ? getConstraintAffectedWork(
+              managedConstraint
+            )
+          : [],
       [
         managedConstraint,
         getConstraintAffectedWork,
-      ]
-    );
-
-
-  // ==========================================================
-  // FILTER OPTIONS
-  // ==========================================================
-
-  const categoryOptions =
-    useMemo(
-      () =>
-        Array.from(
-          new Set(
-            constraints
-              .map(
-                (
-                  constraint
-                ) =>
-                  constraint.category
-              )
-              .filter(
-                Boolean
-              )
-          )
-        ).sort(),
-      [
-        constraints,
-      ]
-    );
-
-
-  const priorityOptions =
-    useMemo(
-      () =>
-        Array.from(
-          new Set(
-            constraints
-              .map(
-                (
-                  constraint
-                ) =>
-                  constraint.priority
-              )
-              .filter(
-                Boolean
-              )
-          )
-        ).sort(),
-      [
-        constraints,
-      ]
-    );
-
-
-  const responsibleOptions =
-    useMemo(
-      () =>
-        Array.from(
-          new Set(
-            constraints
-              .map(
-                (
-                  constraint
-                ) =>
-                  constraint
-                    .responsible_party
-              )
-              .filter(
-                Boolean
-              )
-          )
-        ).sort(),
-      [
-        constraints,
       ]
     );
 
@@ -3326,10 +3636,8 @@ export default function ConstraintLogPage() {
 
           active:
             constraints.filter(
-              (
-                constraint
-              ) =>
-                ACTIVE_STATUSES.includes(
+              (constraint) =>
+                ACTIVE_CONSTRAINT_STATUSES.includes(
                   constraint.status
                 )
             ).length,
@@ -3337,12 +3645,10 @@ export default function ConstraintLogPage() {
 
           overdue:
             constraints.filter(
-              (
-                constraint
-              ) => {
+              (constraint) => {
 
                 if (
-                  TERMINAL_STATUSES.includes(
+                  TERMINAL_CONSTRAINT_STATUSES.includes(
                     constraint.status
                   )
                 ) {
@@ -3359,8 +3665,7 @@ export default function ConstraintLogPage() {
 
                 return (
                   forecast &&
-                  forecast <
-                    today
+                  forecast < today
                 );
 
               }
@@ -3369,9 +3674,7 @@ export default function ConstraintLogPage() {
 
           resolved:
             constraints.filter(
-              (
-                constraint
-              ) =>
+              (constraint) =>
                 constraint.status ===
                 'resolved'
             ).length,
@@ -3379,9 +3682,7 @@ export default function ConstraintLogPage() {
 
           cleared:
             constraints.filter(
-              (
-                constraint
-              ) =>
+              (constraint) =>
                 constraint.status ===
                 'cleared'
             ).length,
@@ -3396,7 +3697,69 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // FILTERED CONSTRAINTS
+  // FILTER OPTIONS
+  // ==========================================================
+
+  const categoryOptions =
+    useMemo(
+      () =>
+        Array.from(
+          new Set(
+            constraints
+              .map(
+                (constraint) =>
+                  constraint.category
+              )
+              .filter(Boolean)
+          )
+        ),
+      [
+        constraints,
+      ]
+    );
+
+
+  const priorityOptions =
+    useMemo(
+      () =>
+        Array.from(
+          new Set(
+            constraints
+              .map(
+                (constraint) =>
+                  constraint.priority
+              )
+              .filter(Boolean)
+          )
+        ),
+      [
+        constraints,
+      ]
+    );
+
+
+  const responsibleOptions =
+    useMemo(
+      () =>
+        Array.from(
+          new Set(
+            constraints
+              .map(
+                (constraint) =>
+                  constraint
+                    .responsible_party
+              )
+              .filter(Boolean)
+          )
+        ),
+      [
+        constraints,
+      ]
+    );
+
+
+  // ==========================================================
+  // FILTER CONSTRAINTS
   // ==========================================================
 
   const filteredConstraints =
@@ -3410,9 +3773,7 @@ export default function ConstraintLogPage() {
 
 
         return constraints.filter(
-          (
-            constraint
-          ) => {
+          (constraint) => {
 
             if (
               statusFilter &&
@@ -3462,7 +3823,7 @@ export default function ConstraintLogPage() {
               );
 
 
-            return normalizeText(
+            const text =
               [
                 getConstraintReference(
                   constraint.id
@@ -3484,22 +3845,16 @@ export default function ConstraintLogPage() {
 
                 constraint.status,
 
-                getSourceLabel(
-                  constraint
-                ),
-
                 ...affected.map(
-                  (
-                    item
-                  ) =>
+                  (item) =>
                     `${item.packageCode} ${item.location}`
                 ),
-              ].join(
-                ' '
-              )
-            ).includes(
-              search
-            );
+              ].join(' ');
+
+
+            return normalizeText(
+              text
+            ).includes(search);
 
           }
         );
@@ -3507,18 +3862,18 @@ export default function ConstraintLogPage() {
       },
       [
         constraints,
+        searchTerm,
         statusFilter,
         categoryFilter,
         priorityFilter,
         responsibleFilter,
-        searchTerm,
         getConstraintAffectedWork,
       ]
     );
 
 
   // ==========================================================
-  // FORECAST CALCULATIONS
+  // FORECAST / ACTION PLAN SUMMARY
   // ==========================================================
 
   const managedForecast =
@@ -3549,7 +3904,6 @@ export default function ConstraintLogPage() {
           dateDifferenceDays(
             managedConstraint
               .required_by_date,
-
             forecastDate
           );
 
@@ -3569,10 +3923,10 @@ export default function ConstraintLogPage() {
 
           label:
             variance > 0
-              ? `DELAY EXPECTED · +${variance} day${variance === 1 ? '' : 's'}`
+              ? `+${variance} day${variance === 1 ? '' : 's'}`
               : variance === 0
-                ? 'ON TIME'
-                : `AHEAD · ${Math.abs(variance)} day${Math.abs(variance) === 1 ? '' : 's'}`,
+                ? 'On required date'
+                : `${Math.abs(variance)} day${Math.abs(variance) === 1 ? '' : 's'} early`,
         };
 
       },
@@ -3583,37 +3937,230 @@ export default function ConstraintLogPage() {
     );
 
 
+  const actionPlanSummary =
+    useMemo(
+      () => {
+
+        const open =
+          recoveryActions.filter(
+            (action) =>
+              action.status ===
+              'open'
+          ).length;
+
+
+        const inProgress =
+          recoveryActions.filter(
+            (action) =>
+              action.status ===
+              'in_progress'
+          ).length;
+
+
+        const completed =
+          recoveryActions.filter(
+            (action) =>
+              action.status ===
+              'completed'
+          ).length;
+
+
+        const effective =
+          recoveryActions.filter(
+            (action) =>
+              action.effectiveness ===
+              'effective'
+          ).length;
+
+
+        const protectionActions =
+          recoveryActions.filter(
+            (action) =>
+              [
+                'open',
+                'in_progress',
+              ].includes(
+                action.status
+              ) &&
+              action.expected_impact ===
+              'protect_required_by'
+          ).length;
+
+
+        const activeActions =
+          open +
+          inProgress;
+
+
+        const activeDates =
+          recoveryActions
+            .filter(
+              (action) =>
+                [
+                  'open',
+                  'in_progress',
+                ].includes(
+                  action.status
+                )
+            )
+            .map(
+              (action) =>
+                action.due_date
+            )
+            .filter(Boolean)
+            .sort();
+
+
+        return {
+          total:
+            recoveryActions.length,
+
+          open,
+
+          inProgress,
+
+          active:
+            activeActions,
+
+          completed,
+
+          effective,
+
+          protectionActions,
+
+          nextDue:
+            activeDates[0] ||
+            null,
+        };
+
+      },
+      [
+        recoveryActions,
+      ]
+    );
+
+
+  const currentOutlook =
+    useMemo(
+      () => {
+
+        if (
+          !managedConstraint
+        ) {
+          return {
+            label:
+              'Not Evaluated',
+
+            description:
+              '',
+          };
+        }
+
+
+        if (
+          managedConstraint.status ===
+          'cleared'
+        ) {
+          return {
+            label:
+              'Cleared',
+
+            description:
+              'Constraint verified and released.',
+          };
+        }
+
+
+        if (
+          managedConstraint.status ===
+          'resolved'
+        ) {
+          return {
+            label:
+              'Awaiting Verification',
+
+            description:
+              'Resolution reported but readiness is still blocked.',
+          };
+        }
+
+
+        if (
+          managedForecast.delayed &&
+          actionPlanSummary
+            .protectionActions >
+            0
+        ) {
+          return {
+            label:
+              'Recovery Possible',
+
+            description:
+              `${actionPlanSummary.protectionActions} active action${actionPlanSummary.protectionActions === 1 ? '' : 's'} may protect the Required By date.`,
+          };
+        }
+
+
+        if (
+          managedForecast.delayed
+        ) {
+          return {
+            label:
+              'Schedule Exposed',
+
+            description:
+              'No active plan-protection action currently offsets the exposure.',
+          };
+        }
+
+
+        if (
+          actionPlanSummary.active >
+          0
+        ) {
+          return {
+            label:
+              'Action Plan Active',
+
+            description:
+              'Recovery actions are being executed.',
+          };
+        }
+
+
+        return {
+          label:
+            'Protected',
+
+          description:
+            'Current forecast does not exceed the Required By date.',
+        };
+
+      },
+      [
+        managedConstraint,
+        managedForecast,
+        actionPlanSummary,
+      ]
+    );
+
+
   // ==========================================================
   // RENDER
   // ==========================================================
 
   return (
-    <div
-      style={
-        pageStyle
-      }
-    >
+    <div style={pageStyle}>
 
-      {/* ====================================================
-          HEADER
-      ===================================================== */}
+      {/* HEADER */}
 
-      <div
-        style={
-          pageHeaderStyle
-        }
-      >
+      <div style={pageHeaderStyle}>
 
         <div>
 
-          <h1
-            style={
-              pageTitleStyle
-            }
-          >
+          <h1 style={pageTitleStyle}>
             CONSTRAINT LOG
           </h1>
-
 
           <p
             style={
@@ -3621,42 +4168,32 @@ export default function ConstraintLogPage() {
             }
           >
             Central project-level management of constraints,
-            ownership, actions, forecasts and readiness clearance.
+            recovery actions, forecasts and readiness clearance.
           </p>
 
         </div>
 
 
         {selectedProjectId && (
-
           <button
             type="button"
-
             onClick={
               openCreateModal
             }
-
             style={
               primaryButtonStyle
             }
           >
             + Add Constraint
           </button>
-
         )}
 
       </div>
 
 
-      {/* ====================================================
-          PROJECT
-      ===================================================== */}
+      {/* PROJECT */}
 
-      <div
-        style={
-          projectRowStyle
-        }
-      >
+      <div style={projectRowStyle}>
 
         <div
           style={{
@@ -3665,20 +4202,14 @@ export default function ConstraintLogPage() {
           }}
         >
 
-          <label
-            style={
-              labelStyle
-            }
-          >
+          <label style={labelStyle}>
             Project
           </label>
-
 
           <select
             value={
               selectedProjectId
             }
-
             onChange={(
               event
             ) =>
@@ -3686,27 +4217,19 @@ export default function ConstraintLogPage() {
                 event.target.value
               )
             }
-
-            style={
-              inputStyle
-            }
+            style={inputStyle}
           >
 
             <option value="">
               -- Select a Project --
             </option>
 
-
             {projects.map(
-              (
-                project
-              ) => (
-
+              (project) => (
                 <option
                   key={
                     project.id
                   }
-
                   value={
                     project.id
                   }
@@ -3717,7 +4240,6 @@ export default function ConstraintLogPage() {
 
                   {project.name}
                 </option>
-
               )
             )}
 
@@ -3727,20 +4249,14 @@ export default function ConstraintLogPage() {
 
 
         {selectedProjectId && (
-
           <button
             type="button"
-
-            disabled={
-              loading
-            }
-
+            disabled={loading}
             onClick={() =>
               loadConstraintLog(
                 selectedProjectId
               )
             }
-
             style={
               secondaryButtonStyle
             }
@@ -3749,12 +4265,10 @@ export default function ConstraintLogPage() {
               ? 'Refreshing...'
               : 'Refresh'}
           </button>
-
         )}
 
 
         {selectedProject && (
-
           <div
             style={
               projectBadgeStyle
@@ -3766,122 +4280,66 @@ export default function ConstraintLogPage() {
 
             {selectedProject.name}
           </div>
-
         )}
 
       </div>
 
 
       {errorMessage && (
-
-        <MessageBox
-          type="error"
-        >
+        <MessageBox type="error">
           {errorMessage}
         </MessageBox>
-
       )}
 
 
       {successMessage && (
-
-        <MessageBox
-          type="success"
-        >
+        <MessageBox type="success">
           {successMessage}
         </MessageBox>
-
       )}
 
-
-      {!selectedProjectId && (
-
-        <div
-          style={
-            emptyStyle
-          }
-        >
-          Select a project to open its centralized Constraint Log.
-        </div>
-
-      )}
-
-
-      {/* ====================================================
-          PROJECT WORKSPACE
-      ===================================================== */}
 
       {selectedProjectId && (
-
         <>
 
-          <div
-            style={
-              summaryGridStyle
-            }
-          >
+          {/* KPI */}
+
+          <div style={summaryGridStyle}>
 
             <SummaryCard
               label="Active Constraints"
-
-              value={
-                summary.active
-              }
-
+              value={summary.active}
               description="Still affecting readiness"
             />
 
-
             <SummaryCard
               label="Overdue"
-
-              value={
-                summary.overdue
-              }
-
+              value={summary.overdue}
               description="Past planned resolution"
             />
 
-
             <SummaryCard
               label="Resolved"
-
-              value={
-                summary.resolved
-              }
-
+              value={summary.resolved}
               description="Awaiting verification"
             />
 
-
             <SummaryCard
               label="Cleared"
-
-              value={
-                summary.cleared
-              }
-
+              value={summary.cleared}
               description="Verified and released"
             />
 
           </div>
 
 
-          <div
-            style={
-              filtersStyle
-            }
-          >
+          {/* FILTERS */}
 
-            <FilterField
-              label="Search"
-            >
+          <div style={filtersStyle}>
 
+            <FilterField label="Search">
               <input
-                value={
-                  searchTerm
-                }
-
+                value={searchTerm}
                 onChange={(
                   event
                 ) =>
@@ -3889,26 +4347,17 @@ export default function ConstraintLogPage() {
                     event.target.value
                   )
                 }
-
+                placeholder="Reference, package, location, action..."
                 style={
                   filterInputStyle
                 }
-
-                placeholder="Reference, package, location, action..."
               />
-
             </FilterField>
 
 
-            <FilterField
-              label="Status"
-            >
-
+            <FilterField label="Status">
               <select
-                value={
-                  statusFilter
-                }
-
+                value={statusFilter}
                 onChange={(
                   event
                 ) =>
@@ -3916,47 +4365,34 @@ export default function ConstraintLogPage() {
                     event.target.value
                   )
                 }
-
                 style={
                   filterInputStyle
                 }
               >
-
                 {STATUS_OPTIONS.map(
-                  (
-                    option
-                  ) => (
-
+                  (option) => (
                     <option
                       key={
                         option.value ||
                         'all'
                       }
-
                       value={
                         option.value
                       }
                     >
                       {option.label}
                     </option>
-
                   )
                 )}
-
               </select>
-
             </FilterField>
 
 
-            <FilterField
-              label="Category"
-            >
-
+            <FilterField label="Category">
               <select
                 value={
                   categoryFilter
                 }
-
                 onChange={(
                   event
                 ) =>
@@ -3964,53 +4400,35 @@ export default function ConstraintLogPage() {
                     event.target.value
                   )
                 }
-
                 style={
                   filterInputStyle
                 }
               >
-
                 <option value="">
                   All Categories
                 </option>
 
-
                 {categoryOptions.map(
-                  (
-                    category
-                  ) => (
-
+                  (category) => (
                     <option
-                      key={
-                        category
-                      }
-
-                      value={
-                        category
-                      }
+                      key={category}
+                      value={category}
                     >
                       {formatLabel(
                         category
                       )}
                     </option>
-
                   )
                 )}
-
               </select>
-
             </FilterField>
 
 
-            <FilterField
-              label="Priority"
-            >
-
+            <FilterField label="Priority">
               <select
                 value={
                   priorityFilter
                 }
-
                 onChange={(
                   event
                 ) =>
@@ -4018,53 +4436,35 @@ export default function ConstraintLogPage() {
                     event.target.value
                   )
                 }
-
                 style={
                   filterInputStyle
                 }
               >
-
                 <option value="">
                   All Priorities
                 </option>
 
-
                 {priorityOptions.map(
-                  (
-                    priority
-                  ) => (
-
+                  (priority) => (
                     <option
-                      key={
-                        priority
-                      }
-
-                      value={
-                        priority
-                      }
+                      key={priority}
+                      value={priority}
                     >
                       {formatLabel(
                         priority
                       )}
                     </option>
-
                   )
                 )}
-
               </select>
-
             </FilterField>
 
 
-            <FilterField
-              label="Responsible"
-            >
-
+            <FilterField label="Responsible">
               <select
                 value={
                   responsibleFilter
                 }
-
                 onChange={(
                   event
                 ) =>
@@ -4072,43 +4472,31 @@ export default function ConstraintLogPage() {
                     event.target.value
                   )
                 }
-
                 style={
                   filterInputStyle
                 }
               >
-
                 <option value="">
                   All Responsible
                 </option>
 
-
                 {responsibleOptions.map(
-                  (
-                    responsible
-                  ) => (
-
+                  (responsible) => (
                     <option
-                      key={
-                        responsible
-                      }
-
-                      value={
-                        responsible
-                      }
+                      key={responsible}
+                      value={responsible}
                     >
                       {responsible}
                     </option>
-
                   )
                 )}
-
               </select>
-
             </FilterField>
 
           </div>
 
+
+          {/* TABLE */}
 
           <div
             style={
@@ -4117,38 +4505,14 @@ export default function ConstraintLogPage() {
           >
 
             {loading ? (
-
-              <div
-                style={
-                  emptyStyle
-                }
-              >
+              <div style={emptyStyle}>
                 Loading Constraint Log...
               </div>
-
-            ) : filteredConstraints.length ===
-              0 ? (
-
-              <div
-                style={
-                  emptyStyle
-                }
-              >
-                No constraints match the current project or filters.
-              </div>
-
             ) : (
-
-              <table
-                style={
-                  tableStyle
-                }
-              >
+              <table style={tableStyle}>
 
                 <thead>
-
                   <tr>
-
                     {[
                       'REFERENCE',
                       'PACKAGE',
@@ -4162,52 +4526,29 @@ export default function ConstraintLogPage() {
                       'SOURCE',
                       'ACTIONS',
                     ].map(
-                      (
-                        item
-                      ) => (
-
+                      (header) => (
                         <th
-                          key={
-                            item
-                          }
-
+                          key={header}
                           style={
                             headerCellStyle
                           }
                         >
-                          {item}
+                          {header}
                         </th>
-
                       )
                     )}
-
                   </tr>
-
                 </thead>
 
 
                 <tbody>
 
                   {filteredConstraints.map(
-                    (
-                      constraint
-                    ) => {
+                    (constraint) => {
 
                       const affected =
                         getConstraintAffectedWork(
                           constraint
-                        );
-
-
-                      const statusStyle =
-                        getStatusStyle(
-                          constraint.status
-                        );
-
-
-                      const priorityStyle =
-                        getPriorityStyle(
-                          constraint.priority
                         );
 
 
@@ -4218,7 +4559,6 @@ export default function ConstraintLogPage() {
 
 
                       return (
-
                         <tr
                           key={
                             constraint.id
@@ -4230,16 +4570,13 @@ export default function ConstraintLogPage() {
                               bodyCellStyle
                             }
                           >
-
                             <strong>
                               {getConstraintReference(
                                 constraint.id
                               )}
                             </strong>
 
-
                             {constraint.blocking && (
-
                               <div
                                 style={
                                   blockingStyle
@@ -4247,9 +4584,7 @@ export default function ConstraintLogPage() {
                               >
                                 BLOCKING
                               </div>
-
                             )}
-
                           </td>
 
 
@@ -4291,19 +4626,18 @@ export default function ConstraintLogPage() {
                               bodyCellStyle
                             }
                           >
-
                             <StatusBadge
                               label={
                                 getStatusLabel(
                                   constraint.status
                                 )
                               }
-
                               style={
-                                statusStyle
+                                getStatusStyle(
+                                  constraint.status
+                                )
                               }
                             />
-
                           </td>
 
 
@@ -4312,19 +4646,18 @@ export default function ConstraintLogPage() {
                               bodyCellStyle
                             }
                           >
-
                             <StatusBadge
                               label={
                                 formatLabel(
                                   constraint.priority
                                 )
                               }
-
                               style={
-                                priorityStyle
+                                getPriorityStyle(
+                                  constraint.priority
+                                )
                               }
                             />
-
                           </td>
 
 
@@ -4355,7 +4688,6 @@ export default function ConstraintLogPage() {
                               bodyCellStyle
                             }
                           >
-
                             {formatDate(
                               constraint
                                 .target_resolution_date ||
@@ -4363,20 +4695,17 @@ export default function ConstraintLogPage() {
                                 .required_by_date
                             )}
 
-
                             {forecast.delayed && (
-
                               <div
                                 style={
-                                  blockingStyle
+                                  exposureTextStyle
                                 }
                               >
                                 {forecast
-                                  .varianceLabel}
+                                  .varianceLabel}{' '}
+                                exposure
                               </div>
-
                             )}
-
                           </td>
 
 
@@ -4396,27 +4725,22 @@ export default function ConstraintLogPage() {
                               bodyCellStyle
                             }
                           >
-
                             <button
                               type="button"
-
                               onClick={() =>
                                 openManagementModal(
                                   constraint
                                 )
                               }
-
                               style={
                                 manageButtonStyle
                               }
                             >
                               Manage
                             </button>
-
                           </td>
 
                         </tr>
-
                       );
 
                     }
@@ -4425,18 +4749,16 @@ export default function ConstraintLogPage() {
                 </tbody>
 
               </table>
-
             )}
 
           </div>
 
         </>
-
       )}
 
 
       {/* ====================================================
-          CENTERED CONSTRAINT MANAGEMENT
+          CENTERED MANAGEMENT WORKSPACE
       ===================================================== */}
 
       {showManagementModal &&
@@ -4475,7 +4797,7 @@ export default function ConstraintLogPage() {
 
                 <div
                   style={
-                    managementHeaderTitleRowStyle
+                    managementTitleRowStyle
                   }
                 >
 
@@ -4496,7 +4818,6 @@ export default function ConstraintLogPage() {
                         managedConstraint.status
                       )
                     }
-
                     style={
                       getStatusStyle(
                         managedConstraint.status
@@ -4511,7 +4832,6 @@ export default function ConstraintLogPage() {
                         managedConstraint.priority
                       )
                     }
-
                     style={
                       getPriorityStyle(
                         managedConstraint.priority
@@ -4521,7 +4841,6 @@ export default function ConstraintLogPage() {
 
 
                   {managedConstraint.blocking && (
-
                     <span
                       style={
                         blockingPillStyle
@@ -4529,7 +4848,6 @@ export default function ConstraintLogPage() {
                     >
                       BLOCKING
                     </span>
-
                   )}
 
                 </div>
@@ -4548,11 +4866,9 @@ export default function ConstraintLogPage() {
 
               <button
                 type="button"
-
                 onClick={
                   closeManagementModal
                 }
-
                 style={
                   closeButtonStyle
                 }
@@ -4571,18 +4887,10 @@ export default function ConstraintLogPage() {
               }
             >
 
-              {/* IMPORTANT:
-                  ERROR NOW APPEARS AT TOP
-              */}
-
               {historyError && (
-
-                <MessageBox
-                  type="error"
-                >
+                <MessageBox type="error">
                   {historyError}
                 </MessageBox>
-
               )}
 
 
@@ -4590,8 +4898,7 @@ export default function ConstraintLogPage() {
 
               <ManagementSection
                 title="Responsibility & Action"
-
-                subtitle="Update the operational information directly."
+                subtitle="Manage the operational information for this constraint."
               >
 
                 <div
@@ -4603,99 +4910,77 @@ export default function ConstraintLogPage() {
                   <ModalField
                     label="Responsible Party"
                   >
-
                     <input
                       disabled={
-                        TERMINAL_STATUSES.includes(
+                        TERMINAL_CONSTRAINT_STATUSES.includes(
                           managedConstraint.status
                         )
                       }
-
                       value={
                         managementForm
                           .responsible_party
                       }
-
                       onChange={(
                         event
                       ) =>
                         setManagementForm(
-                          (
-                            current
-                          ) => ({
+                          (current) => ({
                             ...current,
-
                             responsible_party:
                               event.target.value,
                           })
                         )
                       }
-
                       style={
                         modalInputStyle
                       }
                     />
-
                   </ModalField>
 
 
                   <ModalField
                     label="Priority"
                   >
-
                     <select
                       disabled={
-                        TERMINAL_STATUSES.includes(
+                        TERMINAL_CONSTRAINT_STATUSES.includes(
                           managedConstraint.status
                         )
                       }
-
                       value={
-                        managementForm.priority
+                        managementForm
+                          .priority
                       }
-
                       onChange={(
                         event
                       ) =>
                         setManagementForm(
-                          (
-                            current
-                          ) => ({
+                          (current) => ({
                             ...current,
-
                             priority:
                               event.target.value,
                           })
                         )
                       }
-
                       style={
                         modalInputStyle
                       }
                     >
-
                       {PRIORITY_OPTIONS.map(
-                        (
-                          option
-                        ) => (
-
+                        (option) => (
                           <option
                             key={
                               option.value
                             }
-
                             value={
                               option.value
                             }
                           >
                             {option.label}
                           </option>
-
                         )
                       )}
-
                     </select>
-
                   </ModalField>
 
                 </div>
@@ -4704,84 +4989,68 @@ export default function ConstraintLogPage() {
                 <ModalField
                   label="Required Action"
                 >
-
                   <textarea
                     disabled={
-                      TERMINAL_STATUSES.includes(
+                      TERMINAL_CONSTRAINT_STATUSES.includes(
                         managedConstraint.status
                       )
                     }
-
                     value={
                       managementForm
                         .action_required
                     }
-
                     onChange={(
                       event
                     ) =>
                       setManagementForm(
-                        (
-                          current
-                        ) => ({
+                        (current) => ({
                           ...current,
-
                           action_required:
                             event.target.value,
                         })
                       )
                     }
-
                     style={
                       modalTextareaStyle
                     }
                   />
-
                 </ModalField>
 
 
                 <ModalField
                   label="Description"
                 >
-
                   <textarea
                     disabled={
-                      TERMINAL_STATUSES.includes(
+                      TERMINAL_CONSTRAINT_STATUSES.includes(
                         managedConstraint.status
                       )
                     }
-
                     value={
-                      managementForm.description
+                      managementForm
+                        .description
                     }
-
                     onChange={(
                       event
                     ) =>
                       setManagementForm(
-                        (
-                          current
-                        ) => ({
+                        (current) => ({
                           ...current,
-
                           description:
                             event.target.value,
                         })
                       )
                     }
-
                     style={
                       modalTextareaStyle
                     }
                   />
-
                 </ModalField>
 
 
-                {!TERMINAL_STATUSES.includes(
+                {!TERMINAL_CONSTRAINT_STATUSES.includes(
                   managedConstraint.status
                 ) && (
-
                   <>
 
                     <label
@@ -4789,23 +5058,18 @@ export default function ConstraintLogPage() {
                         checkboxStyle
                       }
                     >
-
                       <input
                         type="checkbox"
-
                         checked={
-                          managementForm.blocking
+                          managementForm
+                            .blocking
                         }
-
                         onChange={(
                           event
                         ) =>
                           setManagementForm(
-                            (
-                              current
-                            ) => ({
+                            (current) => ({
                               ...current,
-
                               blocking:
                                 event.target.checked,
                             })
@@ -4814,61 +5078,48 @@ export default function ConstraintLogPage() {
                       />
 
                       Blocking Constraint
-
                     </label>
 
 
                     <ModalField
                       label="Reason / Comment for Changes"
                     >
-
                       <textarea
                         value={
-                          managementForm.comment
+                          managementForm
+                            .comment
                         }
-
-                        placeholder="Optional explanation for these changes."
-
                         onChange={(
                           event
                         ) =>
                           setManagementForm(
-                            (
-                              current
-                            ) => ({
+                            (current) => ({
                               ...current,
-
                               comment:
                                 event.target.value,
                             })
                           )
                         }
-
                         style={
                           smallTextareaStyle
                         }
                       />
-
                     </ModalField>
 
 
                     <div
                       style={
-                        inlineActionsRightStyle
+                        rightActionsStyle
                       }
                     >
-
                       <button
                         type="button"
-
                         disabled={
                           savingDetails
                         }
-
                         onClick={
                           saveManagementDetails
                         }
-
                         style={
                           primaryButtonStyle
                         }
@@ -4877,22 +5128,19 @@ export default function ConstraintLogPage() {
                           ? 'Saving...'
                           : 'Save Changes'}
                       </button>
-
                     </div>
 
                   </>
-
                 )}
 
               </ManagementSection>
 
 
-              {/* FORECAST */}
+              {/* RESOLUTION FORECAST */}
 
               <ManagementSection
                 title="Resolution Forecast"
-
-                subtitle="Required By remains fixed. Planned Resolution is the current forecast."
+                subtitle="Schedule Exposure is the gap between Required By and the current Planned Resolution."
               >
 
                 <div
@@ -4903,21 +5151,18 @@ export default function ConstraintLogPage() {
 
                   <ForecastCard
                     label="Required By"
-
                     value={
                       formatDate(
                         managedConstraint
                           .required_by_date
                       )
                     }
-
                     description="Date required to protect the plan"
                   />
 
 
                   <ForecastCard
                     label="Planned Resolution"
-
                     value={
                       formatDate(
                         managedConstraint
@@ -4926,21 +5171,17 @@ export default function ConstraintLogPage() {
                           .required_by_date
                       )
                     }
-
                     description="Current expected resolution"
                   />
 
 
                   <ForecastCard
-                    label="Variance"
-
+                    label="Schedule Exposure"
                     value={
                       managedForecast
                         .varianceLabel
                     }
-
-                    description="Against Required By"
-
+                    description="Forecast versus Required By"
                     alert={
                       managedForecast
                         .delayed
@@ -4949,23 +5190,19 @@ export default function ConstraintLogPage() {
 
 
                   <ForecastCard
-                    label="Outlook"
-
+                    label="Current Outlook"
                     value={
-                      managedForecast
-                        .outlook
+                      currentOutlook
+                        .label
                     }
-
                     description={
-                      managedForecast
-                        .delayed
-                        ? 'Forecast exceeds required date'
-                        : 'Forecast protects required date'
+                      currentOutlook
+                        .description
                     }
-
                     alert={
-                      managedForecast
-                        .delayed
+                      currentOutlook
+                        .label ===
+                      'Schedule Exposed'
                     }
                   />
 
@@ -4979,42 +5216,34 @@ export default function ConstraintLogPage() {
                 ].includes(
                   managedConstraint.status
                 ) && (
-
                   <div
                     style={{
                       marginTop:
                         '12px',
                     }}
                   >
-
                     <button
                       type="button"
-
                       onClick={() =>
                         toggleManagementPanel(
                           'forecast'
                         )
                       }
-
                       style={
-                        forecastActionButtonStyle
+                        forecastButtonStyle
                       }
                     >
                       Update Forecast
                     </button>
-
                   </div>
-
                 )}
 
 
                 {activeManagementPanel ===
                   'forecast' && (
-
-                  <ExpandableActionPanel
+                  <ActionPanel
                     title="Update Planned Resolution"
-
-                    description="Use this when the problem will not be solved by the current forecast."
+                    description="A reason is mandatory whenever the Planned Resolution Date changes."
                   >
 
                     <ForecastDateFields
@@ -5022,15 +5251,12 @@ export default function ConstraintLogPage() {
                         managedConstraint
                           .required_by_date
                       }
-
                       date={
                         forecastDate
                       }
-
                       setDate={
                         setForecastDate
                       }
-
                       preview={
                         forecastPreview
                       }
@@ -5038,16 +5264,12 @@ export default function ConstraintLogPage() {
 
 
                     <ModalField
-                      label="Reason for Forecast Change"
+                      label="Reason for Date Change *"
                     >
-
                       <textarea
                         value={
                           managementNote
                         }
-
-                        placeholder="Example: Supplier postponed material delivery."
-
                         onChange={(
                           event
                         ) =>
@@ -5055,12 +5277,11 @@ export default function ConstraintLogPage() {
                             event.target.value
                           )
                         }
-
+                        placeholder="Explain why the Planned Resolution Date is being revised."
                         style={
                           smallTextareaStyle
                         }
                       />
-
                     </ModalField>
 
 
@@ -5069,9 +5290,7 @@ export default function ConstraintLogPage() {
                         warningBoxStyle
                       }
                     >
-                      Required By will not change. The previous forecast,
-                      new forecast, reason, actor and timestamp will remain
-                      in Action History.
+                      Required By will remain unchanged. The reason, previous date and new date will be retained in Action History.
                     </div>
 
 
@@ -5079,22 +5298,449 @@ export default function ConstraintLogPage() {
                       saving={
                         savingAction
                       }
-
                       confirmLabel="Confirm Forecast Update"
-
                       onCancel={() =>
                         setActiveManagementPanel(
                           null
                         )
                       }
-
                       onConfirm={
                         updateForecast
                       }
                     />
 
-                  </ExpandableActionPanel>
+                  </ActionPanel>
+                )}
 
+              </ManagementSection>
+
+
+              {/* ==================================================
+                  ACTION PLAN — SQL 105
+              ================================================== */}
+
+              <ManagementSection
+                title="Action Plan"
+                subtitle="Plan and execute recovery actions intended to eliminate or reduce the constraint's effect on production."
+              >
+
+                <div
+                  style={
+                    actionPlanSummaryGridStyle
+                  }
+                >
+
+                  <MiniSummary
+                    label="Total Actions"
+                    value={
+                      actionPlanSummary
+                        .total
+                    }
+                  />
+
+                  <MiniSummary
+                    label="Active"
+                    value={
+                      actionPlanSummary
+                        .active
+                    }
+                  />
+
+                  <MiniSummary
+                    label="Completed"
+                    value={
+                      actionPlanSummary
+                        .completed
+                    }
+                  />
+
+                  <MiniSummary
+                    label="Effective"
+                    value={
+                      actionPlanSummary
+                        .effective
+                    }
+                  />
+
+                  <MiniSummary
+                    label="Plan Protection"
+                    value={
+                      actionPlanSummary
+                        .protectionActions
+                    }
+                  />
+
+                  <MiniSummary
+                    label="Next Action Due"
+                    value={
+                      formatDate(
+                        actionPlanSummary
+                          .nextDue
+                      )
+                    }
+                  />
+
+                </div>
+
+
+                {!TERMINAL_CONSTRAINT_STATUSES.includes(
+                  managedConstraint.status
+                ) && (
+                  <div
+                    style={{
+                      marginTop:
+                        '12px',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecoveryActionForm(
+                          createRecoveryActionForm()
+                        );
+
+                        setRecoveryActionPanel(
+                          recoveryActionPanel ===
+                            'create'
+                            ? null
+                            : 'create'
+                        );
+
+                        setSelectedRecoveryActionId(
+                          null
+                        );
+
+                        setHistoryError('');
+                      }}
+                      style={
+                        addRecoveryButtonStyle
+                      }
+                    >
+                      + Add Recovery Action
+                    </button>
+                  </div>
+                )}
+
+
+                {recoveryActionPanel ===
+                  'create' && (
+                  <ActionPanel
+                    title="New Recovery Action"
+                    description="Create a specific management response to protect the production plan."
+                  >
+
+                    <div
+                      style={
+                        twoColumnStyle
+                      }
+                    >
+
+                      <ModalField
+                        label="Response Approach"
+                      >
+                        <select
+                          value={
+                            recoveryActionForm
+                              .response_approach
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setRecoveryActionForm(
+                              (current) => ({
+                                ...current,
+                                response_approach:
+                                  event.target.value,
+                              })
+                            )
+                          }
+                          style={
+                            modalInputStyle
+                          }
+                        >
+                          {RESPONSE_APPROACH_OPTIONS.map(
+                            (option) => (
+                              <option
+                                key={
+                                  option.value
+                                }
+                                value={
+                                  option.value
+                                }
+                              >
+                                {option.label}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      </ModalField>
+
+
+                      <ModalField
+                        label="Expected Impact"
+                      >
+                        <select
+                          value={
+                            recoveryActionForm
+                              .expected_impact
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setRecoveryActionForm(
+                              (current) => ({
+                                ...current,
+                                expected_impact:
+                                  event.target.value,
+                              })
+                            )
+                          }
+                          style={
+                            modalInputStyle
+                          }
+                        >
+                          {EXPECTED_IMPACT_OPTIONS.map(
+                            (option) => (
+                              <option
+                                key={
+                                  option.value
+                                }
+                                value={
+                                  option.value
+                                }
+                              >
+                                {option.label}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      </ModalField>
+
+                    </div>
+
+
+                    <ModalField
+                      label="Recovery Action *"
+                    >
+                      <input
+                        value={
+                          recoveryActionForm
+                            .action_title
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setRecoveryActionForm(
+                            (current) => ({
+                              ...current,
+                              action_title:
+                                event.target.value,
+                            })
+                          )
+                        }
+                        placeholder="Example: Purchase approved material from an alternate supplier."
+                        style={
+                          modalInputStyle
+                        }
+                      />
+                    </ModalField>
+
+
+                    <ModalField
+                      label="Action Description"
+                    >
+                      <textarea
+                        value={
+                          recoveryActionForm
+                            .action_description
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setRecoveryActionForm(
+                            (current) => ({
+                              ...current,
+                              action_description:
+                                event.target.value,
+                            })
+                          )
+                        }
+                        placeholder="Describe the decision or action in more detail."
+                        style={
+                          smallTextareaStyle
+                        }
+                      />
+                    </ModalField>
+
+
+                    <div
+                      style={
+                        twoColumnStyle
+                      }
+                    >
+
+                      <ModalField
+                        label="Responsible Party *"
+                      >
+                        <input
+                          value={
+                            recoveryActionForm
+                              .responsible_party
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setRecoveryActionForm(
+                              (current) => ({
+                                ...current,
+                                responsible_party:
+                                  event.target.value,
+                              })
+                            )
+                          }
+                          placeholder="Example: Procurement"
+                          style={
+                            modalInputStyle
+                          }
+                        />
+                      </ModalField>
+
+
+                      <ModalField
+                        label="Action Due Date *"
+                      >
+                        <input
+                          type="date"
+                          value={
+                            recoveryActionForm
+                              .due_date
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setRecoveryActionForm(
+                              (current) => ({
+                                ...current,
+                                due_date:
+                                  event.target.value,
+                              })
+                            )
+                          }
+                          style={
+                            modalInputStyle
+                          }
+                        />
+                      </ModalField>
+
+                    </div>
+
+
+                    <ActionButtons
+                      saving={
+                        savingRecoveryAction
+                      }
+                      confirmLabel="Add Recovery Action"
+                      onCancel={() =>
+                        setRecoveryActionPanel(
+                          null
+                        )
+                      }
+                      onConfirm={
+                        createRecoveryAction
+                      }
+                    />
+
+                  </ActionPanel>
+                )}
+
+
+                {loadingRecoveryActions ? (
+                  <div
+                    style={
+                      emptyInnerStyle
+                    }
+                  >
+                    Loading Action Plan...
+                  </div>
+                ) : recoveryActions.length ===
+                  0 ? (
+                  <div
+                    style={
+                      actionPlanEmptyStyle
+                    }
+                  >
+                    <strong>
+                      No recovery actions yet.
+                    </strong>
+
+                    <div
+                      style={{
+                        marginTop:
+                          '5px',
+                      }}
+                    >
+                      If management can eliminate, reduce, transfer or recover the constraint's effect, add an Action Plan.
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={
+                      recoveryActionListStyle
+                    }
+                  >
+                    {recoveryActions.map(
+                      (action) => (
+                        <RecoveryActionCard
+                          key={
+                            action.id
+                          }
+                          action={
+                            action
+                          }
+                          selected={
+                            selectedRecoveryActionId ===
+                            action.id
+                          }
+                          activePanel={
+                            recoveryActionPanel
+                          }
+                          note={
+                            recoveryActionNote
+                          }
+                          setNote={
+                            setRecoveryActionNote
+                          }
+                          effectiveness={
+                            effectivenessValue
+                          }
+                          setEffectiveness={
+                            setEffectivenessValue
+                          }
+                          saving={
+                            savingRecoveryAction
+                          }
+                          onOpenPanel={
+                            openRecoveryActionPanel
+                          }
+                          onClosePanel={
+                            closeRecoveryActionPanel
+                          }
+                          onStart={
+                            startRecoveryAction
+                          }
+                          onComplete={
+                            completeRecoveryAction
+                          }
+                          onEvaluate={
+                            evaluateRecoveryAction
+                          }
+                          onCancel={
+                            cancelRecoveryAction
+                          }
+                        />
+                      )
+                    )}
+                  </div>
                 )}
 
               </ManagementSection>
@@ -5104,13 +5750,10 @@ export default function ConstraintLogPage() {
 
               <ManagementSection
                 title="Status Management"
-
                 subtitle={`Current Status: ${getStatusLabel(
                   managedConstraint.status
                 )}`}
               >
-
-                {/* FULL STATUS FLOW */}
 
                 <div
                   style={
@@ -5120,13 +5763,11 @@ export default function ConstraintLogPage() {
 
                   <LifecycleStage
                     label="Open"
-
                     active={
                       managedConstraint.status ===
                       'open'
                     }
                   />
-
 
                   <span
                     style={
@@ -5136,16 +5777,13 @@ export default function ConstraintLogPage() {
                     →
                   </span>
 
-
                   <LifecycleStage
                     label="In Progress"
-
                     active={
                       managedConstraint.status ===
                       'in_progress'
                     }
                   />
-
 
                   <span
                     style={
@@ -5155,17 +5793,14 @@ export default function ConstraintLogPage() {
                     ↔
                   </span>
 
-
                   <LifecycleStage
                     label="Waiting"
-
                     active={
                       managedConstraint.status ===
                       'waiting'
                     }
                   />
 
-
                   <span
                     style={
                       lifecycleArrowStyle
@@ -5174,17 +5809,14 @@ export default function ConstraintLogPage() {
                     →
                   </span>
 
-
                   <LifecycleStage
                     label="Resolved"
-
                     active={
                       managedConstraint.status ===
                       'resolved'
                     }
                   />
 
-
                   <span
                     style={
                       lifecycleArrowStyle
@@ -5193,10 +5825,8 @@ export default function ConstraintLogPage() {
                     →
                   </span>
 
-
                   <LifecycleStage
                     label="Cleared"
-
                     active={
                       managedConstraint.status ===
                       'cleared'
@@ -5208,42 +5838,30 @@ export default function ConstraintLogPage() {
 
                 <div
                   style={
-                    actionGridStyle
+                    lifecycleButtonsGridStyle
                   }
                 >
 
-                  {/* OPEN */}
-
                   {managedConstraint.status ===
                     'open' && (
-
                     <LifecycleButton
                       label="Start Action"
-
                       description="Open → In Progress"
-
                       onClick={() =>
                         toggleManagementPanel(
                           'start'
                         )
                       }
                     />
-
                   )}
 
 
-                  {/* IN PROGRESS */}
-
                   {managedConstraint.status ===
                     'in_progress' && (
-
                     <>
-
                       <LifecycleButton
                         label="Set Waiting"
-
                         description="Resolution temporarily blocked"
-
                         onClick={() =>
                           toggleManagementPanel(
                             'waiting'
@@ -5251,38 +5869,26 @@ export default function ConstraintLogPage() {
                         }
                       />
 
-
                       <LifecycleButton
                         label="Resolve"
-
-                        description="Required action completed"
-
+                        description="Underlying constraint solved"
                         emphasis
-
                         onClick={() =>
                           toggleManagementPanel(
                             'resolve'
                           )
                         }
                       />
-
                     </>
-
                   )}
 
 
-                  {/* WAITING */}
-
                   {managedConstraint.status ===
                     'waiting' && (
-
                     <>
-
                       <LifecycleButton
                         label="Resume Action"
-
                         description="Waiting → In Progress"
-
                         onClick={() =>
                           toggleManagementPanel(
                             'resume'
@@ -5290,40 +5896,27 @@ export default function ConstraintLogPage() {
                         }
                       />
 
-
                       <LifecycleButton
                         label="Resolve"
-
-                        description="Required action completed"
-
+                        description="Underlying constraint solved"
                         emphasis
-
                         onClick={() =>
                           toggleManagementPanel(
                             'resolve'
                           )
                         }
                       />
-
                     </>
-
                   )}
 
 
-                  {/* RESOLVED */}
-
                   {managedConstraint.status ===
                     'resolved' && (
-
                     <>
-
                       <LifecycleButton
                         label="Verify & Clear"
-
                         description="Resolution is valid"
-
                         emphasis
-
                         onClick={() =>
                           toggleManagementPanel(
                             'clear'
@@ -5331,310 +5924,231 @@ export default function ConstraintLogPage() {
                         }
                       />
 
-
                       <LifecycleButton
                         label="Reopen Constraint"
-
                         description="Problem still exists"
-
                         warning
-
                         onClick={() =>
                           toggleManagementPanel(
                             'reopen'
                           )
                         }
                       />
-
                     </>
-
                   )}
 
 
-                  {/* CANCEL */}
-
-                  {[
-                    'open',
-                    'in_progress',
-                    'waiting',
-                    'resolved',
-                  ].includes(
+                  {ACTIVE_CONSTRAINT_STATUSES.includes(
                     managedConstraint.status
                   ) && (
-
                     <LifecycleButton
                       label="Cancel Constraint"
-
                       description="Constraint no longer applicable"
-
                       danger
-
                       onClick={() =>
                         toggleManagementPanel(
                           'cancel'
                         )
                       }
                     />
-
                   )}
 
                 </div>
 
 
-                {/* START */}
-
                 {activeManagementPanel ===
                   'start' && (
-
                   <LifecycleActionPanel
-                    title="Start Action"
-
-                    description="Active work to remove this constraint is beginning."
-
+                    title="Start Constraint Resolution"
+                    description="Active management of the underlying constraint is beginning."
                     label="Optional Comment"
-
-                    placeholder="Example: Procurement team started contacting suppliers."
-
                     value={
                       managementNote
                     }
-
-                    onChange={
+                    setValue={
                       setManagementNote
                     }
-
                     saving={
                       savingAction
                     }
-
-                    actionLabel="Confirm Start Action"
-
+                    confirmLabel="Start Action"
+                    onCancel={() =>
+                      setActiveManagementPanel(
+                        null
+                      )
+                    }
                     onConfirm={() =>
                       executeLifecycleAction(
                         'start'
                       )
                     }
+                  />
+                )}
 
+
+                {activeManagementPanel ===
+                  'waiting' && (
+                  <LifecycleActionPanel
+                    title="Set Waiting"
+                    description="Explain what is preventing constraint resolution."
+                    label="Reason for Waiting *"
+                    value={
+                      managementNote
+                    }
+                    setValue={
+                      setManagementNote
+                    }
+                    saving={
+                      savingAction
+                    }
+                    confirmLabel="Set Waiting"
                     onCancel={() =>
                       setActiveManagementPanel(
                         null
                       )
                     }
-                  />
-
-                )}
-
-
-                {/* WAITING */}
-
-                {activeManagementPanel ===
-                  'waiting' && (
-
-                  <LifecycleActionPanel
-                    title="Set Waiting"
-
-                    description="Explain what is preventing the team from continuing resolution work."
-
-                    label="Reason for Waiting"
-
-                    placeholder="Example: Waiting for supplier confirmation."
-
-                    value={
-                      managementNote
-                    }
-
-                    onChange={
-                      setManagementNote
-                    }
-
-                    saving={
-                      savingAction
-                    }
-
-                    actionLabel="Confirm Waiting"
-
                     onConfirm={() =>
                       executeLifecycleAction(
                         'waiting'
                       )
                     }
+                  />
+                )}
 
+
+                {activeManagementPanel ===
+                  'resume' && (
+                  <LifecycleActionPanel
+                    title="Resume Constraint Resolution"
+                    description="Return the constraint to active management."
+                    label="Optional Comment"
+                    value={
+                      managementNote
+                    }
+                    setValue={
+                      setManagementNote
+                    }
+                    saving={
+                      savingAction
+                    }
+                    confirmLabel="Resume"
                     onCancel={() =>
                       setActiveManagementPanel(
                         null
                       )
                     }
-                  />
-
-                )}
-
-
-                {/* RESUME */}
-
-                {activeManagementPanel ===
-                  'resume' && (
-
-                  <LifecycleActionPanel
-                    title="Resume Action"
-
-                    description="Move the constraint back to active resolution."
-
-                    label="Optional Comment"
-
-                    placeholder="Example: Supplier response received. Resolution work resumed."
-
-                    value={
-                      managementNote
-                    }
-
-                    onChange={
-                      setManagementNote
-                    }
-
-                    saving={
-                      savingAction
-                    }
-
-                    actionLabel="Confirm Resume"
-
                     onConfirm={() =>
                       executeLifecycleAction(
                         'resume'
                       )
                     }
+                  />
+                )}
 
+
+                {activeManagementPanel ===
+                  'resolve' && (
+                  <LifecycleActionPanel
+                    title="Resolve Constraint"
+                    description="The underlying problem has been solved. It will still require verification before readiness is released."
+                    label="Resolution Note *"
+                    value={
+                      managementNote
+                    }
+                    setValue={
+                      setManagementNote
+                    }
+                    saving={
+                      savingAction
+                    }
+                    confirmLabel="Mark Resolved"
+                    positive
                     onCancel={() =>
                       setActiveManagementPanel(
                         null
                       )
                     }
-                  />
-
-                )}
-
-
-                {/* RESOLVE */}
-
-                {activeManagementPanel ===
-                  'resolve' && (
-
-                  <LifecycleActionPanel
-                    title="Resolve Constraint"
-
-                    description="The responsible party is reporting that the required action has been completed. Readiness will remain blocked until verification."
-
-                    label="Resolution Note"
-
-                    placeholder="Example: Supplier confirmed material delivery and availability."
-
-                    value={
-                      managementNote
-                    }
-
-                    onChange={
-                      setManagementNote
-                    }
-
-                    saving={
-                      savingAction
-                    }
-
-                    actionLabel="Mark Resolved"
-
                     onConfirm={() =>
                       executeLifecycleAction(
                         'resolve'
                       )
                     }
-
-                    onCancel={() =>
-                      setActiveManagementPanel(
-                        null
-                      )
-                    }
-
-                    success
                   />
-
                 )}
 
-
-                {/* CLEAR */}
 
                 {activeManagementPanel ===
                   'clear' && (
-
-                  <LifecycleActionPanel
+                  <ActionPanel
                     title="Verify & Clear"
-
-                    description="Confirm that the reported resolution is valid and the affected work may proceed."
-
-                    label="Verification Note"
-
-                    placeholder="Example: Material confirmation reviewed. The constraint no longer blocks production."
-
-                    value={
-                      managementNote
-                    }
-
-                    onChange={
-                      setManagementNote
-                    }
-
-                    saving={
-                      savingAction
-                    }
-
-                    actionLabel="Verify & Clear"
-
-                    onConfirm={() =>
-                      executeLifecycleAction(
-                        'clear'
-                      )
-                    }
-
-                    onCancel={() =>
-                      setActiveManagementPanel(
-                        null
-                      )
-                    }
-
-                    success
+                    description="Confirm that the reported resolution is valid and production may proceed."
                   >
 
                     <div
                       style={
-                        verificationWarningStyle
+                        clearanceNoticeStyle
                       }
                     >
-                      Clearing this constraint will release the associated
-                      Lookahead / Koskela readiness condition.
+                      Clearing this constraint will release the associated Lookahead / Koskela readiness condition.
                     </div>
 
-                  </LifecycleActionPanel>
 
+                    <ModalField
+                      label="Verification Note *"
+                    >
+                      <textarea
+                        value={
+                          managementNote
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setManagementNote(
+                            event.target.value
+                          )
+                        }
+                        style={
+                          smallTextareaStyle
+                        }
+                      />
+                    </ModalField>
+
+
+                    <ActionButtons
+                      saving={
+                        savingAction
+                      }
+                      confirmLabel="Verify & Clear"
+                      positive
+                      onCancel={() =>
+                        setActiveManagementPanel(
+                          null
+                        )
+                      }
+                      onConfirm={() =>
+                        executeLifecycleAction(
+                          'clear'
+                        )
+                      }
+                    />
+
+                  </ActionPanel>
                 )}
 
 
-                {/* REOPEN — SQL 104 */}
-
                 {activeManagementPanel ===
                   'reopen' && (
-
-                  <ExpandableActionPanel
+                  <ActionPanel
                     title="Reopen Constraint"
-
-                    description="Use this when the previously reported resolution was unsuccessful and the problem still exists."
+                    description="Use this when the previous resolution was unsuccessful."
                   >
 
                     <div
                       style={
-                        reopenWarningStyle
+                        reopenNoticeStyle
                       }
                     >
-                      Status will change from <strong>Resolved</strong> to{' '}
-                      <strong>In Progress</strong>. Required By will remain
-                      unchanged.
+                      Status will change from <strong>Resolved</strong> to <strong>In Progress</strong>. Required By remains unchanged.
                     </div>
 
 
@@ -5643,15 +6157,12 @@ export default function ConstraintLogPage() {
                         managedConstraint
                           .required_by_date
                       }
-
                       date={
                         forecastDate
                       }
-
                       setDate={
                         setForecastDate
                       }
-
                       preview={
                         forecastPreview
                       }
@@ -5659,16 +6170,12 @@ export default function ConstraintLogPage() {
 
 
                     <ModalField
-                      label="Why was the constraint not resolved?"
+                      label="Reason for Reopening and Date Change *"
                     >
-
                       <textarea
                         value={
                           managementNote
                         }
-
-                        placeholder="Example: Supplier did not deliver on the previously confirmed date."
-
                         onChange={(
                           event
                         ) =>
@@ -5676,171 +6183,86 @@ export default function ConstraintLogPage() {
                             event.target.value
                           )
                         }
-
+                        placeholder="Example: Supplier did not deliver on the previously confirmed date."
                         style={
                           smallTextareaStyle
                         }
                       />
-
                     </ModalField>
-
-
-                    <div
-                      style={
-                        reopenImpactStyle
-                      }
-                    >
-
-                      <div>
-
-                        <div
-                          style={
-                            metaLabelStyle
-                          }
-                        >
-                          Current Status
-                        </div>
-
-                        <strong>
-                          Resolved
-                        </strong>
-
-                      </div>
-
-
-                      <div
-                        style={
-                          lifecycleArrowLargeStyle
-                        }
-                      >
-                        →
-                      </div>
-
-
-                      <div>
-
-                        <div
-                          style={
-                            metaLabelStyle
-                          }
-                        >
-                          New Status
-                        </div>
-
-                        <strong
-                          style={{
-                            color:
-                              '#1d4ed8',
-                          }}
-                        >
-                          In Progress
-                        </strong>
-
-                      </div>
-
-                    </div>
 
 
                     <ActionButtons
                       saving={
                         savingAction
                       }
-
                       confirmLabel="Confirm Reopen"
-
                       warning
-
                       onCancel={() =>
                         setActiveManagementPanel(
                           null
                         )
                       }
-
                       onConfirm={
                         reopenConstraint
                       }
                     />
 
-                  </ExpandableActionPanel>
-
+                  </ActionPanel>
                 )}
 
 
-                {/* CANCEL */}
-
                 {activeManagementPanel ===
                   'cancel' && (
-
                   <LifecycleActionPanel
                     title="Cancel Constraint"
-
-                    description="Cancellation means the constraint is no longer applicable. It does not mean the problem was successfully solved."
-
-                    label="Cancellation Reason"
-
-                    placeholder="Example: Work package removed from current scope."
-
+                    description="The constraint is no longer applicable."
+                    label="Cancellation Reason *"
                     value={
                       managementNote
                     }
-
-                    onChange={
+                    setValue={
                       setManagementNote
                     }
-
                     saving={
                       savingAction
                     }
-
-                    actionLabel="Cancel Constraint"
-
-                    onConfirm={() =>
-                      executeLifecycleAction(
-                        'cancel'
-                      )
-                    }
-
+                    confirmLabel="Cancel Constraint"
+                    danger
                     onCancel={() =>
                       setActiveManagementPanel(
                         null
                       )
                     }
-
-                    danger
+                    onConfirm={() =>
+                      executeLifecycleAction(
+                        'cancel'
+                      )
+                    }
                   />
-
                 )}
 
 
                 {managedConstraint.status ===
                   'resolved' && (
-
                   <div
                     style={
                       resolvedNoticeStyle
                     }
                   >
-                    This constraint is reported as resolved but still blocks
-                    readiness. Choose <strong>Verify & Clear</strong> if the
-                    solution is valid, or <strong>Reopen Constraint</strong>{' '}
-                    if the problem remains.
+                    The constraint is reported as resolved but still blocks readiness. Verify & Clear it if the solution is valid, or reopen it if the problem remains.
                   </div>
-
                 )}
 
 
                 {managedConstraint.status ===
                   'cleared' && (
-
                   <div
                     style={
                       clearedNoticeStyle
                     }
                   >
-                    Resolution verified. This constraint is formally cleared
-                    and no longer blocks readiness.
+                    Resolution verified. This constraint no longer blocks readiness.
                   </div>
-
                 )}
 
               </ManagementSection>
@@ -5850,8 +6272,7 @@ export default function ConstraintLogPage() {
 
               <ManagementSection
                 title="Management Update"
-
-                subtitle="Record progress without changing the current status."
+                subtitle="Record progress without changing the constraint status."
               >
 
                 <textarea
@@ -5861,49 +6282,25 @@ export default function ConstraintLogPage() {
                       ? managementNote
                       : ''
                   }
-
                   placeholder="Add a comment or progress update..."
-
                   onFocus={() => {
-
-                    if (
-                      activeManagementPanel !==
+                    setActiveManagementPanel(
                       'comment'
-                    ) {
+                    );
 
-                      setActiveManagementPanel(
-                        'comment'
-                      );
-
-
-                      setManagementNote('');
-
-                    }
-
+                    setManagementNote('');
                   }}
-
                   onChange={(
                     event
                   ) => {
-
-                    if (
-                      activeManagementPanel !==
+                    setActiveManagementPanel(
                       'comment'
-                    ) {
-
-                      setActiveManagementPanel(
-                        'comment'
-                      );
-
-                    }
-
+                    );
 
                     setManagementNote(
                       event.target.value
                     );
-
                   }}
-
                   style={
                     smallTextareaStyle
                   }
@@ -5912,32 +6309,25 @@ export default function ConstraintLogPage() {
 
                 <div
                   style={
-                    inlineActionsRightStyle
+                    rightActionsStyle
                   }
                 >
-
                   <button
                     type="button"
-
                     disabled={
-                      savingAction ||
                       activeManagementPanel !==
-                        'comment'
+                        'comment' ||
+                      savingAction
                     }
-
                     onClick={
                       addManagementComment
                     }
-
                     style={
                       secondaryActionButtonStyle
                     }
                   >
-                    {savingAction
-                      ? 'Adding...'
-                      : 'Add Comment'}
+                    Add Comment
                   </button>
-
                 </div>
 
               </ManagementSection>
@@ -5947,36 +6337,27 @@ export default function ConstraintLogPage() {
 
               <ManagementSection
                 title="Affected Work"
-
-                subtitle={`${managedAffectedWork.length} unique linked work item${managedAffectedWork.length === 1 ? '' : 's'}`}
+                subtitle={`${managedAffectedWork.length} linked work item${managedAffectedWork.length === 1 ? '' : 's'}`}
               >
 
                 {managedAffectedWork.length ===
                 0 ? (
-
                   <div
                     style={
                       emptyInnerStyle
                     }
                   >
-                    Project-level constraint with no specific planning
-                    occurrence linked.
+                    Project-level constraint.
                   </div>
-
                 ) : (
-
                   managedAffectedWork.map(
-                    (
-                      item
-                    ) => (
-
+                    (item) => (
                       <div
                         key={
                           item.key
                         }
-
                         style={
-                          affectedWorkCardStyle
+                          affectedCardStyle
                         }
                       >
 
@@ -5985,7 +6366,6 @@ export default function ConstraintLogPage() {
                             affectedHeaderStyle
                           }
                         >
-
                           <strong>
                             {item.packageCode}
 
@@ -5994,15 +6374,13 @@ export default function ConstraintLogPage() {
                               : ''}
                           </strong>
 
-
                           <span
                             style={
-                              sourcePillStyle
+                              sourceBadgeStyle
                             }
                           >
                             {item.type}
                           </span>
-
                         </div>
 
 
@@ -6015,47 +6393,38 @@ export default function ConstraintLogPage() {
                         </div>
 
 
-                        {(item.startDate ||
-                          item.finishDate) && (
+                        <div
+                          style={
+                            affectedDateStyle
+                          }
+                        >
+                          {formatDate(
+                            item.startDate
+                          )}
 
-                          <div
-                            style={
-                              affectedMetaStyle
-                            }
-                          >
-                            {formatDate(
-                              item.startDate
-                            )}
+                          {' → '}
 
-                            {' → '}
-
-                            {formatDate(
-                              item.finishDate
-                            )}
-                          </div>
-
-                        )}
+                          {formatDate(
+                            item.finishDate
+                          )}
+                        </div>
 
                       </div>
-
                     )
                   )
-
                 )}
 
               </ManagementSection>
 
 
-              {/* ACTION HISTORY */}
+              {/* HISTORY */}
 
               <ManagementSection
                 title="Action History"
-
-                subtitle="Read-only audit trail"
+                subtitle="Read-only audit trail for the parent constraint."
               >
 
                 {loadingHistory ? (
-
                   <div
                     style={
                       emptyInnerStyle
@@ -6063,10 +6432,8 @@ export default function ConstraintLogPage() {
                   >
                     Loading Action History...
                   </div>
-
                 ) : constraintHistory.length ===
                   0 ? (
-
                   <div
                     style={
                       emptyInnerStyle
@@ -6074,27 +6441,19 @@ export default function ConstraintLogPage() {
                   >
                     No Action History recorded yet.
                   </div>
-
                 ) : (
-
                   constraintHistory.map(
-                    (
-                      entry
-                    ) => (
-
+                    (entry) => (
                       <HistoryEntry
                         key={
                           entry.id
                         }
-
                         entry={
                           entry
                         }
                       />
-
                     )
                   )
-
                 )}
 
               </ManagementSection>
@@ -6112,28 +6471,35 @@ export default function ConstraintLogPage() {
 
               <div
                 style={
-                  footerStatusStyle
+                  footerMetaStyle
                 }
               >
+                {getConstraintReference(
+                  managedConstraint.id
+                )}
+
+                {' · '}
+
                 {getStatusLabel(
                   managedConstraint.status
                 )}
 
                 {' · '}
 
-                {getConstraintReference(
-                  managedConstraint.id
-                )}
+                {actionPlanSummary.total}{' '}
+                Recovery Action
+                {actionPlanSummary.total ===
+                1
+                  ? ''
+                  : 's'}
               </div>
 
 
               <button
                 type="button"
-
                 onClick={
                   closeManagementModal
                 }
-
                 style={
                   secondaryButtonStyle
                 }
@@ -6146,31 +6512,29 @@ export default function ConstraintLogPage() {
           </div>
 
         </div>
-
       )}
 
 
       {/* ====================================================
-          CREATE CONSTRAINT MODAL
+          ADD CONSTRAINT MODAL
       ===================================================== */}
 
       {showCreateModal && (
-
         <div
           style={
-            modalOverlayStyle
+            smallModalOverlayStyle
           }
         >
 
           <div
             style={
-              modalStyle
+              smallModalStyle
             }
           >
 
             <div
               style={
-                modalHeaderStyle
+                smallModalHeaderStyle
               }
             >
 
@@ -6184,11 +6548,11 @@ export default function ConstraintLogPage() {
                   PROJECT CONSTRAINT
                 </div>
 
-
                 <h2
-                  style={
-                    modalTitleStyle
-                  }
+                  style={{
+                    margin:
+                      '4px 0 0',
+                  }}
                 >
                   Add Constraint
                 </h2>
@@ -6198,13 +6562,11 @@ export default function ConstraintLogPage() {
 
               <button
                 type="button"
-
                 onClick={() =>
                   setShowCreateModal(
                     false
                   )
                 }
-
                 style={
                   closeButtonStyle
                 }
@@ -6219,10 +6581,10 @@ export default function ConstraintLogPage() {
               onSubmit={
                 createConstraint
               }
-
-              style={
-                modalBodyStyle
-              }
+              style={{
+                padding:
+                  '20px',
+              }}
             >
 
               <div
@@ -6234,108 +6596,80 @@ export default function ConstraintLogPage() {
                 <ModalField
                   label="Category"
                 >
-
                   <select
                     value={
                       createForm.category
                     }
-
                     onChange={(
                       event
                     ) =>
                       setCreateForm(
-                        (
-                          current
-                        ) => ({
+                        (current) => ({
                           ...current,
-
                           category:
                             event.target.value,
                         })
                       )
                     }
-
                     style={
                       modalInputStyle
                     }
                   >
-
                     {CATEGORY_OPTIONS.map(
-                      (
-                        option
-                      ) => (
-
+                      (option) => (
                         <option
                           key={
                             option.value
                           }
-
                           value={
                             option.value
                           }
                         >
                           {option.label}
                         </option>
-
                       )
                     )}
-
                   </select>
-
                 </ModalField>
 
 
                 <ModalField
                   label="Priority"
                 >
-
                   <select
                     value={
                       createForm.priority
                     }
-
                     onChange={(
                       event
                     ) =>
                       setCreateForm(
-                        (
-                          current
-                        ) => ({
+                        (current) => ({
                           ...current,
-
                           priority:
                             event.target.value,
                         })
                       )
                     }
-
                     style={
                       modalInputStyle
                     }
                   >
-
                     {PRIORITY_OPTIONS.map(
-                      (
-                        option
-                      ) => (
-
+                      (option) => (
                         <option
                           key={
                             option.value
                           }
-
                           value={
                             option.value
                           }
                         >
                           {option.label}
                         </option>
-
                       )
                     )}
-
                   </select>
-
                 </ModalField>
 
               </div>
@@ -6344,32 +6678,25 @@ export default function ConstraintLogPage() {
               <ModalField
                 label="What is blocking the work?"
               >
-
                 <input
                   value={
                     createForm.title
                   }
-
                   onChange={(
                     event
                   ) =>
                     setCreateForm(
-                      (
-                        current
-                      ) => ({
+                      (current) => ({
                         ...current,
-
                         title:
                           event.target.value,
                       })
                     )
                   }
-
                   style={
                     modalInputStyle
                   }
                 />
-
               </ModalField>
 
 
@@ -6382,68 +6709,53 @@ export default function ConstraintLogPage() {
                 <ModalField
                   label="Responsible Party"
                 >
-
                   <input
                     value={
                       createForm
                         .responsible_party
                     }
-
                     onChange={(
                       event
                     ) =>
                       setCreateForm(
-                        (
-                          current
-                        ) => ({
+                        (current) => ({
                           ...current,
-
                           responsible_party:
                             event.target.value,
                         })
                       )
                     }
-
                     style={
                       modalInputStyle
                     }
                   />
-
                 </ModalField>
 
 
                 <ModalField
                   label="Required By Date"
                 >
-
                   <input
                     type="date"
-
                     value={
                       createForm
                         .required_by_date
                     }
-
                     onChange={(
                       event
                     ) =>
                       setCreateForm(
-                        (
-                          current
-                        ) => ({
+                        (current) => ({
                           ...current,
-
                           required_by_date:
                             event.target.value,
                         })
                       )
                     }
-
                     style={
                       modalInputStyle
                     }
                   />
-
                 </ModalField>
 
               </div>
@@ -6452,65 +6764,52 @@ export default function ConstraintLogPage() {
               <ModalField
                 label="Required Action"
               >
-
                 <textarea
                   value={
                     createForm
                       .action_required
                   }
-
                   onChange={(
                     event
                   ) =>
                     setCreateForm(
-                      (
-                        current
-                      ) => ({
+                      (current) => ({
                         ...current,
-
                         action_required:
                           event.target.value,
                       })
                     )
                   }
-
                   style={
                     modalTextareaStyle
                   }
                 />
-
               </ModalField>
 
 
               <ModalField
                 label="Notes"
               >
-
                 <textarea
                   value={
-                    createForm.description
+                    createForm
+                      .description
                   }
-
                   onChange={(
                     event
                   ) =>
                     setCreateForm(
-                      (
-                        current
-                      ) => ({
+                      (current) => ({
                         ...current,
-
                         description:
                           event.target.value,
                       })
                     )
                   }
-
                   style={
                     modalTextareaStyle
                   }
                 />
-
               </ModalField>
 
 
@@ -6519,23 +6818,17 @@ export default function ConstraintLogPage() {
                   checkboxStyle
                 }
               >
-
                 <input
                   type="checkbox"
-
                   checked={
                     createForm.blocking
                   }
-
                   onChange={(
                     event
                   ) =>
                     setCreateForm(
-                      (
-                        current
-                      ) => ({
+                      (current) => ({
                         ...current,
-
                         blocking:
                           event.target.checked,
                       })
@@ -6544,25 +6837,22 @@ export default function ConstraintLogPage() {
                 />
 
                 Blocking Constraint
-
               </label>
 
 
               <div
                 style={
-                  modalActionsStyle
+                  rightActionsStyle
                 }
               >
 
                 <button
                   type="button"
-
                   onClick={() =>
                     setShowCreateModal(
                       false
                     )
                   }
-
                   style={
                     secondaryButtonStyle
                   }
@@ -6573,11 +6863,9 @@ export default function ConstraintLogPage() {
 
                 <button
                   type="submit"
-
                   disabled={
                     creatingConstraint
                   }
-
                   style={
                     primaryButtonStyle
                   }
@@ -6594,7 +6882,6 @@ export default function ConstraintLogPage() {
           </div>
 
         </div>
-
       )}
 
     </div>
@@ -6611,14 +6898,12 @@ function SummaryCard({
   value,
   description,
 }) {
-
   return (
     <div
       style={
         summaryCardStyle
       }
     >
-
       <div
         style={
           summaryLabelStyle
@@ -6626,7 +6911,6 @@ function SummaryCard({
       >
         {label}
       </div>
-
 
       <div
         style={
@@ -6636,7 +6920,6 @@ function SummaryCard({
         {value}
       </div>
 
-
       <div
         style={
           summaryDescriptionStyle
@@ -6644,7 +6927,36 @@ function SummaryCard({
       >
         {description}
       </div>
+    </div>
+  );
+}
 
+
+function MiniSummary({
+  label,
+  value,
+}) {
+  return (
+    <div
+      style={
+        miniSummaryStyle
+      }
+    >
+      <div
+        style={
+          metaLabelStyle
+        }
+      >
+        {label}
+      </div>
+
+      <div
+        style={
+          miniSummaryValueStyle
+        }
+      >
+        {value ?? '—'}
+      </div>
     </div>
   );
 }
@@ -6654,10 +6966,8 @@ function FilterField({
   label,
   children,
 }) {
-
   return (
     <div>
-
       <label
         style={
           filterLabelStyle
@@ -6666,9 +6976,7 @@ function FilterField({
         {label}
       </label>
 
-
       {children}
-
     </div>
   );
 }
@@ -6678,7 +6986,6 @@ function ModalField({
   label,
   children,
 }) {
-
   return (
     <div
       style={{
@@ -6686,7 +6993,6 @@ function ModalField({
           '14px',
       }}
     >
-
       <label
         style={
           modalLabelStyle
@@ -6695,9 +7001,7 @@ function ModalField({
         {label}
       </label>
 
-
       {children}
-
     </div>
   );
 }
@@ -6708,14 +7012,12 @@ function ManagementSection({
   subtitle,
   children,
 }) {
-
   return (
     <section
       style={
-        managementSectionStyle
+        sectionStyle
       }
     >
-
       <h3
         style={
           sectionTitleStyle
@@ -6724,9 +7026,7 @@ function ManagementSection({
         {title}
       </h3>
 
-
       {subtitle && (
-
         <div
           style={
             sectionSubtitleStyle
@@ -6734,9 +7034,7 @@ function ManagementSection({
         >
           {subtitle}
         </div>
-
       )}
-
 
       <div
         style={{
@@ -6746,50 +7044,72 @@ function ManagementSection({
       >
         {children}
       </div>
-
     </section>
   );
 }
 
 
-function ExpandableActionPanel({
-  title,
+function ForecastCard({
+  label,
+  value,
   description,
-  children,
+  alert,
 }) {
-
   return (
     <div
-      style={
-        expandablePanelStyle
-      }
+      style={{
+        ...forecastCardStyle,
+        background:
+          alert
+            ? '#fef2f2'
+            : '#f8fafc',
+        borderColor:
+          alert
+            ? '#fecaca'
+            : '#e2e8f0',
+      }}
     >
 
       <div
         style={
-          expandableTitleStyle
+          metaLabelStyle
         }
       >
-        {title}
+        {label}
       </div>
-
-
-      <div
-        style={
-          expandableDescriptionStyle
-        }
-      >
-        {description}
-      </div>
-
 
       <div
         style={{
           marginTop:
-            '13px',
+            '5px',
+          color:
+            alert
+              ? '#b91c1c'
+              : '#0f172a',
+          fontSize:
+            '12px',
+          fontWeight:
+            900,
         }}
       >
-        {children}
+        {value}
+      </div>
+
+      <div
+        style={{
+          marginTop:
+            '4px',
+          color:
+            alert
+              ? '#991b1b'
+              : '#64748b',
+          fontSize:
+            '8px',
+          lineHeight:
+            1.4,
+        }}
+      >
+        {description}
       </div>
 
     </div>
@@ -6803,7 +7123,6 @@ function ForecastDateFields({
   setDate,
   preview,
 }) {
-
   return (
     <div
       style={
@@ -6812,16 +7131,11 @@ function ForecastDateFields({
     >
 
       <ModalField
-        label="New Planned Resolution Date"
+        label="New Planned Resolution Date *"
       >
-
         <input
           type="date"
-
-          value={
-            date
-          }
-
+          value={date}
           onChange={(
             event
           ) =>
@@ -6829,49 +7143,237 @@ function ForecastDateFields({
               event.target.value
             )
           }
-
           style={
             modalInputStyle
           }
         />
-
       </ModalField>
 
 
       <div>
-
         <div
           style={
             metaLabelStyle
           }
         >
-          Schedule Impact
+          Schedule Exposure
         </div>
-
 
         <div
           style={
             preview?.delayed
-              ? delayPreviewStyle
-              : safePreviewStyle
+              ? delayAssessmentStyle
+              : safeAssessmentStyle
           }
         >
-          {preview
-            ?.label ||
+          {preview?.label ||
             'Select a date'}
         </div>
 
-
         <div
           style={
-            requiredByHelperStyle
+            helperTextStyle
           }
         >
-          Required By: {formatDate(
+          Required By:{' '}
+          {formatDate(
             requiredBy
           )}
         </div>
+      </div>
 
+    </div>
+  );
+}
+
+
+function StatusBadge({
+  label,
+  style,
+}) {
+  return (
+    <span
+      style={{
+        ...badgeBaseStyle,
+        background:
+          style.background,
+        border:
+          `1px solid ${style.border}`,
+        color:
+          style.color,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+
+function LifecycleStage({
+  label,
+  active,
+}) {
+  return (
+    <span
+      style={{
+        ...lifecycleStageStyle,
+        borderColor:
+          active
+            ? '#2563eb'
+            : '#e2e8f0',
+        background:
+          active
+            ? '#eff6ff'
+            : '#ffffff',
+        color:
+          active
+            ? '#1d4ed8'
+            : '#64748b',
+        fontWeight:
+          active
+            ? 900
+            : 700,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+
+function LifecycleButton({
+  label,
+  description,
+  onClick,
+  emphasis,
+  warning,
+  danger,
+}) {
+
+  let background =
+    '#ffffff';
+
+  let border =
+    '#cbd5e1';
+
+  let color =
+    '#334155';
+
+
+  if (emphasis) {
+    background =
+      '#f0fdf4';
+
+    border =
+      '#86efac';
+
+    color =
+      '#166534';
+  }
+
+
+  if (warning) {
+    background =
+      '#fff7ed';
+
+    border =
+      '#fdba74';
+
+    color =
+      '#9a3412';
+  }
+
+
+  if (danger) {
+    background =
+      '#fef2f2';
+
+    border =
+      '#fecaca';
+
+    color =
+      '#b91c1c';
+  }
+
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...lifecycleButtonStyle,
+        background,
+        border:
+          `1px solid ${border}`,
+        color,
+      }}
+    >
+      <strong>
+        {label}
+      </strong>
+
+      <span
+        style={{
+          marginTop:
+            '4px',
+          color:
+            '#64748b',
+          fontSize:
+            '8px',
+        }}
+      >
+        {description}
+      </span>
+    </button>
+  );
+}
+
+
+function ActionPanel({
+  title,
+  description,
+  children,
+}) {
+  return (
+    <div
+      style={
+        actionPanelStyle
+      }
+    >
+
+      <div
+        style={{
+          fontSize:
+            '11px',
+          fontWeight:
+            900,
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          marginTop:
+            '4px',
+          color:
+            '#64748b',
+          fontSize:
+            '9px',
+          lineHeight:
+            1.5,
+        }}
+      >
+        {description}
+      </div>
+
+      <div
+        style={{
+          marginTop:
+            '14px',
+        }}
+      >
+        {children}
       </div>
 
     </div>
@@ -6883,90 +7385,52 @@ function LifecycleActionPanel({
   title,
   description,
   label,
-  placeholder,
   value,
-  onChange,
+  setValue,
   saving,
-  actionLabel,
-  onConfirm,
+  confirmLabel,
   onCancel,
+  onConfirm,
+  positive,
   danger,
-  success,
-  children,
 }) {
-
   return (
-    <ExpandableActionPanel
-      title={
-        title
-      }
-
-      description={
-        description
-      }
+    <ActionPanel
+      title={title}
+      description={description}
     >
 
-      {children}
-
-
       <ModalField
-        label={
-          label
-        }
+        label={label}
       >
-
         <textarea
-          value={
-            value
-          }
-
-          placeholder={
-            placeholder
-          }
-
+          value={value}
           onChange={(
             event
           ) =>
-            onChange(
+            setValue(
               event.target.value
             )
           }
-
           style={
             smallTextareaStyle
           }
         />
-
       </ModalField>
 
 
       <ActionButtons
-        saving={
-          saving
-        }
-
+        saving={saving}
         confirmLabel={
-          actionLabel
+          confirmLabel
         }
-
-        danger={
-          danger
-        }
-
-        success={
-          success
-        }
-
-        onCancel={
-          onCancel
-        }
-
-        onConfirm={
-          onConfirm
-        }
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+        positive={positive}
+        danger={danger}
       />
 
-    </ExpandableActionPanel>
+    </ActionPanel>
   );
 }
 
@@ -6976,16 +7440,16 @@ function ActionButtons({
   confirmLabel,
   onCancel,
   onConfirm,
-  danger,
-  success,
+  positive,
   warning,
+  danger,
 }) {
 
   let style =
     primaryButtonStyle;
 
 
-  if (success) {
+  if (positive) {
     style =
       successPrimaryButtonStyle;
   }
@@ -7006,17 +7470,13 @@ function ActionButtons({
   return (
     <div
       style={
-        inlineActionsRightStyle
+        rightActionsStyle
       }
     >
 
       <button
         type="button"
-
-        onClick={
-          onCancel
-        }
-
+        onClick={onCancel}
         style={
           secondaryButtonStyle
         }
@@ -7027,18 +7487,9 @@ function ActionButtons({
 
       <button
         type="button"
-
-        disabled={
-          saving
-        }
-
-        onClick={
-          onConfirm
-        }
-
-        style={
-          style
-        }
+        disabled={saving}
+        onClick={onConfirm}
+        style={style}
       >
         {saving
           ? 'Processing...'
@@ -7050,210 +7501,502 @@ function ActionButtons({
 }
 
 
-function LifecycleStage({
-  label,
-  active,
+function RecoveryActionCard({
+  action,
+  selected,
+  activePanel,
+  note,
+  setNote,
+  effectiveness,
+  setEffectiveness,
+  saving,
+  onOpenPanel,
+  onClosePanel,
+  onStart,
+  onComplete,
+  onEvaluate,
+  onCancel,
 }) {
 
   return (
     <div
-      style={{
-        ...lifecycleStageStyle,
-
-        borderColor:
-          active
-            ? '#2563eb'
-            : '#e2e8f0',
-
-        background:
-          active
-            ? '#eff6ff'
-            : '#ffffff',
-
-        color:
-          active
-            ? '#1d4ed8'
-            : '#64748b',
-
-        fontWeight:
-          active
-            ? 900
-            : 700,
-      }}
-    >
-      {label}
-    </div>
-  );
-}
-
-
-function LifecycleButton({
-  label,
-  description,
-  onClick,
-  emphasis,
-  warning,
-  danger,
-}) {
-
-  let background =
-    '#ffffff';
-
-  let borderColor =
-    '#cbd5e1';
-
-  let color =
-    '#334155';
-
-
-  if (emphasis) {
-
-    background =
-      '#f0fdf4';
-
-    borderColor =
-      '#86efac';
-
-    color =
-      '#166534';
-
-  }
-
-
-  if (warning) {
-
-    background =
-      '#fff7ed';
-
-    borderColor =
-      '#fdba74';
-
-    color =
-      '#9a3412';
-
-  }
-
-
-  if (danger) {
-
-    background =
-      '#fef2f2';
-
-    borderColor =
-      '#fecaca';
-
-    color =
-      '#b91c1c';
-
-  }
-
-
-  return (
-    <button
-      type="button"
-
-      onClick={
-        onClick
+      style={
+        recoveryActionCardStyle
       }
-
-      style={{
-        ...actionButtonStyle,
-
-        background,
-
-        borderColor,
-
-        color,
-      }}
-    >
-
-      <strong>
-        {label}
-      </strong>
-
-
-      <span>
-        {description}
-      </span>
-
-    </button>
-  );
-}
-
-
-function ForecastCard({
-  label,
-  value,
-  description,
-  alert,
-}) {
-
-  return (
-    <div
-      style={{
-        ...forecastCardStyle,
-
-        background:
-          alert
-            ? '#fef2f2'
-            : '#f8fafc',
-
-        borderColor:
-          alert
-            ? '#fecaca'
-            : '#e2e8f0',
-      }}
     >
 
       <div
         style={
-          metaLabelStyle
+          recoveryActionHeaderStyle
         }
       >
-        {label}
+
+        <div>
+
+          <div
+            style={
+              recoveryActionTitleRowStyle
+            }
+          >
+            <strong
+              style={{
+                fontSize:
+                  '11px',
+              }}
+            >
+              {action.action_title}
+            </strong>
+
+
+            <StatusBadge
+              label={
+                getStatusLabel(
+                  action.status
+                )
+              }
+              style={
+                getStatusStyle(
+                  action.status
+                )
+              }
+            />
+
+
+            <StatusBadge
+              label={
+                action.effectiveness ===
+                  'not_evaluated'
+                  ? 'Effectiveness Not Evaluated'
+                  : formatLabel(
+                      action.effectiveness
+                    )
+              }
+              style={
+                getEffectivenessStyle(
+                  action.effectiveness
+                )
+              }
+            />
+
+          </div>
+
+
+          <div
+            style={
+              recoveryActionApproachStyle
+            }
+          >
+            {formatLabel(
+              action
+                .response_approach
+            )}
+
+            {' · '}
+
+            {formatLabel(
+              action
+                .expected_impact
+            )}
+          </div>
+
+        </div>
+
+
+        <div
+          style={
+            recoveryActionDueStyle
+          }
+        >
+          Due{' '}
+          <strong>
+            {formatDate(
+              action.due_date
+            )}
+          </strong>
+        </div>
+
       </div>
 
 
-      <strong
-        style={{
-          display:
-            'block',
-
-          marginTop:
-            '5px',
-
-          color:
-            alert
-              ? '#b91c1c'
-              : '#0f172a',
-
-          fontSize:
-            '12px',
-        }}
-      >
-        {value}
-      </strong>
+      {action.action_description && (
+        <div
+          style={
+            recoveryActionDescriptionStyle
+          }
+        >
+          {action.action_description}
+        </div>
+      )}
 
 
       <div
-        style={{
-          marginTop:
-            '4px',
-
-          color:
-            alert
-              ? '#991b1b'
-              : '#64748b',
-
-          fontSize:
-            '8px',
-
-          lineHeight:
-            1.4,
-        }}
+        style={
+          recoveryActionMetaGridStyle
+        }
       >
-        {description}
+
+        <div>
+          <div
+            style={
+              metaLabelStyle
+            }
+          >
+            Responsible
+          </div>
+
+          <strong>
+            {action
+              .responsible_party}
+          </strong>
+        </div>
+
+
+        <div>
+          <div
+            style={
+              metaLabelStyle
+            }
+          >
+            Expected Impact
+          </div>
+
+          <strong>
+            {formatLabel(
+              action
+                .expected_impact
+            )}
+          </strong>
+        </div>
+
+
+        {action.effectiveness_notes && (
+          <div>
+            <div
+              style={
+                metaLabelStyle
+              }
+            >
+              Effectiveness Notes
+            </div>
+
+            <strong>
+              {action
+                .effectiveness_notes}
+            </strong>
+          </div>
+        )}
+
       </div>
+
+
+      <div
+        style={
+          recoveryActionButtonsStyle
+        }
+      >
+
+        {action.status ===
+          'open' && (
+          <button
+            type="button"
+            onClick={() =>
+              onOpenPanel(
+                action.id,
+                'start'
+              )
+            }
+            style={
+              smallActionButtonStyle
+            }
+          >
+            Start
+          </button>
+        )}
+
+
+        {[
+          'open',
+          'in_progress',
+        ].includes(
+          action.status
+        ) && (
+          <button
+            type="button"
+            onClick={() =>
+              onOpenPanel(
+                action.id,
+                'complete'
+              )
+            }
+            style={
+              smallPositiveButtonStyle
+            }
+          >
+            Complete
+          </button>
+        )}
+
+
+        {action.status ===
+          'completed' &&
+          action.effectiveness ===
+            'not_evaluated' && (
+          <button
+            type="button"
+            onClick={() =>
+              onOpenPanel(
+                action.id,
+                'evaluate'
+              )
+            }
+            style={
+              smallEvaluationButtonStyle
+            }
+          >
+            Evaluate Effectiveness
+          </button>
+        )}
+
+
+        {[
+          'open',
+          'in_progress',
+        ].includes(
+          action.status
+        ) && (
+          <button
+            type="button"
+            onClick={() =>
+              onOpenPanel(
+                action.id,
+                'cancel'
+              )
+            }
+            style={
+              smallDangerButtonStyle
+            }
+          >
+            Cancel
+          </button>
+        )}
+
+      </div>
+
+
+      {selected &&
+        activePanel ===
+          'start' && (
+        <ActionPanel
+          title="Start Recovery Action"
+          description="Move this recovery action to In Progress."
+        >
+
+          <ModalField
+            label="Optional Comment"
+          >
+            <textarea
+              value={note}
+              onChange={(
+                event
+              ) =>
+                setNote(
+                  event.target.value
+                )
+              }
+              style={
+                smallTextareaStyle
+              }
+            />
+          </ModalField>
+
+
+          <ActionButtons
+            saving={saving}
+            confirmLabel="Start Recovery Action"
+            onCancel={
+              onClosePanel
+            }
+            onConfirm={() =>
+              onStart(
+                action.id
+              )
+            }
+          />
+
+        </ActionPanel>
+      )}
+
+
+      {selected &&
+        activePanel ===
+          'complete' && (
+        <ActionPanel
+          title="Complete Recovery Action"
+          description="Completion does not automatically resolve the parent constraint."
+        >
+
+          <ModalField
+            label="Completion Note *"
+          >
+            <textarea
+              value={note}
+              onChange={(
+                event
+              ) =>
+                setNote(
+                  event.target.value
+                )
+              }
+              placeholder="Describe what was completed."
+              style={
+                smallTextareaStyle
+              }
+            />
+          </ModalField>
+
+
+          <ActionButtons
+            saving={saving}
+            confirmLabel="Mark Completed"
+            positive
+            onCancel={
+              onClosePanel
+            }
+            onConfirm={() =>
+              onComplete(
+                action.id
+              )
+            }
+          />
+
+        </ActionPanel>
+      )}
+
+
+      {selected &&
+        activePanel ===
+          'evaluate' && (
+        <ActionPanel
+          title="Evaluate Effectiveness"
+          description="Determine whether the completed action actually protected or improved the plan."
+        >
+
+          <ModalField
+            label="Effectiveness *"
+          >
+            <select
+              value={
+                effectiveness
+              }
+              onChange={(
+                event
+              ) =>
+                setEffectiveness(
+                  event.target.value
+                )
+              }
+              style={
+                modalInputStyle
+              }
+            >
+              {EFFECTIVENESS_OPTIONS.map(
+                (option) => (
+                  <option
+                    key={
+                      option.value
+                    }
+                    value={
+                      option.value
+                    }
+                  >
+                    {option.label}
+                  </option>
+                )
+              )}
+            </select>
+          </ModalField>
+
+
+          <ModalField
+            label="Effectiveness Notes *"
+          >
+            <textarea
+              value={note}
+              onChange={(
+                event
+              ) =>
+                setNote(
+                  event.target.value
+                )
+              }
+              placeholder="Example: Supplier B confirmed stock and delivery before the Required By date."
+              style={
+                smallTextareaStyle
+              }
+            />
+          </ModalField>
+
+
+          <ActionButtons
+            saving={saving}
+            confirmLabel="Save Evaluation"
+            onCancel={
+              onClosePanel
+            }
+            onConfirm={() =>
+              onEvaluate(
+                action.id
+              )
+            }
+          />
+
+        </ActionPanel>
+      )}
+
+
+      {selected &&
+        activePanel ===
+          'cancel' && (
+        <ActionPanel
+          title="Cancel Recovery Action"
+          description="Cancel this action if it is no longer applicable."
+        >
+
+          <ModalField
+            label="Cancellation Reason *"
+          >
+            <textarea
+              value={note}
+              onChange={(
+                event
+              ) =>
+                setNote(
+                  event.target.value
+                )
+              }
+              style={
+                smallTextareaStyle
+              }
+            />
+          </ModalField>
+
+
+          <ActionButtons
+            saving={saving}
+            confirmLabel="Cancel Recovery Action"
+            danger
+            onCancel={
+              onClosePanel
+            }
+            onConfirm={() =>
+              onCancel(
+                action.id
+              )
+            }
+          />
+
+        </ActionPanel>
+      )}
 
     </div>
   );
@@ -7301,17 +8044,11 @@ function HistoryEntry({
 
         <div>
 
-          <strong
-            style={{
-              fontSize:
-                '10px',
-            }}
-          >
+          <strong>
             {getActionTypeLabel(
               entry.action_type
             )}
           </strong>
-
 
           <div
             style={
@@ -7339,43 +8076,58 @@ function HistoryEntry({
 
 
       {statusChanged && (
+        <div
+          style={
+            historyChangeStyle
+          }
+        >
+          <span>
+            Status
+          </span>
 
-        <HistoryChange
-          label="Status"
+          <strong>
+            {getStatusLabel(
+              entry.status_from
+            )}
 
-          value={`${entry.status_from
-            ? getStatusLabel(
-                entry.status_from
-              )
-            : '—'} → ${entry.status_to
-            ? getStatusLabel(
-                entry.status_to
-              )
-            : '—'}`}
-        />
+            {' → '}
 
+            {getStatusLabel(
+              entry.status_to
+            )}
+          </strong>
+        </div>
       )}
 
 
       {forecastChanged && (
+        <div
+          style={
+            historyChangeStyle
+          }
+        >
+          <span>
+            Forecast
+          </span>
 
-        <HistoryChange
-          label="Forecast"
+          <strong>
+            {formatDate(
+              entry
+                .previous_target_resolution_date
+            )}
 
-          value={`${formatDate(
-            entry
-              .previous_target_resolution_date
-          )} → ${formatDate(
-            entry
-              .new_target_resolution_date
-          )}`}
-        />
+            {' → '}
 
+            {formatDate(
+              entry
+                .new_target_resolution_date
+            )}
+          </strong>
+        </div>
       )}
 
 
       {entry.comment && (
-
         <div
           style={
             historyCommentStyle
@@ -7383,62 +8135,9 @@ function HistoryEntry({
         >
           {entry.comment}
         </div>
-
       )}
 
     </div>
-  );
-}
-
-
-function HistoryChange({
-  label,
-  value,
-}) {
-
-  return (
-    <div
-      style={
-        historyChangeStyle
-      }
-    >
-
-      <span>
-        {label}
-      </span>
-
-
-      <strong>
-        {value}
-      </strong>
-
-    </div>
-  );
-}
-
-
-function StatusBadge({
-  label,
-  style,
-}) {
-
-  return (
-    <span
-      style={{
-        ...badgeStyle,
-
-        background:
-          style.background,
-
-        border:
-          `1px solid ${style.border}`,
-
-        color:
-          style.color,
-      }}
-    >
-      {label}
-    </span>
   );
 }
 
@@ -7447,14 +8146,12 @@ function MessageBox({
   type,
   children,
 }) {
-
   return (
     <div
       style={
-        type ===
-          'error'
-          ? errorBoxStyle
-          : successBoxStyle
+        type === 'error'
+          ? errorMessageStyle
+          : successMessageStyle
       }
     >
       {children}
@@ -7468,612 +8165,286 @@ function MessageBox({
 // ============================================================
 
 const pageStyle = {
-  minHeight:
-    '100%',
-
-  padding:
-    '18px 20px 40px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#0f172a',
+  minHeight: '100%',
+  padding: '18px 20px 40px',
+  background: '#f8fafc',
+  color: '#0f172a',
 };
 
 
 const pageHeaderStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'flex-start',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '16px',
-
-  flexWrap:
-    'wrap',
-
-  marginBottom:
-    '18px',
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  gap: '16px',
+  flexWrap: 'wrap',
+  marginBottom: '18px',
 };
 
 
 const pageTitleStyle = {
-  margin:
-    0,
-
-  fontSize:
-    '22px',
-
-  fontWeight:
-    900,
+  margin: 0,
+  fontSize: '22px',
+  fontWeight: 900,
 };
 
 
 const pageDescriptionStyle = {
-  margin:
-    '6px 0 0',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '11px',
+  margin: '6px 0 0',
+  color: '#64748b',
+  fontSize: '11px',
 };
 
 
 const projectRowStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'flex-end',
-
-  gap:
-    '12px',
-
-  flexWrap:
-    'wrap',
-
-  marginBottom:
-    '16px',
+  display: 'flex',
+  alignItems: 'flex-end',
+  gap: '12px',
+  flexWrap: 'wrap',
+  marginBottom: '16px',
 };
 
 
 const projectBadgeStyle = {
-  padding:
-    '9px 11px',
-
-  border:
-    '1px solid #dbeafe',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1e40af',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
+  padding: '9px 11px',
+  border: '1px solid #dbeafe',
+  borderRadius: '6px',
+  background: '#eff6ff',
+  color: '#1e40af',
+  fontSize: '10px',
+  fontWeight: 700,
 };
 
 
 const labelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '5px',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
+  display: 'block',
+  marginBottom: '5px',
+  fontSize: '11px',
+  fontWeight: 700,
 };
 
 
 const inputStyle = {
-  width:
-    '100%',
-
-  height:
-    '36px',
-
-  padding:
-    '0 9px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
+  width: '100%',
+  height: '36px',
+  padding: '0 9px',
+  border: '1px solid #cbd5e1',
+  borderRadius: '6px',
+  background: '#ffffff',
 };
 
 
 const summaryGridStyle = {
-  display:
-    'grid',
-
+  display: 'grid',
   gridTemplateColumns:
     'repeat(auto-fit, minmax(180px, 1fr))',
-
-  gap:
-    '10px',
-
-  marginBottom:
-    '14px',
+  gap: '10px',
+  marginBottom: '14px',
 };
 
 
 const summaryCardStyle = {
-  minHeight:
-    '92px',
-
-  padding:
-    '14px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#ffffff',
+  padding: '14px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '7px',
+  background: '#ffffff',
 };
 
 
 const summaryLabelStyle = {
-  color:
-    '#64748b',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    900,
-
-  textTransform:
-    'uppercase',
+  color: '#64748b',
+  fontSize: '9px',
+  fontWeight: 900,
+  textTransform: 'uppercase',
 };
 
 
 const summaryValueStyle = {
-  marginTop:
-    '5px',
-
-  fontSize:
-    '25px',
-
-  fontWeight:
-    900,
+  marginTop: '5px',
+  fontSize: '25px',
+  fontWeight: 900,
 };
 
 
 const summaryDescriptionStyle = {
-  marginTop:
-    '7px',
-
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '9px',
+  marginTop: '7px',
+  color: '#94a3b8',
+  fontSize: '9px',
 };
 
 
 const filtersStyle = {
-  display:
-    'grid',
-
+  display: 'grid',
   gridTemplateColumns:
-    'minmax(220px, 2fr) repeat(4, minmax(140px, 1fr))',
-
-  gap:
-    '8px',
-
-  padding:
-    '12px',
-
-  marginBottom:
-    '12px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#ffffff',
+    'minmax(220px,2fr) repeat(4,minmax(140px,1fr))',
+  gap: '8px',
+  padding: '12px',
+  marginBottom: '12px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '7px',
+  background: '#ffffff',
 };
 
 
 const filterLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '4px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    900,
-
-  textTransform:
-    'uppercase',
+  display: 'block',
+  marginBottom: '4px',
+  color: '#64748b',
+  fontSize: '9px',
+  fontWeight: 900,
 };
 
 
 const filterInputStyle = {
-  width:
-    '100%',
-
-  height:
-    '34px',
-
-  padding:
-    '0 8px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '5px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '10px',
+  width: '100%',
+  height: '34px',
+  padding: '0 8px',
+  border: '1px solid #cbd5e1',
+  borderRadius: '5px',
+  background: '#ffffff',
+  fontSize: '10px',
 };
 
 
 const tableContainerStyle = {
-  overflowX:
-    'auto',
-
-  border:
-    '1px solid #cbd5e1',
-
-  background:
-    '#ffffff',
+  overflowX: 'auto',
+  border: '1px solid #cbd5e1',
+  background: '#ffffff',
 };
 
 
 const tableStyle = {
-  width:
-    '100%',
-
-  minWidth:
-    '1500px',
-
-  borderCollapse:
-    'collapse',
-
-  tableLayout:
-    'fixed',
+  width: '100%',
+  minWidth: '1500px',
+  borderCollapse: 'collapse',
+  tableLayout: 'fixed',
 };
 
 
 const headerCellStyle = {
-  padding:
-    '7px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
-
-  textAlign:
-    'center',
+  padding: '7px',
+  border: '1px solid #cbd5e1',
+  background: '#f8fafc',
+  fontSize: '8px',
+  fontWeight: 900,
+  textAlign: 'center',
 };
 
 
 const bodyCellStyle = {
-  padding:
-    '7px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '9px',
-
-  textAlign:
-    'center',
-
-  verticalAlign:
-    'middle',
+  padding: '7px',
+  border: '1px solid #e2e8f0',
+  fontSize: '9px',
+  textAlign: 'center',
+  verticalAlign: 'middle',
 };
 
 
 const leftCellStyle = {
   ...bodyCellStyle,
-
-  textAlign:
-    'left',
+  textAlign: 'left',
 };
 
 
 const blockingStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
+  marginTop: '3px',
+  color: '#b91c1c',
+  fontSize: '8px',
+  fontWeight: 900,
 };
 
 
-const badgeStyle = {
-  display:
-    'inline-flex',
+const exposureTextStyle = {
+  marginTop: '3px',
+  color: '#b45309',
+  fontSize: '8px',
+  fontWeight: 900,
+};
 
-  alignItems:
-    'center',
 
-  justifyContent:
-    'center',
-
-  padding:
-    '4px 7px',
-
-  borderRadius:
-    '999px',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
+const badgeBaseStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '4px 7px',
+  borderRadius: '999px',
+  fontSize: '8px',
+  fontWeight: 900,
 };
 
 
 const blockingPillStyle = {
-  display:
-    'inline-flex',
-
-  padding:
-    '4px 7px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '999px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
+  ...badgeBaseStyle,
+  border: '1px solid #fecaca',
+  background: '#fef2f2',
+  color: '#b91c1c',
 };
 
 
 const primaryButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 13px',
-
-  border:
-    '1px solid #2563eb',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#2563eb',
-
-  color:
-    '#ffffff',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    800,
-
-  cursor:
-    'pointer',
+  height: '36px',
+  padding: '0 13px',
+  border: '1px solid #2563eb',
+  borderRadius: '6px',
+  background: '#2563eb',
+  color: '#ffffff',
+  fontSize: '10px',
+  fontWeight: 800,
+  cursor: 'pointer',
 };
 
 
 const successPrimaryButtonStyle = {
   ...primaryButtonStyle,
-
-  border:
-    '1px solid #16a34a',
-
-  background:
-    '#16a34a',
+  border: '1px solid #16a34a',
+  background: '#16a34a',
 };
 
 
 const warningPrimaryButtonStyle = {
   ...primaryButtonStyle,
-
-  border:
-    '1px solid #ea580c',
-
-  background:
-    '#ea580c',
+  border: '1px solid #ea580c',
+  background: '#ea580c',
 };
 
 
 const dangerPrimaryButtonStyle = {
   ...primaryButtonStyle,
-
-  border:
-    '1px solid #dc2626',
-
-  background:
-    '#dc2626',
+  border: '1px solid #dc2626',
+  background: '#dc2626',
 };
 
 
 const secondaryButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 12px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
+  height: '36px',
+  padding: '0 12px',
+  border: '1px solid #cbd5e1',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#334155',
+  fontSize: '10px',
+  fontWeight: 700,
+  cursor: 'pointer',
 };
 
 
 const secondaryActionButtonStyle = {
   ...secondaryButtonStyle,
-
-  border:
-    '1px solid #bfdbfe',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
+  border: '1px solid #bfdbfe',
+  background: '#eff6ff',
+  color: '#1d4ed8',
 };
 
 
 const manageButtonStyle = {
-  height:
-    '29px',
-
-  padding:
-    '0 10px',
-
-  border:
-    '1px solid #93c5fd',
-
-  borderRadius:
-    '5px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
-};
-
-
-const emptyStyle = {
-  padding:
-    '40px',
-
-  textAlign:
-    'center',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '11px',
-};
-
-
-const emptyInnerStyle = {
-  padding:
-    '16px',
-
-  border:
-    '1px dashed #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#64748b',
-
-  textAlign:
-    'center',
-
-  fontSize:
-    '9px',
+  height: '29px',
+  padding: '0 10px',
+  border: '1px solid #93c5fd',
+  borderRadius: '5px',
+  background: '#eff6ff',
+  color: '#1d4ed8',
+  fontSize: '9px',
+  fontWeight: 900,
+  cursor: 'pointer',
 };
 
 
@@ -8082,698 +8453,543 @@ const emptyInnerStyle = {
 // ============================================================
 
 const managementOverlayStyle = {
-  position:
-    'fixed',
-
-  inset:
-    0,
-
-  zIndex:
-    9000,
-
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  padding:
-    '20px',
-
+  position: 'fixed',
+  inset: 0,
+  zIndex: 9000,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px',
   background:
     'rgba(15,23,42,0.58)',
 };
 
 
 const managementModalStyle = {
-  display:
-    'flex',
-
-  flexDirection:
-    'column',
-
-  width:
-    'min(980px, 95vw)',
-
-  maxHeight:
-    '92vh',
-
-  overflow:
-    'hidden',
-
-  border:
-    '1px solid #dbe3ee',
-
-  borderRadius:
-    '12px',
-
-  background:
-    '#f8fafc',
-
+  width: 'min(1040px,95vw)',
+  maxHeight: '92vh',
+  display: 'flex',
+  flexDirection: 'column',
+  overflow: 'hidden',
+  border: '1px solid #dbe3ee',
+  borderRadius: '12px',
+  background: '#f8fafc',
   boxShadow:
     '0 30px 90px rgba(15,23,42,0.35)',
 };
 
 
 const managementHeaderStyle = {
-  flexShrink:
-    0,
-
-  display:
-    'flex',
-
-  alignItems:
-    'flex-start',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '20px',
-
-  padding:
-    '18px 20px',
-
+  flexShrink: 0,
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '20px',
+  padding: '18px 20px',
   borderBottom:
     '1px solid #e2e8f0',
-
-  background:
-    '#ffffff',
+  background: '#ffffff',
 };
 
 
-const managementHeaderTitleRowStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '7px',
-
-  flexWrap:
-    'wrap',
-
-  marginTop:
-    '4px',
+const managementTitleRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '7px',
+  flexWrap: 'wrap',
+  marginTop: '4px',
 };
 
 
 const managementTitleStyle = {
-  margin:
-    0,
-
-  marginRight:
-    '3px',
-
-  fontSize:
-    '20px',
-
-  fontWeight:
-    900,
+  margin: 0,
+  fontSize: '20px',
+  fontWeight: 900,
 };
 
 
 const managementSubtitleStyle = {
-  marginTop:
-    '6px',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    600,
+  marginTop: '6px',
+  color: '#475569',
+  fontSize: '11px',
+  fontWeight: 600,
 };
 
 
 const managementBodyStyle = {
-  flex:
-    1,
-
-  display:
-    'grid',
-
-  gap:
-    '12px',
-
-  padding:
-    '14px',
-
-  overflowY:
-    'auto',
+  flex: 1,
+  display: 'grid',
+  gap: '12px',
+  padding: '14px',
+  overflowY: 'auto',
 };
 
 
 const managementFooterStyle = {
-  flexShrink:
-    0,
-
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '12px',
-
-  padding:
-    '12px 16px',
-
+  flexShrink: 0,
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '12px',
+  padding: '12px 16px',
   borderTop:
     '1px solid #e2e8f0',
-
-  background:
-    '#ffffff',
+  background: '#ffffff',
 };
 
 
-const footerStatusStyle = {
-  color:
-    '#64748b',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    700,
+const footerMetaStyle = {
+  color: '#64748b',
+  fontSize: '9px',
+  fontWeight: 700,
 };
 
 
-const managementSectionStyle = {
-  padding:
-    '15px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '8px',
-
-  background:
-    '#ffffff',
+const sectionStyle = {
+  padding: '15px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '8px',
+  background: '#ffffff',
 };
 
 
 const sectionTitleStyle = {
-  margin:
-    0,
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
+  margin: 0,
+  fontSize: '12px',
+  fontWeight: 900,
 };
 
 
 const sectionSubtitleStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '9px',
+  marginTop: '3px',
+  color: '#94a3b8',
+  fontSize: '9px',
 };
 
 
-const expandablePanelStyle = {
-  marginTop:
-    '12px',
-
-  padding:
-    '13px',
-
-  border:
-    '1px solid #dbeafe',
-
-  borderRadius:
-    '8px',
-
-  background:
-    '#f8fbff',
+const eyebrowStyle = {
+  color: '#2563eb',
+  fontSize: '9px',
+  fontWeight: 900,
+  letterSpacing: '0.08em',
 };
 
 
-const expandableTitleStyle = {
-  color:
-    '#0f172a',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    900,
+const closeButtonStyle = {
+  width: '34px',
+  height: '34px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#64748b',
+  fontSize: '20px',
+  cursor: 'pointer',
 };
 
 
-const expandableDescriptionStyle = {
-  marginTop:
-    '4px',
+const modalLabelStyle = {
+  display: 'block',
+  marginBottom: '6px',
+  color: '#334155',
+  fontSize: '10px',
+  fontWeight: 800,
+};
 
-  color:
-    '#64748b',
 
-  fontSize:
-    '9px',
+const modalInputStyle = {
+  width: '100%',
+  height: '38px',
+  padding: '0 9px',
+  border: '1px solid #cbd5e1',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#0f172a',
+  fontSize: '11px',
+};
 
-  lineHeight:
-    1.5,
+
+const modalTextareaStyle = {
+  width: '100%',
+  minHeight: '82px',
+  padding: '9px',
+  border: '1px solid #cbd5e1',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#0f172a',
+  fontFamily: 'inherit',
+  fontSize: '11px',
+  resize: 'vertical',
+};
+
+
+const smallTextareaStyle = {
+  ...modalTextareaStyle,
+  minHeight: '75px',
+};
+
+
+const twoColumnStyle = {
+  display: 'grid',
+  gridTemplateColumns:
+    'repeat(2,minmax(0,1fr))',
+  gap: '12px',
+};
+
+
+const checkboxStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  marginBottom: '14px',
+  padding: '10px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '6px',
+  background: '#f8fafc',
+  fontSize: '10px',
+  fontWeight: 700,
+};
+
+
+const rightActionsStyle = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: '8px',
 };
 
 
 const forecastGridStyle = {
-  display:
-    'grid',
-
+  display: 'grid',
   gridTemplateColumns:
-    'repeat(4, minmax(0, 1fr))',
-
-  gap:
-    '8px',
+    'repeat(4,minmax(0,1fr))',
+  gap: '8px',
 };
 
 
 const forecastCardStyle = {
-  padding:
-    '11px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
+  padding: '11px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '7px',
 };
 
 
 const metaLabelStyle = {
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
-
-  letterSpacing:
-    '0.04em',
-
-  textTransform:
-    'uppercase',
+  color: '#94a3b8',
+  fontSize: '8px',
+  fontWeight: 900,
+  textTransform: 'uppercase',
 };
 
 
-const forecastActionButtonStyle = {
-  height:
-    '32px',
-
-  padding:
-    '0 11px',
-
-  border:
-    '1px solid #fdba74',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff7ed',
-
-  color:
-    '#9a3412',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
+const forecastButtonStyle = {
+  height: '32px',
+  padding: '0 11px',
+  border: '1px solid #fdba74',
+  borderRadius: '6px',
+  background: '#fff7ed',
+  color: '#9a3412',
+  fontSize: '9px',
+  fontWeight: 900,
+  cursor: 'pointer',
 };
 
 
-const delayPreviewStyle = {
-  marginTop:
-    '6px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    900,
+const delayAssessmentStyle = {
+  marginTop: '6px',
+  padding: '10px',
+  border: '1px solid #fecaca',
+  borderRadius: '6px',
+  background: '#fef2f2',
+  color: '#b91c1c',
+  fontSize: '9px',
+  fontWeight: 900,
 };
 
 
-const safePreviewStyle = {
-  marginTop:
-    '6px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #bbf7d0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    900,
+const safeAssessmentStyle = {
+  marginTop: '6px',
+  padding: '10px',
+  border: '1px solid #bbf7d0',
+  borderRadius: '6px',
+  background: '#f0fdf4',
+  color: '#166534',
+  fontSize: '9px',
+  fontWeight: 900,
 };
 
 
-const requiredByHelperStyle = {
-  marginTop:
-    '5px',
-
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '8px',
+const helperTextStyle = {
+  marginTop: '5px',
+  color: '#94a3b8',
+  fontSize: '8px',
 };
 
 
-const lifecycleFlowStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '6px',
-
-  flexWrap:
-    'wrap',
-
-  marginBottom:
-    '13px',
-};
-
-
-const lifecycleStageStyle = {
-  padding:
-    '6px 9px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '999px',
-
-  fontSize:
-    '8px',
-};
-
-
-const lifecycleArrowStyle = {
-  color:
-    '#cbd5e1',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    900,
-};
-
-
-const lifecycleArrowLargeStyle = {
-  color:
-    '#cbd5e1',
-
-  fontSize:
-    '20px',
-
-  fontWeight:
-    900,
-};
-
-
-const actionGridStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(2, minmax(0, 1fr))',
-
-  gap:
-    '8px',
-};
-
-
-const actionButtonStyle = {
-  display:
-    'flex',
-
-  flexDirection:
-    'column',
-
-  gap:
-    '4px',
-
-  padding:
-    '10px 11px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'left',
-
-  cursor:
-    'pointer',
-
-  fontSize:
-    '9px',
-};
-
-
-const resolvedNoticeStyle = {
-  marginTop:
-    '12px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #ddd6fe',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f5f3ff',
-
-  color:
-    '#6d28d9',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    700,
-};
-
-
-const clearedNoticeStyle = {
-  marginTop:
-    '12px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #bbf7d0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    700,
-};
-
-
-const verificationWarningStyle = {
-  marginBottom:
-    '12px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #86efac',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    700,
-};
-
-
-const reopenWarningStyle = {
-  marginBottom:
-    '14px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #fdba74',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff7ed',
-
-  color:
-    '#9a3412',
-
-  fontSize:
-    '9px',
-
-  lineHeight:
-    1.5,
-};
-
-
-const reopenImpactStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    '1fr auto 1fr',
-
-  alignItems:
-    'center',
-
-  gap:
-    '12px',
-
-  marginBottom:
-    '14px',
-
-  padding:
-    '12px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#ffffff',
+const actionPanelStyle = {
+  marginTop: '12px',
+  padding: '13px',
+  border: '1px solid #dbeafe',
+  borderRadius: '8px',
+  background: '#f8fbff',
 };
 
 
 const warningBoxStyle = {
-  padding:
-    '10px',
-
-  marginBottom:
-    '12px',
-
-  border:
-    '1px solid #fde68a',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fffbeb',
-
-  color:
-    '#92400e',
-
-  fontSize:
-    '9px',
-
-  lineHeight:
-    1.5,
+  marginBottom: '12px',
+  padding: '10px',
+  border: '1px solid #fde68a',
+  borderRadius: '6px',
+  background: '#fffbeb',
+  color: '#92400e',
+  fontSize: '9px',
 };
 
 
-const inlineActionsRightStyle = {
-  display:
-    'flex',
+const clearanceNoticeStyle = {
+  marginBottom: '12px',
+  padding: '10px',
+  border: '1px solid #86efac',
+  borderRadius: '6px',
+  background: '#f0fdf4',
+  color: '#166534',
+  fontSize: '9px',
+};
 
-  justifyContent:
-    'flex-end',
 
-  gap:
-    '8px',
+const reopenNoticeStyle = {
+  marginBottom: '12px',
+  padding: '10px',
+  border: '1px solid #fdba74',
+  borderRadius: '6px',
+  background: '#fff7ed',
+  color: '#9a3412',
+  fontSize: '9px',
+};
+
+
+const lifecycleFlowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  flexWrap: 'wrap',
+  marginBottom: '13px',
+  color: '#cbd5e1',
+};
+
+
+const lifecycleStageStyle = {
+  padding: '6px 9px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '999px',
+  fontSize: '8px',
+};
+
+
+const lifecycleArrowStyle = {
+  color: '#cbd5e1',
+  fontSize: '11px',
+  fontWeight: 900,
+};
+
+
+const lifecycleButtonsGridStyle = {
+  display: 'grid',
+  gridTemplateColumns:
+    'repeat(2,minmax(0,1fr))',
+  gap: '8px',
+};
+
+
+const lifecycleButtonStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  padding: '10px',
+  borderRadius: '7px',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
+
+
+// ============================================================
+// ACTION PLAN
+// ============================================================
+
+const actionPlanSummaryGridStyle = {
+  display: 'grid',
+  gridTemplateColumns:
+    'repeat(6,minmax(0,1fr))',
+  gap: '8px',
+};
+
+
+const miniSummaryStyle = {
+  padding: '10px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '7px',
+  background: '#f8fafc',
+};
+
+
+const miniSummaryValueStyle = {
+  marginTop: '5px',
+  fontSize: '12px',
+  fontWeight: 900,
+};
+
+
+const addRecoveryButtonStyle = {
+  height: '34px',
+  padding: '0 11px',
+  border: '1px solid #93c5fd',
+  borderRadius: '6px',
+  background: '#eff6ff',
+  color: '#1d4ed8',
+  fontSize: '9px',
+  fontWeight: 900,
+  cursor: 'pointer',
+};
+
+
+const actionPlanEmptyStyle = {
+  marginTop: '12px',
+  padding: '16px',
+  border: '1px dashed #cbd5e1',
+  borderRadius: '7px',
+  background: '#f8fafc',
+  color: '#64748b',
+  fontSize: '9px',
+};
+
+
+const recoveryActionListStyle = {
+  display: 'grid',
+  gap: '9px',
+  marginTop: '12px',
+};
+
+
+const recoveryActionCardStyle = {
+  padding: '12px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '8px',
+  background: '#f8fafc',
+};
+
+
+const recoveryActionHeaderStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '12px',
+  flexWrap: 'wrap',
+};
+
+
+const recoveryActionTitleRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  flexWrap: 'wrap',
+};
+
+
+const recoveryActionApproachStyle = {
+  marginTop: '5px',
+  color: '#64748b',
+  fontSize: '8px',
+  fontWeight: 700,
+};
+
+
+const recoveryActionDueStyle = {
+  color: '#475569',
+  fontSize: '9px',
+};
+
+
+const recoveryActionDescriptionStyle = {
+  marginTop: '10px',
+  color: '#475569',
+  fontSize: '9px',
+  lineHeight: 1.5,
+};
+
+
+const recoveryActionMetaGridStyle = {
+  display: 'grid',
+  gridTemplateColumns:
+    'repeat(auto-fit,minmax(180px,1fr))',
+  gap: '10px',
+  marginTop: '11px',
+  fontSize: '9px',
+};
+
+
+const recoveryActionButtonsStyle = {
+  display: 'flex',
+  gap: '6px',
+  flexWrap: 'wrap',
+  marginTop: '12px',
+};
+
+
+const smallActionButtonStyle = {
+  height: '30px',
+  padding: '0 9px',
+  border: '1px solid #93c5fd',
+  borderRadius: '5px',
+  background: '#eff6ff',
+  color: '#1d4ed8',
+  fontSize: '8px',
+  fontWeight: 800,
+  cursor: 'pointer',
+};
+
+
+const smallPositiveButtonStyle = {
+  ...smallActionButtonStyle,
+  border: '1px solid #86efac',
+  background: '#f0fdf4',
+  color: '#166534',
+};
+
+
+const smallEvaluationButtonStyle = {
+  ...smallActionButtonStyle,
+  border: '1px solid #c4b5fd',
+  background: '#f5f3ff',
+  color: '#6d28d9',
+};
+
+
+const smallDangerButtonStyle = {
+  ...smallActionButtonStyle,
+  border: '1px solid #fecaca',
+  background: '#fef2f2',
+  color: '#b91c1c',
+};
+
+
+// ============================================================
+// STATUS NOTICES
+// ============================================================
+
+const resolvedNoticeStyle = {
+  marginTop: '12px',
+  padding: '10px',
+  border: '1px solid #ddd6fe',
+  borderRadius: '6px',
+  background: '#f5f3ff',
+  color: '#6d28d9',
+  fontSize: '9px',
+};
+
+
+const clearedNoticeStyle = {
+  marginTop: '12px',
+  padding: '10px',
+  border: '1px solid #bbf7d0',
+  borderRadius: '6px',
+  background: '#f0fdf4',
+  color: '#166534',
+  fontSize: '9px',
 };
 
 
@@ -8781,93 +8997,46 @@ const inlineActionsRightStyle = {
 // AFFECTED WORK
 // ============================================================
 
-const affectedWorkCardStyle = {
-  marginBottom:
-    '8px',
-
-  padding:
-    '11px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#f8fafc',
+const affectedCardStyle = {
+  marginBottom: '8px',
+  padding: '11px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '7px',
+  background: '#f8fafc',
 };
 
 
 const affectedHeaderStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'flex-start',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '10px',
-
-  fontSize:
-    '10px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '10px',
+  fontSize: '10px',
 };
 
 
-const sourcePillStyle = {
-  display:
-    'inline-flex',
-
-  padding:
-    '3px 6px',
-
-  border:
-    '1px solid #bfdbfe',
-
-  borderRadius:
-    '999px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    800,
+const sourceBadgeStyle = {
+  padding: '3px 6px',
+  border: '1px solid #bfdbfe',
+  borderRadius: '999px',
+  background: '#eff6ff',
+  color: '#1d4ed8',
+  fontSize: '8px',
+  fontWeight: 800,
 };
 
 
 const affectedLocationStyle = {
-  marginTop:
-    '4px',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
+  marginTop: '4px',
+  color: '#475569',
+  fontSize: '10px',
+  fontWeight: 700,
 };
 
 
-const affectedMetaStyle = {
-  marginTop:
-    '7px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '9px',
+const affectedDateStyle = {
+  marginTop: '7px',
+  color: '#64748b',
+  fontSize: '9px',
 };
 
 
@@ -8876,436 +9045,131 @@ const affectedMetaStyle = {
 // ============================================================
 
 const historyCardStyle = {
-  marginBottom:
-    '9px',
-
-  padding:
-    '11px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#f8fafc',
+  marginBottom: '9px',
+  padding: '11px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '7px',
+  background: '#f8fafc',
 };
 
 
 const historyHeaderStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '10px',
-
-  flexWrap:
-    'wrap',
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '10px',
 };
 
 
 const historyActorStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '8px',
+  marginTop: '3px',
+  color: '#64748b',
+  fontSize: '8px',
 };
 
 
 const historyDateStyle = {
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '8px',
+  color: '#94a3b8',
+  fontSize: '8px',
 };
 
 
 const historyChangeStyle = {
-  display:
-    'grid',
-
+  display: 'grid',
   gridTemplateColumns:
     '80px 1fr',
-
-  gap:
-    '8px',
-
-  marginTop:
-    '9px',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '9px',
+  gap: '8px',
+  marginTop: '9px',
+  fontSize: '9px',
 };
 
 
 const historyCommentStyle = {
-  marginTop:
-    '9px',
-
-  paddingTop:
-    '9px',
-
-  borderTop:
-    '1px solid #e2e8f0',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '9px',
-
-  lineHeight:
-    1.5,
+  marginTop: '9px',
+  paddingTop: '9px',
+  borderTop: '1px solid #e2e8f0',
+  color: '#475569',
+  fontSize: '9px',
+  lineHeight: 1.5,
 };
 
 
 // ============================================================
-// MODAL / FORM
+// CREATE MODAL
 // ============================================================
 
-const modalOverlayStyle = {
-  position:
-    'fixed',
-
-  inset:
-    0,
-
-  zIndex:
-    9500,
-
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  padding:
-    '20px',
-
+const smallModalOverlayStyle = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 9500,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px',
   background:
     'rgba(15,23,42,0.62)',
 };
 
 
-const modalStyle = {
-  width:
-    'min(680px, 96vw)',
-
-  maxHeight:
-    '92vh',
-
-  overflowY:
-    'auto',
-
-  borderRadius:
-    '10px',
-
-  background:
-    '#ffffff',
-
+const smallModalStyle = {
+  width: 'min(680px,96vw)',
+  maxHeight: '92vh',
+  overflowY: 'auto',
+  borderRadius: '10px',
+  background: '#ffffff',
   boxShadow:
     '0 24px 70px rgba(15,23,42,0.30)',
 };
 
 
-const modalHeaderStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'flex-start',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '20px',
-
-  padding:
-    '18px 20px',
-
+const smallModalHeaderStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '20px',
+  padding: '18px 20px',
   borderBottom:
     '1px solid #e2e8f0',
 };
 
 
-const modalBodyStyle = {
-  padding:
-    '20px',
-};
-
-
-const modalTitleStyle = {
-  margin:
-    '4px 0 0',
-
-  fontSize:
-    '19px',
-
-  fontWeight:
-    900,
-};
-
-
-const eyebrowStyle = {
-  color:
-    '#2563eb',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    900,
-
-  letterSpacing:
-    '0.08em',
-};
-
-
-const closeButtonStyle = {
-  width:
-    '34px',
-
-  height:
-    '34px',
-
-  flexShrink:
-    0,
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '20px',
-
-  cursor:
-    'pointer',
-};
-
-
-const modalLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '6px',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    800,
-};
-
-
-const modalInputStyle = {
-  width:
-    '100%',
-
-  height:
-    '38px',
-
-  padding:
-    '0 9px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '11px',
-};
-
-
-const modalTextareaStyle = {
-  width:
-    '100%',
-
-  minHeight:
-    '82px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontFamily:
-    'inherit',
-
-  fontSize:
-    '11px',
-
-  resize:
-    'vertical',
-};
-
-
-const smallTextareaStyle = {
-  ...modalTextareaStyle,
-
-  minHeight:
-    '76px',
-};
-
-
-const twoColumnStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(2, minmax(0, 1fr))',
-
-  gap:
-    '12px',
-};
-
-
-const checkboxStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '8px',
-
-  marginBottom:
-    '14px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
-};
-
-
-const modalActionsStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'flex-end',
-
-  gap:
-    '8px',
-
-  marginTop:
-    '20px',
-};
-
-
 // ============================================================
-// MESSAGE BOXES
+// EMPTY / MESSAGES
 // ============================================================
 
-const errorBoxStyle = {
-  marginBottom:
-    '2px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
+const emptyStyle = {
+  padding: '40px',
+  textAlign: 'center',
+  color: '#64748b',
 };
 
 
-const successBoxStyle = {
-  marginBottom:
-    '14px',
+const emptyInnerStyle = {
+  padding: '16px',
+  border: '1px dashed #cbd5e1',
+  borderRadius: '6px',
+  background: '#f8fafc',
+  color: '#64748b',
+  textAlign: 'center',
+  fontSize: '9px',
+};
 
-  padding:
-    '10px',
 
-  border:
-    '1px solid #bbf7d0',
+const errorMessageStyle = {
+  marginBottom: '14px',
+  padding: '10px',
+  border: '1px solid #fecaca',
+  borderRadius: '6px',
+  background: '#fef2f2',
+  color: '#b91c1c',
+  fontSize: '10px',
+};
 
-  borderRadius:
-    '6px',
 
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-
-  fontSize:
-    '10px',
+const successMessageStyle = {
+  marginBottom: '14px',
+  padding: '10px',
+  border: '1px solid #bbf7d0',
+  borderRadius: '6px',
+  background: '#f0fdf4',
+  color: '#166534',
+  fontSize: '10px',
 };
