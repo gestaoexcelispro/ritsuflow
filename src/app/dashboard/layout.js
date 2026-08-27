@@ -13,6 +13,27 @@ import {
   usePathname,
 } from 'next/navigation'
 
+import {
+  LayoutDashboard,
+  FolderKanban,
+  Settings2,
+  MapPinned,
+  Boxes,
+  ChartNoAxesCombined,
+  ClipboardList,
+  Users,
+  UserRoundCheck,
+  Clock3,
+  CalendarRange,
+  ListTree,
+  CalendarDays,
+  TriangleAlert,
+  Map,
+  TableProperties,
+  ShieldCheck,
+  Building2,
+} from 'lucide-react'
+
 import LogoutButton from '../../components/LogoutButton'
 
 import {
@@ -23,129 +44,174 @@ import styles from './dashboard.module.css'
 
 
 // ============================================================
+// RitsuFlow™
+// DASHBOARD NAVIGATION
+//
+// EXPANDED SIDEBAR
+//
+// [icon] Page Name
+//
+// COLLAPSED SIDEBAR
+//
+// [icon]
+//   ↓ hover
+// Page Name tooltip
+//
+// ============================================================
+
+
+// ============================================================
 // BASE NAVIGATION
 // ============================================================
 
 const baseNavigationGroups = [
+
   {
     label: 'Workspace',
 
     items: [
+
       {
         label: 'Overview',
         href: '/dashboard',
-        icon: 'OV',
+        icon: LayoutDashboard,
       },
+
       {
         label: 'Projects',
         href: '/dashboard/projects',
-        icon: 'PR',
+        icon: FolderKanban,
       },
+
       {
         label: 'Project Setup',
         href: '/dashboard/projects/setup',
-        icon: 'PS',
+        icon: Settings2,
       },
+
       {
         label: 'Location Structure',
         href: '/dashboard/projects/locations',
-        icon: 'LB',
+        icon: MapPinned,
       },
+
       {
         label: 'Work Packages',
         href: '/dashboard/projects/work-packages',
-        icon: 'PK',
+        icon: Boxes,
       },
+
     ],
   },
+
 
   {
     label: 'Field Management',
 
     items: [
+
       {
         label: 'Operational Dashboard',
         href: '/dashboard/projects/operations',
-        icon: 'OD',
+        icon: ChartNoAxesCombined,
       },
+
       {
         label: 'Daily Reports',
         href: '/dashboard/projects/daily-reports',
-        icon: 'DR',
+        icon: ClipboardList,
       },
+
       {
         label: 'Workforce',
         href: '/dashboard/field-management/workforce',
-        icon: 'WF',
+        icon: Users,
       },
+
       {
         label: 'Project Assignments',
         href: '/dashboard/field-management/workforce/assignments',
-        icon: 'PA',
+        icon: UserRoundCheck,
       },
+
       {
         label: 'Attendance',
         href: '/dashboard/field-management/workforce/attendance',
-        icon: 'AT',
+        icon: Clock3,
       },
+
     ],
   },
+
 
   {
     label: 'Planning',
 
     items: [
+
       {
         label: 'Master Plan',
         href: '/dashboard/projetos/masterplan',
-        icon: 'MP',
+        icon: CalendarRange,
       },
+
       {
         label: 'Lookahead Planning',
         href: '/dashboard/projetos/lookahead',
-        icon: 'LA',
+        icon: ListTree,
       },
+
       {
         label: 'Weekly Planning',
         href: '/dashboard/projetos/semanal',
-        icon: 'WP',
+        icon: CalendarDays,
       },
+
       {
         label: 'Constraint Log',
         href: '/dashboard/projects/constraints',
-        icon: 'CL',
+        icon: TriangleAlert,
       },
+
     ],
   },
+
 
   {
     label: 'Control',
 
     items: [
+
       {
         label: 'Production Map',
         href: '/dashboard/diretoria/mapa',
-        icon: 'PM',
+        icon: Map,
       },
+
       {
         label: 'Status Matrix',
         href: '/dashboard/projetos/matriz-status',
-        icon: 'SM',
+        icon: TableProperties,
       },
+
     ],
   },
+
 
   {
     label: 'Administration',
 
     items: [
+
       {
         label: 'Users & Access',
         href: '/dashboard/administration/users',
-        icon: 'UA',
+        icon: ShieldCheck,
       },
+
     ],
   },
+
 ]
 
 
@@ -154,15 +220,19 @@ const baseNavigationGroups = [
 // ============================================================
 
 const platformNavigationGroup = {
+
   label: 'Platform',
 
   items: [
+
     {
       label: 'Organizations',
       href: '/dashboard/platform/organizations',
-      icon: 'OR',
+      icon: Building2,
     },
+
   ],
+
 }
 
 
@@ -173,8 +243,10 @@ const platformNavigationGroup = {
 export default function DashboardLayout({
   children,
 }) {
+
   const pathname =
     usePathname()
+
 
   const supabase =
     useMemo(
@@ -203,7 +275,18 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // PLATFORM OWNER STATE
+  // TOOLTIP STATE
+  // ==========================================================
+
+  const [
+    hoveredNavigationItem,
+    setHoveredNavigationItem,
+  ] =
+    useState(null)
+
+
+  // ==========================================================
+  // PLATFORM OWNER
   // ==========================================================
 
   const [
@@ -221,7 +304,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // COLLAPSIBLE NAVIGATION GROUPS
+  // COLLAPSIBLE GROUPS
   // ==========================================================
 
   const [
@@ -229,12 +312,25 @@ export default function DashboardLayout({
     setExpandedGroups,
   ] =
     useState({
-      Workspace: true,
-      'Field Management': true,
-      Planning: true,
-      Control: true,
-      Administration: true,
-      Platform: true,
+
+      Workspace:
+        true,
+
+      'Field Management':
+        true,
+
+      Planning:
+        true,
+
+      Control:
+        true,
+
+      Administration:
+        true,
+
+      Platform:
+        true,
+
     })
 
 
@@ -242,87 +338,104 @@ export default function DashboardLayout({
   // PLATFORM OWNER AUTHORIZATION
   // ==========================================================
 
-  useEffect(() => {
-    let mounted = true
+  useEffect(
+    () => {
+
+      let mounted =
+        true
 
 
-    async function loadPlatformAuthorization() {
-      try {
-        const {
-          data,
-          error,
-        } =
-          await supabase.rpc(
-            'is_platform_owner'
+      async function loadPlatformAuthorization() {
+
+        try {
+
+          const {
+            data,
+            error,
+          } =
+            await supabase.rpc(
+              'is_platform_owner'
+            )
+
+
+          if (!mounted) {
+            return
+          }
+
+
+          if (error) {
+
+            console.error(
+              'Platform owner authorization could not be loaded.',
+              error
+            )
+
+
+            setIsPlatformOwner(
+              false
+            )
+
+
+            setPlatformAuthorizationLoaded(
+              true
+            )
+
+
+            return
+
+          }
+
+
+          setIsPlatformOwner(
+            data === true
           )
 
 
-        if (!mounted) {
-          return
-        }
+          setPlatformAuthorizationLoaded(
+            true
+          )
 
+        } catch (error) {
 
-        if (error) {
           console.error(
-            'Platform owner authorization could not be loaded.',
+            'Platform owner authorization failed.',
             error
           )
 
 
-          setIsPlatformOwner(
-            false
-          )
+          if (mounted) {
+
+            setIsPlatformOwner(
+              false
+            )
 
 
-          setPlatformAuthorizationLoaded(
-            true
-          )
+            setPlatformAuthorizationLoaded(
+              true
+            )
 
+          }
 
-          return
         }
 
-
-        setIsPlatformOwner(
-          data === true
-        )
-
-
-        setPlatformAuthorizationLoaded(
-          true
-        )
-
-      } catch (error) {
-        console.error(
-          'Platform owner authorization failed.',
-          error
-        )
-
-
-        if (mounted) {
-          setIsPlatformOwner(
-            false
-          )
-
-
-          setPlatformAuthorizationLoaded(
-            true
-          )
-        }
       }
-    }
 
 
-    loadPlatformAuthorization()
+      loadPlatformAuthorization()
 
 
-    return () => {
-      mounted = false
-    }
+      return () => {
 
-  }, [
-    supabase,
-  ])
+        mounted =
+          false
+
+      }
+
+    },
+    [
+      supabase,
+    ]
+  )
 
 
   // ==========================================================
@@ -336,10 +449,12 @@ export default function DashboardLayout({
         if (
           isPlatformOwner
         ) {
+
           return [
             ...baseNavigationGroups,
             platformNavigationGroup,
           ]
+
         }
 
 
@@ -361,14 +476,17 @@ export default function DashboardLayout({
   ) {
 
     if (
-      href === '/dashboard'
+      href ===
+      '/dashboard'
     ) {
+
       return (
         pathname ===
           '/dashboard' ||
         pathname ===
           '/dashboard/'
       )
+
     }
 
 
@@ -376,10 +494,12 @@ export default function DashboardLayout({
       href ===
       '/dashboard/projects'
     ) {
+
       return (
         pathname ===
         href
       )
+
     }
 
 
@@ -387,23 +507,26 @@ export default function DashboardLayout({
       href ===
       '/dashboard/field-management/workforce'
     ) {
+
       return (
         pathname ===
           href ||
         pathname ===
           `${href}/`
       )
+
     }
 
 
     return pathname.startsWith(
       href
     )
+
   }
 
 
   // ==========================================================
-  // CURRENT NAVIGATION GROUP
+  // CURRENT MODULE
   // ==========================================================
 
   const currentNavigationGroup =
@@ -486,15 +609,19 @@ export default function DashboardLayout({
               activeGroupLabel
             ]
           ) {
+
             return current
+
           }
 
 
           return {
+
             ...current,
 
             [activeGroupLabel]:
               true,
+
           }
 
         }
@@ -509,7 +636,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // TOGGLE NAVIGATION GROUP
+  // TOGGLE GROUP
   // ==========================================================
 
   function toggleGroup(
@@ -535,10 +662,15 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // TOGGLE SIDEBAR
+  // SIDEBAR TOGGLE
   // ==========================================================
 
   function toggleNavigation() {
+
+    setHoveredNavigationItem(
+      null
+    )
+
 
     if (
       typeof window !==
@@ -552,33 +684,40 @@ export default function DashboardLayout({
 
       setIsMobileOpen(
         (
-          currentState
+          current
         ) =>
-          !currentState
+          !current
       )
 
 
       return
+
     }
 
 
     setIsCollapsed(
       (
-        currentState
+        current
       ) =>
-        !currentState
+        !current
     )
+
   }
 
 
   // ==========================================================
-  // CLOSE MOBILE SIDEBAR
+  // CLOSE MOBILE NAVIGATION
   // ==========================================================
 
   function closeMobileNavigation() {
 
     setIsMobileOpen(
       false
+    )
+
+
+    setHoveredNavigationItem(
+      null
     )
 
   }
@@ -589,15 +728,19 @@ export default function DashboardLayout({
   // ==========================================================
 
   const sidebarClassName = [
+
     styles.sidebar,
+
 
     isCollapsed
       ? styles.sidebarCollapsed
       : '',
 
+
     isMobileOpen
       ? styles.sidebarMobileOpen
       : '',
+
   ]
     .filter(
       Boolean
@@ -647,17 +790,19 @@ export default function DashboardLayout({
         className={
           sidebarClassName
         }
+        style={{
+          overflow:
+            'visible',
+        }}
       >
 
         {/* ===================================================
             SIDEBAR TOP SPACER
-
-            The RitsuFlow brand is now displayed in the
-            dashboard topbar instead of the sidebar.
         =================================================== */}
 
         <div
           style={{
+
             height:
               isCollapsed
                 ? '18px'
@@ -665,6 +810,7 @@ export default function DashboardLayout({
 
             flexShrink:
               0,
+
           }}
         />
 
@@ -678,6 +824,10 @@ export default function DashboardLayout({
             styles.navigation
           }
           aria-label="RitsuFlow navigation"
+          style={{
+            overflowX:
+              'visible',
+          }}
         >
 
           {navigationGroups.map(
@@ -706,6 +856,15 @@ export default function DashboardLayout({
                   key={
                     group.label
                   }
+                  style={{
+
+                    position:
+                      'relative',
+
+                    overflow:
+                      'visible',
+
+                  }}
                 >
 
                   {/* =========================================
@@ -728,6 +887,7 @@ export default function DashboardLayout({
                       isGroupExpanded
                     }
                     style={{
+
                       display:
                         'flex',
 
@@ -773,6 +933,7 @@ export default function DashboardLayout({
 
                       transition:
                         'background 0.15s ease',
+
                     }}
                   >
 
@@ -783,11 +944,13 @@ export default function DashboardLayout({
                           styles.navigationLabel
                         }
                         style={{
+
                           margin:
                             0,
 
                           padding:
                             0,
+
                         }}
                       >
                         {
@@ -803,6 +966,7 @@ export default function DashboardLayout({
                       <span
                         aria-hidden="true"
                         style={{
+
                           display:
                             'inline-flex',
 
@@ -834,6 +998,7 @@ export default function DashboardLayout({
 
                           transition:
                             'transform 0.15s ease',
+
                         }}
                       >
                         ▼
@@ -853,7 +1018,12 @@ export default function DashboardLayout({
                     isCollapsed
                   ) && (
 
-                    <div>
+                    <div
+                      style={{
+                        overflow:
+                          'visible',
+                      }}
+                    >
 
                       {group.items.map(
                         (
@@ -866,12 +1036,19 @@ export default function DashboardLayout({
                             )
 
 
+                          const Icon =
+                            item.icon
+
+
                           const linkClassName = [
+
                             styles.navigationLink,
+
 
                             active
                               ? styles.navigationLinkActive
                               : '',
+
                           ]
                             .filter(
                               Boolean
@@ -881,45 +1058,295 @@ export default function DashboardLayout({
                             )
 
 
+                          const tooltipVisible =
+                            isCollapsed &&
+                            hoveredNavigationItem ===
+                              item.href
+
+
                           return (
 
-                            <Link
-                              href={
-                                item.href
-                              }
-                              className={
-                                linkClassName
-                              }
-                              onClick={
-                                closeMobileNavigation
-                              }
+                            <div
                               key={
                                 item.href
                               }
+                              style={{
+
+                                position:
+                                  'relative',
+
+                                overflow:
+                                  'visible',
+
+                              }}
+                              onMouseEnter={() =>
+                                setHoveredNavigationItem(
+                                  item.href
+                                )
+                              }
+                              onMouseLeave={() =>
+                                setHoveredNavigationItem(
+                                  null
+                                )
+                              }
                             >
 
-                              <span
+                              <Link
+                                href={
+                                  item.href
+                                }
                                 className={
-                                  styles.navigationIcon
+                                  linkClassName
                                 }
-                              >
-                                {
-                                  item.icon
+                                onClick={
+                                  closeMobileNavigation
                                 }
-                              </span>
-
-
-                              <span
-                                className={
-                                  styles.navigationText
-                                }
-                              >
-                                {
+                                aria-label={
                                   item.label
                                 }
-                              </span>
+                                style={{
 
-                            </Link>
+                                  position:
+                                    'relative',
+
+                                  display:
+                                    'flex',
+
+                                  alignItems:
+                                    'center',
+
+                                  justifyContent:
+                                    isCollapsed
+                                      ? 'center'
+                                      : 'flex-start',
+
+                                  overflow:
+                                    'visible',
+
+                                }}
+                              >
+
+                                {/* =============================
+                                    ICON
+                                ============================= */}
+
+                                <span
+                                  className={
+                                    styles.navigationIcon
+                                  }
+                                  style={{
+
+                                    display:
+                                      'inline-flex',
+
+                                    alignItems:
+                                      'center',
+
+                                    justifyContent:
+                                      'center',
+
+                                    width:
+                                      isCollapsed
+                                        ? '40px'
+                                        : '36px',
+
+                                    height:
+                                      isCollapsed
+                                        ? '40px'
+                                        : '36px',
+
+                                    minWidth:
+                                      isCollapsed
+                                        ? '40px'
+                                        : '36px',
+
+                                    borderRadius:
+                                      '10px',
+
+                                    background:
+                                      active
+                                        ? '#14b8a6'
+                                        : 'rgba(15,23,42,0.16)',
+
+                                    color:
+                                      '#ffffff',
+
+                                    transition:
+                                      'background 0.15s ease, transform 0.15s ease',
+
+                                    transform:
+                                      hoveredNavigationItem ===
+                                        item.href
+                                        ? 'translateX(1px)'
+                                        : 'translateX(0)',
+
+                                  }}
+                                >
+
+                                  <Icon
+                                    size={
+                                      isCollapsed
+                                        ? 21
+                                        : 19
+                                    }
+                                    strokeWidth={
+                                      2
+                                    }
+                                    aria-hidden="true"
+                                  />
+
+                                </span>
+
+
+                                {/* =============================
+                                    EXPANDED PAGE NAME
+                                ============================= */}
+
+                                {!isCollapsed && (
+
+                                  <span
+                                    className={
+                                      styles.navigationText
+                                    }
+                                    style={{
+
+                                      marginLeft:
+                                        '10px',
+
+                                    }}
+                                  >
+                                    {
+                                      item.label
+                                    }
+                                  </span>
+
+                                )}
+
+                              </Link>
+
+
+                              {/* =============================
+                                  COLLAPSED TOOLTIP
+                              ============================= */}
+
+                              {tooltipVisible && (
+
+                                <div
+                                  style={{
+
+                                    position:
+                                      'absolute',
+
+                                    top:
+                                      '50%',
+
+                                    left:
+                                      'calc(100% + 12px)',
+
+                                    zIndex:
+                                      10000,
+
+                                    transform:
+                                      'translateY(-50%)',
+
+                                    display:
+                                      'flex',
+
+                                    alignItems:
+                                      'center',
+
+                                    minHeight:
+                                      '36px',
+
+                                    padding:
+                                      '8px 12px',
+
+                                    border:
+                                      '1px solid rgba(255,255,255,0.08)',
+
+                                    borderRadius:
+                                      '7px',
+
+                                    background:
+                                      '#0f172a',
+
+                                    boxShadow:
+                                      '0 8px 24px rgba(15,23,42,0.24)',
+
+                                    color:
+                                      '#ffffff',
+
+                                    fontSize:
+                                      '13px',
+
+                                    lineHeight:
+                                      1,
+
+                                    fontWeight:
+                                      700,
+
+                                    whiteSpace:
+                                      'nowrap',
+
+                                    pointerEvents:
+                                      'none',
+
+                                  }}
+                                >
+
+                                  {/* =========================
+                                      TOOLTIP ARROW
+                                  ========================= */}
+
+                                  <span
+                                    style={{
+
+                                      position:
+                                        'absolute',
+
+                                      left:
+                                        '-5px',
+
+                                      top:
+                                        '50%',
+
+                                      width:
+                                        '10px',
+
+                                      height:
+                                        '10px',
+
+                                      background:
+                                        '#0f172a',
+
+                                      transform:
+                                        'translateY(-50%) rotate(45deg)',
+
+                                    }}
+                                  />
+
+
+                                  <span
+                                    style={{
+
+                                      position:
+                                        'relative',
+
+                                      zIndex:
+                                        1,
+
+                                    }}
+                                  >
+                                    {
+                                      item.label
+                                    }
+                                  </span>
+
+                                </div>
+
+                              )}
+
+                            </div>
 
                           )
 
@@ -982,8 +1409,7 @@ export default function DashboardLayout({
                 styles.statusText
               }
             >
-              RitsuFlow is currently under
-              active development.
+              RitsuFlow is currently under active development.
             </p>
 
           </div>
@@ -1035,6 +1461,7 @@ export default function DashboardLayout({
               styles.topbarLeft
             }
             style={{
+
               display:
                 'flex',
 
@@ -1046,11 +1473,12 @@ export default function DashboardLayout({
 
               minWidth:
                 0,
+
             }}
           >
 
             {/* ===============================================
-                MENU BUTTON
+                MENU
             =============================================== */}
 
             <button
@@ -1068,11 +1496,11 @@ export default function DashboardLayout({
 
 
             {/* ===============================================
-                RITSUFLOW BRAND
+                RITSUFLOW LOGO
 
-                Normal full-color logo.
+                Normal logo.
                 Transparent background.
-                No green container.
+                No green block.
             =============================================== */}
 
             <Link
@@ -1082,6 +1510,7 @@ export default function DashboardLayout({
               }
               aria-label="RitsuFlow home"
               style={{
+
                 display:
                   'flex',
 
@@ -1120,6 +1549,7 @@ export default function DashboardLayout({
 
                 overflow:
                   'visible',
+
               }}
             >
 
@@ -1134,6 +1564,7 @@ export default function DashboardLayout({
                 }
                 priority
                 style={{
+
                   display:
                     'block',
 
@@ -1148,6 +1579,7 @@ export default function DashboardLayout({
 
                   objectPosition:
                     'center',
+
                 }}
               />
 
@@ -1163,6 +1595,7 @@ export default function DashboardLayout({
                 styles.pageIdentity
               }
               style={{
+
                 display:
                   'flex',
 
@@ -1174,6 +1607,7 @@ export default function DashboardLayout({
 
                 minWidth:
                   0,
+
               }}
             >
 
@@ -1182,6 +1616,7 @@ export default function DashboardLayout({
                   styles.pageCategory
                 }
                 style={{
+
                   margin:
                     0,
 
@@ -1202,6 +1637,7 @@ export default function DashboardLayout({
 
                   textTransform:
                     'uppercase',
+
                 }}
               >
                 {
@@ -1215,6 +1651,7 @@ export default function DashboardLayout({
                   styles.pageTitle
                 }
                 style={{
+
                   margin:
                     '4px 0 0',
 
@@ -1229,6 +1666,7 @@ export default function DashboardLayout({
 
                   fontWeight:
                     900,
+
                 }}
               >
                 {
@@ -1251,7 +1689,7 @@ export default function DashboardLayout({
 
 
         {/* ===================================================
-            PAGE CONTENT
+            CONTENT
         =================================================== */}
 
         <main
