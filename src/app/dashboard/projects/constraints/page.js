@@ -7,6 +7,8 @@ import React, {
   useState,
 } from 'react';
 
+import { createPortal } from 'react-dom';
+
 import { supabase } from '../../../../lib/supabase';
 
 
@@ -857,6 +859,12 @@ export default function ConstraintLogPage() {
 
 
   const [
+    headerActionsTarget,
+    setHeaderActionsTarget,
+  ] = useState(null);
+
+
+  const [
     errorMessage,
     setErrorMessage,
   ] = useState('');
@@ -871,12 +879,6 @@ export default function ConstraintLogPage() {
   // ==========================================================
   // FILTERS
   // ==========================================================
-
-  const [
-    searchTerm,
-    setSearchTerm,
-  ] = useState('');
-
 
   const [
     statusFilter,
@@ -1771,6 +1773,54 @@ export default function ConstraintLogPage() {
 
   useEffect(
     () => {
+
+      const resolveHeaderTarget =
+        () => {
+
+          const explicitTarget =
+            document.querySelector(
+              '[class*="topbarRight"]'
+            );
+
+          const fallbackHeader =
+            document.querySelector(
+              'header'
+            );
+
+          setHeaderActionsTarget(
+            explicitTarget ||
+            fallbackHeader
+              ?.lastElementChild ||
+            null
+          );
+
+        };
+
+
+      resolveHeaderTarget();
+
+
+      const frame =
+        window.requestAnimationFrame(
+          resolveHeaderTarget
+        );
+
+
+      return () => {
+
+        window.cancelAnimationFrame(
+          frame
+        );
+
+      };
+
+    },
+    []
+  );
+
+
+  useEffect(
+    () => {
       loadProjects();
     },
     [
@@ -1804,7 +1854,6 @@ export default function ConstraintLogPage() {
       projectId
     );
 
-    setSearchTerm('');
     setStatusFilter('');
     setCategoryFilter('');
     setPriorityFilter('');
@@ -3683,12 +3732,6 @@ export default function ConstraintLogPage() {
     useMemo(
       () => {
 
-        const search =
-          normalizeText(
-            searchTerm
-          );
-
-
         return constraints.filter(
           (constraint) => {
 
@@ -3740,56 +3783,7 @@ export default function ConstraintLogPage() {
             }
 
 
-            if (!search) {
-              return true;
-            }
-
-
-            const affected =
-              getConstraintAffectedWork(
-                constraint
-              );
-
-
-            const text =
-              [
-                getConstraintReference(
-                  constraint.id
-                ),
-
-                constraint.title,
-
-                constraint.description,
-
-                constraint.category,
-
-                constraint
-                  .action_required,
-
-                constraint
-                  .responsible_party,
-
-                constraint
-                  .base_priority,
-
-                constraint
-                  .effective_priority,
-
-                constraint.status,
-
-                constraint
-                  .schedule_exposure_status,
-
-                ...affected.map(
-                  (item) =>
-                    `${item.packageCode} ${item.location}`
-                ),
-              ].join(' ');
-
-
-            return normalizeText(
-              text
-            ).includes(search);
+            return true;
 
           }
         );
@@ -3797,7 +3791,6 @@ export default function ConstraintLogPage() {
       },
       [
         constraints,
-        searchTerm,
         statusFilter,
         categoryFilter,
         priorityFilter,
@@ -4001,103 +3994,98 @@ export default function ConstraintLogPage() {
     <div style={pageStyle}>
 
       {/* ======================================================
-          PROJECT TOOLBAR
+          CONSTRAINT PAGE HEADER CONTROLS
       ====================================================== */}
 
-      <div style={projectToolbarStyle}>
+      {headerActionsTarget &&
+        createPortal(
 
-        <div style={projectToolbarLeftStyle}>
+          <div style={headerControlsStyle}>
 
-          <label
-            htmlFor="constraint-project-selector"
-            style={projectToolbarLabelStyle}
-          >
-            Project
-          </label>
+            <div style={headerProjectControlStyle}>
 
-
-          <div style={projectSelectStyle}>
-
-            <select
-              id="constraint-project-selector"
-              value={
-                selectedProjectId
-              }
-              onChange={(
-                event
-              ) =>
-                handleProjectChange(
-                  event.target.value
-                )
-              }
-              style={inputStyle}
-            >
-
-              <option value="">
-                -- Select a Project --
-              </option>
-
-              {projects.map(
-                (project) => (
-                  <option
-                    key={
-                      project.id
-                    }
-                    value={
-                      project.id
-                    }
-                  >
-                    {project.code
-                      ? `${project.code} - `
-                      : ''}
-
-                    {project.name}
-                  </option>
-                )
-              )}
-
-            </select>
-
-          </div>
+              <span style={headerProjectLabelStyle}>
+                Project
+              </span>
 
 
-          {selectedProjectId && (
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() =>
-                loadConstraintLog(
+              <select
+                value={
                   selectedProjectId
-                )
-              }
-              style={
-                secondaryButtonStyle
-              }
-            >
-              {loading
-                ? 'Refreshing...'
-                : 'Refresh'}
-            </button>
-          )}
+                }
+                onChange={(
+                  event
+                ) =>
+                  handleProjectChange(
+                    event.target.value
+                  )
+                }
+                style={headerProjectSelectStyle}
+                aria-label="Constraint project"
+              >
 
-        </div>
+                <option value="">
+                  -- Select a Project --
+                </option>
+
+                {projects.map(
+                  (project) => (
+                    <option
+                      key={
+                        project.id
+                      }
+                      value={
+                        project.id
+                      }
+                    >
+                      {project.code
+                        ? `${project.code} - `
+                        : ''}
+
+                      {project.name}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+            </div>
 
 
-        {selectedProjectId && (
-          <button
-            type="button"
-            onClick={
-              openCreateModal
-            }
-            style={
-              primaryButtonStyle
-            }
-          >
-            + Add Constraint
-          </button>
+            {selectedProjectId && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() =>
+                  loadConstraintLog(
+                    selectedProjectId
+                  )
+                }
+                style={headerRefreshButtonStyle}
+              >
+                {loading
+                  ? 'Refreshing...'
+                  : 'Refresh'}
+              </button>
+            )}
+
+
+            {selectedProjectId && (
+              <button
+                type="button"
+                onClick={
+                  openCreateModal
+                }
+                style={headerAddButtonStyle}
+              >
+                + Add Constraint
+              </button>
+            )}
+
+          </div>,
+
+          headerActionsTarget
         )}
-
-      </div>
 
 
       {errorMessage && (
@@ -4163,217 +4151,6 @@ export default function ConstraintLogPage() {
 
 
           {/* ==================================================
-              FILTERS
-          ================================================== */}
-
-          <SectionCard
-            title="Filters"
-            subtitle="Narrow the register by status, category, priority, exposure or responsible party."
-          >
-
-            <div style={filtersGridStyle}>
-
-              <FilterField label="Search">
-                <input
-                  value={searchTerm}
-                  onChange={(
-                    event
-                  ) =>
-                    setSearchTerm(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Constraint, package, location, action..."
-                  style={
-                    filterInputStyle
-                  }
-                />
-              </FilterField>
-
-
-              <FilterField label="Status">
-                <select
-                  value={statusFilter}
-                  onChange={(
-                    event
-                  ) =>
-                    setStatusFilter(
-                      event.target.value
-                    )
-                  }
-                  style={
-                    filterInputStyle
-                  }
-                >
-                  {STATUS_OPTIONS.map(
-                    (option) => (
-                      <option
-                        key={
-                          option.value ||
-                          'all'
-                        }
-                        value={
-                          option.value
-                        }
-                      >
-                        {option.label}
-                      </option>
-                    )
-                  )}
-                </select>
-              </FilterField>
-
-
-              <FilterField label="Category">
-                <select
-                  value={
-                    categoryFilter
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCategoryFilter(
-                      event.target.value
-                    )
-                  }
-                  style={
-                    filterInputStyle
-                  }
-                >
-                  <option value="">
-                    All Categories
-                  </option>
-
-                  {categoryOptions.map(
-                    (category) => (
-                      <option
-                        key={category}
-                        value={category}
-                      >
-                        {formatLabel(
-                          category
-                        )}
-                      </option>
-                    )
-                  )}
-                </select>
-              </FilterField>
-
-
-              <FilterField label="Effective Priority">
-                <select
-                  value={
-                    priorityFilter
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setPriorityFilter(
-                      event.target.value
-                    )
-                  }
-                  style={
-                    filterInputStyle
-                  }
-                >
-
-                  <option value="">
-                    All Priorities
-                  </option>
-
-                  {PRIORITY_OPTIONS.map(
-                    (priority) => (
-                      <option
-                        key={
-                          priority.value
-                        }
-                        value={
-                          priority.value
-                        }
-                      >
-                        {priority.label}
-                      </option>
-                    )
-                  )}
-
-                </select>
-              </FilterField>
-
-
-              <FilterField label="Exposure">
-                <select
-                  value={
-                    exposureFilter
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setExposureFilter(
-                      event.target.value
-                    )
-                  }
-                  style={
-                    filterInputStyle
-                  }
-                >
-
-                  <option value="">
-                    All Exposure
-                  </option>
-
-                  <option value="exposed">
-                    Exposed
-                  </option>
-
-                  <option value="protected">
-                    Protected
-                  </option>
-
-                </select>
-              </FilterField>
-
-
-              <FilterField label="Responsible">
-                <select
-                  value={
-                    responsibleFilter
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setResponsibleFilter(
-                      event.target.value
-                    )
-                  }
-                  style={
-                    filterInputStyle
-                  }
-                >
-
-                  <option value="">
-                    All Responsible
-                  </option>
-
-                  {responsibleOptions.map(
-                    (responsible) => (
-                      <option
-                        key={responsible}
-                        value={responsible}
-                      >
-                        {responsible}
-                      </option>
-                    )
-                  )}
-
-                </select>
-              </FilterField>
-
-            </div>
-
-          </SectionCard>
-
-
-          {/* ==================================================
               SPLIT WORKSPACE
           ================================================== */}
 
@@ -4396,22 +4173,198 @@ export default function ConstraintLogPage() {
 
               <div style={registerHeaderStyle}>
 
-                <div>
+                <div style={registerHeaderTopStyle}>
 
-                  <div style={sectionHeadingStyle}>
-                    Constraint Register
+                  <div>
+
+                    <div style={sectionHeadingStyle}>
+                      Constraint Register
+                    </div>
+
+                    <div style={sectionSupportingTextStyle}>
+                      Review and manage project constraints.
+                    </div>
+
                   </div>
 
-                  <div style={sectionSupportingTextStyle}>
-                    Review and open constraints requiring project-level management.
+
+                  <div style={registerCountStyle}>
+                    {filteredConstraints.length}{' '}
+                    shown
                   </div>
 
                 </div>
 
 
-                <div style={registerCountStyle}>
-                  {filteredConstraints.length}{' '}
-                  shown
+                <div style={registerFiltersStyle}>
+
+                  <FilterField label="Status">
+                    <select
+                      value={statusFilter}
+                      onChange={(
+                        event
+                      ) =>
+                        setStatusFilter(
+                          event.target.value
+                        )
+                      }
+                      style={registerFilterInputStyle}
+                    >
+                      {STATUS_OPTIONS.map(
+                        (option) => (
+                          <option
+                            key={
+                              option.value ||
+                              'all'
+                            }
+                            value={
+                              option.value
+                            }
+                          >
+                            {option.label}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </FilterField>
+
+
+                  <FilterField label="Category">
+                    <select
+                      value={
+                        categoryFilter
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setCategoryFilter(
+                          event.target.value
+                        )
+                      }
+                      style={registerFilterInputStyle}
+                    >
+                      <option value="">
+                        All Categories
+                      </option>
+
+                      {categoryOptions.map(
+                        (category) => (
+                          <option
+                            key={category}
+                            value={category}
+                          >
+                            {formatLabel(
+                              category
+                            )}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </FilterField>
+
+
+                  <FilterField label="Effective Priority">
+                    <select
+                      value={
+                        priorityFilter
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setPriorityFilter(
+                          event.target.value
+                        )
+                      }
+                      style={registerFilterInputStyle}
+                    >
+
+                      <option value="">
+                        All Priorities
+                      </option>
+
+                      {PRIORITY_OPTIONS.map(
+                        (priority) => (
+                          <option
+                            key={
+                              priority.value
+                            }
+                            value={
+                              priority.value
+                            }
+                          >
+                            {priority.label}
+                          </option>
+                        )
+                      )}
+
+                    </select>
+                  </FilterField>
+
+
+                  <FilterField label="Exposure">
+                    <select
+                      value={
+                        exposureFilter
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setExposureFilter(
+                          event.target.value
+                        )
+                      }
+                      style={registerFilterInputStyle}
+                    >
+
+                      <option value="">
+                        All Exposure
+                      </option>
+
+                      <option value="exposed">
+                        Exposed
+                      </option>
+
+                      <option value="protected">
+                        Protected
+                      </option>
+
+                    </select>
+                  </FilterField>
+
+
+                  <FilterField label="Responsible">
+                    <select
+                      value={
+                        responsibleFilter
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setResponsibleFilter(
+                          event.target.value
+                        )
+                      }
+                      style={registerFilterInputStyle}
+                    >
+
+                      <option value="">
+                        All Responsible
+                      </option>
+
+                      {responsibleOptions.map(
+                        (responsible) => (
+                          <option
+                            key={responsible}
+                            value={responsible}
+                          >
+                            {responsible}
+                          </option>
+                        )
+                      )}
+
+                    </select>
+                  </FilterField>
+
                 </div>
 
               </div>
@@ -8293,7 +8246,7 @@ const pageStyle = {
     '100%',
 
   padding:
-    '22px 24px 44px',
+    '0 24px 36px',
 
   background:
     '#f8fafc',
@@ -8309,7 +8262,7 @@ const pageStyle = {
 
 const sectionCardStyle = {
   marginBottom:
-    '14px',
+    '10px',
 
   border:
     '1px solid #e2e8f0',
@@ -8366,15 +8319,15 @@ const sectionSupportingTextStyle = {
 
 const sectionContentStyle = {
   padding:
-    '12px 14px 14px',
+    '10px 14px 12px',
 };
 
 
 // ============================================================
-// PROJECT TOOLBAR
+// CONSTRAINT HEADER CONTROLS
 // ============================================================
 
-const projectToolbarStyle = {
+const headerControlsStyle = {
   display:
     'flex',
 
@@ -8382,32 +8335,20 @@ const projectToolbarStyle = {
     'center',
 
   justifyContent:
-    'space-between',
+    'flex-end',
 
   gap:
-    '14px',
+    '8px',
 
-  marginBottom:
-    '14px',
+  width:
+    '100%',
 
-  padding:
-    '12px 14px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '9px',
-
-  background:
-    '#ffffff',
-
-  minHeight:
-    '68px',
+  flexWrap:
+    'nowrap',
 };
 
 
-const projectToolbarLeftStyle = {
+const headerProjectControlStyle = {
   display:
     'flex',
 
@@ -8415,55 +8356,46 @@ const projectToolbarLeftStyle = {
     'center',
 
   gap:
-    '10px',
+    '7px',
 
   minWidth:
     0,
-
-  flex:
-    1,
-
-  flexWrap:
-    'wrap',
 };
 
 
-const projectToolbarLabelStyle = {
+const headerProjectLabelStyle = {
   color:
-    '#0f172a',
+    '#64748b',
 
   fontSize:
-    '14px',
+    '11px',
 
   fontWeight:
     900,
 
-  lineHeight:
-    1.2,
+  textTransform:
+    'uppercase',
+
+  letterSpacing:
+    '0.05em',
 
   whiteSpace:
     'nowrap',
 };
 
 
-const projectSelectStyle = {
+const headerProjectSelectStyle = {
   width:
-    'min(460px,100%)',
+    '250px',
 
-  flex:
-    '0 1 460px',
-};
-
-
-const inputStyle = {
-  width:
-    '100%',
+  maxWidth:
+    '30vw',
 
   height:
-    '44px',
+    '36px',
 
   padding:
-    '0 11px',
+    '0 9px',
 
   border:
     '1px solid #cbd5e1',
@@ -8478,10 +8410,73 @@ const inputStyle = {
     '#0f172a',
 
   fontSize:
-    '14px',
+    '12px',
 
   fontWeight:
-    500,
+    600,
+};
+
+
+const headerRefreshButtonStyle = {
+  height:
+    '36px',
+
+  padding:
+    '0 11px',
+
+  border:
+    '1px solid #cbd5e1',
+
+  borderRadius:
+    '6px',
+
+  background:
+    '#ffffff',
+
+  color:
+    '#334155',
+
+  fontSize:
+    '12px',
+
+  fontWeight:
+    800,
+
+  cursor:
+    'pointer',
+};
+
+
+const headerAddButtonStyle = {
+  height:
+    '36px',
+
+  padding:
+    '0 13px',
+
+  border:
+    '1px solid #2563eb',
+
+  borderRadius:
+    '6px',
+
+  background:
+    '#2563eb',
+
+  color:
+    '#ffffff',
+
+  fontSize:
+    '12px',
+
+  fontWeight:
+    900,
+
+  cursor:
+    'pointer',
+
+  whiteSpace:
+    'nowrap',
 };
 
 
@@ -8559,45 +8554,30 @@ const summaryDescriptionStyle = {
 
 
 // ============================================================
-// FILTERS
+// REGISTER FILTERS
 // ============================================================
 
-const filtersGridStyle = {
+const registerFiltersStyle = {
   display:
     'grid',
 
   gridTemplateColumns:
-    'minmax(220px,2fr) repeat(5,minmax(115px,1fr))',
+    'repeat(5,minmax(125px,1fr))',
 
   gap:
     '8px',
+
+  marginTop:
+    '10px',
 };
 
 
-const filterLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '4px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '13px',
-
-  fontWeight:
-    900,
-};
-
-
-const filterInputStyle = {
+const registerFilterInputStyle = {
   width:
     '100%',
 
   height:
-    '42px',
+    '34px',
 
   padding:
     '0 8px',
@@ -8611,8 +8591,11 @@ const filterInputStyle = {
   background:
     '#ffffff',
 
+  color:
+    '#0f172a',
+
   fontSize:
-    '14px',
+    '11px',
 };
 
 
@@ -8651,6 +8634,18 @@ const registerPanelStyle = {
 
 
 const registerHeaderStyle = {
+  padding:
+    '12px 14px 10px',
+
+  borderBottom:
+    '1px solid #e2e8f0',
+
+  background:
+    '#ffffff',
+};
+
+
+const registerHeaderTopStyle = {
   display:
     'flex',
 
@@ -8662,18 +8657,6 @@ const registerHeaderStyle = {
 
   gap:
     '12px',
-
-  minHeight:
-    '56px',
-
-  padding:
-    '13px 14px',
-
-  borderBottom:
-    '1px solid #e2e8f0',
-
-  background:
-    '#ffffff',
 };
 
 
