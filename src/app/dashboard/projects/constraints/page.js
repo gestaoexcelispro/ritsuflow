@@ -14,24 +14,23 @@ import { supabase } from '../../../../lib/supabase';
 // RitsuFlow™
 // CENTRALIZED CONSTRAINT LOG
 //
-// Architecture:
-// ------------------------------------------------------------
-// Constraint Log belongs to the PROJECT.
+// Project-level Constraint Management workspace.
 //
-// Lookahead / Koskela may identify or link constraints,
-// but constraints remain independent project-level objects.
+// Current scope:
+// - Read central constraints
+// - Project filtering
+// - KPI summary
+// - Search and filters
+// - Manual project-level constraint creation
+// - Atomic creation + Action History
+// - Read-only Action History timeline
 //
-// Readiness governance:
-// OPEN        -> blocking
-// IN PROGRESS -> blocking
-// WAITING     -> blocking
-// RESOLVED    -> blocking
-// CLEARED     -> released
-// CANCELLED   -> released
-//
-// SQL foundation:
-// 94_constraint_management_foundation.sql
-// 96_constraint_cleared_readiness_gate.sql
+// Future scope:
+// - Edit / assign
+// - Status lifecycle actions
+// - Resolved -> Verify -> Cleared
+// - Koskela creation/link integration
+// - Weekly Planning readiness
 // ============================================================
 
 
@@ -54,61 +53,79 @@ const TERMINAL_STATUSES = [
 
 
 const STATUS_OPTIONS = [
+  { value: '', label: 'All Statuses' },
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'cleared', label: 'Cleared' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+
+const CATEGORY_OPTIONS = [
   {
-    value: '',
-    label: 'All Statuses',
+    value: 'projects_information',
+    label: 'Projects / Information',
   },
   {
-    value: 'open',
-    label: 'Open',
+    value: 'materials',
+    label: 'Materials',
   },
   {
-    value: 'in_progress',
-    label: 'In Progress',
+    value: 'labor',
+    label: 'Labor',
   },
   {
-    value: 'waiting',
-    label: 'Waiting',
+    value: 'equipment',
+    label: 'Equipment',
   },
   {
-    value: 'resolved',
-    label: 'Resolved',
+    value: 'space',
+    label: 'Space',
   },
   {
-    value: 'cleared',
-    label: 'Cleared',
+    value: 'predecessor',
+    label: 'Predecessor',
   },
   {
-    value: 'cancelled',
-    label: 'Cancelled',
+    value: 'external_conditions',
+    label: 'External Conditions',
   },
 ];
 
 
-const CATEGORY_LABELS = {
-  projects_information:
-    'Projects / Information',
+const PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
+];
 
-  materials:
-    'Materials',
 
-  labor:
-    'Labor',
+const CATEGORY_LABELS =
+  Object.fromEntries(
+    CATEGORY_OPTIONS.map(
+      (item) => [
+        item.value,
+        item.label,
+      ]
+    )
+  );
 
-  equipment:
-    'Equipment',
 
-  space:
-    'Space',
-
-  predecessor:
-    'Predecessor',
-
-  predecessors:
-    'Predecessor',
-
-  external_conditions:
-    'External Conditions',
+const ACTION_TYPE_LABELS = {
+  created: 'Constraint Created',
+  assigned: 'Assigned',
+  responsible_changed: 'Responsible Changed',
+  action_updated: 'Required Action Updated',
+  status_changed: 'Status Changed',
+  target_date_changed: 'Target Date Changed',
+  comment_added: 'Comment Added',
+  resolved: 'Resolution Reported',
+  verified: 'Resolution Verified',
+  cleared: 'Constraint Cleared',
+  cancelled: 'Constraint Cancelled',
 };
 
 
@@ -116,37 +133,24 @@ const CATEGORY_LABELS = {
 // HELPERS
 // ============================================================
 
-function normalizeText(
-  value
-) {
-  return String(
-    value || ''
-  )
+function normalizeText(value) {
+  return String(value || '')
     .trim()
     .toLowerCase();
 }
 
 
-function formatLabel(
-  value
-) {
+function formatLabel(value) {
   if (!value) {
     return '—';
   }
 
-  if (
-    CATEGORY_LABELS[value]
-  ) {
-    return CATEGORY_LABELS[
-      value
-    ];
+  if (CATEGORY_LABELS[value]) {
+    return CATEGORY_LABELS[value];
   }
 
   return String(value)
-    .replace(
-      /_/g,
-      ' '
-    )
+    .replace(/_/g, ' ')
     .replace(
       /\b\w/g,
       (character) =>
@@ -155,9 +159,7 @@ function formatLabel(
 }
 
 
-function formatDate(
-  value
-) {
+function formatDate(value) {
   if (!value) {
     return '—';
   }
@@ -181,6 +183,35 @@ function formatDate(
       month: 'short',
       day: '2-digit',
       year: 'numeric',
+    }
+  ).format(date);
+}
+
+
+function formatDateTime(value) {
+  if (!value) {
+    return '—';
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    'en-US',
+    {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     }
   ).format(date);
 }
@@ -215,26 +246,16 @@ function getConstraintReference(
   }
 
   const compact =
-    String(
-      constraintId
-    )
-      .replace(
-        /-/g,
-        ''
-      )
-      .slice(
-        0,
-        6
-      )
+    String(constraintId)
+      .replace(/-/g, '')
+      .slice(0, 6)
       .toUpperCase();
 
   return `CON-${compact}`;
 }
 
 
-function getDueDate(
-  constraint
-) {
+function getDueDate(constraint) {
   return (
     constraint
       .target_resolution_date ||
@@ -249,9 +270,7 @@ function isConstraintOverdue(
   constraint
 ) {
   const dueDate =
-    getDueDate(
-      constraint
-    );
+    getDueDate(constraint);
 
   if (!dueDate) {
     return false;
@@ -300,11 +319,8 @@ function getSourceLabel(
 }
 
 
-function getStatusLabel(
-  status
-) {
+function getStatusLabel(status) {
   switch (status) {
-
     case 'open':
       return 'Open';
 
@@ -324,100 +340,76 @@ function getStatusLabel(
       return 'Cancelled';
 
     default:
-      return formatLabel(
-        status
-      );
+      return formatLabel(status);
   }
 }
 
 
-function getStatusStyle(
-  status
+function getActionTypeLabel(
+  actionType
 ) {
-  switch (status) {
+  if (!actionType) {
+    return 'History Entry';
+  }
 
+  return (
+    ACTION_TYPE_LABELS[
+      actionType
+    ] ||
+    formatLabel(actionType)
+  );
+}
+
+
+function getStatusStyle(status) {
+  switch (status) {
     case 'open':
       return {
-        background:
-          '#fee2e2',
-
-        border:
-          '#fca5a5',
-
-        color:
-          '#991b1b',
+        background: '#fee2e2',
+        border: '#fca5a5',
+        color: '#991b1b',
       };
 
     case 'in_progress':
       return {
-        background:
-          '#dbeafe',
-
-        border:
-          '#93c5fd',
-
-        color:
-          '#1d4ed8',
+        background: '#dbeafe',
+        border: '#93c5fd',
+        color: '#1d4ed8',
       };
 
     case 'waiting':
       return {
-        background:
-          '#fef3c7',
-
-        border:
-          '#fcd34d',
-
-        color:
-          '#92400e',
+        background: '#fef3c7',
+        border: '#fcd34d',
+        color: '#92400e',
       };
 
     case 'resolved':
       return {
-        background:
-          '#ede9fe',
-
-        border:
-          '#c4b5fd',
-
-        color:
-          '#6d28d9',
+        background: '#ede9fe',
+        border: '#c4b5fd',
+        color: '#6d28d9',
       };
 
     case 'cleared':
       return {
-        background:
-          '#dcfce7',
-
-        border:
-          '#86efac',
-
-        color:
-          '#166534',
+        background: '#dcfce7',
+        border: '#86efac',
+        color: '#166534',
       };
 
     case 'cancelled':
       return {
-        background:
-          '#f1f5f9',
-
-        border:
-          '#cbd5e1',
-
-        color:
-          '#64748b',
+        background: '#f1f5f9',
+        border: '#cbd5e1',
+        color: '#64748b',
       };
 
     default:
       return {
-        background:
-          '#f8fafc',
-
-        border:
-          '#cbd5e1',
-
-        color:
-          '#475569',
+        background: '#f8fafc',
+        border: '#cbd5e1',
+        color: '#475569',
       };
   }
 }
@@ -427,79 +419,89 @@ function getPriorityStyle(
   priority
 ) {
   const normalized =
-    normalizeText(
-      priority
-    );
+    normalizeText(priority);
 
   if (
-    normalized === 'critical'
+    normalized ===
+    'critical'
   ) {
     return {
-      background:
-        '#fee2e2',
-
-      border:
-        '#ef4444',
-
-      color:
-        '#991b1b',
+      background: '#fee2e2',
+      border: '#ef4444',
+      color: '#991b1b',
     };
   }
 
   if (
-    normalized === 'high'
+    normalized ===
+    'high'
   ) {
     return {
-      background:
-        '#fff7ed',
-
-      border:
-        '#fdba74',
-
-      color:
-        '#c2410c',
+      background: '#fff7ed',
+      border: '#fdba74',
+      color: '#c2410c',
     };
   }
 
   if (
-    normalized === 'medium'
+    normalized ===
+    'medium'
   ) {
     return {
-      background:
-        '#fefce8',
-
-      border:
-        '#fde047',
-
-      color:
-        '#854d0e',
+      background: '#fefce8',
+      border: '#fde047',
+      color: '#854d0e',
     };
   }
 
   if (
-    normalized === 'low'
+    normalized ===
+    'low'
   ) {
     return {
-      background:
-        '#f0fdf4',
-
-      border:
-        '#86efac',
-
-      color:
-        '#166534',
+      background: '#f0fdf4',
+      border: '#86efac',
+      color: '#166534',
     };
   }
 
   return {
-    background:
-      '#f8fafc',
+    background: '#f8fafc',
+    border: '#cbd5e1',
+    color: '#64748b',
+  };
+}
 
-    border:
-      '#cbd5e1',
 
-    color:
-      '#64748b',
+// ============================================================
+// INITIAL FORM
+// ============================================================
+
+function createInitialForm() {
+  return {
+    category:
+      'projects_information',
+
+    title:
+      '',
+
+    description:
+      '',
+
+    action_required:
+      '',
+
+    responsible_party:
+      '',
+
+    required_by_date:
+      '',
+
+    priority:
+      'medium',
+
+    blocking:
+      true,
   };
 }
 
@@ -559,6 +561,12 @@ export default function ConstraintLogPage() {
 
 
   const [
+    successMessage,
+    setSuccessMessage,
+  ] = useState('');
+
+
+  const [
     searchTerm,
     setSearchTerm,
   ] = useState('');
@@ -588,6 +596,60 @@ export default function ConstraintLogPage() {
   ] = useState('');
 
 
+  const [
+    showCreateModal,
+    setShowCreateModal,
+  ] = useState(false);
+
+
+  const [
+    creatingConstraint,
+    setCreatingConstraint,
+  ] = useState(false);
+
+
+  const [
+    form,
+    setForm,
+  ] = useState(
+    createInitialForm()
+  );
+
+
+  // ==========================================================
+  // ACTION HISTORY STATE
+  // ==========================================================
+
+  const [
+    showHistoryModal,
+    setShowHistoryModal,
+  ] = useState(false);
+
+
+  const [
+    historyConstraint,
+    setHistoryConstraint,
+  ] = useState(null);
+
+
+  const [
+    constraintHistory,
+    setConstraintHistory,
+  ] = useState([]);
+
+
+  const [
+    loadingHistory,
+    setLoadingHistory,
+  ] = useState(false);
+
+
+  const [
+    historyError,
+    setHistoryError,
+  ] = useState('');
+
+
   // ==========================================================
   // SELECTED PROJECT
   // ==========================================================
@@ -599,8 +661,7 @@ export default function ConstraintLogPage() {
           (project) =>
             project.id ===
             selectedProjectId
-        ) ||
-        null,
+        ) || null,
       [
         projects,
         selectedProjectId,
@@ -616,9 +677,7 @@ export default function ConstraintLogPage() {
     useCallback(
       async () => {
 
-        setErrorMessage(
-          ''
-        );
+        setErrorMessage('');
 
         try {
 
@@ -627,9 +686,7 @@ export default function ConstraintLogPage() {
             error,
           } =
             await supabase
-              .from(
-                'projects'
-              )
+              .from('projects')
               .select(`
                 id,
                 organization_id,
@@ -645,8 +702,7 @@ export default function ConstraintLogPage() {
               .order(
                 'created_at',
                 {
-                  ascending:
-                    false,
+                  ascending: false,
                 }
               );
 
@@ -667,8 +723,7 @@ export default function ConstraintLogPage() {
 
           const params =
             new URLSearchParams(
-              window.location
-                .search
+              window.location.search
             );
 
 
@@ -699,11 +754,9 @@ export default function ConstraintLogPage() {
             loadedProjects.length ===
             1
           ) {
-
             setSelectedProjectId(
               loadedProjects[0].id
             );
-
           }
 
         } catch (error) {
@@ -732,57 +785,31 @@ export default function ConstraintLogPage() {
 
   const loadConstraintLog =
     useCallback(
-      async (
-        projectId
-      ) => {
+      async (projectId) => {
 
         if (!projectId) {
 
-          setConstraints(
-            []
-          );
-
-          setAffectedWork(
-            []
-          );
-
-          setLookaheadItems(
-            {}
-          );
-
-          setMasterPlanPackages(
-            {}
-          );
+          setConstraints([]);
+          setAffectedWork([]);
+          setLookaheadItems({});
+          setMasterPlanPackages({});
 
           return;
         }
 
 
-        setLoading(
-          true
-        );
-
-        setErrorMessage(
-          ''
-        );
+        setLoading(true);
+        setErrorMessage('');
 
 
         try {
 
-          // --------------------------------------------------
-          // CENTRAL PROJECT CONSTRAINTS
-          // --------------------------------------------------
-
           const {
-            data:
-              constraintData,
-            error:
-              constraintError,
+            data: constraintData,
+            error: constraintError,
           } =
             await supabase
-              .from(
-                'constraints'
-              )
+              .from('constraints')
               .select(`
                 id,
                 project_id,
@@ -821,22 +848,18 @@ export default function ConstraintLogPage() {
               .order(
                 'created_at',
                 {
-                  ascending:
-                    false,
+                  ascending: false,
                 }
               );
 
 
-          if (
-            constraintError
-          ) {
+          if (constraintError) {
             throw constraintError;
           }
 
 
           const loadedConstraints =
-            constraintData ||
-            [];
+            constraintData || [];
 
 
           setConstraints(
@@ -849,17 +872,9 @@ export default function ConstraintLogPage() {
             0
           ) {
 
-            setAffectedWork(
-              []
-            );
-
-            setLookaheadItems(
-              {}
-            );
-
-            setMasterPlanPackages(
-              {}
-            );
+            setAffectedWork([]);
+            setLookaheadItems({});
+            setMasterPlanPackages({});
 
             return;
           }
@@ -873,14 +888,12 @@ export default function ConstraintLogPage() {
 
 
           // --------------------------------------------------
-          // MULTIPLE AFFECTED WORK RELATIONSHIPS
+          // AFFECTED WORK
           // --------------------------------------------------
 
           const {
-            data:
-              affectedWorkData,
-            error:
-              affectedWorkError,
+            data: affectedWorkData,
+            error: affectedWorkError,
           } =
             await supabase
               .from(
@@ -899,16 +912,13 @@ export default function ConstraintLogPage() {
               );
 
 
-          if (
-            affectedWorkError
-          ) {
+          if (affectedWorkError) {
             throw affectedWorkError;
           }
 
 
           const loadedAffectedWork =
-            affectedWorkData ||
-            [];
+            affectedWorkData || [];
 
 
           setAffectedWork(
@@ -917,60 +927,46 @@ export default function ConstraintLogPage() {
 
 
           // --------------------------------------------------
-          // LOOKAHEAD WORK REFERENCES
+          // LOOKAHEAD REFERENCES
           // --------------------------------------------------
 
-          const lookaheadIds =
-            Array.from(
-              new Set(
-                loadedAffectedWork
-                  .map(
-                    (item) =>
-                      item
-                        .lookahead_work_item_id
-                  )
-                  .filter(
-                    Boolean
-                  )
+          const affectedLookaheadIds =
+            loadedAffectedWork
+              .map(
+                (item) =>
+                  item.lookahead_work_item_id
               )
-            );
+              .filter(Boolean);
 
 
           const directLookaheadIds =
             loadedConstraints
               .map(
                 (constraint) =>
-                  constraint
-                    .lookahead_work_item_id
+                  constraint.lookahead_work_item_id
               )
-              .filter(
-                Boolean
-              );
+              .filter(Boolean);
 
 
           const allLookaheadIds =
             Array.from(
               new Set([
-                ...lookaheadIds,
+                ...affectedLookaheadIds,
                 ...directLookaheadIds,
               ])
             );
 
 
-          let nextLookaheadMap =
-            {};
+          let nextLookaheadMap = {};
 
 
           if (
-            allLookaheadIds.length >
-            0
+            allLookaheadIds.length > 0
           ) {
 
             const {
-              data:
-                lookaheadData,
-              error:
-                lookaheadError,
+              data: lookaheadData,
+              error: lookaheadError,
             } =
               await supabase
                 .from(
@@ -995,9 +991,7 @@ export default function ConstraintLogPage() {
                 );
 
 
-            if (
-              lookaheadError
-            ) {
+            if (lookaheadError) {
               throw lookaheadError;
             }
 
@@ -1005,8 +999,7 @@ export default function ConstraintLogPage() {
             nextLookaheadMap =
               Object.fromEntries(
                 (
-                  lookaheadData ||
-                  []
+                  lookaheadData || []
                 ).map(
                   (item) => [
                     item.id,
@@ -1027,69 +1020,56 @@ export default function ConstraintLogPage() {
           // MASTER PLAN REFERENCES
           // --------------------------------------------------
 
-          const affectedMasterPlanIds =
+          const affectedMasterIds =
             loadedAffectedWork
               .map(
                 (item) =>
-                  item
-                    .master_plan_package_id
+                  item.master_plan_package_id
               )
-              .filter(
-                Boolean
-              );
+              .filter(Boolean);
 
 
-          const directMasterPlanIds =
+          const directMasterIds =
             loadedConstraints
               .map(
                 (constraint) =>
-                  constraint
-                    .master_plan_package_id
+                  constraint.master_plan_package_id
               )
-              .filter(
-                Boolean
-              );
+              .filter(Boolean);
 
 
-          const lookaheadMasterPlanIds =
+          const lookaheadMasterIds =
             Object
               .values(
                 nextLookaheadMap
               )
               .map(
                 (item) =>
-                  item
-                    .master_plan_package_id
+                  item.master_plan_package_id
               )
-              .filter(
-                Boolean
-              );
+              .filter(Boolean);
 
 
-          const allMasterPlanIds =
+          const allMasterIds =
             Array.from(
               new Set([
-                ...affectedMasterPlanIds,
-                ...directMasterPlanIds,
-                ...lookaheadMasterPlanIds,
+                ...affectedMasterIds,
+                ...directMasterIds,
+                ...lookaheadMasterIds,
               ])
             );
 
 
-          let nextMasterPlanMap =
-            {};
+          let nextMasterPlanMap = {};
 
 
           if (
-            allMasterPlanIds.length >
-            0
+            allMasterIds.length > 0
           ) {
 
             const {
-              data:
-                masterPlanData,
-              error:
-                masterPlanError,
+              data: masterPlanData,
+              error: masterPlanError,
             } =
               await supabase
                 .from(
@@ -1108,13 +1088,11 @@ export default function ConstraintLogPage() {
                 `)
                 .in(
                   'id',
-                  allMasterPlanIds
+                  allMasterIds
                 );
 
 
-            if (
-              masterPlanError
-            ) {
+            if (masterPlanError) {
               throw masterPlanError;
             }
 
@@ -1122,8 +1100,7 @@ export default function ConstraintLogPage() {
             nextMasterPlanMap =
               Object.fromEntries(
                 (
-                  masterPlanData ||
-                  []
+                  masterPlanData || []
                 ).map(
                   (item) => [
                     item.id,
@@ -1154,9 +1131,7 @@ export default function ConstraintLogPage() {
 
         } finally {
 
-          setLoading(
-            false
-          );
+          setLoading(false);
 
         }
 
@@ -1171,9 +1146,7 @@ export default function ConstraintLogPage() {
 
   useEffect(
     () => {
-
       loadProjects();
-
     },
     [
       loadProjects,
@@ -1183,11 +1156,9 @@ export default function ConstraintLogPage() {
 
   useEffect(
     () => {
-
       loadConstraintLog(
         selectedProjectId
       );
-
     },
     [
       selectedProjectId,
@@ -1201,74 +1172,34 @@ export default function ConstraintLogPage() {
   // ==========================================================
 
   const handleProjectChange =
-    (
-      projectId
-    ) => {
+    (projectId) => {
 
       setSelectedProjectId(
         projectId
       );
 
+      setConstraints([]);
+      setAffectedWork([]);
+      setLookaheadItems({});
+      setMasterPlanPackages({});
 
-      setConstraints(
-        []
-      );
+      setSearchTerm('');
+      setStatusFilter('');
+      setCategoryFilter('');
+      setPriorityFilter('');
+      setResponsibleFilter('');
 
-
-      setAffectedWork(
-        []
-      );
-
-
-      setLookaheadItems(
-        {}
-      );
-
-
-      setMasterPlanPackages(
-        {}
-      );
+      setErrorMessage('');
+      setSuccessMessage('');
 
 
-      setSearchTerm(
-        ''
-      );
-
-
-      setStatusFilter(
-        ''
-      );
-
-
-      setCategoryFilter(
-        ''
-      );
-
-
-      setPriorityFilter(
-        ''
-      );
-
-
-      setResponsibleFilter(
-        ''
-      );
-
-
-      setErrorMessage(
-        ''
-      );
-
-
-      if (
-        projectId
-      ) {
+      if (projectId) {
 
         window.history
           .replaceState(
             {},
             '',
-            `/dashboard/projetos/constraints?projectId=${projectId}`
+            `/dashboard/projects/constraints?projectId=${projectId}`
           );
 
       } else {
@@ -1277,10 +1208,348 @@ export default function ConstraintLogPage() {
           .replaceState(
             {},
             '',
-            '/dashboard/projetos/constraints'
+            '/dashboard/projects/constraints'
           );
 
       }
+
+    };
+
+
+  // ==========================================================
+  // OPEN CREATE MODAL
+  // ==========================================================
+
+  const openCreateModal =
+    () => {
+
+      if (!selectedProjectId) {
+        return;
+      }
+
+      setForm(
+        createInitialForm()
+      );
+
+      setErrorMessage('');
+      setSuccessMessage('');
+
+      setShowCreateModal(true);
+
+    };
+
+
+  // ==========================================================
+  // CREATE MANUAL CONSTRAINT + INITIAL HISTORY
+  // ==========================================================
+
+  const createConstraint =
+    async (event) => {
+
+      event.preventDefault();
+
+
+      if (
+        !selectedProjectId ||
+        creatingConstraint
+      ) {
+        return;
+      }
+
+
+      const title =
+        String(
+          form.title || ''
+        ).trim();
+
+
+      const actionRequired =
+        String(
+          form.action_required || ''
+        ).trim();
+
+
+      const responsibleParty =
+        String(
+          form.responsible_party || ''
+        ).trim();
+
+
+      if (!form.category) {
+        setErrorMessage(
+          'Constraint category is required.'
+        );
+        return;
+      }
+
+
+      if (!title) {
+        setErrorMessage(
+          'Constraint title is required.'
+        );
+        return;
+      }
+
+
+      if (!actionRequired) {
+        setErrorMessage(
+          'Required action is required.'
+        );
+        return;
+      }
+
+
+      if (!responsibleParty) {
+        setErrorMessage(
+          'Responsible party is required.'
+        );
+        return;
+      }
+
+
+      if (!form.required_by_date) {
+        setErrorMessage(
+          'Due date is required.'
+        );
+        return;
+      }
+
+
+      setCreatingConstraint(true);
+      setErrorMessage('');
+      setSuccessMessage('');
+
+
+      try {
+
+        let performedBy = null;
+
+
+        const {
+          data: userData,
+        } =
+          await supabase.auth
+            .getUser();
+
+
+        const user =
+          userData?.user;
+
+
+        if (user) {
+
+          performedBy =
+            user.user_metadata
+              ?.full_name ||
+            user.user_metadata
+              ?.name ||
+            user.email ||
+            null;
+
+        }
+
+
+        const {
+          data,
+          error,
+        } =
+          await supabase.rpc(
+            'create_manual_constraint_with_history',
+            {
+              target_project_id:
+                selectedProjectId,
+
+              target_category:
+                form.category,
+
+              target_title:
+                title,
+
+              target_description:
+                String(
+                  form.description || ''
+                ).trim() || null,
+
+              target_action_required:
+                actionRequired,
+
+              target_responsible_party:
+                responsibleParty,
+
+              target_required_by_date:
+                form.required_by_date,
+
+              target_priority:
+                form.priority,
+
+              target_blocking:
+                Boolean(
+                  form.blocking
+                ),
+
+              target_performed_by:
+                performedBy,
+            }
+          );
+
+
+        if (error) {
+          throw error;
+        }
+
+
+        const createdConstraintId =
+          Array.isArray(data)
+            ? data[0]
+            : data;
+
+
+        setShowCreateModal(false);
+
+        setForm(
+          createInitialForm()
+        );
+
+
+        setSuccessMessage(
+          `Constraint ${getConstraintReference(
+            createdConstraintId
+          )} created successfully.`
+        );
+
+
+        await loadConstraintLog(
+          selectedProjectId
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Create Constraint:',
+          error
+        );
+
+
+        setErrorMessage(
+          error.message ||
+          'The constraint could not be created.'
+        );
+
+      } finally {
+
+        setCreatingConstraint(false);
+
+      }
+
+    };
+
+
+  // ==========================================================
+  // LOAD ACTION HISTORY
+  // ==========================================================
+
+  const openConstraintHistory =
+    async (constraint) => {
+
+      if (!constraint?.id) {
+        return;
+      }
+
+
+      setHistoryConstraint(
+        constraint
+      );
+
+      setConstraintHistory([]);
+
+      setHistoryError('');
+
+      setShowHistoryModal(true);
+
+      setLoadingHistory(true);
+
+
+      try {
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              'constraint_logs'
+            )
+            .select(`
+              id,
+              constraint_id,
+
+              status_from,
+              status_to,
+
+              previous_target_resolution_date,
+              new_target_resolution_date,
+
+              comment,
+
+              action_type,
+              performed_by,
+              performed_by_user_id,
+
+              created_at
+            `)
+            .eq(
+              'constraint_id',
+              constraint.id
+            )
+            .order(
+              'created_at',
+              {
+                ascending: false,
+              }
+            );
+
+
+        if (error) {
+          throw error;
+        }
+
+
+        setConstraintHistory(
+          data || []
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Constraint Action History:',
+          error
+        );
+
+
+        setHistoryError(
+          error.message ||
+          'Action History could not be loaded.'
+        );
+
+      } finally {
+
+        setLoadingHistory(false);
+
+      }
+
+    };
+
+
+  const closeConstraintHistory =
+    () => {
+
+      setShowHistoryModal(false);
+
+      setHistoryConstraint(null);
+
+      setConstraintHistory([]);
+
+      setHistoryError('');
 
     };
 
@@ -1293,8 +1562,7 @@ export default function ConstraintLogPage() {
     useMemo(
       () => {
 
-        const map =
-          {};
+        const map = {};
 
 
         affectedWork.forEach(
@@ -1302,22 +1570,17 @@ export default function ConstraintLogPage() {
 
             if (
               !map[
-                relationship
-                  .constraint_id
+                relationship.constraint_id
               ]
             ) {
-
               map[
-                relationship
-                  .constraint_id
+                relationship.constraint_id
               ] = [];
-
             }
 
 
             map[
-              relationship
-                .constraint_id
+              relationship.constraint_id
             ].push(
               relationship
             );
@@ -1336,69 +1599,53 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // AFFECTED WORK DISPLAY
+  // AFFECTED WORK
   // ==========================================================
 
   const getConstraintAffectedWork =
     useCallback(
-      (
-        constraint
-      ) => {
+      (constraint) => {
 
         const relationships =
           affectedWorkByConstraint[
             constraint.id
-          ] ||
-          [];
+          ] || [];
 
 
-        const workItems =
-          [];
+        const workItems = [];
 
 
         relationships.forEach(
-          (
-            relationship
-          ) => {
+          (relationship) => {
 
             if (
               relationship
                 .lookahead_work_item_id
             ) {
 
-              const lookaheadItem =
+              const item =
                 lookaheadItems[
                   relationship
                     .lookahead_work_item_id
                 ];
 
 
-              if (
-                lookaheadItem
-              ) {
+              if (item) {
 
                 workItems.push({
                   key:
-                    `lookahead-${lookaheadItem.id}`,
+                    `lookahead-${item.id}`,
 
                   type:
                     'Lookahead',
 
                   packageCode:
-                    lookaheadItem
-                      .package_code ||
+                    item.package_code ||
                     '—',
 
-                  serviceName:
-                    lookaheadItem
-                      .service_name ||
-                    '',
-
                   location:
-                    lookaheadItem
-                      .location_path ||
-                    lookaheadItem
-                      .location_name ||
+                    item.location_path ||
+                    item.location_name ||
                     'Unassigned Location',
                 });
 
@@ -1412,39 +1659,29 @@ export default function ConstraintLogPage() {
                 .master_plan_package_id
             ) {
 
-              const masterPlanItem =
+              const item =
                 masterPlanPackages[
                   relationship
                     .master_plan_package_id
                 ];
 
 
-              if (
-                masterPlanItem
-              ) {
+              if (item) {
 
                 workItems.push({
                   key:
-                    `master-${masterPlanItem.id}`,
+                    `master-${item.id}`,
 
                   type:
                     'Master Plan',
 
                   packageCode:
-                    masterPlanItem
-                      .package_code ||
+                    item.package_code ||
                     '—',
 
-                  serviceName:
-                    masterPlanItem
-                      .service_name ||
-                    '',
-
                   location:
-                    masterPlanItem
-                      .location_path ||
-                    masterPlanItem
-                      .location_name ||
+                    item.location_path ||
+                    item.location_name ||
                     'Unassigned Location',
                 });
 
@@ -1456,61 +1693,45 @@ export default function ConstraintLogPage() {
         );
 
 
-        // ----------------------------------------------------
-        // LEGACY DIRECT RELATIONSHIPS
-        //
-        // SQL 94 preserves these temporarily for compatibility.
-        // Add them only when the many-to-many relationship
-        // layer did not already provide the same reference.
-        // ----------------------------------------------------
-
         if (
           constraint
             .lookahead_work_item_id
         ) {
 
-          const lookaheadItem =
+          const item =
             lookaheadItems[
               constraint
                 .lookahead_work_item_id
             ];
 
 
-          const alreadyIncluded =
+          const exists =
             workItems.some(
-              (item) =>
-                item.key ===
+              (workItem) =>
+                workItem.key ===
                 `lookahead-${constraint.lookahead_work_item_id}`
             );
 
 
           if (
-            lookaheadItem &&
-            !alreadyIncluded
+            item &&
+            !exists
           ) {
 
             workItems.push({
               key:
-                `lookahead-${lookaheadItem.id}`,
+                `lookahead-${item.id}`,
 
               type:
                 'Lookahead',
 
               packageCode:
-                lookaheadItem
-                  .package_code ||
+                item.package_code ||
                 '—',
 
-              serviceName:
-                lookaheadItem
-                  .service_name ||
-                '',
-
               location:
-                lookaheadItem
-                  .location_path ||
-                lookaheadItem
-                  .location_name ||
+                item.location_path ||
+                item.location_name ||
                 'Unassigned Location',
             });
 
@@ -1524,48 +1745,40 @@ export default function ConstraintLogPage() {
             .master_plan_package_id
         ) {
 
-          const masterPlanItem =
+          const item =
             masterPlanPackages[
               constraint
                 .master_plan_package_id
             ];
 
 
-          const alreadyIncluded =
+          const exists =
             workItems.some(
-              (item) =>
-                item.key ===
+              (workItem) =>
+                workItem.key ===
                 `master-${constraint.master_plan_package_id}`
             );
 
 
           if (
-            masterPlanItem &&
-            !alreadyIncluded
+            item &&
+            !exists
           ) {
 
             workItems.push({
               key:
-                `master-${masterPlanItem.id}`,
+                `master-${item.id}`,
 
               type:
                 'Master Plan',
 
               packageCode:
-                masterPlanItem
-                  .package_code ||
+                item.package_code ||
                 '—',
 
-              serviceName:
-                masterPlanItem
-                  .service_name ||
-                '',
-
               location:
-                masterPlanItem
-                  .location_path ||
-                masterPlanItem
-                  .location_name ||
+                item.location_path ||
+                item.location_name ||
                 'Unassigned Location',
             });
 
@@ -1599,9 +1812,7 @@ export default function ConstraintLogPage() {
                 (constraint) =>
                   constraint.category
               )
-              .filter(
-                Boolean
-              )
+              .filter(Boolean)
           )
         ).sort(),
       [
@@ -1620,9 +1831,7 @@ export default function ConstraintLogPage() {
                 (constraint) =>
                   constraint.priority
               )
-              .filter(
-                Boolean
-              )
+              .filter(Boolean)
           )
         ).sort(),
       [
@@ -1639,12 +1848,9 @@ export default function ConstraintLogPage() {
             constraints
               .map(
                 (constraint) =>
-                  constraint
-                    .responsible_party
+                  constraint.responsible_party
               )
-              .filter(
-                Boolean
-              )
+              .filter(Boolean)
           )
         ).sort(),
       [
@@ -1654,45 +1860,39 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // KPI COUNTS
+  // KPI SUMMARY
   // ==========================================================
 
   const summary =
     useMemo(
-      () => {
+      () => ({
+        active:
+          constraints.filter(
+            (constraint) =>
+              ACTIVE_STATUSES.includes(
+                constraint.status
+              )
+          ).length,
 
-        return {
+        overdue:
+          constraints.filter(
+            isConstraintOverdue
+          ).length,
 
-          active:
-            constraints.filter(
-              (constraint) =>
-                ACTIVE_STATUSES.includes(
-                  constraint.status
-                )
-            ).length,
+        resolved:
+          constraints.filter(
+            (constraint) =>
+              constraint.status ===
+              'resolved'
+          ).length,
 
-          overdue:
-            constraints.filter(
-              isConstraintOverdue
-            ).length,
-
-          resolved:
-            constraints.filter(
-              (constraint) =>
-                constraint.status ===
-                'resolved'
-            ).length,
-
-          cleared:
-            constraints.filter(
-              (constraint) =>
-                constraint.status ===
-                'cleared'
-            ).length,
-
-        };
-
-      },
+        cleared:
+          constraints.filter(
+            (constraint) =>
+              constraint.status ===
+              'cleared'
+          ).length,
+      }),
       [
         constraints,
       ]
@@ -1714,9 +1914,7 @@ export default function ConstraintLogPage() {
 
 
         return constraints.filter(
-          (
-            constraint
-          ) => {
+          (constraint) => {
 
             if (
               statusFilter &&
@@ -1747,8 +1945,7 @@ export default function ConstraintLogPage() {
 
             if (
               responsibleFilter &&
-              constraint
-                .responsible_party !==
+              constraint.responsible_party !==
               responsibleFilter
             ) {
               return false;
@@ -1774,7 +1971,6 @@ export default function ConstraintLogPage() {
                   (item) =>
                     [
                       item.packageCode,
-                      item.serviceName,
                       item.location,
                       item.type,
                     ].join(' ')
@@ -1790,18 +1986,11 @@ export default function ConstraintLogPage() {
                   ),
 
                   constraint.title,
-
                   constraint.description,
-
                   constraint.category,
-
                   constraint.action_required,
-
-                  constraint
-                    .responsible_party,
-
+                  constraint.responsible_party,
                   constraint.priority,
-
                   constraint.status,
 
                   getSourceLabel(
@@ -1840,17 +2029,10 @@ export default function ConstraintLogPage() {
   return (
     <div
       style={{
-        minHeight:
-          '100%',
-
-        padding:
-          '18px 20px 40px',
-
-        background:
-          '#f8fafc',
-
-        color:
-          '#0f172a',
+        minHeight: '100%',
+        padding: '18px 20px 40px',
+        background: '#f8fafc',
+        color: '#0f172a',
       }}
     >
 
@@ -1860,23 +2042,12 @@ export default function ConstraintLogPage() {
 
       <div
         style={{
-          display:
-            'flex',
-
-          alignItems:
-            'flex-start',
-
-          justifyContent:
-            'space-between',
-
-          gap:
-            '16px',
-
-          flexWrap:
-            'wrap',
-
-          marginBottom:
-            '18px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: '16px',
+          flexWrap: 'wrap',
+          marginBottom: '18px',
         }}
       >
 
@@ -1884,14 +2055,9 @@ export default function ConstraintLogPage() {
 
           <h1
             style={{
-              margin:
-                0,
-
-              fontSize:
-                '22px',
-
-              fontWeight:
-                800,
+              margin: 0,
+              fontSize: '22px',
+              fontWeight: 800,
             }}
           >
             CONSTRAINT LOG
@@ -1900,20 +2066,11 @@ export default function ConstraintLogPage() {
 
           <p
             style={{
-              maxWidth:
-                '760px',
-
-              margin:
-                '6px 0 0',
-
-              color:
-                '#64748b',
-
-              fontSize:
-                '11px',
-
-              lineHeight:
-                1.5,
+              maxWidth: '760px',
+              margin: '6px 0 0',
+              color: '#64748b',
+              fontSize: '11px',
+              lineHeight: 1.5,
             }}
           >
             Central project-level management of constraints,
@@ -1924,38 +2081,19 @@ export default function ConstraintLogPage() {
         </div>
 
 
-        {selectedProject && (
+        {selectedProjectId && (
 
-          <div
-            style={{
-              padding:
-                '8px 11px',
-
-              border:
-                '1px solid #dbeafe',
-
-              borderRadius:
-                '6px',
-
-              background:
-                '#eff6ff',
-
-              color:
-                '#1e40af',
-
-              fontSize:
-                '10px',
-
-              fontWeight:
-                700,
-            }}
+          <button
+            type="button"
+            onClick={
+              openCreateModal
+            }
+            style={
+              primaryButtonStyle
+            }
           >
-            {selectedProject.code
-              ? `${selectedProject.code} · `
-              : ''}
-
-            {selectedProject.name}
-          </div>
+            + Add Constraint
+          </button>
 
         )}
 
@@ -1963,25 +2101,16 @@ export default function ConstraintLogPage() {
 
 
       {/* ====================================================
-          PROJECT SELECTOR
+          PROJECT CONTROL
       ===================================================== */}
 
       <div
         style={{
-          display:
-            'flex',
-
-          alignItems:
-            'flex-end',
-
-          gap:
-            '12px',
-
-          flexWrap:
-            'wrap',
-
-          marginBottom:
-            '16px',
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: '12px',
+          flexWrap: 'wrap',
+          marginBottom: '16px',
         }}
       >
 
@@ -2025,15 +2154,12 @@ export default function ConstraintLogPage() {
 
 
             {projects.map(
-              (
-                project
-              ) => (
+              (project) => (
 
                 <option
                   key={
                     project.id
                   }
-
                   value={
                     project.id
                   }
@@ -2058,14 +2184,14 @@ export default function ConstraintLogPage() {
           <button
             type="button"
 
+            disabled={
+              loading
+            }
+
             onClick={() =>
               loadConstraintLog(
                 selectedProjectId
               )
-            }
-
-            disabled={
-              loading
             }
 
             style={
@@ -2081,40 +2207,49 @@ export default function ConstraintLogPage() {
 
         )}
 
+
+        {selectedProject && (
+
+          <div
+            style={{
+              padding: '9px 11px',
+              border:
+                '1px solid #dbeafe',
+              borderRadius: '6px',
+              background: '#eff6ff',
+              color: '#1e40af',
+              fontSize: '10px',
+              fontWeight: 700,
+            }}
+          >
+            {selectedProject.code
+              ? `${selectedProject.code} · `
+              : ''}
+
+            {selectedProject.name}
+          </div>
+
+        )}
+
       </div>
 
 
       {/* ====================================================
-          ERROR
+          MESSAGES
       ===================================================== */}
 
       {errorMessage && (
 
         <div
           style={{
-            marginBottom:
-              '14px',
-
-            padding:
-              '10px 12px',
-
+            marginBottom: '14px',
+            padding: '10px 12px',
             border:
               '1px solid #fecaca',
-
-            borderRadius:
-              '6px',
-
-            background:
-              '#fef2f2',
-
-            color:
-              '#b91c1c',
-
-            fontSize:
-              '11px',
-
-            lineHeight:
-              1.45,
+            borderRadius: '6px',
+            background: '#fef2f2',
+            color: '#b91c1c',
+            fontSize: '11px',
           }}
         >
           {errorMessage}
@@ -2123,8 +2258,29 @@ export default function ConstraintLogPage() {
       )}
 
 
+      {successMessage && (
+
+        <div
+          style={{
+            marginBottom: '14px',
+            padding: '10px 12px',
+            border:
+              '1px solid #bbf7d0',
+            borderRadius: '6px',
+            background: '#f0fdf4',
+            color: '#166534',
+            fontSize: '11px',
+            fontWeight: 700,
+          }}
+        >
+          {successMessage}
+        </div>
+
+      )}
+
+
       {/* ====================================================
-          NO PROJECT
+          EMPTY PROJECT
       ===================================================== */}
 
       {!selectedProjectId && (
@@ -2142,14 +2298,9 @@ export default function ConstraintLogPage() {
 
           <div
             style={{
-              marginTop:
-                '6px',
-
-              color:
-                '#64748b',
-
-              fontSize:
-                '11px',
+              marginTop: '6px',
+              color: '#64748b',
+              fontSize: '11px',
             }}
           >
             Select a project to open its centralized Constraint Log.
@@ -2168,23 +2319,15 @@ export default function ConstraintLogPage() {
 
         <>
 
-          {/* ==================================================
-              SUMMARY
-          ================================================== */}
+          {/* SUMMARY */}
 
           <div
             style={{
-              display:
-                'grid',
-
+              display: 'grid',
               gridTemplateColumns:
                 'repeat(auto-fit, minmax(180px, 1fr))',
-
-              gap:
-                '10px',
-
-              marginBottom:
-                '14px',
+              gap: '10px',
+              marginBottom: '14px',
             }}
           >
 
@@ -2226,48 +2369,24 @@ export default function ConstraintLogPage() {
           </div>
 
 
-          {/* ==================================================
-              FILTERS
-          ================================================== */}
+          {/* FILTERS */}
 
           <div
             style={{
-              display:
-                'grid',
-
+              display: 'grid',
               gridTemplateColumns:
                 'minmax(220px, 2fr) repeat(4, minmax(145px, 1fr))',
-
-              gap:
-                '8px',
-
-              marginBottom:
-                '12px',
-
-              padding:
-                '12px',
-
+              gap: '8px',
+              marginBottom: '12px',
+              padding: '12px',
               border:
                 '1px solid #e2e8f0',
-
-              borderRadius:
-                '7px',
-
-              background:
-                '#ffffff',
+              borderRadius: '7px',
+              background: '#ffffff',
             }}
           >
 
-            <div>
-
-              <label
-                style={
-                  filterLabelStyle
-                }
-              >
-                Search
-              </label>
-
+            <FilterField label="Search">
 
               <input
                 type="text"
@@ -2291,19 +2410,10 @@ export default function ConstraintLogPage() {
                 }
               />
 
-            </div>
+            </FilterField>
 
 
-            <div>
-
-              <label
-                style={
-                  filterLabelStyle
-                }
-              >
-                Status
-              </label>
-
+            <FilterField label="Status">
 
               <select
                 value={
@@ -2322,18 +2432,14 @@ export default function ConstraintLogPage() {
                   filterInputStyle
                 }
               >
-
                 {STATUS_OPTIONS.map(
-                  (
-                    option
-                  ) => (
+                  (option) => (
 
                     <option
                       key={
                         option.value ||
                         'all'
                       }
-
                       value={
                         option.value
                       }
@@ -2343,22 +2449,12 @@ export default function ConstraintLogPage() {
 
                   )
                 )}
-
               </select>
 
-            </div>
+            </FilterField>
 
 
-            <div>
-
-              <label
-                style={
-                  filterLabelStyle
-                }
-              >
-                Category
-              </label>
-
+            <FilterField label="Category">
 
               <select
                 value={
@@ -2377,22 +2473,17 @@ export default function ConstraintLogPage() {
                   filterInputStyle
                 }
               >
-
                 <option value="">
                   All Categories
                 </option>
 
-
                 {categoryOptions.map(
-                  (
-                    category
-                  ) => (
+                  (category) => (
 
                     <option
                       key={
                         category
                       }
-
                       value={
                         category
                       }
@@ -2404,22 +2495,12 @@ export default function ConstraintLogPage() {
 
                   )
                 )}
-
               </select>
 
-            </div>
+            </FilterField>
 
 
-            <div>
-
-              <label
-                style={
-                  filterLabelStyle
-                }
-              >
-                Priority
-              </label>
-
+            <FilterField label="Priority">
 
               <select
                 value={
@@ -2438,22 +2519,17 @@ export default function ConstraintLogPage() {
                   filterInputStyle
                 }
               >
-
                 <option value="">
                   All Priorities
                 </option>
 
-
                 {priorityOptions.map(
-                  (
-                    priority
-                  ) => (
+                  (priority) => (
 
                     <option
                       key={
                         priority
                       }
-
                       value={
                         priority
                       }
@@ -2465,22 +2541,12 @@ export default function ConstraintLogPage() {
 
                   )
                 )}
-
               </select>
 
-            </div>
+            </FilterField>
 
 
-            <div>
-
-              <label
-                style={
-                  filterLabelStyle
-                }
-              >
-                Responsible
-              </label>
-
+            <FilterField label="Responsible">
 
               <select
                 value={
@@ -2499,22 +2565,17 @@ export default function ConstraintLogPage() {
                   filterInputStyle
                 }
               >
-
                 <option value="">
                   All Responsible
                 </option>
 
-
                 {responsibleOptions.map(
-                  (
-                    responsible
-                  ) => (
+                  (responsible) => (
 
                     <option
                       key={
                         responsible
                       }
-
                       value={
                         responsible
                       }
@@ -2524,134 +2585,59 @@ export default function ConstraintLogPage() {
 
                   )
                 )}
-
               </select>
 
-            </div>
+            </FilterField>
 
           </div>
 
 
-          {/* ==================================================
-              RESULT COUNT
-          ================================================== */}
+          {/* RESULTS */}
 
           <div
             style={{
-              display:
-                'flex',
-
-              alignItems:
-                'center',
-
-              justifyContent:
-                'space-between',
-
-              gap:
-                '12px',
-
-              marginBottom:
-                '7px',
-
-              color:
-                '#64748b',
-
-              fontSize:
-                '10px',
+              marginBottom: '7px',
+              color: '#64748b',
+              fontSize: '10px',
             }}
           >
-
-            <span>
-              Showing{' '}
-              <strong
-                style={{
-                  color:
-                    '#0f172a',
-                }}
-              >
-                {
-                  filteredConstraints.length
-                }
-              </strong>{' '}
-              of{' '}
-              <strong
-                style={{
-                  color:
-                    '#0f172a',
-                }}
-              >
-                {
-                  constraints.length
-                }
-              </strong>{' '}
-              constraints
-            </span>
-
-
-            {(
-              searchTerm ||
-              statusFilter ||
-              categoryFilter ||
-              priorityFilter ||
-              responsibleFilter
-            ) && (
-
-              <button
-                type="button"
-
-                onClick={() => {
-                  setSearchTerm('');
-                  setStatusFilter('');
-                  setCategoryFilter('');
-                  setPriorityFilter('');
-                  setResponsibleFilter('');
-                }}
-
-                style={
-                  clearFiltersButtonStyle
-                }
-              >
-                Clear Filters
-              </button>
-
-            )}
-
+            Showing{' '}
+            <strong
+              style={{
+                color: '#0f172a',
+              }}
+            >
+              {filteredConstraints.length}
+            </strong>{' '}
+            of{' '}
+            <strong
+              style={{
+                color: '#0f172a',
+              }}
+            >
+              {constraints.length}
+            </strong>{' '}
+            constraints
           </div>
 
 
-          {/* ==================================================
-              TABLE
-          ================================================== */}
+          {/* TABLE */}
 
           <div
             style={{
-              overflowX:
-                'auto',
-
+              overflowX: 'auto',
               border:
                 '1px solid #cbd5e1',
-
-              background:
-                '#ffffff',
+              background: '#ffffff',
             }}
           >
 
             {loading ? (
 
               <div
-                style={{
-                  padding:
-                    '50px 20px',
-
-                  color:
-                    '#64748b',
-
-                  textAlign:
-                    'center',
-
-                  fontSize:
-                    '12px',
-                }}
+                style={
+                  loadingStyle
+                }
               >
                 Loading Constraint Log...
               </div>
@@ -2660,46 +2646,26 @@ export default function ConstraintLogPage() {
               0 ? (
 
               <div
-                style={{
-                  padding:
-                    '50px 20px',
-
-                  color:
-                    '#64748b',
-
-                  textAlign:
-                    'center',
-
-                  fontSize:
-                    '12px',
-                }}
+                style={
+                  loadingStyle
+                }
               >
-
                 {constraints.length ===
                 0
                   ? 'No constraints are registered for this project.'
                   : 'No constraints match the selected filters.'}
-
               </div>
 
             ) : (
 
               <table
                 style={{
-                  width:
-                    '100%',
-
-                  minWidth:
-                    '1450px',
-
+                  width: '100%',
+                  minWidth: '1540px',
                   borderCollapse:
                     'collapse',
-
-                  tableLayout:
-                    'fixed',
-
-                  fontSize:
-                    '10px',
+                  tableLayout: 'fixed',
+                  fontSize: '10px',
                 }}
               >
 
@@ -2710,110 +2676,100 @@ export default function ConstraintLogPage() {
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '92px',
+                        width: '92px',
                       }}
                     >
                       REFERENCE
                     </th>
 
-
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '100px',
+                        width: '100px',
                       }}
                     >
                       PACKAGE
                     </th>
 
-
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '230px',
+                        width: '230px',
                       }}
                     >
                       LOCATION / AFFECTED WORK
                     </th>
 
-
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '150px',
+                        width: '150px',
                       }}
                     >
                       CATEGORY
                     </th>
 
-
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '115px',
+                        width: '115px',
                       }}
                     >
                       STATUS
                     </th>
 
-
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '115px',
+                        width: '115px',
                       }}
                     >
                       PRIORITY
                     </th>
 
-
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '170px',
+                        width: '170px',
                       }}
                     >
                       RESPONSIBLE
                     </th>
 
-
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '260px',
+                        width: '260px',
                       }}
                     >
                       REQUIRED ACTION
                     </th>
 
-
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '105px',
+                        width: '105px',
                       }}
                     >
                       DUE DATE
                     </th>
 
+                    <th
+                      style={{
+                        ...headerCellStyle,
+                        width: '125px',
+                      }}
+                    >
+                      SOURCE
+                    </th>
 
                     <th
                       style={{
                         ...headerCellStyle,
-                        width:
-                          '125px',
+                        width: '90px',
                       }}
                     >
-                      SOURCE
+                      ACTIONS
                     </th>
 
                   </tr>
@@ -2824,9 +2780,7 @@ export default function ConstraintLogPage() {
                 <tbody>
 
                   {filteredConstraints.map(
-                    (
-                      constraint
-                    ) => {
+                    (constraint) => {
 
                       const affected =
                         getConstraintAffectedWork(
@@ -2834,7 +2788,7 @@ export default function ConstraintLogPage() {
                         );
 
 
-                      const uniquePackages =
+                      const packageCodes =
                         Array.from(
                           new Set(
                             affected
@@ -2842,22 +2796,8 @@ export default function ConstraintLogPage() {
                                 (item) =>
                                   item.packageCode
                               )
-                              .filter(
-                                Boolean
-                              )
+                              .filter(Boolean)
                           )
-                        );
-
-
-                      const dueDate =
-                        getDueDate(
-                          constraint
-                        );
-
-
-                      const overdue =
-                        isConstraintOverdue(
-                          constraint
                         );
 
 
@@ -2873,6 +2813,18 @@ export default function ConstraintLogPage() {
                         );
 
 
+                      const dueDate =
+                        getDueDate(
+                          constraint
+                        );
+
+
+                      const overdue =
+                        isConstraintOverdue(
+                          constraint
+                        );
+
+
                       return (
 
                         <tr
@@ -2881,274 +2833,95 @@ export default function ConstraintLogPage() {
                           }
                         >
 
-                          {/* REFERENCE */}
-
                           <td
                             style={
                               bodyCellStyle
                             }
                           >
-
-                            <div
-                              style={{
-                                color:
-                                  '#0f172a',
-
-                                fontSize:
-                                  '10px',
-
-                                fontWeight:
-                                  900,
-                              }}
-                            >
+                            <strong>
                               {getConstraintReference(
                                 constraint.id
                               )}
-                            </div>
-
+                            </strong>
 
                             {constraint.blocking && (
-
                               <div
-                                style={{
-                                  marginTop:
-                                    '3px',
-
-                                  color:
-                                    '#b91c1c',
-
-                                  fontSize:
-                                    '8px',
-
-                                  fontWeight:
-                                    800,
-                                }}
+                                style={
+                                  blockingTextStyle
+                                }
                               >
                                 BLOCKING
                               </div>
-
                             )}
-
                           </td>
 
-
-                          {/* PACKAGE */}
 
                           <td
                             style={
                               bodyCellStyle
                             }
                           >
-
-                            {uniquePackages.length >
-                            0 ? (
-
-                              <div
-                                style={{
-                                  display:
-                                    'flex',
-
-                                  alignItems:
-                                    'center',
-
-                                  justifyContent:
-                                    'center',
-
-                                  gap:
-                                    '3px',
-
-                                  flexWrap:
-                                    'wrap',
-                                }}
-                              >
-
-                                {uniquePackages
-                                  .slice(
-                                    0,
-                                    3
-                                  )
-                                  .map(
-                                    (
-                                      packageCode
-                                    ) => (
-
-                                      <span
-                                        key={
-                                          packageCode
-                                        }
-
-                                        style={
-                                          packageBadgeStyle
-                                        }
-                                      >
-                                        {packageCode}
-                                      </span>
-
-                                    )
-                                  )}
-
-
-                                {uniquePackages.length >
-                                  3 && (
-
-                                  <span
-                                    style={{
-                                      color:
-                                        '#64748b',
-
-                                      fontSize:
-                                        '8px',
-
-                                      fontWeight:
-                                        700,
-                                    }}
-                                  >
-                                    +{
-                                      uniquePackages.length -
-                                      3
-                                    }
-                                  </span>
-
-                                )}
-
-                              </div>
-
-                            ) : (
-
-                              <span
-                                style={
-                                  mutedStyle
-                                }
-                              >
-                                Project-level
-                              </span>
-
-                            )}
-
+                            {packageCodes.length >
+                            0
+                              ? packageCodes.join(
+                                  ', '
+                                )
+                              : (
+                                <span
+                                  style={
+                                    mutedStyle
+                                  }
+                                >
+                                  Project-level
+                                </span>
+                              )}
                           </td>
 
-
-                          {/* AFFECTED WORK */}
 
                           <td
                             style={{
                               ...bodyCellStyle,
-
-                              padding:
-                                '7px 9px',
-
-                              textAlign:
-                                'left',
+                              textAlign: 'left',
                             }}
                           >
-
                             {affected.length >
-                            0 ? (
-
-                              <div>
-
-                                {affected
-                                  .slice(
-                                    0,
-                                    3
-                                  )
-                                  .map(
-                                    (
-                                      item
-                                    ) => (
+                            0
+                              ? affected.map(
+                                  (item) => (
+                                    <div
+                                      key={
+                                        item.key
+                                      }
+                                      style={{
+                                        marginBottom:
+                                          '4px',
+                                      }}
+                                    >
+                                      <strong>
+                                        {item.location}
+                                      </strong>
 
                                       <div
-                                        key={
-                                          item.key
+                                        style={
+                                          mutedStyle
                                         }
-
-                                        style={{
-                                          marginBottom:
-                                            '4px',
-                                        }}
                                       >
-
-                                        <div
-                                          style={{
-                                            color:
-                                              '#334155',
-
-                                            fontSize:
-                                              '9px',
-
-                                            fontWeight:
-                                              700,
-
-                                            lineHeight:
-                                              1.35,
-                                          }}
-                                        >
-                                          {item.location}
-                                        </div>
-
-
-                                        <div
-                                          style={{
-                                            marginTop:
-                                              '1px',
-
-                                            color:
-                                              '#94a3b8',
-
-                                            fontSize:
-                                              '8px',
-                                          }}
-                                        >
-                                          {item.type}
-                                        </div>
-
+                                        {item.type}
                                       </div>
-
-                                    )
-                                  )}
-
-
-                                {affected.length >
-                                  3 && (
-
-                                  <div
-                                    style={{
-                                      color:
-                                        '#64748b',
-
-                                      fontSize:
-                                        '8px',
-
-                                      fontWeight:
-                                        700,
-                                    }}
-                                  >
-                                    +{
-                                      affected.length -
-                                      3
-                                    } more affected work items
-                                  </div>
-
-                                )}
-
-                              </div>
-
-                            ) : (
-
-                              <span
-                                style={
-                                  mutedStyle
-                                }
-                              >
-                                Project-level constraint
-                              </span>
-
-                            )}
-
+                                    </div>
+                                  )
+                                )
+                              : (
+                                <span
+                                  style={
+                                    mutedStyle
+                                  }
+                                >
+                                  Project-level constraint
+                                </span>
+                              )}
                           </td>
 
-
-                          {/* CATEGORY */}
 
                           <td
                             style={
@@ -3161,24 +2934,18 @@ export default function ConstraintLogPage() {
                           </td>
 
 
-                          {/* STATUS */}
-
                           <td
                             style={
                               bodyCellStyle
                             }
                           >
-
                             <span
                               style={{
                                 ...badgeBaseStyle,
-
                                 background:
                                   statusStyle.background,
-
                                 border:
                                   `1px solid ${statusStyle.border}`,
-
                                 color:
                                   statusStyle.color,
                               }}
@@ -3188,51 +2955,31 @@ export default function ConstraintLogPage() {
                               )}
                             </span>
 
-
                             {constraint.status ===
                               'resolved' && (
-
                               <div
-                                style={{
-                                  marginTop:
-                                    '4px',
-
-                                  color:
-                                    '#7c3aed',
-
-                                  fontSize:
-                                    '8px',
-
-                                  fontWeight:
-                                    700,
-                                }}
+                                style={
+                                  resolvedTextStyle
+                                }
                               >
                                 Awaiting Clearance
                               </div>
-
                             )}
-
                           </td>
 
-
-                          {/* PRIORITY */}
 
                           <td
                             style={
                               bodyCellStyle
                             }
                           >
-
                             <span
                               style={{
                                 ...badgeBaseStyle,
-
                                 background:
                                   priorityStyle.background,
-
                                 border:
                                   `1px solid ${priorityStyle.border}`,
-
                                 color:
                                   priorityStyle.color,
                               }}
@@ -3241,24 +2988,13 @@ export default function ConstraintLogPage() {
                                 constraint.priority
                               )}
                             </span>
-
                           </td>
 
-
-                          {/* RESPONSIBLE */}
 
                           <td
                             style={{
                               ...bodyCellStyle,
-
-                              padding:
-                                '7px 9px',
-
-                              textAlign:
-                                'left',
-
-                              fontWeight:
-                                600,
+                              textAlign: 'left',
                             }}
                           >
                             {constraint
@@ -3267,108 +3003,80 @@ export default function ConstraintLogPage() {
                           </td>
 
 
-                          {/* ACTION */}
-
                           <td
                             style={{
                               ...bodyCellStyle,
-
-                              padding:
-                                '7px 9px',
-
-                              textAlign:
-                                'left',
+                              textAlign: 'left',
                             }}
                           >
-
-                            <div
-                              style={{
-                                color:
-                                  '#334155',
-
-                                fontWeight:
-                                  600,
-
-                                lineHeight:
-                                  1.4,
-                              }}
-                            >
-                              {constraint
-                                .action_required ||
-                                constraint.title ||
-                                constraint.description ||
-                                '—'}
-                            </div>
-
+                            {constraint
+                              .action_required ||
+                              constraint.title ||
+                              constraint.description ||
+                              '—'}
                           </td>
 
 
-                          {/* DUE DATE */}
-
                           <td
                             style={{
                               ...bodyCellStyle,
-
                               color:
                                 overdue
                                   ? '#b91c1c'
                                   : '#334155',
-
                               fontWeight:
                                 overdue
                                   ? 800
                                   : 600,
                             }}
                           >
-
                             {formatDate(
                               dueDate
                             )}
 
-
                             {overdue && (
-
                               <div
-                                style={{
-                                  marginTop:
-                                    '3px',
-
-                                  color:
-                                    '#b91c1c',
-
-                                  fontSize:
-                                    '8px',
-
-                                  fontWeight:
-                                    900,
-                                }}
+                                style={
+                                  blockingTextStyle
+                                }
                               >
                                 OVERDUE
                               </div>
-
                             )}
-
                           </td>
 
-
-                          {/* SOURCE */}
 
                           <td
                             style={
                               bodyCellStyle
                             }
                           >
+                            {getSourceLabel(
+                              constraint
+                            )}
+                          </td>
 
-                            <span
+
+                          <td
+                            style={
+                              bodyCellStyle
+                            }
+                          >
+                            <button
+                              type="button"
+
+                              onClick={() =>
+                                openConstraintHistory(
+                                  constraint
+                                )
+                              }
+
                               style={
-                                sourceBadgeStyle
+                                historyButtonStyle
                               }
                             >
-                              {getSourceLabel(
-                                constraint
-                              )}
-                            </span>
-
+                              History
+                            </button>
                           </td>
 
                         </tr>
@@ -3386,87 +3094,1032 @@ export default function ConstraintLogPage() {
 
           </div>
 
+        </>
 
-          {/* ==================================================
-              GOVERNANCE LEGEND
-          ================================================== */}
+      )}
+
+
+      {/* ====================================================
+          CREATE CONSTRAINT MODAL
+      ===================================================== */}
+
+      {showCreateModal && (
+
+        <div
+          style={
+            modalOverlayStyle
+          }
+        >
 
           <div
-            style={{
-              display:
-                'flex',
-
-              alignItems:
-                'center',
-
-              gap:
-                '14px',
-
-              flexWrap:
-                'wrap',
-
-              padding:
-                '10px 12px',
-
-              border:
-                '1px solid #e2e8f0',
-
-              borderTop:
-                0,
-
-              background:
-                '#ffffff',
-
-              color:
-                '#64748b',
-
-              fontSize:
-                '9px',
-            }}
+            style={
+              modalStyle
+            }
           >
 
-            <strong
+            <div
+              style={
+                modalHeaderStyle
+              }
+            >
+
+              <div>
+
+                <div
+                  style={
+                    modalEyebrowStyle
+                  }
+                >
+                  PROJECT CONSTRAINT
+                </div>
+
+
+                <h2
+                  style={
+                    modalTitleStyle
+                  }
+                >
+                  Add Constraint
+                </h2>
+
+
+                <p
+                  style={
+                    modalDescriptionStyle
+                  }
+                >
+                  Register a project-level constraint that may exist
+                  independently from Lookahead Planning.
+                </p>
+
+              </div>
+
+
+              <button
+                type="button"
+
+                disabled={
+                  creatingConstraint
+                }
+
+                onClick={() =>
+                  setShowCreateModal(
+                    false
+                  )
+                }
+
+                style={
+                  closeButtonStyle
+                }
+              >
+                ×
+              </button>
+
+            </div>
+
+
+            <form
+              onSubmit={
+                createConstraint
+              }
+
               style={{
-                color:
-                  '#334155',
+                padding: '20px',
               }}
             >
-              READINESS GOVERNANCE:
-            </strong>
+
+              <div
+                style={
+                  modalGridStyle
+                }
+              >
+
+                <ModalField
+                  label="Constraint Category"
+                >
+
+                  <select
+                    required
+
+                    value={
+                      form.category
+                    }
+
+                    onChange={(
+                      event
+                    ) =>
+                      setForm(
+                        (current) => ({
+                          ...current,
+
+                          category:
+                            event.target.value,
+                        })
+                      )
+                    }
+
+                    style={
+                      modalInputStyle
+                    }
+                  >
+                    {CATEGORY_OPTIONS.map(
+                      (option) => (
+
+                        <option
+                          key={
+                            option.value
+                          }
+                          value={
+                            option.value
+                          }
+                        >
+                          {option.label}
+                        </option>
+
+                      )
+                    )}
+                  </select>
+
+                </ModalField>
 
 
-            <span>
-              Open = Blocking
-            </span>
+                <ModalField
+                  label="Priority"
+                >
+
+                  <select
+                    value={
+                      form.priority
+                    }
+
+                    onChange={(
+                      event
+                    ) =>
+                      setForm(
+                        (current) => ({
+                          ...current,
+
+                          priority:
+                            event.target.value,
+                        })
+                      )
+                    }
+
+                    style={
+                      modalInputStyle
+                    }
+                  >
+                    {PRIORITY_OPTIONS.map(
+                      (option) => (
+
+                        <option
+                          key={
+                            option.value
+                          }
+                          value={
+                            option.value
+                          }
+                        >
+                          {option.label}
+                        </option>
+
+                      )
+                    )}
+                  </select>
+
+                </ModalField>
+
+              </div>
 
 
-            <span>
-              In Progress = Blocking
-            </span>
+              <ModalField
+                label="What is blocking the work?"
+              >
+
+                <input
+                  type="text"
+                  required
+
+                  value={
+                    form.title
+                  }
+
+                  placeholder="Example: Approved structural drawing unavailable"
+
+                  onChange={(
+                    event
+                  ) =>
+                    setForm(
+                      (current) => ({
+                        ...current,
+
+                        title:
+                          event.target.value,
+                      })
+                    )
+                  }
+
+                  style={
+                    modalInputStyle
+                  }
+                />
+
+              </ModalField>
 
 
-            <span>
-              Waiting = Blocking
-            </span>
+              <div
+                style={
+                  modalGridStyle
+                }
+              >
+
+                <ModalField
+                  label="Responsible Party"
+                >
+
+                  <input
+                    type="text"
+                    required
+
+                    value={
+                      form.responsible_party
+                    }
+
+                    placeholder="Company or responsible person"
+
+                    onChange={(
+                      event
+                    ) =>
+                      setForm(
+                        (current) => ({
+                          ...current,
+
+                          responsible_party:
+                            event.target.value,
+                        })
+                      )
+                    }
+
+                    style={
+                      modalInputStyle
+                    }
+                  />
+
+                </ModalField>
 
 
-            <span>
-              Resolved = Still Blocking
-            </span>
+                <ModalField
+                  label="Due Date"
+                >
+
+                  <input
+                    type="date"
+                    required
+
+                    value={
+                      form.required_by_date
+                    }
+
+                    onChange={(
+                      event
+                    ) =>
+                      setForm(
+                        (current) => ({
+                          ...current,
+
+                          required_by_date:
+                            event.target.value,
+                        })
+                      )
+                    }
+
+                    style={
+                      modalInputStyle
+                    }
+                  />
+
+                </ModalField>
+
+              </div>
 
 
-            <span>
-              Cleared = Released
-            </span>
+              <ModalField
+                label="Required Action"
+              >
+
+                <textarea
+                  required
+                  rows={3}
+
+                  value={
+                    form.action_required
+                  }
+
+                  placeholder="Example: Issue approved IFC drawing before production release"
+
+                  onChange={(
+                    event
+                  ) =>
+                    setForm(
+                      (current) => ({
+                        ...current,
+
+                        action_required:
+                          event.target.value,
+                      })
+                    )
+                  }
+
+                  style={
+                    modalTextareaStyle
+                  }
+                />
+
+              </ModalField>
 
 
-            <span>
-              Cancelled = Released
-            </span>
+              <ModalField
+                label="Notes"
+              >
+
+                <textarea
+                  rows={3}
+
+                  value={
+                    form.description
+                  }
+
+                  placeholder="Additional context, impact, background or observations..."
+
+                  onChange={(
+                    event
+                  ) =>
+                    setForm(
+                      (current) => ({
+                        ...current,
+
+                        description:
+                          event.target.value,
+                      })
+                    )
+                  }
+
+                  style={
+                    modalTextareaStyle
+                  }
+                />
+
+              </ModalField>
+
+
+              <label
+                style={
+                  blockingToggleStyle
+                }
+              >
+
+                <input
+                  type="checkbox"
+
+                  checked={
+                    form.blocking
+                  }
+
+                  onChange={(
+                    event
+                  ) =>
+                    setForm(
+                      (current) => ({
+                        ...current,
+
+                        blocking:
+                          event.target.checked,
+                      })
+                    )
+                  }
+                />
+
+
+                <div>
+
+                  <strong>
+                    Blocking Constraint
+                  </strong>
+
+
+                  <div
+                    style={{
+                      marginTop: '3px',
+                      color: '#64748b',
+                      fontSize: '9px',
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Blocking constraints can affect production readiness
+                    until formally cleared.
+                  </div>
+
+                </div>
+
+              </label>
+
+
+              <div
+                style={
+                  governanceBoxStyle
+                }
+              >
+                New manual constraints start as{' '}
+                <strong>OPEN</strong>. Creation is automatically
+                recorded in Action History. A constraint that later
+                reaches <strong>RESOLVED</strong> remains active until
+                its resolution is verified and the constraint becomes{' '}
+                <strong>CLEARED</strong>.
+              </div>
+
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '8px',
+                  marginTop: '20px',
+                }}
+              >
+
+                <button
+                  type="button"
+
+                  disabled={
+                    creatingConstraint
+                  }
+
+                  onClick={() =>
+                    setShowCreateModal(
+                      false
+                    )
+                  }
+
+                  style={
+                    secondaryButtonStyle
+                  }
+                >
+                  Cancel
+                </button>
+
+
+                <button
+                  type="submit"
+
+                  disabled={
+                    creatingConstraint
+                  }
+
+                  style={
+                    creatingConstraint
+                      ? disabledPrimaryButtonStyle
+                      : primaryButtonStyle
+                  }
+                >
+                  {creatingConstraint
+                    ? 'Creating...'
+                    : 'Create Constraint'}
+                </button>
+
+              </div>
+
+            </form>
 
           </div>
 
-        </>
+        </div>
+
+      )}
+
+
+      {/* ====================================================
+          ACTION HISTORY MODAL
+      ===================================================== */}
+
+      {showHistoryModal &&
+        historyConstraint && (
+
+        <div
+          style={
+            modalOverlayStyle
+          }
+        >
+
+          <div
+            style={
+              historyModalStyle
+            }
+          >
+
+            <div
+              style={
+                modalHeaderStyle
+              }
+            >
+
+              <div>
+
+                <div
+                  style={
+                    modalEyebrowStyle
+                  }
+                >
+                  ACTION HISTORY
+                </div>
+
+
+                <h2
+                  style={
+                    modalTitleStyle
+                  }
+                >
+                  {getConstraintReference(
+                    historyConstraint.id
+                  )}
+                </h2>
+
+
+                <p
+                  style={
+                    modalDescriptionStyle
+                  }
+                >
+                  {historyConstraint.title}
+                </p>
+
+              </div>
+
+
+              <button
+                type="button"
+
+                onClick={
+                  closeConstraintHistory
+                }
+
+                style={
+                  closeButtonStyle
+                }
+              >
+                ×
+              </button>
+
+            </div>
+
+
+            <div
+              style={{
+                padding: '20px',
+              }}
+            >
+
+              {/* CURRENT STATE */}
+
+              <div
+                style={
+                  historyCurrentStateStyle
+                }
+              >
+
+                <div>
+
+                  <div
+                    style={
+                      historyMetaLabelStyle
+                    }
+                  >
+                    CURRENT STATUS
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '4px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {getStatusLabel(
+                      historyConstraint.status
+                    )}
+                  </div>
+
+                </div>
+
+
+                <div>
+
+                  <div
+                    style={
+                      historyMetaLabelStyle
+                    }
+                  >
+                    RESPONSIBLE
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '4px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {historyConstraint
+                      .responsible_party ||
+                      '—'}
+                  </div>
+
+                </div>
+
+
+                <div>
+
+                  <div
+                    style={
+                      historyMetaLabelStyle
+                    }
+                  >
+                    TARGET DATE
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '4px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {formatDate(
+                      getDueDate(
+                        historyConstraint
+                      )
+                    )}
+                  </div>
+
+                </div>
+
+              </div>
+
+
+              {historyError && (
+
+                <div
+                  style={{
+                    marginBottom: '14px',
+                    padding: '10px 12px',
+                    border:
+                      '1px solid #fecaca',
+                    borderRadius: '6px',
+                    background: '#fef2f2',
+                    color: '#b91c1c',
+                    fontSize: '11px',
+                  }}
+                >
+                  {historyError}
+                </div>
+
+              )}
+
+
+              {loadingHistory ? (
+
+                <div
+                  style={
+                    historyEmptyStyle
+                  }
+                >
+                  Loading Action History...
+                </div>
+
+              ) : constraintHistory.length ===
+                0 ? (
+
+                <div
+                  style={
+                    historyEmptyStyle
+                  }
+                >
+                  No Action History has been recorded for this
+                  constraint yet.
+                </div>
+
+              ) : (
+
+                <div
+                  style={{
+                    position: 'relative',
+                  }}
+                >
+
+                  {constraintHistory.map(
+                    (
+                      entry,
+                      index
+                    ) => {
+
+                      const hasStatusChange =
+                        entry.status_from !==
+                          entry.status_to &&
+                        (
+                          entry.status_from ||
+                          entry.status_to
+                        );
+
+
+                      const hasDateChange =
+                        entry
+                          .previous_target_resolution_date !==
+                          entry
+                            .new_target_resolution_date &&
+                        (
+                          entry
+                            .previous_target_resolution_date ||
+                          entry
+                            .new_target_resolution_date
+                        );
+
+
+                      return (
+
+                        <div
+                          key={
+                            entry.id
+                          }
+
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              '28px minmax(0, 1fr)',
+                            gap: '12px',
+                          }}
+                        >
+
+                          {/* TIMELINE */}
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                            }}
+                          >
+
+                            <div
+                              style={
+                                historyDotStyle
+                              }
+                            />
+
+                            {index <
+                              constraintHistory.length -
+                                1 && (
+
+                              <div
+                                style={
+                                  historyLineStyle
+                                }
+                              />
+
+                            )}
+
+                          </div>
+
+
+                          {/* ENTRY */}
+
+                          <div
+                            style={{
+                              paddingBottom:
+                                index <
+                                constraintHistory.length -
+                                  1
+                                  ? '20px'
+                                  : 0,
+                            }}
+                          >
+
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                justifyContent:
+                                  'space-between',
+                                gap: '12px',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+
+                              <div>
+
+                                <div
+                                  style={
+                                    historyActionTitleStyle
+                                  }
+                                >
+                                  {getActionTypeLabel(
+                                    entry.action_type
+                                  )}
+                                </div>
+
+
+                                <div
+                                  style={
+                                    historyActorStyle
+                                  }
+                                >
+                                  {entry.performed_by ||
+                                    'System / Legacy Record'}
+                                </div>
+
+                              </div>
+
+
+                              <div
+                                style={
+                                  historyTimestampStyle
+                                }
+                              >
+                                {formatDateTime(
+                                  entry.created_at
+                                )}
+                              </div>
+
+                            </div>
+
+
+                            {(hasStatusChange ||
+                              hasDateChange ||
+                              entry.comment) && (
+
+                              <div
+                                style={
+                                  historyEntryBoxStyle
+                                }
+                              >
+
+                                {hasStatusChange && (
+
+                                  <div
+                                    style={
+                                      historyChangeRowStyle
+                                    }
+                                  >
+
+                                    <span
+                                      style={
+                                        historyChangeLabelStyle
+                                      }
+                                    >
+                                      Status
+                                    </span>
+
+                                    <span>
+                                      {entry.status_from
+                                        ? getStatusLabel(
+                                            entry.status_from
+                                          )
+                                        : '—'}
+
+                                      {' → '}
+
+                                      {entry.status_to
+                                        ? getStatusLabel(
+                                            entry.status_to
+                                          )
+                                        : '—'}
+                                    </span>
+
+                                  </div>
+
+                                )}
+
+
+                                {hasDateChange && (
+
+                                  <div
+                                    style={
+                                      historyChangeRowStyle
+                                    }
+                                  >
+
+                                    <span
+                                      style={
+                                        historyChangeLabelStyle
+                                      }
+                                    >
+                                      Target Date
+                                    </span>
+
+                                    <span>
+                                      {formatDate(
+                                        entry
+                                          .previous_target_resolution_date
+                                      )}
+
+                                      {' → '}
+
+                                      {formatDate(
+                                        entry
+                                          .new_target_resolution_date
+                                      )}
+                                    </span>
+
+                                  </div>
+
+                                )}
+
+
+                                {entry.comment && (
+
+                                  <div
+                                    style={{
+                                      marginTop:
+                                        hasStatusChange ||
+                                        hasDateChange
+                                          ? '9px'
+                                          : 0,
+
+                                      paddingTop:
+                                        hasStatusChange ||
+                                        hasDateChange
+                                          ? '9px'
+                                          : 0,
+
+                                      borderTop:
+                                        hasStatusChange ||
+                                        hasDateChange
+                                          ? '1px solid #e2e8f0'
+                                          : 'none',
+
+                                      color: '#475569',
+                                      fontSize: '10px',
+                                      lineHeight: 1.55,
+                                    }}
+                                  >
+                                    {entry.comment}
+                                  </div>
+
+                                )}
+
+                              </div>
+
+                            )}
+
+                          </div>
+
+                        </div>
+
+                      );
+
+                    }
+                  )}
+
+                </div>
+
+              )}
+
+
+              <div
+                style={
+                  historyAuditNoticeStyle
+                }
+              >
+                Action History is read-only. Historical records are
+                retained as an audit trail of constraint management
+                decisions and lifecycle changes.
+              </div>
+
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginTop: '18px',
+                }}
+              >
+
+                <button
+                  type="button"
+
+                  onClick={
+                    closeConstraintHistory
+                  }
+
+                  style={
+                    secondaryButtonStyle
+                  }
+                >
+                  Close
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
 
       )}
 
@@ -3476,7 +4129,7 @@ export default function ConstraintLogPage() {
 
 
 // ============================================================
-// SUMMARY CARD
+// COMPONENTS
 // ============================================================
 
 function SummaryCard({
@@ -3488,39 +4141,22 @@ function SummaryCard({
   return (
     <div
       style={{
-        minHeight:
-          '92px',
-
-        padding:
-          '14px 15px',
-
+        minHeight: '92px',
+        padding: '14px 15px',
         border:
           '1px solid #e2e8f0',
-
-        borderRadius:
-          '7px',
-
-        background:
-          '#ffffff',
+        borderRadius: '7px',
+        background: '#ffffff',
       }}
     >
 
       <div
         style={{
-          color:
-            '#64748b',
-
-          fontSize:
-            '9px',
-
-          fontWeight:
-            800,
-
-          letterSpacing:
-            '0.04em',
-
-          textTransform:
-            'uppercase',
+          color: '#64748b',
+          fontSize: '9px',
+          fontWeight: 800,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
         }}
       >
         {label}
@@ -3529,20 +4165,10 @@ function SummaryCard({
 
       <div
         style={{
-          marginTop:
-            '5px',
-
-          color:
-            '#0f172a',
-
-          fontSize:
-            '25px',
-
-          fontWeight:
-            900,
-
-          lineHeight:
-            1,
+          marginTop: '5px',
+          color: '#0f172a',
+          fontSize: '25px',
+          fontWeight: 900,
         }}
       >
         {value}
@@ -3551,21 +4177,63 @@ function SummaryCard({
 
       <div
         style={{
-          marginTop:
-            '7px',
-
-          color:
-            '#94a3b8',
-
-          fontSize:
-            '9px',
-
-          lineHeight:
-            1.35,
+          marginTop: '7px',
+          color: '#94a3b8',
+          fontSize: '9px',
         }}
       >
         {description}
       </div>
+
+    </div>
+  );
+}
+
+
+function FilterField({
+  label,
+  children,
+}) {
+
+  return (
+    <div>
+
+      <label
+        style={
+          filterLabelStyle
+        }
+      >
+        {label}
+      </label>
+
+      {children}
+
+    </div>
+  );
+}
+
+
+function ModalField({
+  label,
+  children,
+}) {
+
+  return (
+    <div
+      style={{
+        marginBottom: '15px',
+      }}
+    >
+
+      <label
+        style={
+          modalLabelStyle
+        }
+      >
+        {label}
+      </label>
+
+      {children}
 
     </div>
   );
@@ -3577,353 +4245,456 @@ function SummaryCard({
 // ============================================================
 
 const labelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '5px',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
+  display: 'block',
+  marginBottom: '5px',
+  color: '#334155',
+  fontSize: '11px',
+  fontWeight: 700,
 };
 
 
 const selectStyle = {
-  width:
-    '100%',
-
-  height:
-    '36px',
-
-  padding:
-    '0 10px',
-
+  width: '100%',
+  height: '36px',
+  padding: '0 10px',
   border:
     '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '11px',
-
-  outline:
-    'none',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#0f172a',
+  fontSize: '11px',
 };
 
 
 const filterLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '4px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    800,
-
-  textTransform:
-    'uppercase',
+  display: 'block',
+  marginBottom: '4px',
+  color: '#64748b',
+  fontSize: '9px',
+  fontWeight: 800,
+  textTransform: 'uppercase',
 };
 
 
 const filterInputStyle = {
-  width:
-    '100%',
-
-  height:
-    '34px',
-
-  padding:
-    '0 8px',
-
+  width: '100%',
+  height: '34px',
+  padding: '0 8px',
   border:
     '1px solid #cbd5e1',
+  borderRadius: '5px',
+  background: '#ffffff',
+  color: '#0f172a',
+  fontSize: '10px',
+};
 
-  borderRadius:
-    '5px',
 
-  background:
-    '#ffffff',
+const primaryButtonStyle = {
+  height: '36px',
+  padding: '0 13px',
+  border:
+    '1px solid #2563eb',
+  borderRadius: '6px',
+  background: '#2563eb',
+  color: '#ffffff',
+  fontSize: '11px',
+  fontWeight: 800,
+  cursor: 'pointer',
+};
 
-  color:
-    '#0f172a',
 
-  fontSize:
-    '10px',
-
-  outline:
-    'none',
+const disabledPrimaryButtonStyle = {
+  ...primaryButtonStyle,
+  opacity: 0.5,
+  cursor: 'not-allowed',
 };
 
 
 const secondaryButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 12px',
-
+  height: '36px',
+  padding: '0 12px',
   border:
     '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#334155',
+  fontSize: '11px',
+  fontWeight: 700,
+  cursor: 'pointer',
 };
 
 
 const disabledButtonStyle = {
   ...secondaryButtonStyle,
-
-  opacity:
-    0.45,
-
-  cursor:
-    'not-allowed',
+  opacity: 0.45,
+  cursor: 'not-allowed',
 };
 
 
-const clearFiltersButtonStyle = {
-  padding:
-    '4px 7px',
-
+const historyButtonStyle = {
+  height: '28px',
+  padding: '0 9px',
   border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '4px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
+    '1px solid #bfdbfe',
+  borderRadius: '5px',
+  background: '#eff6ff',
+  color: '#1d4ed8',
+  fontSize: '9px',
+  fontWeight: 800,
+  cursor: 'pointer',
 };
 
 
 const headerCellStyle = {
-  padding:
-    '7px 6px',
-
+  padding: '7px 6px',
   border:
     '1px solid #cbd5e1',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'center',
-
-  verticalAlign:
-    'middle',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
-
-  letterSpacing:
-    '0.02em',
+  background: '#f8fafc',
+  color: '#334155',
+  textAlign: 'center',
+  fontSize: '8px',
+  fontWeight: 900,
 };
 
 
 const bodyCellStyle = {
-  padding:
-    '6px',
-
+  padding: '7px',
   border:
     '1px solid #e2e8f0',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'center',
-
-  verticalAlign:
-    'middle',
-
-  fontSize:
-    '9px',
+  background: '#ffffff',
+  color: '#334155',
+  textAlign: 'center',
+  verticalAlign: 'middle',
+  fontSize: '9px',
 };
 
 
 const badgeBaseStyle = {
-  display:
-    'inline-flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  maxWidth:
-    '100%',
-
-  padding:
-    '4px 7px',
-
-  borderRadius:
-    '999px',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
-
-  whiteSpace:
-    'nowrap',
-};
-
-
-const packageBadgeStyle = {
-  display:
-    'inline-flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  minWidth:
-    '38px',
-
-  padding:
-    '3px 5px',
-
-  border:
-    '1px solid #bfdbfe',
-
-  borderRadius:
-    '4px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
-};
-
-
-const sourceBadgeStyle = {
-  display:
-    'inline-flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  padding:
-    '4px 6px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '4px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    700,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '4px 7px',
+  borderRadius: '999px',
+  fontSize: '8px',
+  fontWeight: 900,
 };
 
 
 const mutedStyle = {
-  color:
-    '#94a3b8',
+  color: '#94a3b8',
+  fontSize: '8px',
+};
 
-  fontSize:
-    '8px',
 
-  fontWeight:
-    600,
+const blockingTextStyle = {
+  marginTop: '3px',
+  color: '#b91c1c',
+  fontSize: '8px',
+  fontWeight: 900,
+};
+
+
+const resolvedTextStyle = {
+  marginTop: '4px',
+  color: '#7c3aed',
+  fontSize: '8px',
+  fontWeight: 700,
+};
+
+
+const loadingStyle = {
+  padding: '50px 20px',
+  color: '#64748b',
+  textAlign: 'center',
+  fontSize: '12px',
 };
 
 
 const emptyStyle = {
-  padding:
-    '50px 20px',
-
+  padding: '50px 20px',
   border:
     '1px solid #e2e8f0',
+  background: '#ffffff',
+  color: '#64748b',
+  textAlign: 'center',
+  fontSize: '12px',
+};
 
+
+const modalOverlayStyle = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 7000,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px',
   background:
-    '#ffffff',
+    'rgba(6,27,47,0.60)',
+};
 
-  color:
-    '#64748b',
 
-  textAlign:
-    'center',
+const modalStyle = {
+  width:
+    'min(680px, 96vw)',
+  maxHeight: '92vh',
+  overflowY: 'auto',
+  borderRadius: '10px',
+  background: '#ffffff',
+  boxShadow:
+    '0 24px 70px rgba(15,23,42,0.30)',
+};
 
-  fontSize:
-    '12px',
+
+const historyModalStyle = {
+  width:
+    'min(760px, 96vw)',
+  maxHeight: '92vh',
+  overflowY: 'auto',
+  borderRadius: '10px',
+  background: '#ffffff',
+  boxShadow:
+    '0 24px 70px rgba(15,23,42,0.30)',
+};
+
+
+const modalHeaderStyle = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent:
+    'space-between',
+  gap: '20px',
+  padding: '18px 20px',
+  borderBottom:
+    '1px solid #e2e8f0',
+};
+
+
+const modalEyebrowStyle = {
+  color: '#2563eb',
+  fontSize: '9px',
+  fontWeight: 900,
+  letterSpacing: '0.08em',
+};
+
+
+const modalTitleStyle = {
+  margin: '4px 0 0',
+  fontSize: '19px',
+  fontWeight: 900,
+};
+
+
+const modalDescriptionStyle = {
+  margin: '6px 0 0',
+  color: '#64748b',
+  fontSize: '10px',
+  lineHeight: 1.5,
+};
+
+
+const closeButtonStyle = {
+  width: '34px',
+  height: '34px',
+  border:
+    '1px solid #e2e8f0',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#64748b',
+  fontSize: '20px',
+  cursor: 'pointer',
+};
+
+
+const modalGridStyle = {
+  display: 'grid',
+  gridTemplateColumns:
+    'repeat(2, minmax(0, 1fr))',
+  gap: '12px',
+};
+
+
+const modalLabelStyle = {
+  display: 'block',
+  marginBottom: '6px',
+  color: '#334155',
+  fontSize: '10px',
+  fontWeight: 800,
+};
+
+
+const modalInputStyle = {
+  width: '100%',
+  height: '38px',
+  padding: '0 9px',
+  border:
+    '1px solid #cbd5e1',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#0f172a',
+  fontSize: '11px',
+  outline: 'none',
+};
+
+
+const modalTextareaStyle = {
+  width: '100%',
+  minHeight: '82px',
+  padding: '9px',
+  border:
+    '1px solid #cbd5e1',
+  borderRadius: '6px',
+  background: '#ffffff',
+  color: '#0f172a',
+  fontSize: '11px',
+  fontFamily: 'inherit',
+  resize: 'vertical',
+  outline: 'none',
+};
+
+
+const blockingToggleStyle = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: '10px',
+  padding: '11px',
+  border:
+    '1px solid #e2e8f0',
+  borderRadius: '6px',
+  background: '#f8fafc',
+  color: '#334155',
+  fontSize: '10px',
+  cursor: 'pointer',
+};
+
+
+const governanceBoxStyle = {
+  marginTop: '14px',
+  padding: '10px 11px',
+  border:
+    '1px solid #ddd6fe',
+  borderRadius: '6px',
+  background: '#f5f3ff',
+  color: '#5b21b6',
+  fontSize: '9px',
+  lineHeight: 1.5,
+};
+
+
+// ============================================================
+// ACTION HISTORY STYLES
+// ============================================================
+
+const historyCurrentStateStyle = {
+  display: 'grid',
+  gridTemplateColumns:
+    'repeat(3, minmax(0, 1fr))',
+  gap: '10px',
+  marginBottom: '22px',
+  padding: '12px',
+  border:
+    '1px solid #e2e8f0',
+  borderRadius: '7px',
+  background: '#f8fafc',
+  color: '#334155',
+  fontSize: '10px',
+};
+
+
+const historyMetaLabelStyle = {
+  color: '#94a3b8',
+  fontSize: '8px',
+  fontWeight: 900,
+  letterSpacing: '0.04em',
+};
+
+
+const historyDotStyle = {
+  width: '10px',
+  height: '10px',
+  flexShrink: 0,
+  marginTop: '4px',
+  border:
+    '2px solid #2563eb',
+  borderRadius: '50%',
+  background: '#ffffff',
+};
+
+
+const historyLineStyle = {
+  width: '2px',
+  minHeight: '76px',
+  flex: 1,
+  marginTop: '4px',
+  background: '#dbeafe',
+};
+
+
+const historyActionTitleStyle = {
+  color: '#0f172a',
+  fontSize: '11px',
+  fontWeight: 900,
+};
+
+
+const historyActorStyle = {
+  marginTop: '3px',
+  color: '#64748b',
+  fontSize: '9px',
+  fontWeight: 600,
+};
+
+
+const historyTimestampStyle = {
+  color: '#94a3b8',
+  fontSize: '9px',
+  whiteSpace: 'nowrap',
+};
+
+
+const historyEntryBoxStyle = {
+  marginTop: '9px',
+  padding: '10px 11px',
+  border:
+    '1px solid #e2e8f0',
+  borderRadius: '6px',
+  background: '#f8fafc',
+};
+
+
+const historyChangeRowStyle = {
+  display: 'grid',
+  gridTemplateColumns:
+    '90px minmax(0, 1fr)',
+  gap: '8px',
+  marginBottom: '5px',
+  color: '#334155',
+  fontSize: '9px',
+};
+
+
+const historyChangeLabelStyle = {
+  color: '#64748b',
+  fontWeight: 800,
+};
+
+
+const historyEmptyStyle = {
+  padding: '38px 20px',
+  color: '#64748b',
+  textAlign: 'center',
+  fontSize: '11px',
+};
+
+
+const historyAuditNoticeStyle = {
+  marginTop: '20px',
+  padding: '10px 11px',
+  border:
+    '1px solid #dbeafe',
+  borderRadius: '6px',
+  background: '#eff6ff',
+  color: '#1e40af',
+  fontSize: '9px',
+  lineHeight: 1.5,
 };
