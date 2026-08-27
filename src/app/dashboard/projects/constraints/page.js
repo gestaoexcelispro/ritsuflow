@@ -12,7 +12,7 @@ import { supabase } from '../../../../lib/supabase';
 
 // ============================================================
 // RitsuFlow™
-// CONSTRAINT MANAGEMENT — SPLIT WORKSPACE
+// CONSTRAINT MANAGEMENT — CENTERED MODAL WORKSPACE
 // ============================================================
 
 
@@ -4115,19 +4115,10 @@ export default function ConstraintLogPage() {
 
 
           {/* ==================================================
-              SPLIT WORKSPACE
+              CONSTRAINT WORKSPACE
           ================================================== */}
 
-          <div
-            style={{
-              ...splitWorkspaceStyle,
-
-              gridTemplateColumns:
-                managedConstraint
-                  ? 'minmax(0, 1fr) minmax(390px, 36%)'
-                  : 'minmax(0, 1fr)',
-            }}
-          >
+          <div style={splitWorkspaceStyle}>
 
             {/* ================================================
                 CONSTRAINT REGISTER
@@ -4632,12 +4623,19 @@ export default function ConstraintLogPage() {
 
 
             {/* ================================================
-                MANAGEMENT DRAWER
+                CENTERED CONSTRAINT MANAGEMENT MODAL
             ================================================ */}
 
             {managedConstraint && (
 
-              <aside style={drawerStyle}>
+              <div style={managementModalOverlayStyle}>
+
+                <aside
+                  style={drawerStyle}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Constraint Management"
+                >
 
                 <div style={drawerHeaderStyle}>
 
@@ -6557,7 +6555,9 @@ export default function ConstraintLogPage() {
 
                 </div>
 
-              </aside>
+                </aside>
+
+              </div>
             )}
 
           </div>
@@ -8430,13 +8430,10 @@ const registerFilterInputStyle = {
 
 const splitWorkspaceStyle = {
   display:
-    'grid',
+    'block',
 
-  gap:
-    '12px',
-
-  alignItems:
-    'start',
+  width:
+    '100%',
 };
 
 
@@ -8905,24 +8902,57 @@ const manageButtonStyle = {
 
 
 // ============================================================
-// DRAWER
+// CENTERED CONSTRAINT MANAGEMENT MODAL
 // ============================================================
 
-const drawerStyle = {
+const managementModalOverlayStyle = {
   position:
-    'sticky',
+    'fixed',
 
-  top:
-    '14px',
+  inset:
+    0,
 
+  zIndex:
+    9800,
+
+  display:
+    'flex',
+
+  alignItems:
+    'center',
+
+  justifyContent:
+    'center',
+
+  padding:
+    '24px',
+
+  background:
+    'rgba(15,23,42,0.58)',
+
+  backdropFilter:
+    'blur(2px)',
+};
+
+
+const drawerStyle = {
   display:
     'flex',
 
   flexDirection:
     'column',
 
+  width:
+    'min(1180px, calc(100vw - 48px))',
+
+  height:
+    'min(880px, calc(100vh - 48px))',
+
+  maxWidth:
+    '1180px',
+
   maxHeight:
-    'calc(100vh - 28px)',
+    'calc(100vh - 48px)',
 
   overflow:
     'hidden',
@@ -8931,13 +8961,13 @@ const drawerStyle = {
     '1px solid #cbd5e1',
 
   borderRadius:
-    '10px',
+    '14px',
 
   background:
     '#ffffff',
 
   boxShadow:
-    '0 12px 36px rgba(15,23,42,0.12)',
+    '0 28px 80px rgba(15,23,42,0.32)',
 };
 
 
@@ -8952,13 +8982,16 @@ const drawerHeaderStyle = {
     '12px',
 
   padding:
-    '14px',
+    '16px 18px',
 
   borderBottom:
     '1px solid #e2e8f0',
 
   background:
     '#ffffff',
+
+  flexShrink:
+    0,
 };
 
 
@@ -9096,16 +9129,19 @@ const drawerSummaryStyle = {
     'repeat(3,minmax(0,1fr))',
 
   gap:
-    '6px',
+    '8px',
 
   padding:
-    '9px 12px',
+    '10px 18px',
 
   borderBottom:
     '1px solid #e2e8f0',
 
   background:
     '#f8fafc',
+
+  flexShrink:
+    0,
 };
 
 
@@ -9130,6 +9166,9 @@ const drawerTabsStyle = {
 
   borderBottom:
     '1px solid #e2e8f0',
+
+  flexShrink:
+    0,
 };
 
 
@@ -9158,11 +9197,14 @@ const drawerBodyStyle = {
   flex:
     1,
 
+  minHeight:
+    0,
+
   overflowY:
     'auto',
 
   padding:
-    '10px',
+    '16px 18px',
 
   background:
     '#f8fafc',
@@ -9183,13 +9225,16 @@ const drawerFooterStyle = {
     '8px',
 
   padding:
-    '9px 12px',
+    '10px 18px',
 
   borderTop:
     '1px solid #e2e8f0',
 
   background:
     '#ffffff',
+
+  flexShrink:
+    0,
 };
 
 
