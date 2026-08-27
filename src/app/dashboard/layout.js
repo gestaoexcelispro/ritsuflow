@@ -202,11 +202,6 @@ export default function DashboardLayout({
 
   // =======================================================
   // COLLAPSIBLE NAVIGATION GROUPS
-  //
-  // true  = module/pages visible
-  // false = module/pages hidden
-  //
-  // All modules start open.
   // =======================================================
 
   const [
@@ -433,9 +428,6 @@ export default function DashboardLayout({
 
   // =======================================================
   // KEEP ACTIVE MODULE OPEN
-  //
-  // If user navigates directly to a page, its parent module
-  // automatically opens.
   // =======================================================
 
   useEffect(
@@ -593,15 +585,12 @@ export default function DashboardLayout({
 
         <button
           type="button"
-
           className={
             styles.mobileOverlay
           }
-
           onClick={
             closeMobileNavigation
           }
-
           aria-label="Close navigation"
         />
 
@@ -619,52 +608,22 @@ export default function DashboardLayout({
       >
 
         {/* =================================================
-            BRAND
+            SIDEBAR TOP SPACER
+
+            Brand was intentionally moved into the topbar.
         ================================================= */}
 
         <div
-          className={
-            styles.sidebarHeader
-          }
-        >
+          style={{
+            height:
+              isCollapsed
+                ? '18px'
+                : '26px',
 
-          <Link
-            href="/"
-
-            className={
-              styles.brand
-            }
-
-            onClick={
-              closeMobileNavigation
-            }
-
-            aria-label="RitsuFlow home"
-          >
-
-            <Image
-              src="/logo-white.png"
-
-              alt="RitsuFlow"
-
-              width={
-                1600
-              }
-
-              height={
-                900
-              }
-
-              priority
-
-              className={
-                styles.brandLogo
-              }
-            />
-
-          </Link>
-
-        </div>
+            flexShrink:
+              0,
+          }}
+        />
 
 
         {/* =================================================
@@ -675,7 +634,6 @@ export default function DashboardLayout({
           className={
             styles.navigation
           }
-
           aria-label="RitsuFlow navigation"
         >
 
@@ -702,7 +660,6 @@ export default function DashboardLayout({
                   className={
                     styles.navigationGroup
                   }
-
                   key={
                     group.label
                   }
@@ -714,23 +671,19 @@ export default function DashboardLayout({
 
                   <button
                     type="button"
-
                     onClick={() =>
                       toggleGroup(
                         group.label
                       )
                     }
-
                     title={
                       isGroupExpanded
                         ? `Hide ${group.label}`
                         : `Show ${group.label}`
                     }
-
                     aria-expanded={
                       isGroupExpanded
                     }
-
                     style={{
                       display:
                         'flex',
@@ -786,7 +739,6 @@ export default function DashboardLayout({
                         className={
                           styles.navigationLabel
                         }
-
                         style={{
                           margin:
                             0,
@@ -807,7 +759,6 @@ export default function DashboardLayout({
 
                       <span
                         aria-hidden="true"
-
                         style={{
                           display:
                             'inline-flex',
@@ -893,15 +844,12 @@ export default function DashboardLayout({
                               href={
                                 item.href
                               }
-
                               className={
                                 linkClassName
                               }
-
                               onClick={
                                 closeMobileNavigation
                               }
-
                               key={
                                 item.href
                               }
@@ -1043,35 +991,153 @@ export default function DashboardLayout({
             className={
               styles.topbarLeft
             }
+            style={{
+              display:
+                'flex',
+
+              alignItems:
+                'center',
+
+              gap:
+                '14px',
+            }}
           >
+
+            {/* =============================================
+                MENU
+            ============================================= */}
 
             <button
               type="button"
-
               className={
                 styles.menuButton
               }
-
               onClick={
                 toggleNavigation
               }
-
               aria-label="Toggle navigation"
             >
               ☰
             </button>
 
 
+            {/* =============================================
+                BRAND IN TOPBAR
+            ============================================= */}
+
+            <Link
+              href="/"
+              onClick={
+                closeMobileNavigation
+              }
+              aria-label="RitsuFlow home"
+              style={{
+                display:
+                  'flex',
+
+                alignItems:
+                  'center',
+
+                justifyContent:
+                  'center',
+
+                width:
+                  '78px',
+
+                height:
+                  '48px',
+
+                flexShrink:
+                  0,
+
+                padding:
+                  '6px 8px',
+
+                borderRadius:
+                  '9px',
+
+                background:
+                  '#387c86',
+
+                textDecoration:
+                  'none',
+
+                overflow:
+                  'hidden',
+              }}
+            >
+
+              <Image
+                src="/logo-white.png"
+                alt="RitsuFlow"
+                width={
+                  1600
+                }
+                height={
+                  900
+                }
+                priority
+                style={{
+                  display:
+                    'block',
+
+                  width:
+                    '100%',
+
+                  height:
+                    '100%',
+
+                  objectFit:
+                    'contain',
+                }}
+              />
+
+            </Link>
+
+
+            {/* =============================================
+                PAGE IDENTITY
+            ============================================= */}
+
             <div
               className={
                 styles.pageIdentity
               }
+              style={{
+                display:
+                  'flex',
+
+                flexDirection:
+                  'column',
+
+                justifyContent:
+                  'center',
+
+                minWidth:
+                  0,
+              }}
             >
 
               <p
                 className={
                   styles.pageCategory
                 }
+                style={{
+                  margin:
+                    0,
+
+                  fontSize:
+                    '12px',
+
+                  lineHeight:
+                    1.2,
+
+                  fontWeight:
+                    800,
+
+                  letterSpacing:
+                    '0.08em',
+                }}
               >
                 {
                   currentCategory
@@ -1083,6 +1149,19 @@ export default function DashboardLayout({
                 className={
                   styles.pageTitle
                 }
+                style={{
+                  margin:
+                    '4px 0 0',
+
+                  fontSize:
+                    '20px',
+
+                  lineHeight:
+                    1.15,
+
+                  fontWeight:
+                    900,
+                }}
               >
                 {
                   currentTitle
