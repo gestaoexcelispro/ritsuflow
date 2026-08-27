@@ -13,27 +13,6 @@ import {
   usePathname,
 } from 'next/navigation'
 
-import {
-  LayoutDashboard,
-  FolderKanban,
-  Settings2,
-  MapPinned,
-  Boxes,
-  ChartNoAxesCombined,
-  ClipboardList,
-  Users,
-  UserRoundCheck,
-  Clock3,
-  CalendarRange,
-  ListTree,
-  CalendarDays,
-  TriangleAlert,
-  Map,
-  TableProperties,
-  ShieldCheck,
-  Building2,
-} from 'lucide-react'
-
 import LogoutButton from '../../components/LogoutButton'
 
 import {
@@ -47,21 +26,257 @@ import styles from './dashboard.module.css'
 // RitsuFlow™
 // DASHBOARD NAVIGATION
 //
-// EXPANDED SIDEBAR
+// No external icon library required.
 //
+// Expanded:
 // [icon] Page Name
 //
-// COLLAPSED SIDEBAR
-//
+// Collapsed:
 // [icon]
-//   ↓ hover
+//    ↓ hover
 // Page Name tooltip
-//
 // ============================================================
 
 
 // ============================================================
-// BASE NAVIGATION
+// INLINE SVG ICON
+// ============================================================
+
+function NavIcon({
+  type,
+  size = 19,
+}) {
+
+  const commonProps = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  }
+
+
+  switch (type) {
+
+    case 'overview':
+      return (
+        <svg {...commonProps}>
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+      )
+
+
+    case 'projects':
+      return (
+        <svg {...commonProps}>
+          <path d="M3 7h6l2 2h10v10H3z" />
+          <path d="M3 7V5h6l2 2" />
+        </svg>
+      )
+
+
+    case 'setup':
+      return (
+        <svg {...commonProps}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.2 19.3a1.7 1.7 0 0 0-1.4.4l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.7 8.2a1.7 1.7 0 0 0-.4-1.4l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.8 4.7a1.7 1.7 0 0 0 1.4-.4l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.1.4.3.7.6 1 .3.2.7.4 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.7.6z" />
+        </svg>
+      )
+
+
+    case 'location':
+      return (
+        <svg {...commonProps}>
+          <path d="M12 21s6-5 6-11a6 6 0 1 0-12 0c0 6 6 11 6 11z" />
+          <circle cx="12" cy="10" r="2" />
+        </svg>
+      )
+
+
+    case 'packages':
+      return (
+        <svg {...commonProps}>
+          <path d="M4 7l8-4 8 4-8 4z" />
+          <path d="M4 12l8 4 8-4" />
+          <path d="M4 17l8 4 8-4" />
+        </svg>
+      )
+
+
+    case 'operations':
+      return (
+        <svg {...commonProps}>
+          <path d="M4 19V9" />
+          <path d="M10 19V5" />
+          <path d="M16 19v-7" />
+          <path d="M22 19V3" />
+          <path d="M2 19h20" />
+        </svg>
+      )
+
+
+    case 'reports':
+      return (
+        <svg {...commonProps}>
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <path d="M9 3h6v4H9z" />
+          <path d="M9 11h6" />
+          <path d="M9 15h6" />
+        </svg>
+      )
+
+
+    case 'workforce':
+      return (
+        <svg {...commonProps}>
+          <circle cx="9" cy="8" r="3" />
+          <circle cx="17" cy="9" r="2" />
+          <path d="M3 20c0-4 2.5-6 6-6s6 2 6 6" />
+          <path d="M15 15c3 0 5 1.7 5 5" />
+        </svg>
+      )
+
+
+    case 'assignment':
+      return (
+        <svg {...commonProps}>
+          <circle cx="9" cy="8" r="3" />
+          <path d="M3 20c0-4 2.5-6 6-6 2.1 0 3.8.7 4.8 2" />
+          <path d="M15 18l2 2 4-5" />
+        </svg>
+      )
+
+
+    case 'attendance':
+      return (
+        <svg {...commonProps}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      )
+
+
+    case 'masterplan':
+      return (
+        <svg {...commonProps}>
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M8 3v4" />
+          <path d="M16 3v4" />
+          <path d="M3 10h18" />
+          <path d="M8 14h3" />
+          <path d="M13 14h3" />
+          <path d="M8 17h3" />
+        </svg>
+      )
+
+
+    case 'lookahead':
+      return (
+        <svg {...commonProps}>
+          <path d="M5 5h6" />
+          <path d="M5 12h10" />
+          <path d="M5 19h14" />
+          <path d="M11 5l3 3-3 3" />
+          <path d="M15 12l3 3-3 3" />
+        </svg>
+      )
+
+
+    case 'weekly':
+      return (
+        <svg {...commonProps}>
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M8 3v4" />
+          <path d="M16 3v4" />
+          <path d="M3 10h18" />
+          <path d="M7 14h2" />
+          <path d="M11 14h2" />
+          <path d="M15 14h2" />
+          <path d="M7 17h2" />
+          <path d="M11 17h2" />
+        </svg>
+      )
+
+
+    case 'constraint':
+      return (
+        <svg {...commonProps}>
+          <path d="M12 3L2.5 20h19z" />
+          <path d="M12 9v4" />
+          <circle cx="12" cy="16.5" r=".7" fill="currentColor" stroke="none" />
+        </svg>
+      )
+
+
+    case 'production':
+      return (
+        <svg {...commonProps}>
+          <path d="M3 20V8l6 3V8l6 3V4h6v16z" />
+          <path d="M7 16h2" />
+          <path d="M12 16h2" />
+          <path d="M17 16h2" />
+        </svg>
+      )
+
+
+    case 'matrix':
+      return (
+        <svg {...commonProps}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18" />
+          <path d="M3 15h18" />
+          <path d="M9 3v18" />
+          <path d="M15 3v18" />
+        </svg>
+      )
+
+
+    case 'users':
+      return (
+        <svg {...commonProps}>
+          <circle cx="9" cy="8" r="3" />
+          <path d="M3 20c0-4 2.5-6 6-6s6 2 6 6" />
+          <path d="M17 8v6" />
+          <path d="M14 11h6" />
+        </svg>
+      )
+
+
+    case 'organizations':
+      return (
+        <svg {...commonProps}>
+          <rect x="5" y="3" width="14" height="18" rx="1" />
+          <path d="M9 7h2" />
+          <path d="M13 7h2" />
+          <path d="M9 11h2" />
+          <path d="M13 11h2" />
+          <path d="M9 15h2" />
+          <path d="M13 15h2" />
+          <path d="M10 21v-3h4v3" />
+        </svg>
+      )
+
+
+    default:
+      return (
+        <svg {...commonProps}>
+          <circle cx="12" cy="12" r="8" />
+        </svg>
+      )
+
+  }
+}
+
+
+// ============================================================
+// NAVIGATION
 // ============================================================
 
 const baseNavigationGroups = [
@@ -74,31 +289,31 @@ const baseNavigationGroups = [
       {
         label: 'Overview',
         href: '/dashboard',
-        icon: LayoutDashboard,
+        icon: 'overview',
       },
 
       {
         label: 'Projects',
         href: '/dashboard/projects',
-        icon: FolderKanban,
+        icon: 'projects',
       },
 
       {
         label: 'Project Setup',
         href: '/dashboard/projects/setup',
-        icon: Settings2,
+        icon: 'setup',
       },
 
       {
         label: 'Location Structure',
         href: '/dashboard/projects/locations',
-        icon: MapPinned,
+        icon: 'location',
       },
 
       {
         label: 'Work Packages',
         href: '/dashboard/projects/work-packages',
-        icon: Boxes,
+        icon: 'packages',
       },
 
     ],
@@ -113,31 +328,31 @@ const baseNavigationGroups = [
       {
         label: 'Operational Dashboard',
         href: '/dashboard/projects/operations',
-        icon: ChartNoAxesCombined,
+        icon: 'operations',
       },
 
       {
         label: 'Daily Reports',
         href: '/dashboard/projects/daily-reports',
-        icon: ClipboardList,
+        icon: 'reports',
       },
 
       {
         label: 'Workforce',
         href: '/dashboard/field-management/workforce',
-        icon: Users,
+        icon: 'workforce',
       },
 
       {
         label: 'Project Assignments',
         href: '/dashboard/field-management/workforce/assignments',
-        icon: UserRoundCheck,
+        icon: 'assignment',
       },
 
       {
         label: 'Attendance',
         href: '/dashboard/field-management/workforce/attendance',
-        icon: Clock3,
+        icon: 'attendance',
       },
 
     ],
@@ -152,25 +367,25 @@ const baseNavigationGroups = [
       {
         label: 'Master Plan',
         href: '/dashboard/projetos/masterplan',
-        icon: CalendarRange,
+        icon: 'masterplan',
       },
 
       {
         label: 'Lookahead Planning',
         href: '/dashboard/projetos/lookahead',
-        icon: ListTree,
+        icon: 'lookahead',
       },
 
       {
         label: 'Weekly Planning',
         href: '/dashboard/projetos/semanal',
-        icon: CalendarDays,
+        icon: 'weekly',
       },
 
       {
         label: 'Constraint Log',
         href: '/dashboard/projects/constraints',
-        icon: TriangleAlert,
+        icon: 'constraint',
       },
 
     ],
@@ -185,13 +400,13 @@ const baseNavigationGroups = [
       {
         label: 'Production Map',
         href: '/dashboard/diretoria/mapa',
-        icon: Map,
+        icon: 'production',
       },
 
       {
         label: 'Status Matrix',
         href: '/dashboard/projetos/matriz-status',
-        icon: TableProperties,
+        icon: 'matrix',
       },
 
     ],
@@ -206,7 +421,7 @@ const baseNavigationGroups = [
       {
         label: 'Users & Access',
         href: '/dashboard/administration/users',
-        icon: ShieldCheck,
+        icon: 'users',
       },
 
     ],
@@ -214,10 +429,6 @@ const baseNavigationGroups = [
 
 ]
 
-
-// ============================================================
-// PLATFORM NAVIGATION
-// ============================================================
 
 const platformNavigationGroup = {
 
@@ -228,7 +439,7 @@ const platformNavigationGroup = {
     {
       label: 'Organizations',
       href: '/dashboard/platform/organizations',
-      icon: Building2,
+      icon: 'organizations',
     },
 
   ],
@@ -237,7 +448,7 @@ const platformNavigationGroup = {
 
 
 // ============================================================
-// DASHBOARD LAYOUT
+// DASHBOARD
 // ============================================================
 
 export default function DashboardLayout({
@@ -257,7 +468,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // SIDEBAR STATE
+  // SIDEBAR
   // ==========================================================
 
   const [
@@ -275,7 +486,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // TOOLTIP STATE
+  // TOOLTIP
   // ==========================================================
 
   const [
@@ -286,7 +497,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // PLATFORM OWNER
+  // PLATFORM
   // ==========================================================
 
   const [
@@ -304,7 +515,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // COLLAPSIBLE GROUPS
+  // MODULE EXPANSION
   // ==========================================================
 
   const [
@@ -335,7 +546,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // PLATFORM OWNER AUTHORIZATION
+  // PLATFORM AUTHORIZATION
   // ==========================================================
 
   useEffect(
@@ -425,10 +636,8 @@ export default function DashboardLayout({
 
 
       return () => {
-
         mounted =
           false
-
       }
 
     },
@@ -476,8 +685,7 @@ export default function DashboardLayout({
   ) {
 
     if (
-      href ===
-      '/dashboard'
+      href === '/dashboard'
     ) {
 
       return (
@@ -526,7 +734,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // CURRENT MODULE
+  // CURRENT GROUP
   // ==========================================================
 
   const currentNavigationGroup =
@@ -580,7 +788,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // KEEP CURRENT MODULE OPEN
+  // KEEP ACTIVE GROUP OPEN
   // ==========================================================
 
   useEffect(
@@ -636,7 +844,7 @@ export default function DashboardLayout({
 
 
   // ==========================================================
-  // TOGGLE GROUP
+  // GROUP TOGGLE
   // ==========================================================
 
   function toggleGroup(
@@ -704,10 +912,6 @@ export default function DashboardLayout({
 
   }
 
-
-  // ==========================================================
-  // CLOSE MOBILE NAVIGATION
-  // ==========================================================
 
   function closeMobileNavigation() {
 
@@ -797,12 +1001,11 @@ export default function DashboardLayout({
       >
 
         {/* ===================================================
-            SIDEBAR TOP SPACER
+            SIDEBAR SPACER
         =================================================== */}
 
         <div
           style={{
-
             height:
               isCollapsed
                 ? '18px'
@@ -810,7 +1013,6 @@ export default function DashboardLayout({
 
             flexShrink:
               0,
-
           }}
         />
 
@@ -857,13 +1059,11 @@ export default function DashboardLayout({
                     group.label
                   }
                   style={{
-
                     position:
                       'relative',
 
                     overflow:
                       'visible',
-
                   }}
                 >
 
@@ -944,13 +1144,11 @@ export default function DashboardLayout({
                           styles.navigationLabel
                         }
                         style={{
-
                           margin:
                             0,
 
                           padding:
                             0,
-
                         }}
                       >
                         {
@@ -1036,8 +1234,10 @@ export default function DashboardLayout({
                             )
 
 
-                          const Icon =
-                            item.icon
+                          const tooltipVisible =
+                            isCollapsed &&
+                            hoveredNavigationItem ===
+                              item.href
 
 
                           const linkClassName = [
@@ -1058,12 +1258,6 @@ export default function DashboardLayout({
                             )
 
 
-                          const tooltipVisible =
-                            isCollapsed &&
-                            hoveredNavigationItem ===
-                              item.href
-
-
                           return (
 
                             <div
@@ -1071,13 +1265,11 @@ export default function DashboardLayout({
                                 item.href
                               }
                               style={{
-
                                 position:
                                   'relative',
 
                                 overflow:
                                   'visible',
-
                               }}
                               onMouseEnter={() =>
                                 setHoveredNavigationItem(
@@ -1127,7 +1319,7 @@ export default function DashboardLayout({
                               >
 
                                 {/* =============================
-                                    ICON
+                                    ICON CONTAINER
                                 ============================= */}
 
                                 <span
@@ -1183,23 +1375,22 @@ export default function DashboardLayout({
                                   }}
                                 >
 
-                                  <Icon
+                                  <NavIcon
+                                    type={
+                                      item.icon
+                                    }
                                     size={
                                       isCollapsed
                                         ? 21
                                         : 19
                                     }
-                                    strokeWidth={
-                                      2
-                                    }
-                                    aria-hidden="true"
                                   />
 
                                 </span>
 
 
                                 {/* =============================
-                                    EXPANDED PAGE NAME
+                                    PAGE LABEL
                                 ============================= */}
 
                                 {!isCollapsed && (
@@ -1209,10 +1400,8 @@ export default function DashboardLayout({
                                       styles.navigationText
                                     }
                                     style={{
-
                                       marginLeft:
                                         '10px',
-
                                     }}
                                   >
                                     {
@@ -1226,7 +1415,7 @@ export default function DashboardLayout({
 
 
                               {/* =============================
-                                  COLLAPSED TOOLTIP
+                                  TOOLTIP
                               ============================= */}
 
                               {tooltipVisible && (
@@ -1294,10 +1483,6 @@ export default function DashboardLayout({
                                   }}
                                 >
 
-                                  {/* =========================
-                                      TOOLTIP ARROW
-                                  ========================= */}
-
                                   <span
                                     style={{
 
@@ -1328,13 +1513,11 @@ export default function DashboardLayout({
 
                                   <span
                                     style={{
-
                                       position:
                                         'relative',
 
                                       zIndex:
                                         1,
-
                                     }}
                                   >
                                     {
@@ -1497,10 +1680,6 @@ export default function DashboardLayout({
 
             {/* ===============================================
                 RITSUFLOW LOGO
-
-                Normal logo.
-                Transparent background.
-                No green block.
             =============================================== */}
 
             <Link
