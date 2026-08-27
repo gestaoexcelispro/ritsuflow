@@ -7185,7 +7185,7 @@ function DrawerMetric({
               : '#0f172a',
 
           fontSize:
-            '10px',
+            '14px',
 
           fontWeight:
             900,
@@ -7325,7 +7325,7 @@ function ForecastCard({
               : '#0f172a',
 
           fontSize:
-            '11px',
+            '15px',
 
           fontWeight:
             900,
@@ -8377,7 +8377,7 @@ const sectionCardStyle = {
 
 const sectionHeaderStyle = {
   minHeight:
-    '56px',
+    '62px',
 
   padding:
     '13px 14px 0',
@@ -8389,7 +8389,7 @@ const sectionHeadingStyle = {
     '#0f172a',
 
   fontSize:
-    '11px',
+    '18px',
 
   fontWeight:
     900,
@@ -8407,7 +8407,7 @@ const sectionSupportingTextStyle = {
     '#94a3b8',
 
   fontSize:
-    '7px',
+    '13px',
 
   lineHeight:
     1.45,
@@ -8453,7 +8453,7 @@ const inputStyle = {
     '100%',
 
   height:
-    '36px',
+    '44px',
 
   padding:
     '0 9px',
@@ -8486,7 +8486,7 @@ const projectBadgeStyle = {
     '#1e40af',
 
   fontSize:
-    '9px',
+    '13px',
 
   fontWeight:
     800,
@@ -8532,7 +8532,7 @@ const summaryLabelStyle = {
     '#64748b',
 
   fontSize:
-    '8px',
+    '13px',
 
   fontWeight:
     900,
@@ -8547,7 +8547,7 @@ const summaryValueStyle = {
     '5px',
 
   fontSize:
-    '24px',
+    '36px',
 
   fontWeight:
     900,
@@ -8562,7 +8562,7 @@ const summaryDescriptionStyle = {
     '#94a3b8',
 
   fontSize:
-    '8px',
+    '13px',
 };
 
 
@@ -8593,7 +8593,7 @@ const filterLabelStyle = {
     '#64748b',
 
   fontSize:
-    '8px',
+    '13px',
 
   fontWeight:
     900,
@@ -8605,7 +8605,7 @@ const filterInputStyle = {
     '100%',
 
   height:
-    '34px',
+    '42px',
 
   padding:
     '0 8px',
@@ -8620,7 +8620,7 @@ const filterInputStyle = {
     '#ffffff',
 
   fontSize:
-    '9px',
+    '14px',
 };
 
 
@@ -8690,7 +8690,7 @@ const registerCountStyle = {
     '#64748b',
 
   fontSize:
-    '8px',
+    '12px',
 
   fontWeight:
     700,
@@ -8720,7 +8720,7 @@ const tableStyle = {
 
 const headerCellStyle = {
   padding:
-    '8px',
+    '11px 10px',
 
   borderBottom:
     '1px solid #cbd5e1',
@@ -8732,7 +8732,7 @@ const headerCellStyle = {
     '#64748b',
 
   fontSize:
-    '7px',
+    '12px',
 
   fontWeight:
     900,
@@ -8744,13 +8744,13 @@ const headerCellStyle = {
 
 const bodyCellStyle = {
   padding:
-    '9px',
+    '13px 11px',
 
   borderBottom:
     '1px solid #e2e8f0',
 
   fontSize:
-    '8px',
+    '13px',
 
   textAlign:
     'center',
@@ -8779,7 +8779,7 @@ const constraintTitleStyle = {
     '#475569',
 
   fontSize:
-    '8px',
+    '13px',
 
   lineHeight:
     1.4,
@@ -8815,7 +8815,7 @@ const blockingInlineStyle = {
     '#b91c1c',
 
   fontSize:
-    '6px',
+    '10px',
 
   fontWeight:
     900,
@@ -8836,7 +8836,7 @@ const sourceInlineStyle = {
     '#1d4ed8',
 
   fontSize:
-    '6px',
+    '10px',
 
   fontWeight:
     900,
@@ -8851,7 +8851,7 @@ const secondaryTextStyle = {
     '#94a3b8',
 
   fontSize:
-    '7px',
+    '12px',
 };
 
 
@@ -8875,7 +8875,7 @@ const autoLabelStyle = {
     '#b91c1c',
 
   fontSize:
-    '6px',
+    '10px',
 
   fontWeight:
     900,
@@ -8903,7 +8903,7 @@ const badgeBaseStyle = {
     '999px',
 
   fontSize:
-    '7px',
+    '11px',
 
   fontWeight:
     900,
@@ -8933,13 +8933,13 @@ const exposureBadgeStyle = {
     '6px',
 
   fontSize:
-    '7px',
+    '11px',
 };
 
 
 const exposureStatusTextStyle = {
   fontSize:
-    '5px',
+    '9px',
 
   fontWeight:
     900,
@@ -8969,7 +8969,7 @@ const blockingPillStyle = {
 
 const primaryButtonStyle = {
   height:
-    '35px',
+    '42px',
 
   padding:
     '0 12px',
@@ -8987,7 +8987,7 @@ const primaryButtonStyle = {
     '#ffffff',
 
   fontSize:
-    '9px',
+    '14px',
 
   fontWeight:
     900,
@@ -9032,7 +9032,7 @@ const dangerPrimaryButtonStyle = {
 
 const secondaryButtonStyle = {
   height:
-    '35px',
+    '42px',
 
   padding:
     '0 11px',
@@ -9050,7 +9050,7 @@ const secondaryButtonStyle = {
     '#334155',
 
   fontSize:
-    '9px',
+    '14px',
 
   fontWeight:
     800,
@@ -9076,7 +9076,7 @@ const secondaryActionButtonStyle = {
 
 const manageButtonStyle = {
   height:
-    '28px',
+    '34px',
 
   padding:
     '0 9px',
@@ -9094,7 +9094,7 @@ const manageButtonStyle = {
     '#1d4ed8',
 
   fontSize:
-    '7px',
+    '12px',
 
   fontWeight:
     900,
@@ -9167,7 +9167,7 @@ const drawerEyebrowStyle = {
     '#2563eb',
 
   fontSize:
-    '7px',
+    '11px',
 
   fontWeight:
     900,
@@ -9200,7 +9200,7 @@ const drawerTitleStyle = {
     0,
 
   fontSize:
-    '16px',
+    '20px',
 
   fontWeight:
     900,
@@ -9215,7 +9215,7 @@ const drawerConstraintTitleStyle = {
     '#475569',
 
   fontSize:
-    '9px',
+    '14px',
 
   fontWeight:
     700,
@@ -9251,7 +9251,7 @@ const drawerMetaLabelStyle = {
     '#94a3b8',
 
   fontSize:
-    '6px',
+    '10px',
 
   fontWeight:
     900,
@@ -9281,7 +9281,7 @@ const closeButtonStyle = {
     '#64748b',
 
   fontSize:
-    '18px',
+    '22px',
 
   cursor:
     'pointer',
@@ -9335,7 +9335,7 @@ const drawerTabsStyle = {
 
 const drawerTabStyle = {
   minHeight:
-    '42px',
+    '46px',
 
   padding:
     '5px 3px',
@@ -9344,7 +9344,7 @@ const drawerTabStyle = {
     'none',
 
   fontSize:
-    '7px',
+    '12px',
 
   fontWeight:
     900,
@@ -9398,7 +9398,7 @@ const footerMetaStyle = {
     '#64748b',
 
   fontSize:
-    '7px',
+    '11px',
 
   fontWeight:
     700,
@@ -9428,7 +9428,7 @@ const drawerSectionHeadingStyle = {
     '#0f172a',
 
   fontSize:
-    '10px',
+    '16px',
 
   fontWeight:
     900,
@@ -9443,7 +9443,7 @@ const drawerSectionSupportingTextStyle = {
     '#94a3b8',
 
   fontSize:
-    '7px',
+    '12px',
 
   lineHeight:
     1.4,
@@ -9473,7 +9473,7 @@ const modalLabelStyle = {
     '#334155',
 
   fontSize:
-    '8px',
+    '13px',
 
   fontWeight:
     800,
@@ -9485,7 +9485,7 @@ const modalInputStyle = {
     '100%',
 
   height:
-    '35px',
+    '42px',
 
   padding:
     '0 8px',
@@ -9503,7 +9503,7 @@ const modalInputStyle = {
     '#0f172a',
 
   fontSize:
-    '9px',
+    '14px',
 };
 
 
@@ -9512,7 +9512,7 @@ const modalTextareaStyle = {
     '100%',
 
   minHeight:
-    '75px',
+    '90px',
 
   padding:
     '8px',
@@ -9533,7 +9533,7 @@ const modalTextareaStyle = {
     'inherit',
 
   fontSize:
-    '9px',
+    '14px',
 
   resize:
     'vertical',
@@ -9544,7 +9544,7 @@ const smallTextareaStyle = {
   ...modalTextareaStyle,
 
   minHeight:
-    '66px',
+    '78px',
 };
 
 
@@ -9574,7 +9574,7 @@ const checkboxStyle = {
     '#f8fafc',
 
   fontSize:
-    '8px',
+    '12px',
 
   fontWeight:
     700,
@@ -9616,7 +9616,7 @@ const autoPriorityNoticeStyle = {
     '#991b1b',
 
   fontSize:
-    '7px',
+    '11px',
 
   lineHeight:
     1.45,
@@ -9656,7 +9656,7 @@ const lifecycleStageStyle = {
     '999px',
 
   fontSize:
-    '6px',
+    '11px',
 };
 
 
@@ -9665,7 +9665,7 @@ const lifecycleArrowStyle = {
     '#cbd5e1',
 
   fontSize:
-    '8px',
+    '12px',
 
   fontWeight:
     900,
@@ -9701,7 +9701,7 @@ const lifecycleButtonStyle = {
     'left',
 
   fontSize:
-    '8px',
+    '12px',
 
   cursor:
     'pointer',
@@ -9716,7 +9716,7 @@ const lifecycleDescriptionStyle = {
     '#64748b',
 
   fontSize:
-    '6px',
+    '11px',
 };
 
 
@@ -9744,7 +9744,7 @@ const actionPanelStyle = {
 
 const actionPanelTitleStyle = {
   fontSize:
-    '9px',
+    '14px',
 
   fontWeight:
     900,
@@ -9759,7 +9759,7 @@ const actionPanelDescriptionStyle = {
     '#64748b',
 
   fontSize:
-    '7px',
+    '12px',
 
   lineHeight:
     1.4,
@@ -9808,7 +9808,7 @@ const forecastDescriptionStyle = {
     '#64748b',
 
   fontSize:
-    '7px',
+    '12px',
 
   lineHeight:
     1.4,
@@ -9820,7 +9820,7 @@ const metaLabelStyle = {
     '#94a3b8',
 
   fontSize:
-    '6px',
+    '10px',
 
   fontWeight:
     900,
@@ -9832,7 +9832,7 @@ const metaLabelStyle = {
 
 const forecastButtonStyle = {
   height:
-    '32px',
+    '38px',
 
   padding:
     '0 10px',
@@ -9850,7 +9850,7 @@ const forecastButtonStyle = {
     '#9a3412',
 
   fontSize:
-    '8px',
+    '12px',
 
   fontWeight:
     900,
@@ -9897,7 +9897,7 @@ const delayAssessmentStyle = {
     '#b91c1c',
 
   fontSize:
-    '8px',
+    '12px',
 };
 
 
@@ -9921,7 +9921,7 @@ const safeAssessmentStyle = {
     '#166534',
 
   fontSize:
-    '8px',
+    '12px',
 };
 
 
@@ -9933,7 +9933,7 @@ const helperTextStyle = {
     '#64748b',
 
   fontSize:
-    '6px',
+    '11px',
 };
 
 
@@ -9969,7 +9969,7 @@ const criticalEscalationStyle = {
     '#991b1b',
 
   fontSize:
-    '8px',
+    '12px',
 };
 
 
@@ -9978,7 +9978,7 @@ const noticeTextStyle = {
     '3px',
 
   fontSize:
-    '7px',
+    '11px',
 
   lineHeight:
     1.4,
@@ -10005,7 +10005,7 @@ const warningBoxStyle = {
     '#92400e',
 
   fontSize:
-    '7px',
+    '11px',
 
   lineHeight:
     1.4,
@@ -10032,7 +10032,7 @@ const reopenNoticeStyle = {
     '#9a3412',
 
   fontSize:
-    '7px',
+    '11px',
 };
 
 
@@ -10044,7 +10044,7 @@ const inlineValidationStyle = {
     '#b91c1c',
 
   fontSize:
-    '7px',
+    '11px',
 
   fontWeight:
     700,
@@ -10080,7 +10080,7 @@ const reopenTransitionStyle = {
     '#ffffff',
 
   fontSize:
-    '8px',
+    '12px',
 };
 
 
@@ -10089,7 +10089,7 @@ const reopenArrowStyle = {
     '#cbd5e1',
 
   fontSize:
-    '16px',
+    '20px',
 
   fontWeight:
     900,
@@ -10135,7 +10135,7 @@ const miniSummaryValueStyle = {
     '4px',
 
   fontSize:
-    '9px',
+    '13px',
 
   fontWeight:
     900,
@@ -10144,7 +10144,7 @@ const miniSummaryValueStyle = {
 
 const addRecoveryButtonStyle = {
   height:
-    '32px',
+    '38px',
 
   padding:
     '0 10px',
@@ -10162,7 +10162,7 @@ const addRecoveryButtonStyle = {
     '#1d4ed8',
 
   fontSize:
-    '8px',
+    '12px',
 
   fontWeight:
     900,
@@ -10192,7 +10192,7 @@ const actionPlanEmptyStyle = {
     '#64748b',
 
   fontSize:
-    '8px',
+    '12px',
 };
 
 
@@ -10201,7 +10201,7 @@ const emptyDescriptionStyle = {
     '4px',
 
   fontSize:
-    '7px',
+    '11px',
 
   lineHeight:
     1.4,
@@ -10249,7 +10249,7 @@ const recoveryActionHeaderStyle = {
     'wrap',
 
   fontSize:
-    '8px',
+    '12px',
 };
 
 
@@ -10276,7 +10276,7 @@ const recoveryActionApproachStyle = {
     '#64748b',
 
   fontSize:
-    '6px',
+    '11px',
 
   fontWeight:
     700,
@@ -10288,7 +10288,7 @@ const recoveryActionDueStyle = {
     '#475569',
 
   fontSize:
-    '7px',
+    '11px',
 };
 
 
@@ -10300,7 +10300,7 @@ const recoveryActionDescriptionStyle = {
     '#475569',
 
   fontSize:
-    '7px',
+    '12px',
 
   lineHeight:
     1.4,
@@ -10321,7 +10321,7 @@ const recoveryActionMetaGridStyle = {
     '9px',
 
   fontSize:
-    '7px',
+    '11px',
 };
 
 
@@ -10345,7 +10345,7 @@ const effectivenessNotesStyle = {
     '#475569',
 
   fontSize:
-    '7px',
+    '11px',
 };
 
 
@@ -10366,7 +10366,7 @@ const recoveryActionButtonsStyle = {
 
 const smallActionButtonStyle = {
   height:
-    '27px',
+    '32px',
 
   padding:
     '0 8px',
@@ -10384,7 +10384,7 @@ const smallActionButtonStyle = {
     '#1d4ed8',
 
   fontSize:
-    '7px',
+    '11px',
 
   fontWeight:
     800,
@@ -10469,7 +10469,7 @@ const affectedHeaderStyle = {
     '8px',
 
   fontSize:
-    '8px',
+    '12px',
 };
 
 
@@ -10490,7 +10490,7 @@ const sourceBadgeStyle = {
     '#1d4ed8',
 
   fontSize:
-    '6px',
+    '10px',
 
   fontWeight:
     800,
@@ -10505,7 +10505,7 @@ const affectedLocationStyle = {
     '#475569',
 
   fontSize:
-    '8px',
+    '12px',
 
   fontWeight:
     700,
@@ -10520,7 +10520,7 @@ const affectedDateStyle = {
     '#64748b',
 
   fontSize:
-    '7px',
+    '11px',
 };
 
 
@@ -10545,7 +10545,7 @@ const historyCardStyle = {
     '#f8fafc',
 
   fontSize:
-    '7px',
+    '11px',
 };
 
 
@@ -10569,7 +10569,7 @@ const historyActorStyle = {
     '#64748b',
 
   fontSize:
-    '6px',
+    '10px',
 };
 
 
@@ -10578,7 +10578,7 @@ const historyDateStyle = {
     '#94a3b8',
 
   fontSize:
-    '6px',
+    '10px',
 };
 
 
@@ -10690,7 +10690,7 @@ const createModalTitleStyle = {
     '4px 0 0',
 
   fontSize:
-    '18px',
+    '22px',
 };
 
 
@@ -10715,7 +10715,7 @@ const emptyStyle = {
     '#64748b',
 
   fontSize:
-    '9px',
+    '13px',
 };
 
 
@@ -10739,7 +10739,7 @@ const emptyInnerStyle = {
     'center',
 
   fontSize:
-    '7px',
+    '12px',
 };
 
 
@@ -10763,7 +10763,7 @@ const errorMessageStyle = {
     '#b91c1c',
 
   fontSize:
-    '8px',
+    '12px',
 };
 
 
@@ -10787,5 +10787,5 @@ const successMessageStyle = {
     '#166534',
 
   fontSize:
-    '8px',
+    '12px',
 };
