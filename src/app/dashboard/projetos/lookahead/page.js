@@ -2278,6 +2278,229 @@ export default function LookaheadPage() {
 
 
   // ==========================================================
+  // LOCATION SEQUENCE VIEW
+  //
+  // Same Lookahead data, different visualization:
+  // - one row per Master Plan location
+  // - each day shows the Work Package active at that location
+  //
+  // Manual Lookahead-only activities are not included here yet
+  // because the current manual activity architecture does not
+  // store a Location reference.
+  // ==========================================================
+
+  const locationSequenceRows =
+    useMemo(
+      () => {
+
+        const locationMap =
+          new Map();
+
+
+        workItems.forEach(
+          (
+            item
+          ) => {
+
+            const locationPath =
+              String(
+                getLocationPath(
+                  item
+                ) ||
+                ''
+              ).trim();
+
+
+            const locationName =
+              String(
+                getLocationName(
+                  item
+                ) ||
+                ''
+              ).trim();
+
+
+            const locationKey =
+              locationPath ||
+              locationName;
+
+
+            if (
+              !locationKey
+            ) {
+              return;
+            }
+
+
+            if (
+              !locationMap.has(
+                locationKey
+              )
+            ) {
+
+              locationMap.set(
+                locationKey,
+                {
+                  key:
+                    locationKey,
+
+                  name:
+                    locationName ||
+                    locationPath,
+
+                  path:
+                    locationPath ||
+                    locationName,
+
+                  items:
+                    [],
+                }
+              );
+
+            }
+
+
+            locationMap
+              .get(
+                locationKey
+              )
+              .items
+              .push(
+                item
+              );
+
+          }
+        );
+
+
+        const rows =
+          Array.from(
+            locationMap.values()
+          );
+
+
+        rows.forEach(
+          (
+            row
+          ) => {
+
+            row.items.sort(
+              (
+                a,
+                b
+              ) => {
+
+                const dateA =
+                  getPackageDates(
+                    a
+                  ).start ||
+                  '';
+
+                const dateB =
+                  getPackageDates(
+                    b
+                  ).start ||
+                  '';
+
+
+                if (
+                  dateA !==
+                  dateB
+                ) {
+
+                  return dateA.localeCompare(
+                    dateB
+                  );
+
+                }
+
+
+                return getPackageCode(
+                  a
+                ).localeCompare(
+                  getPackageCode(
+                    b
+                  )
+                );
+
+              }
+            );
+
+          }
+        );
+
+
+        rows.sort(
+          (
+            a,
+            b
+          ) => {
+
+            const firstA =
+              a.items
+                .map(
+                  (
+                    item
+                  ) =>
+                    getPackageDates(
+                      item
+                    ).start ||
+                    ''
+                )
+                .filter(
+                  Boolean
+                )
+                .sort()[0] ||
+                '';
+
+            const firstB =
+              b.items
+                .map(
+                  (
+                    item
+                  ) =>
+                    getPackageDates(
+                      item
+                    ).start ||
+                    ''
+                )
+                .filter(
+                  Boolean
+                )
+                .sort()[0] ||
+                '';
+
+
+            if (
+              firstA !==
+              firstB
+            ) {
+
+              return firstA.localeCompare(
+                firstB
+              );
+
+            }
+
+
+            return a.path.localeCompare(
+              b.path
+            );
+
+          }
+        );
+
+
+        return rows;
+
+      },
+      [
+        workItems,
+      ]
+    );
+
+
+  // ==========================================================
   // CALENDAR
   // ==========================================================
 
@@ -3976,6 +4199,27 @@ export default function LookaheadPage() {
           }
         >
           📅 Lookahead &amp; Koskela Sheet
+        </button>
+
+
+        <button
+
+          type="button"
+
+          onClick={() =>
+            setActiveTab(
+              'locations'
+            )
+          }
+
+          style={
+            activeTab ===
+            'locations'
+              ? activeTabStyle
+              : tabStyle
+          }
+        >
+          📍 Location Sequence
         </button>
 
 
@@ -5958,6 +6202,607 @@ export default function LookaheadPage() {
                 Manual row timeline ▼ = select Work Package
               </span>
 
+            </div>
+
+          </div>
+
+        )}
+
+
+      {/* ====================================================
+          LOCATION SEQUENCE
+      ===================================================== */}
+
+      {selectedProjectId &&
+        selectedPlanId &&
+        activeTab ===
+          'locations' && (
+
+          <div
+            style={{
+              overflowX:
+                'auto',
+
+              overflowY:
+                'visible',
+
+              border:
+                '1px solid #cbd5e1',
+
+              background:
+                '#fff',
+            }}
+          >
+
+            {loading ? (
+
+              <div
+                style={{
+                  padding:
+                    '40px',
+
+                  textAlign:
+                    'center',
+
+                  color:
+                    '#64748b',
+                }}
+              >
+                Loading Location Sequence...
+              </div>
+
+            ) : (
+
+              <table
+                style={{
+                  width:
+                    'max-content',
+
+                  minWidth:
+                    '100%',
+
+                  borderCollapse:
+                    'collapse',
+
+                  tableLayout:
+                    'fixed',
+
+                  fontSize:
+                    '10px',
+                }}
+              >
+
+                <thead>
+
+                  <tr>
+
+                    <th
+                      rowSpan={
+                        3
+                      }
+
+                      style={{
+                        ...headerCellStyle,
+
+                        width:
+                          '54px',
+
+                        minWidth:
+                          '54px',
+                      }}
+                    >
+                      ID
+                    </th>
+
+
+                    <th
+                      rowSpan={
+                        3
+                      }
+
+                      style={{
+                        ...headerCellStyle,
+
+                        width:
+                          '330px',
+
+                        minWidth:
+                          '330px',
+
+                        textAlign:
+                          'left',
+
+                        paddingLeft:
+                          '14px',
+                      }}
+                    >
+                      LOCATION
+                    </th>
+
+
+                    {weekGroups.map(
+                      (
+                        week
+                      ) => (
+
+                        <th
+                          key={
+                            `location-week-${week.weekNumber}`
+                          }
+
+                          colSpan={
+                            week.days.length
+                          }
+
+                          style={{
+                            ...headerCellStyle,
+
+                            background:
+                              '#dbe5f1',
+
+                            color:
+                              '#0f2747',
+
+                            fontWeight:
+                              900,
+                          }}
+                        >
+                          WEEK {week.weekNumber}
+                        </th>
+
+                      )
+                    )}
+
+                  </tr>
+
+
+                  <tr>
+
+                    {visibleDays.map(
+                      (
+                        day
+                      ) => (
+
+                        <th
+                          key={
+                            `location-day-${day.iso}`
+                          }
+
+                          style={{
+                            ...headerCellStyle,
+
+                            width:
+                              DAY_WIDTH,
+
+                            minWidth:
+                              DAY_WIDTH,
+
+                            background:
+                              day.isHoliday
+                                ? '#fee2e2'
+                                : day.isWeekend
+                                  ? '#eef2f7'
+                                  : '#f8fafc',
+
+                            color:
+                              day.isHoliday
+                                ? '#991b1b'
+                                : '#334155',
+                          }}
+                        >
+                          {day.isHoliday
+                            ? 'HOL'
+                            : day.weekdayShort}
+                        </th>
+
+                      )
+                    )}
+
+                  </tr>
+
+
+                  <tr>
+
+                    {visibleDays.map(
+                      (
+                        day
+                      ) => (
+
+                        <th
+                          key={
+                            `location-date-${day.iso}`
+                          }
+
+                          style={{
+                            ...headerCellStyle,
+
+                            width:
+                              DAY_WIDTH,
+
+                            minWidth:
+                              DAY_WIDTH,
+
+                            background:
+                              day.isHoliday
+                                ? '#fee2e2'
+                                : day.isWeekend
+                                  ? '#eef2f7'
+                                  : '#ffffff',
+
+                            color:
+                              day.isHoliday
+                                ? '#991b1b'
+                                : '#0f172a',
+
+                            fontSize:
+                              '9px',
+                          }}
+                        >
+                          {day.label}
+                        </th>
+
+                      )
+                    )}
+
+                  </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                  {locationSequenceRows.length ===
+                    0 ? (
+
+                    <tr>
+
+                      <td
+                        colSpan={
+                          visibleDays.length +
+                          2
+                        }
+
+                        style={{
+                          padding:
+                            '40px 20px',
+
+                          color:
+                            '#64748b',
+
+                          textAlign:
+                            'center',
+
+                          borderBottom:
+                            '1px solid #e2e8f0',
+                        }}
+                      >
+                        No Master Plan locations are available in this Lookahead window.
+                      </td>
+
+                    </tr>
+
+                  ) : (
+
+                    locationSequenceRows.map(
+                      (
+                        locationRow,
+                        locationIndex
+                      ) => (
+
+                        <tr
+                          key={
+                            locationRow.key
+                          }
+                        >
+
+                          <td
+                            style={{
+                              ...bodyCellStyle,
+
+                              width:
+                                '54px',
+
+                              minWidth:
+                                '54px',
+
+                              textAlign:
+                                'center',
+
+                              fontWeight:
+                                700,
+                            }}
+                          >
+                            {locationIndex + 1}
+                          </td>
+
+
+                          <td
+                            title={
+                              locationRow.path
+                            }
+
+                            style={{
+                              ...bodyCellStyle,
+
+                              width:
+                                '330px',
+
+                              minWidth:
+                                '330px',
+
+                              padding:
+                                '7px 12px',
+
+                              textAlign:
+                                'left',
+                            }}
+                          >
+
+                            <div
+                              style={{
+                                color:
+                                  '#0f172a',
+
+                                fontSize:
+                                  '11px',
+
+                                fontWeight:
+                                  800,
+                              }}
+                            >
+                              {locationRow.name}
+                            </div>
+
+
+                            {locationRow.path &&
+                              locationRow.path !==
+                              locationRow.name && (
+
+                              <div
+                                style={{
+                                  marginTop:
+                                    '3px',
+
+                                  color:
+                                    '#94a3b8',
+
+                                  fontSize:
+                                    '9px',
+                                }}
+                              >
+                                {locationRow.path}
+                              </div>
+
+                            )}
+
+                          </td>
+
+
+                          {visibleDays.map(
+                            (
+                              day
+                            ) => {
+
+                              const activeItems =
+                                locationRow.items.filter(
+                                  (
+                                    item
+                                  ) => {
+
+                                    if (
+                                      day.isWeekend ||
+                                      day.isHoliday
+                                    ) {
+                                      return false;
+                                    }
+
+
+                                    const dates =
+                                      getPackageDates(
+                                        item
+                                      );
+
+
+                                    return (
+                                      dates.start &&
+                                      dates.finish &&
+                                      day.iso >=
+                                        dates.start &&
+                                      day.iso <=
+                                        dates.finish
+                                    );
+
+                                  }
+                                );
+
+
+                              const activeItem =
+                                activeItems[0] ||
+                                null;
+
+
+                              const code =
+                                activeItem
+                                  ? getPackageCode(
+                                      activeItem
+                                    )
+                                  : '';
+
+
+                              const color =
+                                code
+                                  ? getServiceColor(
+                                      code,
+                                      organizationWorkPackages
+                                    )
+                                  : '';
+
+
+                              const textColor =
+                                color
+                                  ? getTextColor(
+                                      color
+                                    )
+                                  : '#64748b';
+
+
+                              const tooltip =
+                                activeItems
+                                  .map(
+                                    (
+                                      item
+                                    ) =>
+                                      `${getPackageCode(
+                                        item
+                                      )} · ${getPackageDescription(
+                                        item
+                                      )}`
+                                  )
+                                  .join(
+                                    '\n'
+                                  );
+
+
+                              return (
+
+                                <td
+                                  key={
+                                    `${locationRow.key}-${day.iso}`
+                                  }
+
+                                  title={
+                                    day.isHoliday
+                                      ? day.holidayDescription
+                                      : tooltip ||
+                                        day.iso
+                                  }
+
+                                  style={{
+                                    ...bodyCellStyle,
+
+                                    width:
+                                      DAY_WIDTH,
+
+                                    minWidth:
+                                      DAY_WIDTH,
+
+                                    height:
+                                      '34px',
+
+                                    padding:
+                                      0,
+
+                                    textAlign:
+                                      'center',
+
+                                    background:
+                                      code
+                                        ? color
+                                        : day.isHoliday
+                                          ? '#fee2e2'
+                                          : day.isWeekend
+                                            ? '#eef2f7'
+                                            : '#ffffff',
+
+                                    color:
+                                      code
+                                        ? textColor
+                                        : day.isHoliday
+                                          ? '#991b1b'
+                                          : '#94a3b8',
+
+                                    fontSize:
+                                      '10px',
+
+                                    fontWeight:
+                                      code
+                                        ? 900
+                                        : 500,
+
+                                    boxShadow:
+                                      day.isHoliday
+                                        ? 'inset 0 0 0 1px #fca5a5'
+                                        : 'none',
+                                  }}
+                                >
+                                  {code
+                                    ? code
+                                    : day.isHoliday
+                                      ? 'HOL'
+                                      : day.isWeekend
+                                        ? 'OFF'
+                                        : ''}
+                                </td>
+
+                              );
+
+                            }
+                          )}
+
+                        </tr>
+
+                      )
+                    )
+
+                  )}
+
+                </tbody>
+
+              </table>
+
+            )}
+
+
+            <div
+              style={{
+                display:
+                  'flex',
+
+                alignItems:
+                  'center',
+
+                gap:
+                  '18px',
+
+                flexWrap:
+                  'wrap',
+
+                padding:
+                  '10px 12px',
+
+                borderTop:
+                  '1px solid #cbd5e1',
+
+                color:
+                  '#475569',
+
+                fontSize:
+                  '9px',
+              }}
+            >
+              <strong>
+                LOCATION VIEW:
+              </strong>
+
+              <span>
+                Each row = one Master Plan location
+              </span>
+
+              <span>
+                Cell = Work Package planned at that location/day
+              </span>
+
+              <span>
+                OFF = Weekend
+              </span>
+
+              <span>
+                HOL = Master Plan Holiday
+              </span>
+
+              <span>
+                Lookahead-only manual activities without a location are not shown here
+              </span>
             </div>
 
           </div>
