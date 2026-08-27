@@ -14,28 +14,24 @@ import { supabase } from '../../../../lib/supabase';
 // RitsuFlow™
 // CENTRALIZED CONSTRAINT MANAGEMENT
 //
-// Current operational scope:
+// Operational scope:
 //
 // - Central project Constraint Log
-// - Manual project-level constraint creation
-// - Constraint Management drawer
+// - Manual constraint creation
 // - Edit Details
 // - Add Comment
 // - Update Forecast
-// - Action History
-// - Required By vs Planned Resolution
-// - Forecast variance / Delay Expected
-//
-// Lifecycle actions are intentionally NOT active yet:
-//
 // - Start Action
-// - Waiting
-// - Resume
+// - Set Waiting
+// - Resume Action
 // - Resolve
 // - Verify & Clear
-// - Cancel
+// - Cancel Constraint
+// - Action History
+// - Required By vs Planned Resolution
+// - Forecast variance
+// - Lookahead / Koskela readiness release on CLEARED
 //
-// Those will be introduced through governed RPCs.
 // ============================================================
 
 
@@ -248,9 +244,14 @@ function formatDate(value) {
   return new Intl.DateTimeFormat(
     'en-US',
     {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
+      month:
+        'short',
+
+      day:
+        '2-digit',
+
+      year:
+        'numeric',
     }
   ).format(date);
 }
@@ -275,40 +276,22 @@ function formatDateTime(value) {
   return new Intl.DateTimeFormat(
     'en-US',
     {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      month:
+        'short',
+
+      day:
+        '2-digit',
+
+      year:
+        'numeric',
+
+      hour:
+        '2-digit',
+
+      minute:
+        '2-digit',
     }
   ).format(date);
-}
-
-
-function getTodayIso() {
-  const now =
-    new Date();
-
-  const year =
-    now.getFullYear();
-
-  const month =
-    String(
-      now.getMonth() + 1
-    ).padStart(
-      2,
-      '0'
-    );
-
-  const day =
-    String(
-      now.getDate()
-    ).padStart(
-      2,
-      '0'
-    );
-
-  return `${year}-${month}-${day}`;
 }
 
 
@@ -337,66 +320,26 @@ function getConstraintReference(
 }
 
 
-function getDueDate(
-  constraint
-) {
-  return (
-    constraint
-      .target_resolution_date ||
-    constraint
-      .required_by_date ||
-    null
-  );
-}
-
-
-function isConstraintOverdue(
-  constraint
-) {
-  const dueDate =
-    getDueDate(
-      constraint
-    );
-
-  if (!dueDate) {
-    return false;
-  }
-
-  if (
-    TERMINAL_STATUSES.includes(
-      constraint.status
-    )
-  ) {
-    return false;
-  }
-
-  return (
-    dueDate <
-    getTodayIso()
-  );
-}
-
-
 function getSourceLabel(
   constraint
 ) {
   if (
     constraint
-      .readiness_assessment_id
+      ?.readiness_assessment_id
   ) {
     return 'Lookahead / Koskela';
   }
 
   if (
     constraint
-      .lookahead_work_item_id
+      ?.lookahead_work_item_id
   ) {
     return 'Lookahead';
   }
 
   if (
     constraint
-      .master_plan_package_id
+      ?.master_plan_package_id
   ) {
     return 'Master Plan';
   }
@@ -405,8 +348,12 @@ function getSourceLabel(
 }
 
 
-function getStatusLabel(status) {
-  switch (status) {
+function getStatusLabel(
+  status
+) {
+  switch (
+    status
+  ) {
 
     case 'open':
       return 'Open';
@@ -452,15 +399,21 @@ function getActionTypeLabel(
 }
 
 
-function getStatusStyle(status) {
-  switch (status) {
+function getStatusStyle(
+  status
+) {
+  switch (
+    status
+  ) {
 
     case 'open':
       return {
         background:
           '#fee2e2',
+
         border:
           '#fca5a5',
+
         color:
           '#991b1b',
       };
@@ -469,8 +422,10 @@ function getStatusStyle(status) {
       return {
         background:
           '#dbeafe',
+
         border:
           '#93c5fd',
+
         color:
           '#1d4ed8',
       };
@@ -479,8 +434,10 @@ function getStatusStyle(status) {
       return {
         background:
           '#fef3c7',
+
         border:
           '#fcd34d',
+
         color:
           '#92400e',
       };
@@ -489,8 +446,10 @@ function getStatusStyle(status) {
       return {
         background:
           '#ede9fe',
+
         border:
           '#c4b5fd',
+
         color:
           '#6d28d9',
       };
@@ -499,8 +458,10 @@ function getStatusStyle(status) {
       return {
         background:
           '#dcfce7',
+
         border:
           '#86efac',
+
         color:
           '#166534',
       };
@@ -509,8 +470,10 @@ function getStatusStyle(status) {
       return {
         background:
           '#f1f5f9',
+
         border:
           '#cbd5e1',
+
         color:
           '#64748b',
       };
@@ -519,8 +482,10 @@ function getStatusStyle(status) {
       return {
         background:
           '#f8fafc',
+
         border:
           '#cbd5e1',
+
         color:
           '#475569',
       };
@@ -531,75 +496,72 @@ function getStatusStyle(status) {
 function getPriorityStyle(
   priority
 ) {
-  const normalized =
+  switch (
     normalizeText(
       priority
-    );
-
-  if (
-    normalized ===
-    'critical'
+    )
   ) {
-    return {
-      background:
-        '#fee2e2',
-      border:
-        '#ef4444',
-      color:
-        '#991b1b',
-    };
-  }
 
-  if (
-    normalized ===
-    'high'
-  ) {
-    return {
-      background:
-        '#fff7ed',
-      border:
-        '#fdba74',
-      color:
-        '#c2410c',
-    };
-  }
+    case 'critical':
+      return {
+        background:
+          '#fee2e2',
 
-  if (
-    normalized ===
-    'medium'
-  ) {
-    return {
-      background:
-        '#fefce8',
-      border:
-        '#fde047',
-      color:
-        '#854d0e',
-    };
-  }
+        border:
+          '#ef4444',
 
-  if (
-    normalized ===
-    'low'
-  ) {
-    return {
-      background:
-        '#f0fdf4',
-      border:
-        '#86efac',
-      color:
-        '#166534',
-    };
-  }
+        color:
+          '#991b1b',
+      };
 
-  return {
-    background:
-      '#f8fafc',
-    border:
-      '#cbd5e1',
-    color:
-      '#64748b',
-  };
+    case 'high':
+      return {
+        background:
+          '#fff7ed',
+
+        border:
+          '#fdba74',
+
+        color:
+          '#c2410c',
+      };
+
+    case 'medium':
+      return {
+        background:
+          '#fefce8',
+
+        border:
+          '#fde047',
+
+        color:
+          '#854d0e',
+      };
+
+    case 'low':
+      return {
+        background:
+          '#f0fdf4',
+
+        border:
+          '#86efac',
+
+        color:
+          '#166534',
+      };
+
+    default:
+      return {
+        background:
+          '#f8fafc',
+
+        border:
+          '#cbd5e1',
+
+        color:
+          '#64748b',
+      };
+  }
 }
 
 
@@ -648,20 +610,40 @@ function dateDifferenceDays(
 function getForecastAssessment(
   constraint
 ) {
+  if (
+    !constraint
+  ) {
+    return {
+      variance:
+        null,
+
+      varianceLabel:
+        '—',
+
+      outlook:
+        'Not Evaluated',
+
+      delayed:
+        false,
+    };
+  }
+
+
   const requiredBy =
     constraint
-      ?.required_by_date;
+      .required_by_date;
 
-  const plannedResolution =
+
+  const forecast =
     constraint
-      ?.target_resolution_date ||
+      .target_resolution_date ||
     requiredBy;
 
 
   const variance =
     dateDifferenceDays(
       requiredBy,
-      plannedResolution
+      forecast
     );
 
 
@@ -752,7 +734,9 @@ async function getPerformedBy() {
       data?.user;
 
 
-    if (!user) {
+    if (
+      !user
+    ) {
       return null;
     }
 
@@ -782,7 +766,7 @@ async function getPerformedBy() {
 
 
 // ============================================================
-// INITIAL FORMS
+// FORM BUILDERS
 // ============================================================
 
 function createInitialForm() {
@@ -874,7 +858,7 @@ function createForecastForm(
 export default function ConstraintLogPage() {
 
   // ==========================================================
-  // DATA
+  // MAIN DATA
   // ==========================================================
 
   const [
@@ -1098,6 +1082,28 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
+  // LIFECYCLE ACTION MODAL
+  // ==========================================================
+
+  const [
+    lifecycleAction,
+    setLifecycleAction,
+  ] = useState(null);
+
+
+  const [
+    lifecycleNote,
+    setLifecycleNote,
+  ] = useState('');
+
+
+  const [
+    savingLifecycle,
+    setSavingLifecycle,
+  ] = useState(false);
+
+
+  // ==========================================================
   // SELECTED PROJECT
   // ==========================================================
 
@@ -1105,7 +1111,9 @@ export default function ConstraintLogPage() {
     useMemo(
       () =>
         projects.find(
-          (project) =>
+          (
+            project
+          ) =>
             project.id ===
             selectedProjectId
         ) ||
@@ -1194,7 +1202,9 @@ export default function ConstraintLogPage() {
           if (
             requestedProjectId &&
             loadedProjects.some(
-              (project) =>
+              (
+                project
+              ) =>
                 project.id ===
                 requestedProjectId
             )
@@ -1386,7 +1396,9 @@ export default function ConstraintLogPage() {
 
           const constraintIds =
             loadedConstraints.map(
-              (constraint) =>
+              (
+                constraint
+              ) =>
                 constraint.id
             );
 
@@ -1441,7 +1453,9 @@ export default function ConstraintLogPage() {
               new Set([
                 ...loadedAffectedWork
                   .map(
-                    (item) =>
+                    (
+                      item
+                    ) =>
                       item
                         .lookahead_work_item_id
                   )
@@ -1451,7 +1465,9 @@ export default function ConstraintLogPage() {
 
                 ...loadedConstraints
                   .map(
-                    (constraint) =>
+                    (
+                      constraint
+                    ) =>
                       constraint
                         .lookahead_work_item_id
                   )
@@ -1514,7 +1530,9 @@ export default function ConstraintLogPage() {
                   lookaheadData ||
                   []
                 ).map(
-                  (item) => [
+                  (
+                    item
+                  ) => [
                     item.id,
                     item,
                   ]
@@ -1538,7 +1556,9 @@ export default function ConstraintLogPage() {
               new Set([
                 ...loadedAffectedWork
                   .map(
-                    (item) =>
+                    (
+                      item
+                    ) =>
                       item
                         .master_plan_package_id
                   )
@@ -1548,7 +1568,9 @@ export default function ConstraintLogPage() {
 
                 ...loadedConstraints
                   .map(
-                    (constraint) =>
+                    (
+                      constraint
+                    ) =>
                       constraint
                         .master_plan_package_id
                   )
@@ -1561,7 +1583,9 @@ export default function ConstraintLogPage() {
                     nextLookaheadMap
                   )
                   .map(
-                    (item) =>
+                    (
+                      item
+                    ) =>
                       item
                         .master_plan_package_id
                   )
@@ -1622,7 +1646,9 @@ export default function ConstraintLogPage() {
                   masterPlanData ||
                   []
                 ).map(
-                  (item) => [
+                  (
+                    item
+                  ) => [
                     item.id,
                     item,
                   ]
@@ -1783,8 +1809,8 @@ export default function ConstraintLogPage() {
       ) => {
 
         if (
-          !selectedProjectId ||
-          !constraintId
+          !constraintId ||
+          !selectedProjectId
         ) {
           return;
         }
@@ -1904,26 +1930,6 @@ export default function ConstraintLogPage() {
     );
 
 
-    setConstraints(
-      []
-    );
-
-
-    setAffectedWork(
-      []
-    );
-
-
-    setLookaheadItems(
-      {}
-    );
-
-
-    setMasterPlanPackages(
-      {}
-    );
-
-
     setSearchTerm(
       ''
     );
@@ -1949,12 +1955,12 @@ export default function ConstraintLogPage() {
     );
 
 
-    setErrorMessage(
+    setSuccessMessage(
       ''
     );
 
 
-    setSuccessMessage(
+    setErrorMessage(
       ''
     );
 
@@ -1988,30 +1994,13 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // CREATE CONSTRAINT
+  // CREATE
   // ==========================================================
 
   function openCreateModal() {
 
-    if (
-      !selectedProjectId
-    ) {
-      return;
-    }
-
-
     setForm(
       createInitialForm()
-    );
-
-
-    setErrorMessage(
-      ''
-    );
-
-
-    setSuccessMessage(
-      ''
     );
 
 
@@ -2030,7 +2019,6 @@ export default function ConstraintLogPage() {
 
 
     if (
-      !selectedProjectId ||
       creatingConstraint
     ) {
       return;
@@ -2044,29 +2032,32 @@ export default function ConstraintLogPage() {
       ).trim();
 
 
-    const actionRequired =
+    const responsible =
       String(
-        form.action_required ||
+        form
+          .responsible_party ||
         ''
       ).trim();
 
 
-    const responsibleParty =
+    const action =
       String(
-        form.responsible_party ||
+        form
+          .action_required ||
         ''
       ).trim();
 
 
     if (
       !title ||
-      !actionRequired ||
-      !responsibleParty ||
-      !form.required_by_date
+      !responsible ||
+      !action ||
+      !form
+        .required_by_date
     ) {
 
       setErrorMessage(
-        'Title, responsible party, required action and due date are required.'
+        'Title, Responsible Party, Required Action and Required By Date are required.'
       );
 
       return;
@@ -2107,20 +2098,18 @@ export default function ConstraintLogPage() {
               title,
 
             target_description:
-              String(
-                form.description ||
-                ''
-              ).trim() ||
+              form.description ||
               null,
 
             target_action_required:
-              actionRequired,
+              action,
 
             target_responsible_party:
-              responsibleParty,
+              responsible,
 
             target_required_by_date:
-              form.required_by_date,
+              form
+                .required_by_date,
 
             target_priority:
               form.priority,
@@ -2143,14 +2132,6 @@ export default function ConstraintLogPage() {
       }
 
 
-      const createdConstraintId =
-        Array.isArray(
-          data
-        )
-          ? data[0]
-          : data;
-
-
       setShowCreateModal(
         false
       );
@@ -2158,7 +2139,9 @@ export default function ConstraintLogPage() {
 
       setSuccessMessage(
         `Constraint ${getConstraintReference(
-          createdConstraintId
+          Array.isArray(data)
+            ? data[0]
+            : data
         )} created successfully.`
       );
 
@@ -2179,7 +2162,7 @@ export default function ConstraintLogPage() {
 
       setErrorMessage(
         error.message ||
-        'The constraint could not be created.'
+        'Constraint could not be created.'
       );
 
     } finally {
@@ -2200,13 +2183,6 @@ export default function ConstraintLogPage() {
   async function openManagementDrawer(
     constraint
   ) {
-
-    if (
-      !constraint?.id
-    ) {
-      return;
-    }
-
 
     setManagedConstraint(
       constraint
@@ -2252,18 +2228,13 @@ export default function ConstraintLogPage() {
     );
 
 
-    setShowEditModal(
-      false
+    setLifecycleAction(
+      null
     );
 
 
-    setShowCommentModal(
-      false
-    );
-
-
-    setShowForecastModal(
-      false
+    setLifecycleNote(
+      ''
     );
 
   }
@@ -2274,13 +2245,6 @@ export default function ConstraintLogPage() {
   // ==========================================================
 
   function openEditModal() {
-
-    if (
-      !managedConstraint
-    ) {
-      return;
-    }
-
 
     setEditForm(
       createEditForm(
@@ -2311,28 +2275,6 @@ export default function ConstraintLogPage() {
     }
 
 
-    if (
-      !String(
-        editForm
-          .responsible_party ||
-        ''
-      ).trim() ||
-      !String(
-        editForm
-          .action_required ||
-        ''
-      ).trim()
-    ) {
-
-      setHistoryError(
-        'Responsible Party and Required Action are required.'
-      );
-
-      return;
-
-    }
-
-
     setSavingEdit(
       true
     );
@@ -2359,10 +2301,12 @@ export default function ConstraintLogPage() {
               managedConstraint.id,
 
             target_responsible_party:
-              editForm.responsible_party,
+              editForm
+                .responsible_party,
 
             target_action_required:
-              editForm.action_required,
+              editForm
+                .action_required,
 
             target_priority:
               editForm.priority,
@@ -2398,13 +2342,6 @@ export default function ConstraintLogPage() {
       );
 
 
-      setSuccessMessage(
-        `${getConstraintReference(
-          managedConstraint.id
-        )} updated successfully.`
-      );
-
-
       await refreshManagedConstraint(
         managedConstraint.id
       );
@@ -2436,17 +2373,12 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // ADD COMMENT
+  // COMMENT
   // ==========================================================
 
   function openCommentModal() {
 
     setCommentText(
-      ''
-    );
-
-
-    setHistoryError(
       ''
     );
 
@@ -2473,7 +2405,7 @@ export default function ConstraintLogPage() {
     }
 
 
-    const normalizedComment =
+    const comment =
       String(
         commentText ||
         ''
@@ -2481,7 +2413,7 @@ export default function ConstraintLogPage() {
 
 
     if (
-      !normalizedComment
+      !comment
     ) {
 
       setHistoryError(
@@ -2495,11 +2427,6 @@ export default function ConstraintLogPage() {
 
     setSavingComment(
       true
-    );
-
-
-    setHistoryError(
-      ''
     );
 
 
@@ -2519,7 +2446,7 @@ export default function ConstraintLogPage() {
               managedConstraint.id,
 
             target_comment:
-              normalizedComment,
+              comment,
 
             target_performed_by:
               performedBy,
@@ -2539,11 +2466,6 @@ export default function ConstraintLogPage() {
       );
 
 
-      setCommentText(
-        ''
-      );
-
-
       await refreshManagedConstraint(
         managedConstraint.id
       );
@@ -2553,7 +2475,7 @@ export default function ConstraintLogPage() {
     ) {
 
       console.error(
-        'Add Constraint Comment:',
+        'Constraint Comment:',
         error
       );
 
@@ -2575,27 +2497,15 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // UPDATE FORECAST
+  // FORECAST
   // ==========================================================
 
   function openForecastModal() {
-
-    if (
-      !managedConstraint
-    ) {
-      return;
-    }
-
 
     setForecastForm(
       createForecastForm(
         managedConstraint
       )
-    );
-
-
-    setHistoryError(
-      ''
     );
 
 
@@ -2614,41 +2524,24 @@ export default function ConstraintLogPage() {
 
 
     if (
-      !managedConstraint ||
-      savingForecast
+      savingForecast ||
+      !managedConstraint
     ) {
       return;
     }
-
-
-    const reason =
-      String(
-        forecastForm
-          .reason ||
-        ''
-      ).trim();
 
 
     if (
       !forecastForm
-        .new_resolution_date
+        .new_resolution_date ||
+      !String(
+        forecastForm.reason ||
+        ''
+      ).trim()
     ) {
 
       setHistoryError(
-        'New Planned Resolution Date is required.'
-      );
-
-      return;
-
-    }
-
-
-    if (
-      !reason
-    ) {
-
-      setHistoryError(
-        'Reason for forecast change is required.'
+        'New Planned Resolution Date and Reason are required.'
       );
 
       return;
@@ -2658,11 +2551,6 @@ export default function ConstraintLogPage() {
 
     setSavingForecast(
       true
-    );
-
-
-    setHistoryError(
-      ''
     );
 
 
@@ -2686,7 +2574,7 @@ export default function ConstraintLogPage() {
                 .new_resolution_date,
 
             target_reason:
-              reason,
+              forecastForm.reason,
 
             target_performed_by:
               performedBy,
@@ -2715,7 +2603,7 @@ export default function ConstraintLogPage() {
     ) {
 
       console.error(
-        'Update Constraint Forecast:',
+        'Constraint Forecast:',
         error
       );
 
@@ -2737,7 +2625,456 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // AFFECTED WORK MAP
+  // LIFECYCLE ACTIONS
+  // ==========================================================
+
+  function openLifecycleAction(
+    action
+  ) {
+
+    setLifecycleAction(
+      action
+    );
+
+
+    setLifecycleNote(
+      ''
+    );
+
+
+    setHistoryError(
+      ''
+    );
+
+  }
+
+
+  function getLifecycleConfiguration(
+    action
+  ) {
+
+    switch (
+      action
+    ) {
+
+      case 'start':
+        return {
+          eyebrow:
+            'LIFECYCLE',
+
+          title:
+            'Start Action',
+
+          description:
+            'Move this constraint from Open to In Progress.',
+
+          label:
+            'Optional Comment',
+
+          placeholder:
+            'Example: Procurement team started contacting suppliers.',
+
+          required:
+            false,
+
+          button:
+            'Start Action',
+        };
+
+
+      case 'waiting':
+        return {
+          eyebrow:
+            'LIFECYCLE',
+
+          title:
+            'Set Waiting',
+
+          description:
+            'Record why active resolution work cannot continue.',
+
+          label:
+            'Reason for Waiting',
+
+          placeholder:
+            'Example: Waiting for supplier confirmation.',
+
+          required:
+            true,
+
+          button:
+            'Set Waiting',
+        };
+
+
+      case 'resume':
+        return {
+          eyebrow:
+            'LIFECYCLE',
+
+          title:
+            'Resume Action',
+
+          description:
+            'Move this constraint back to active resolution.',
+
+          label:
+            'Optional Comment',
+
+          placeholder:
+            'Example: Supplier response received. Procurement resumed.',
+
+          required:
+            false,
+
+          button:
+            'Resume Action',
+        };
+
+
+      case 'resolve':
+        return {
+          eyebrow:
+            'RESOLUTION',
+
+          title:
+            'Resolve Constraint',
+
+          description:
+            'Report that the required action has been completed. The constraint will remain blocking until verified and cleared.',
+
+          label:
+            'Resolution Note',
+
+          placeholder:
+            'Example: Supplier confirmed material delivery for August 29.',
+
+          required:
+            true,
+
+          button:
+            'Mark Resolved',
+        };
+
+
+      case 'clear':
+        return {
+          eyebrow:
+            'VERIFICATION',
+
+          title:
+            'Verify & Clear',
+
+          description:
+            'Confirm that the reported resolution is valid and affected work may proceed.',
+
+          label:
+            'Verification Note',
+
+          placeholder:
+            'Example: Delivery confirmation reviewed. Material availability no longer blocks production.',
+
+          required:
+            true,
+
+          button:
+            'Verify & Clear',
+        };
+
+
+      case 'cancel':
+        return {
+          eyebrow:
+            'CONSTRAINT MANAGEMENT',
+
+          title:
+            'Cancel Constraint',
+
+          description:
+            'Cancel means the constraint is no longer applicable. It does not mean the issue was successfully resolved.',
+
+          label:
+            'Cancellation Reason',
+
+          placeholder:
+            'Example: Work package removed from current scope.',
+
+          required:
+            true,
+
+          button:
+            'Cancel Constraint',
+        };
+
+
+      default:
+        return null;
+    }
+
+  }
+
+
+  async function executeLifecycleAction(
+    event
+  ) {
+
+    event.preventDefault();
+
+
+    if (
+      !managedConstraint ||
+      !lifecycleAction ||
+      savingLifecycle
+    ) {
+      return;
+    }
+
+
+    const configuration =
+      getLifecycleConfiguration(
+        lifecycleAction
+      );
+
+
+    const note =
+      String(
+        lifecycleNote ||
+        ''
+      ).trim();
+
+
+    if (
+      configuration
+        ?.required &&
+      !note
+    ) {
+
+      setHistoryError(
+        `${configuration.label} is required.`
+      );
+
+      return;
+
+    }
+
+
+    setSavingLifecycle(
+      true
+    );
+
+
+    setHistoryError(
+      ''
+    );
+
+
+    try {
+
+      const performedBy =
+        await getPerformedBy();
+
+
+      let functionName =
+        null;
+
+
+      let parameters =
+        null;
+
+
+      switch (
+        lifecycleAction
+      ) {
+
+        case 'start':
+
+          functionName =
+            'start_constraint_action_with_history';
+
+
+          parameters = {
+            target_constraint_id:
+              managedConstraint.id,
+
+            target_comment:
+              note ||
+              null,
+
+            target_performed_by:
+              performedBy,
+          };
+
+          break;
+
+
+        case 'waiting':
+
+          functionName =
+            'set_constraint_waiting_with_history';
+
+
+          parameters = {
+            target_constraint_id:
+              managedConstraint.id,
+
+            target_reason:
+              note,
+
+            target_performed_by:
+              performedBy,
+          };
+
+          break;
+
+
+        case 'resume':
+
+          functionName =
+            'resume_constraint_action_with_history';
+
+
+          parameters = {
+            target_constraint_id:
+              managedConstraint.id,
+
+            target_comment:
+              note ||
+              null,
+
+            target_performed_by:
+              performedBy,
+          };
+
+          break;
+
+
+        case 'resolve':
+
+          functionName =
+            'resolve_constraint_with_history';
+
+
+          parameters = {
+            target_constraint_id:
+              managedConstraint.id,
+
+            target_resolution_note:
+              note,
+
+            target_performed_by:
+              performedBy,
+          };
+
+          break;
+
+
+        case 'clear':
+
+          functionName =
+            'verify_and_clear_constraint_with_history';
+
+
+          parameters = {
+            target_constraint_id:
+              managedConstraint.id,
+
+            target_verification_note:
+              note,
+
+            target_performed_by:
+              performedBy,
+          };
+
+          break;
+
+
+        case 'cancel':
+
+          functionName =
+            'cancel_constraint_with_history';
+
+
+          parameters = {
+            target_constraint_id:
+              managedConstraint.id,
+
+            target_reason:
+              note,
+
+            target_performed_by:
+              performedBy,
+          };
+
+          break;
+
+
+        default:
+
+          throw new Error(
+            'Unknown lifecycle action.'
+          );
+
+      }
+
+
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          functionName,
+          parameters
+        );
+
+
+      if (
+        error
+      ) {
+        throw error;
+      }
+
+
+      setLifecycleAction(
+        null
+      );
+
+
+      setLifecycleNote(
+        ''
+      );
+
+
+      await refreshManagedConstraint(
+        managedConstraint.id
+      );
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        'Constraint Lifecycle:',
+        error
+      );
+
+
+      setHistoryError(
+        error.message ||
+        'Constraint lifecycle action could not be completed.'
+      );
+
+    } finally {
+
+      setSavingLifecycle(
+        false
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // AFFECTED WORK
   // ==========================================================
 
   const affectedWorkByConstraint =
@@ -2788,13 +3125,6 @@ export default function ConstraintLogPage() {
       ]
     );
 
-
-  // ==========================================================
-  // AFFECTED WORK
-  //
-  // Prefer Lookahead representation when it contains useful
-  // package/location data. Master Plan fallback is retained.
-  // ==========================================================
 
   const getConstraintAffectedWork =
     useCallback(
@@ -2926,122 +3256,6 @@ export default function ConstraintLogPage() {
         );
 
 
-        // ----------------------------------------------------
-        // DIRECT LEGACY REFERENCES
-        // ----------------------------------------------------
-
-        if (
-          constraint
-            .lookahead_work_item_id
-        ) {
-
-          const item =
-            lookaheadItems[
-              constraint
-                .lookahead_work_item_id
-            ];
-
-
-          if (
-            item &&
-            (
-              item.package_code ||
-              item.location_path ||
-              item.location_name
-            )
-          ) {
-
-            candidates.push({
-              key:
-                `lookahead-${item.id}`,
-
-              type:
-                'Lookahead',
-
-              packageCode:
-                item.package_code ||
-                '—',
-
-              serviceName:
-                item.service_name ||
-                '',
-
-              location:
-                item.location_path ||
-                item.location_name ||
-                'Unassigned Location',
-
-              startDate:
-                item.lookahead_start_date ||
-                null,
-
-              finishDate:
-                item.lookahead_finish_date ||
-                null,
-            });
-
-          }
-
-        }
-
-
-        if (
-          constraint
-            .master_plan_package_id
-        ) {
-
-          const item =
-            masterPlanPackages[
-              constraint
-                .master_plan_package_id
-            ];
-
-
-          if (
-            item
-          ) {
-
-            candidates.push({
-              key:
-                `master-${item.id}`,
-
-              type:
-                'Master Plan',
-
-              packageCode:
-                item.package_code ||
-                '—',
-
-              serviceName:
-                item.service_name ||
-                '',
-
-              location:
-                item.location_path ||
-                item.location_name ||
-                'Unassigned Location',
-
-              startDate:
-                item.scheduled_start_date ||
-                null,
-
-              finishDate:
-                item.scheduled_finish_date ||
-                null,
-            });
-
-          }
-
-        }
-
-
-        // ----------------------------------------------------
-        // DEDUPLICATE BY PACKAGE + LOCATION
-        //
-        // If Lookahead and Master Plan describe the same work,
-        // keep the Lookahead representation.
-        // ----------------------------------------------------
-
         const unique =
           new Map();
 
@@ -3051,49 +3265,32 @@ export default function ConstraintLogPage() {
             item
           ) => {
 
-            const logicalKey =
-              [
-                normalizeText(
-                  item.packageCode
-                ),
-
-                normalizeText(
-                  item.location
-                ),
-              ].join(
-                '|'
-              );
+            const key =
+              `${normalizeText(
+                item.packageCode
+              )}|${normalizeText(
+                item.location
+              )}`;
 
 
             const existing =
               unique.get(
-                logicalKey
+                key
               );
 
 
             if (
-              !existing
+              !existing ||
+              (
+                existing.type ===
+                  'Master Plan' &&
+                item.type ===
+                  'Lookahead'
+              )
             ) {
 
               unique.set(
-                logicalKey,
-                item
-              );
-
-              return;
-
-            }
-
-
-            if (
-              existing.type ===
-                'Master Plan' &&
-              item.type ===
-                'Lookahead'
-            ) {
-
-              unique.set(
-                logicalKey,
+                key,
                 item
               );
 
@@ -3150,7 +3347,9 @@ export default function ConstraintLogPage() {
           new Set(
             constraints
               .map(
-                (constraint) =>
+                (
+                  constraint
+                ) =>
                   constraint.category
               )
               .filter(
@@ -3171,7 +3370,9 @@ export default function ConstraintLogPage() {
           new Set(
             constraints
               .map(
-                (constraint) =>
+                (
+                  constraint
+                ) =>
                   constraint.priority
               )
               .filter(
@@ -3192,7 +3393,9 @@ export default function ConstraintLogPage() {
           new Set(
             constraints
               .map(
-                (constraint) =>
+                (
+                  constraint
+                ) =>
                   constraint
                     .responsible_party
               )
@@ -3208,7 +3411,7 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
-  // KPI SUMMARY
+  // SUMMARY
   // ==========================================================
 
   const summary =
@@ -3217,7 +3420,9 @@ export default function ConstraintLogPage() {
 
         active:
           constraints.filter(
-            (constraint) =>
+            (
+              constraint
+            ) =>
               ACTIVE_STATUSES.includes(
                 constraint.status
               )
@@ -3225,19 +3430,64 @@ export default function ConstraintLogPage() {
 
         overdue:
           constraints.filter(
-            isConstraintOverdue
+            (
+              constraint
+            ) => {
+
+              if (
+                TERMINAL_STATUSES.includes(
+                  constraint.status
+                )
+              ) {
+                return false;
+              }
+
+
+              const forecast =
+                constraint
+                  .target_resolution_date ||
+                constraint
+                  .required_by_date;
+
+
+              if (
+                !forecast
+              ) {
+                return false;
+              }
+
+
+              const today =
+                new Date()
+                  .toISOString()
+                  .slice(
+                    0,
+                    10
+                  );
+
+
+              return (
+                forecast <
+                today
+              );
+
+            }
           ).length,
 
         resolved:
           constraints.filter(
-            (constraint) =>
+            (
+              constraint
+            ) =>
               constraint.status ===
               'resolved'
           ).length,
 
         cleared:
           constraints.filter(
-            (constraint) =>
+            (
+              constraint
+            ) =>
               constraint.status ===
               'cleared'
           ).length,
@@ -3257,7 +3507,7 @@ export default function ConstraintLogPage() {
     useMemo(
       () => {
 
-        const normalizedSearch =
+        const search =
           normalizeText(
             searchTerm
           );
@@ -3306,7 +3556,7 @@ export default function ConstraintLogPage() {
 
 
             if (
-              !normalizedSearch
+              !search
             ) {
               return true;
             }
@@ -3318,24 +3568,6 @@ export default function ConstraintLogPage() {
               );
 
 
-            const affectedSearch =
-              affected
-                .map(
-                  (item) =>
-                    [
-                      item.packageCode,
-                      item.serviceName,
-                      item.location,
-                      item.type,
-                    ].join(
-                      ' '
-                    )
-                )
-                .join(
-                  ' '
-                );
-
-
             return normalizeText(
               [
                 getConstraintReference(
@@ -3343,23 +3575,36 @@ export default function ConstraintLogPage() {
                 ),
 
                 constraint.title,
+
                 constraint.description,
+
                 constraint.category,
-                constraint.action_required,
-                constraint.responsible_party,
+
+                constraint
+                  .action_required,
+
+                constraint
+                  .responsible_party,
+
                 constraint.priority,
+
                 constraint.status,
 
                 getSourceLabel(
                   constraint
                 ),
 
-                affectedSearch,
+                ...affected.map(
+                  (
+                    item
+                  ) =>
+                    `${item.packageCode} ${item.location}`
+                ),
               ].join(
                 ' '
               )
             ).includes(
-              normalizedSearch
+              search
             );
 
           }
@@ -3368,19 +3613,15 @@ export default function ConstraintLogPage() {
       },
       [
         constraints,
-        searchTerm,
         statusFilter,
         categoryFilter,
         priorityFilter,
         responsibleFilter,
+        searchTerm,
         getConstraintAffectedWork,
       ]
     );
 
-
-  // ==========================================================
-  // FORECAST ASSESSMENT
-  // ==========================================================
 
   const managedForecast =
     useMemo(
@@ -3400,79 +3641,36 @@ export default function ConstraintLogPage() {
 
   return (
     <div
-      style={{
-        minHeight:
-          '100%',
-
-        padding:
-          '18px 20px 40px',
-
-        background:
-          '#f8fafc',
-
-        color:
-          '#0f172a',
-      }}
+      style={
+        pageStyle
+      }
     >
 
       {/* ====================================================
-          PAGE HEADER
+          HEADER
       ===================================================== */}
 
       <div
-        style={{
-          display:
-            'flex',
-
-          justifyContent:
-            'space-between',
-
-          alignItems:
-            'flex-start',
-
-          gap:
-            '16px',
-
-          flexWrap:
-            'wrap',
-
-          marginBottom:
-            '18px',
-        }}
+        style={
+          pageHeaderStyle
+        }
       >
 
         <div>
 
           <h1
-            style={{
-              margin:
-                0,
-
-              fontSize:
-                '22px',
-
-              fontWeight:
-                800,
-            }}
+            style={
+              pageTitleStyle
+            }
           >
             CONSTRAINT LOG
           </h1>
 
 
           <p
-            style={{
-              maxWidth:
-                '760px',
-
-              margin:
-                '6px 0 0',
-
-              color:
-                '#64748b',
-
-              fontSize:
-                '11px',
-            }}
+            style={
+              pageDescriptionStyle
+            }
           >
             Central project-level management of constraints,
             ownership, actions, forecasts and readiness clearance.
@@ -3503,32 +3701,19 @@ export default function ConstraintLogPage() {
 
 
       {/* ====================================================
-          PROJECT SELECTOR
+          PROJECT
       ===================================================== */}
 
       <div
-        style={{
-          display:
-            'flex',
-
-          alignItems:
-            'flex-end',
-
-          gap:
-            '12px',
-
-          flexWrap:
-            'wrap',
-
-          marginBottom:
-            '16px',
-        }}
+        style={
+          projectRowStyle
+        }
       >
 
         <div
           style={{
             width:
-              'min(360px, 100%)',
+              'min(360px,100%)',
           }}
         >
 
@@ -3555,7 +3740,7 @@ export default function ConstraintLogPage() {
             }
 
             style={
-              selectStyle
+              inputStyle
             }
           >
 
@@ -3598,10 +3783,6 @@ export default function ConstraintLogPage() {
           <button
             type="button"
 
-            disabled={
-              loading
-            }
-
             onClick={() =>
               loadConstraintLog(
                 selectedProjectId
@@ -3612,85 +3793,39 @@ export default function ConstraintLogPage() {
               secondaryButtonStyle
             }
           >
-            {loading
-              ? 'Refreshing...'
-              : 'Refresh'}
+            Refresh
           </button>
-
-        )}
-
-
-        {selectedProject && (
-
-          <div
-            style={
-              projectBadgeStyle
-            }
-          >
-            {selectedProject.code
-              ? `${selectedProject.code} · `
-              : ''}
-
-            {selectedProject.name}
-          </div>
 
         )}
 
       </div>
 
 
-      {/* ====================================================
-          MESSAGES
-      ===================================================== */}
-
       {errorMessage && (
-
-        <div
-          style={
-            errorMessageStyle
-          }
+        <MessageBox
+          type="error"
         >
           {errorMessage}
-        </div>
-
+        </MessageBox>
       )}
 
 
       {successMessage && (
-
-        <div
-          style={
-            successMessageStyle
-          }
+        <MessageBox
+          type="success"
         >
           {successMessage}
-        </div>
-
+        </MessageBox>
       )}
 
-
-      {!selectedProjectId && (
-
-        <div
-          style={
-            emptyStyle
-          }
-        >
-          Select a project to open its centralized Constraint Log.
-        </div>
-
-      )}
-
-
-      {/* ====================================================
-          PROJECT WORKSPACE
-      ===================================================== */}
 
       {selectedProjectId && (
 
         <>
 
-          {/* SUMMARY */}
+          {/* ==================================================
+              KPI
+          ================================================== */}
 
           <div
             style={
@@ -3721,7 +3856,7 @@ export default function ConstraintLogPage() {
               value={
                 summary.resolved
               }
-              description="Awaiting verification / clearance"
+              description="Awaiting verification"
             />
 
 
@@ -3736,7 +3871,9 @@ export default function ConstraintLogPage() {
           </div>
 
 
-          {/* FILTERS */}
+          {/* ==================================================
+              FILTERS
+          ================================================== */}
 
           <div
             style={
@@ -3760,11 +3897,11 @@ export default function ConstraintLogPage() {
                   )
                 }
 
-                placeholder="Reference, location, action..."
-
                 style={
                   filterInputStyle
                 }
+
+                placeholder="Reference, package, location, action..."
               />
             </FilterField>
 
@@ -3979,24 +4116,9 @@ export default function ConstraintLogPage() {
           </div>
 
 
-          <div
-            style={
-              resultCountStyle
-            }
-          >
-            Showing{' '}
-            <strong>
-              {filteredConstraints.length}
-            </strong>{' '}
-            of{' '}
-            <strong>
-              {constraints.length}
-            </strong>{' '}
-            constraints
-          </div>
-
-
-          {/* TABLE */}
+          {/* ==================================================
+              TABLE
+          ================================================== */}
 
           <div
             style={
@@ -4008,21 +4130,10 @@ export default function ConstraintLogPage() {
 
               <div
                 style={
-                  loadingStyle
+                  emptyStyle
                 }
               >
                 Loading Constraint Log...
-              </div>
-
-            ) : filteredConstraints.length ===
-              0 ? (
-
-              <div
-                style={
-                  loadingStyle
-                }
-              >
-                No constraints match the current project/filter selection.
               </div>
 
             ) : (
@@ -4040,7 +4151,7 @@ export default function ConstraintLogPage() {
                     {[
                       'REFERENCE',
                       'PACKAGE',
-                      'LOCATION / AFFECTED WORK',
+                      'LOCATION',
                       'CATEGORY',
                       'STATUS',
                       'PRIORITY',
@@ -4051,19 +4162,19 @@ export default function ConstraintLogPage() {
                       'ACTIONS',
                     ].map(
                       (
-                        label
+                        item
                       ) => (
 
                         <th
                           key={
-                            label
+                            item
                           }
 
                           style={
                             headerCellStyle
                           }
                         >
-                          {label}
+                          {item}
                         </th>
 
                       )
@@ -4130,7 +4241,7 @@ export default function ConstraintLogPage() {
 
                               <div
                                 style={
-                                  blockingTextStyle
+                                  blockingStyle
                                 }
                               >
                                 BLOCKING
@@ -4153,16 +4264,13 @@ export default function ConstraintLogPage() {
 
 
                           <td
-                            style={{
-                              ...bodyCellStyle,
-
-                              textAlign:
-                                'left',
-                            }}
+                            style={
+                              bodyCellStyle
+                            }
                           >
                             {affected[0]
                               ?.location ||
-                              'Project-level constraint'}
+                              'Project-level'}
                           </td>
 
 
@@ -4183,24 +4291,17 @@ export default function ConstraintLogPage() {
                             }
                           >
 
-                            <span
-                              style={{
-                                ...badgeBaseStyle,
+                            <StatusBadge
+                              label={
+                                getStatusLabel(
+                                  constraint.status
+                                )
+                              }
 
-                                background:
-                                  statusStyle.background,
-
-                                border:
-                                  `1px solid ${statusStyle.border}`,
-
-                                color:
-                                  statusStyle.color,
-                              }}
-                            >
-                              {getStatusLabel(
-                                constraint.status
-                              )}
-                            </span>
+                              style={
+                                statusStyle
+                              }
+                            />
 
                           </td>
 
@@ -4211,53 +4312,38 @@ export default function ConstraintLogPage() {
                             }
                           >
 
-                            <span
-                              style={{
-                                ...badgeBaseStyle,
+                            <StatusBadge
+                              label={
+                                formatLabel(
+                                  constraint.priority
+                                )
+                              }
 
-                                background:
-                                  priorityStyle.background,
-
-                                border:
-                                  `1px solid ${priorityStyle.border}`,
-
-                                color:
-                                  priorityStyle.color,
-                              }}
-                            >
-                              {formatLabel(
-                                constraint.priority
-                              )}
-                            </span>
+                              style={
+                                priorityStyle
+                              }
+                            />
 
                           </td>
 
 
                           <td
-                            style={{
-                              ...bodyCellStyle,
-
-                              textAlign:
-                                'left',
-                            }}
+                            style={
+                              leftCellStyle
+                            }
                           >
                             {constraint
-                              .responsible_party ||
-                              '—'}
+                              .responsible_party}
                           </td>
 
 
                           <td
-                            style={{
-                              ...bodyCellStyle,
-
-                              textAlign:
-                                'left',
-                            }}
+                            style={
+                              leftCellStyle
+                            }
                           >
                             {constraint
-                              .action_required ||
-                              '—'}
+                              .action_required}
                           </td>
 
 
@@ -4267,30 +4353,25 @@ export default function ConstraintLogPage() {
                             }
                           >
 
-                            <div
-                              style={{
-                                fontWeight:
-                                  700,
-                              }}
-                            >
-                              {formatDate(
-                                constraint
-                                  .target_resolution_date ||
-                                constraint
-                                  .required_by_date
-                              )}
-                            </div>
+                            {formatDate(
+                              constraint
+                                .target_resolution_date ||
+                              constraint
+                                .required_by_date
+                            )}
 
 
                             {forecast.delayed && (
 
                               <div
                                 style={
-                                  delayTextStyle
+                                  blockingStyle
                                 }
                               >
-                                {forecast
-                                  .varianceLabel}
+                                {
+                                  forecast
+                                    .varianceLabel
+                                }
                               </div>
 
                             )}
@@ -4507,7 +4588,7 @@ export default function ConstraintLogPage() {
               </ManagementSection>
 
 
-              {/* SCHEDULE EXPOSURE */}
+              {/* FORECAST */}
 
               <ManagementSection
                 title="Resolution Forecast"
@@ -4545,7 +4626,7 @@ export default function ConstraintLogPage() {
                       )
                     }
 
-                    description="Current expected completion"
+                    description="Current expected resolution"
                   />
 
 
@@ -4557,7 +4638,7 @@ export default function ConstraintLogPage() {
                         .varianceLabel
                     }
 
-                    description="Against required date"
+                    description="Against Required By date"
 
                     alert={
                       managedForecast
@@ -4577,8 +4658,8 @@ export default function ConstraintLogPage() {
                     description={
                       managedForecast
                         .delayed
-                        ? 'Current forecast exceeds required date'
-                        : 'Current forecast protects required date'
+                        ? 'Forecast exceeds required date'
+                        : 'Forecast protects required date'
                     }
 
                     alert={
@@ -4647,25 +4728,31 @@ export default function ConstraintLogPage() {
                   }
                 >
 
-                  <button
-                    type="button"
+                  {!TERMINAL_STATUSES.includes(
+                    managedConstraint.status
+                  ) && (
 
-                    onClick={
-                      openEditModal
-                    }
+                    <button
+                      type="button"
 
-                    style={
-                      managementButtonStyle
-                    }
-                  >
-                    <strong>
-                      Edit Details
-                    </strong>
+                      onClick={
+                        openEditModal
+                      }
 
-                    <span>
-                      Owner, action, priority and blocking
-                    </span>
-                  </button>
+                      style={
+                        actionButtonStyle
+                      }
+                    >
+                      <strong>
+                        Edit Details
+                      </strong>
+
+                      <span>
+                        Owner, action, priority and blocking
+                      </span>
+                    </button>
+
+                  )}
 
 
                   <button
@@ -4676,7 +4763,7 @@ export default function ConstraintLogPage() {
                     }
 
                     style={
-                      managementButtonStyle
+                      actionButtonStyle
                     }
                   >
                     <strong>
@@ -4684,16 +4771,15 @@ export default function ConstraintLogPage() {
                     </strong>
 
                     <span>
-                      Record progress without changing status
+                      Add a management update
                     </span>
                   </button>
 
 
-                  {!TERMINAL_STATUSES.includes(
-                    managedConstraint.status
-                  ) &&
-                  ![
-                    'resolved',
+                  {[
+                    'open',
+                    'in_progress',
+                    'waiting',
                   ].includes(
                     managedConstraint.status
                   ) && (
@@ -4706,7 +4792,7 @@ export default function ConstraintLogPage() {
                       }
 
                       style={
-                        forecastButtonStyle
+                        forecastActionButtonStyle
                       }
                     >
                       <strong>
@@ -4714,7 +4800,7 @@ export default function ConstraintLogPage() {
                       </strong>
 
                       <span>
-                        Revise planned completion and explain the delay
+                        Revise planned resolution date
                       </span>
                     </button>
 
@@ -4722,26 +4808,18 @@ export default function ConstraintLogPage() {
 
 
                   {managedConstraint.status ===
-                    'resolved' && (
-
-                    <PrototypeActionButton
-                      label="Verify & Clear"
-
-                      description="Verify resolution and release readiness"
-
-                      emphasis
-                    />
-
-                  )}
-
-
-                  {managedConstraint.status ===
                     'open' && (
 
-                    <PrototypeActionButton
+                    <LifecycleButton
                       label="Start Action"
 
                       description="Open → In Progress"
+
+                      onClick={() =>
+                        openLifecycleAction(
+                          'start'
+                        )
+                      }
                     />
 
                   )}
@@ -4750,10 +4828,114 @@ export default function ConstraintLogPage() {
                   {managedConstraint.status ===
                     'in_progress' && (
 
-                    <PrototypeActionButton
-                      label="Resolve"
+                    <>
+                      <LifecycleButton
+                        label="Set Waiting"
 
-                      description="Report required action completed"
+                        description="In Progress → Waiting"
+
+                        onClick={() =>
+                          openLifecycleAction(
+                            'waiting'
+                          )
+                        }
+                      />
+
+
+                      <LifecycleButton
+                        label="Resolve"
+
+                        description="Report required action complete"
+
+                        emphasis
+
+                        onClick={() =>
+                          openLifecycleAction(
+                            'resolve'
+                          )
+                        }
+                      />
+                    </>
+
+                  )}
+
+
+                  {managedConstraint.status ===
+                    'waiting' && (
+
+                    <>
+                      <LifecycleButton
+                        label="Resume Action"
+
+                        description="Waiting → In Progress"
+
+                        onClick={() =>
+                          openLifecycleAction(
+                            'resume'
+                          )
+                        }
+                      />
+
+
+                      <LifecycleButton
+                        label="Resolve"
+
+                        description="Report required action complete"
+
+                        emphasis
+
+                        onClick={() =>
+                          openLifecycleAction(
+                            'resolve'
+                          )
+                        }
+                      />
+                    </>
+
+                  )}
+
+
+                  {managedConstraint.status ===
+                    'resolved' && (
+
+                    <LifecycleButton
+                      label="Verify & Clear"
+
+                      description="Verify resolution and release readiness"
+
+                      emphasis
+
+                      onClick={() =>
+                        openLifecycleAction(
+                          'clear'
+                        )
+                      }
+                    />
+
+                  )}
+
+
+                  {[
+                    'open',
+                    'in_progress',
+                    'waiting',
+                    'resolved',
+                  ].includes(
+                    managedConstraint.status
+                  ) && (
+
+                    <LifecycleButton
+                      label="Cancel Constraint"
+
+                      description="Close as no longer applicable"
+
+                      danger
+
+                      onClick={() =>
+                        openLifecycleAction(
+                          'cancel'
+                        )
+                      }
                     />
 
                   )}
@@ -4761,14 +4943,34 @@ export default function ConstraintLogPage() {
                 </div>
 
 
-                <div
-                  style={
-                    prototypeNoticeStyle
-                  }
-                >
-                  Lifecycle transitions remain disabled until their
-                  governed database functions are installed.
-                </div>
+                {managedConstraint.status ===
+                  'resolved' && (
+
+                  <div
+                    style={
+                      resolvedNoticeStyle
+                    }
+                  >
+                    This constraint has been reported resolved, but it
+                    still blocks readiness until verification is complete.
+                  </div>
+
+                )}
+
+
+                {managedConstraint.status ===
+                  'cleared' && (
+
+                  <div
+                    style={
+                      clearedNoticeStyle
+                    }
+                  >
+                    Resolution verified. This constraint is cleared and
+                    no longer blocks associated readiness.
+                  </div>
+
+                )}
 
               </ManagementSection>
 
@@ -4789,109 +4991,72 @@ export default function ConstraintLogPage() {
                       emptyInnerStyle
                     }
                   >
-                    Project-level constraint with no specific planning
+                    Project-level constraint with no specific work
                     occurrence linked.
                   </div>
 
                 ) : (
 
-                  <div
-                    style={{
-                      display:
-                        'grid',
+                  managedAffectedWork.map(
+                    (
+                      item
+                    ) => (
 
-                      gap:
-                        '8px',
-                    }}
-                  >
+                      <div
+                        key={
+                          item.key
+                        }
 
-                    {managedAffectedWork.map(
-                      (
-                        item
-                      ) => (
+                        style={
+                          affectedWorkCardStyle
+                        }
+                      >
+
+                        <strong>
+                          {item.packageCode}
+
+                          {item.serviceName
+                            ? ` · ${item.serviceName}`
+                            : ''}
+                        </strong>
+
 
                         <div
-                          key={
-                            item.key
-                          }
-
                           style={
-                            affectedWorkCardStyle
+                            affectedLocationStyle
                           }
                         >
-
-                          <div
-                            style={{
-                              fontSize:
-                                '11px',
-
-                              fontWeight:
-                                900,
-                            }}
-                          >
-                            {item.packageCode}
-
-                            {item.serviceName
-                              ? ` · ${item.serviceName}`
-                              : ''}
-                          </div>
-
-
-                          <div
-                            style={{
-                              marginTop:
-                                '4px',
-
-                              fontSize:
-                                '10px',
-
-                              color:
-                                '#475569',
-
-                              fontWeight:
-                                700,
-                            }}
-                          >
-                            {item.location}
-                          </div>
-
-
-                          <div
-                            style={{
-                              marginTop:
-                                '7px',
-
-                              color:
-                                '#64748b',
-
-                              fontSize:
-                                '9px',
-                            }}
-                          >
-                            {item.type}
-
-                            {item.startDate
-                              ? ` · ${formatDate(item.startDate)}`
-                              : ''}
-
-                            {item.finishDate
-                              ? ` → ${formatDate(item.finishDate)}`
-                              : ''}
-                          </div>
-
+                          {item.location}
                         </div>
 
-                      )
-                    )}
 
-                  </div>
+                        <div
+                          style={
+                            affectedMetaStyle
+                          }
+                        >
+                          {item.type}
+
+                          {item.startDate
+                            ? ` · ${formatDate(item.startDate)}`
+                            : ''}
+
+                          {item.finishDate
+                            ? ` → ${formatDate(item.finishDate)}`
+                            : ''}
+                        </div>
+
+                      </div>
+
+                    )
+                  )
 
                 )}
 
               </ManagementSection>
 
 
-              {/* HISTORY */}
+              {/* ACTION HISTORY */}
 
               <ManagementSection
                 title="Action History"
@@ -4901,13 +5066,11 @@ export default function ConstraintLogPage() {
 
                 {historyError && (
 
-                  <div
-                    style={
-                      errorMessageStyle
-                    }
+                  <MessageBox
+                    type="error"
                   >
                     {historyError}
-                  </div>
+                  </MessageBox>
 
                 )}
 
@@ -4973,9 +5136,9 @@ export default function ConstraintLogPage() {
       {showCreateModal && (
 
         <ModalShell
-          title="Add Constraint"
-
           eyebrow="PROJECT CONSTRAINT"
+
+          title="Add Constraint"
 
           onClose={() =>
             setShowCreateModal(
@@ -5358,7 +5521,7 @@ export default function ConstraintLogPage() {
 
 
       {/* ====================================================
-          EDIT DETAILS MODAL
+          EDIT MODAL
       ===================================================== */}
 
       {showEditModal &&
@@ -5551,8 +5714,6 @@ export default function ConstraintLogPage() {
                   editForm.comment
                 }
 
-                placeholder="Optional explanation for this change"
-
                 onChange={(
                   event
                 ) =>
@@ -5688,8 +5849,6 @@ export default function ConstraintLogPage() {
                   commentText
                 }
 
-                placeholder="Example: Supplier contacted. Awaiting confirmation of revised shipment date."
-
                 onChange={(
                   event
                 ) =>
@@ -5707,16 +5866,6 @@ export default function ConstraintLogPage() {
               />
 
             </ModalField>
-
-
-            <div
-              style={
-                infoBoxStyle
-              }
-            >
-              This comment will be appended to Action History without
-              changing the current constraint status.
-            </div>
 
 
             <ModalActions>
@@ -5764,7 +5913,7 @@ export default function ConstraintLogPage() {
 
 
       {/* ====================================================
-          UPDATE FORECAST MODAL
+          FORECAST MODAL
       ===================================================== */}
 
       {showForecastModal &&
@@ -5784,38 +5933,38 @@ export default function ConstraintLogPage() {
 
           <div
             style={
-              forecastModalSummaryStyle
+              forecastModalGridStyle
             }
           >
 
-            <div>
-              <span>
-                Required By
-              </span>
+            <ForecastCard
+              label="Required By"
 
-              <strong>
-                {formatDate(
+              value={
+                formatDate(
                   managedConstraint
                     .required_by_date
-                )}
-              </strong>
-            </div>
+                )
+              }
+
+              description="Original required date"
+            />
 
 
-            <div>
-              <span>
-                Current Forecast
-              </span>
+            <ForecastCard
+              label="Current Forecast"
 
-              <strong>
-                {formatDate(
+              value={
+                formatDate(
                   managedConstraint
                     .target_resolution_date ||
                   managedConstraint
                     .required_by_date
-                )}
-              </strong>
-            </div>
+                )
+              }
+
+              description="Current planned resolution"
+            />
 
           </div>
 
@@ -5861,63 +6010,6 @@ export default function ConstraintLogPage() {
             </ModalField>
 
 
-            {forecastForm
-              .new_resolution_date && (
-
-              <div
-                style={
-                  getForecastPreviewStyle(
-                    managedConstraint
-                      .required_by_date,
-
-                    forecastForm
-                      .new_resolution_date
-                  )
-                }
-              >
-
-                {(() => {
-
-                  const variance =
-                    dateDifferenceDays(
-                      managedConstraint
-                        .required_by_date,
-
-                      forecastForm
-                        .new_resolution_date
-                    );
-
-
-                  if (
-                    variance === null
-                  ) {
-                    return 'Forecast could not be evaluated.';
-                  }
-
-
-                  if (
-                    variance > 0
-                  ) {
-                    return `DELAY EXPECTED · +${variance} day${variance === 1 ? '' : 's'} beyond the required date`;
-                  }
-
-
-                  if (
-                    variance === 0
-                  ) {
-                    return 'ON TIME · Forecast remains on the required date';
-                  }
-
-
-                  return `AHEAD · ${Math.abs(variance)} day${Math.abs(variance) === 1 ? '' : 's'} before the required date`;
-
-                })()}
-
-              </div>
-
-            )}
-
-
             <ModalField
               label="Reason for Forecast Change"
             >
@@ -5926,8 +6018,6 @@ export default function ConstraintLogPage() {
                 value={
                   forecastForm.reason
                 }
-
-                placeholder="Example: Supplier confirmed that material will only arrive on September 2."
 
                 onChange={(
                   event
@@ -5960,9 +6050,8 @@ export default function ConstraintLogPage() {
                 warningBoxStyle
               }
             >
-              The original Required By date will not be changed.
-              RitsuFlow will preserve the previous forecast and the
-              reason for this revision in Action History.
+              Required By will remain unchanged. The previous forecast
+              and reason for revision will be retained in Action History.
             </div>
 
 
@@ -5999,6 +6088,154 @@ export default function ConstraintLogPage() {
                 {savingForecast
                   ? 'Updating...'
                   : 'Update Forecast'}
+              </button>
+
+            </ModalActions>
+
+          </form>
+
+        </ModalShell>
+
+      )}
+
+
+      {/* ====================================================
+          LIFECYCLE MODAL
+      ===================================================== */}
+
+      {lifecycleAction &&
+        managedConstraint && (
+
+        <ModalShell
+          eyebrow={
+            getLifecycleConfiguration(
+              lifecycleAction
+            )?.eyebrow
+          }
+
+          title={
+            getLifecycleConfiguration(
+              lifecycleAction
+            )?.title
+          }
+
+          onClose={() =>
+            setLifecycleAction(
+              null
+            )
+          }
+        >
+
+          <p
+            style={
+              lifecycleDescriptionStyle
+            }
+          >
+            {
+              getLifecycleConfiguration(
+                lifecycleAction
+              )?.description
+            }
+          </p>
+
+
+          {lifecycleAction ===
+            'clear' && (
+
+            <div
+              style={
+                verificationWarningStyle
+              }
+            >
+              Clearing this constraint will release its associated
+              Lookahead/Koskela readiness condition.
+            </div>
+
+          )}
+
+
+          <form
+            onSubmit={
+              executeLifecycleAction
+            }
+          >
+
+            <ModalField
+              label={
+                getLifecycleConfiguration(
+                  lifecycleAction
+                )?.label
+              }
+            >
+
+              <textarea
+                value={
+                  lifecycleNote
+                }
+
+                placeholder={
+                  getLifecycleConfiguration(
+                    lifecycleAction
+                  )?.placeholder
+                }
+
+                onChange={(
+                  event
+                ) =>
+                  setLifecycleNote(
+                    event.target.value
+                  )
+                }
+
+                style={{
+                  ...modalTextareaStyle,
+
+                  minHeight:
+                    '125px',
+                }}
+              />
+
+            </ModalField>
+
+
+            <ModalActions>
+
+              <button
+                type="button"
+
+                onClick={() =>
+                  setLifecycleAction(
+                    null
+                  )
+                }
+
+                style={
+                  secondaryButtonStyle
+                }
+              >
+                Cancel
+              </button>
+
+
+              <button
+                type="submit"
+
+                disabled={
+                  savingLifecycle
+                }
+
+                style={
+                  lifecycleAction ===
+                    'cancel'
+                    ? dangerPrimaryButtonStyle
+                    : primaryButtonStyle
+                }
+              >
+                {savingLifecycle
+                  ? 'Processing...'
+                  : getLifecycleConfiguration(
+                      lifecycleAction
+                    )?.button}
               </button>
 
             </ModalActions>
@@ -6098,37 +6335,36 @@ function ManagementSection({
       }
     >
 
+      <h3
+        style={
+          sectionTitleStyle
+        }
+      >
+        {title}
+      </h3>
+
+
+      {subtitle && (
+
+        <div
+          style={
+            sectionSubtitleStyle
+          }
+        >
+          {subtitle}
+        </div>
+
+      )}
+
+
       <div
         style={{
-          marginBottom:
+          marginTop:
             '12px',
         }}
       >
-
-        <h3
-          style={
-            sectionTitleStyle
-          }
-        >
-          {title}
-        </h3>
-
-
-        {subtitle && (
-
-          <div
-            style={
-              sectionSubtitleStyle
-            }
-          >
-            {subtitle}
-          </div>
-
-        )}
-
+        {children}
       </div>
-
-      {children}
 
     </section>
   );
@@ -6154,7 +6390,7 @@ function ManagementValue({
 
       <div
         style={
-          managementValueStyle
+          valueStyle
         }
       >
         {value}
@@ -6174,7 +6410,7 @@ function ManagementDetail({
     <div
       style={{
         marginBottom:
-          '13px',
+          '14px',
       }}
     >
 
@@ -6189,7 +6425,7 @@ function ManagementDetail({
 
       <div
         style={
-          managementDetailValueStyle
+          detailValueStyle
         }
       >
         {value}
@@ -6212,15 +6448,15 @@ function ForecastCard({
       style={{
         ...forecastCardStyle,
 
-        borderColor:
-          alert
-            ? '#fecaca'
-            : '#e2e8f0',
-
         background:
           alert
             ? '#fef2f2'
             : '#f8fafc',
+
+        borderColor:
+          alert
+            ? '#fecaca'
+            : '#e2e8f0',
       }}
     >
 
@@ -6233,8 +6469,11 @@ function ForecastCard({
       </div>
 
 
-      <div
+      <strong
         style={{
+          display:
+            'block',
+
           marginTop:
             '5px',
 
@@ -6245,13 +6484,10 @@ function ForecastCard({
 
           fontSize:
             '12px',
-
-          fontWeight:
-            900,
         }}
       >
         {value}
-      </div>
+      </strong>
 
 
       <div
@@ -6266,9 +6502,6 @@ function ForecastCard({
 
           fontSize:
             '8px',
-
-          lineHeight:
-            1.4,
         }}
       >
         {description}
@@ -6279,45 +6512,57 @@ function ForecastCard({
 }
 
 
-function PrototypeActionButton({
+function LifecycleButton({
   label,
   description,
+  onClick,
   emphasis,
+  danger,
 }) {
 
   return (
     <button
       type="button"
 
-      disabled
+      onClick={
+        onClick
+      }
 
       style={{
-        ...managementButtonStyle,
+        ...actionButtonStyle,
 
         background:
-          emphasis
-            ? '#f0fdf4'
-            : '#f8fafc',
+          danger
+            ? '#fef2f2'
+            : emphasis
+              ? '#f0fdf4'
+              : '#ffffff',
 
         borderColor:
-          emphasis
-            ? '#86efac'
-            : '#cbd5e1',
+          danger
+            ? '#fecaca'
+            : emphasis
+              ? '#86efac'
+              : '#cbd5e1',
 
-        opacity:
-          0.7,
-
-        cursor:
-          'not-allowed',
+        color:
+          danger
+            ? '#b91c1c'
+            : emphasis
+              ? '#166534'
+              : '#334155',
       }}
     >
+
       <strong>
         {label}
       </strong>
 
+
       <span>
         {description}
       </span>
+
     </button>
   );
 }
@@ -6327,7 +6572,7 @@ function HistoryEntry({
   entry,
 }) {
 
-  const hasStatusChange =
+  const statusChanged =
     entry.status_from !==
       entry.status_to &&
     (
@@ -6336,7 +6581,7 @@ function HistoryEntry({
     );
 
 
-  const hasDateChange =
+  const forecastChanged =
     entry
       .previous_target_resolution_date !==
       entry
@@ -6364,15 +6609,11 @@ function HistoryEntry({
 
         <div>
 
-          <div
-            style={
-              historyTitleStyle
-            }
-          >
+          <strong>
             {getActionTypeLabel(
               entry.action_type
             )}
-          </div>
+          </strong>
 
 
           <div
@@ -6400,7 +6641,7 @@ function HistoryEntry({
       </div>
 
 
-      {hasStatusChange && (
+      {statusChanged && (
 
         <HistoryChange
           label="Status"
@@ -6419,7 +6660,7 @@ function HistoryEntry({
       )}
 
 
-      {hasDateChange && (
+      {forecastChanged && (
 
         <HistoryChange
           label="Forecast"
@@ -6474,6 +6715,32 @@ function HistoryChange({
       </strong>
 
     </div>
+  );
+}
+
+
+function StatusBadge({
+  label,
+  style,
+}) {
+
+  return (
+    <span
+      style={{
+        ...badgeStyle,
+
+        background:
+          style.background,
+
+        border:
+          `1px solid ${style.border}`,
+
+        color:
+          style.color,
+      }}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -6593,19 +6860,9 @@ function ModalActions({
 
   return (
     <div
-      style={{
-        display:
-          'flex',
-
-        justifyContent:
-          'flex-end',
-
-        gap:
-          '8px',
-
-        marginTop:
-          '20px',
-      }}
+      style={
+        modalActionsStyle
+      }
     >
       {children}
     </div>
@@ -6613,56 +6870,23 @@ function ModalActions({
 }
 
 
-function getForecastPreviewStyle(
-  requiredBy,
-  forecast
-) {
+function MessageBox({
+  type,
+  children,
+}) {
 
-  const variance =
-    dateDifferenceDays(
-      requiredBy,
-      forecast
-    );
-
-
-  const delayed =
-    variance !== null &&
-    variance > 0;
-
-
-  return {
-    margin:
-      '-5px 0 15px',
-
-    padding:
-      '9px 10px',
-
-    border:
-      `1px solid ${
-        delayed
-          ? '#fecaca'
-          : '#bbf7d0'
-      }`,
-
-    borderRadius:
-      '6px',
-
-    background:
-      delayed
-        ? '#fef2f2'
-        : '#f0fdf4',
-
-    color:
-      delayed
-        ? '#b91c1c'
-        : '#166534',
-
-    fontSize:
-      '9px',
-
-    fontWeight:
-      900,
-  };
+  return (
+    <div
+      style={
+        type ===
+          'error'
+          ? errorBoxStyle
+          : successBoxStyle
+      }
+    >
+      {children}
+    </div>
+  );
 }
 
 
@@ -6670,15 +6894,81 @@ function getForecastPreviewStyle(
 // STYLES
 // ============================================================
 
+const pageStyle = {
+  minHeight:
+    '100%',
+
+  padding:
+    '18px 20px 40px',
+
+  background:
+    '#f8fafc',
+
+  color:
+    '#0f172a',
+};
+
+
+const pageHeaderStyle = {
+  display:
+    'flex',
+
+  justifyContent:
+    'space-between',
+
+  gap:
+    '16px',
+
+  marginBottom:
+    '18px',
+};
+
+
+const pageTitleStyle = {
+  margin:
+    0,
+
+  fontSize:
+    '22px',
+
+  fontWeight:
+    900,
+};
+
+
+const pageDescriptionStyle = {
+  margin:
+    '6px 0 0',
+
+  color:
+    '#64748b',
+
+  fontSize:
+    '11px',
+};
+
+
+const projectRowStyle = {
+  display:
+    'flex',
+
+  alignItems:
+    'flex-end',
+
+  gap:
+    '12px',
+
+  marginBottom:
+    '16px',
+};
+
+
 const labelStyle = {
   display:
     'block',
 
   marginBottom:
     '5px',
-
-  color:
-    '#334155',
 
   fontSize:
     '11px',
@@ -6688,7 +6978,7 @@ const labelStyle = {
 };
 
 
-const selectStyle = {
+const inputStyle = {
   width:
     '100%',
 
@@ -6696,7 +6986,7 @@ const selectStyle = {
     '36px',
 
   padding:
-    '0 10px',
+    '0 9px',
 
   border:
     '1px solid #cbd5e1',
@@ -6706,36 +6996,6 @@ const selectStyle = {
 
   background:
     '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '11px',
-};
-
-
-const projectBadgeStyle = {
-  padding:
-    '9px 11px',
-
-  border:
-    '1px solid #dbeafe',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1e40af',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
 };
 
 
@@ -6744,7 +7004,7 @@ const summaryGridStyle = {
     'grid',
 
   gridTemplateColumns:
-    'repeat(auto-fit, minmax(180px, 1fr))',
+    'repeat(4, minmax(0, 1fr))',
 
   gap:
     '10px',
@@ -6755,11 +7015,8 @@ const summaryGridStyle = {
 
 
 const summaryCardStyle = {
-  minHeight:
-    '92px',
-
   padding:
-    '14px 15px',
+    '14px',
 
   border:
     '1px solid #e2e8f0',
@@ -6780,10 +7037,7 @@ const summaryLabelStyle = {
     '9px',
 
   fontWeight:
-    800,
-
-  textTransform:
-    'uppercase',
+    900,
 };
 
 
@@ -6816,7 +7070,7 @@ const filtersStyle = {
     'grid',
 
   gridTemplateColumns:
-    'minmax(220px, 2fr) repeat(4, minmax(145px, 1fr))',
+    '2fr repeat(4, 1fr)',
 
   gap:
     '8px',
@@ -6852,10 +7106,7 @@ const filterLabelStyle = {
     '9px',
 
   fontWeight:
-    800,
-
-  textTransform:
-    'uppercase',
+    900,
 };
 
 
@@ -6877,21 +7128,6 @@ const filterInputStyle = {
 
   background:
     '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '10px',
-};
-
-
-const resultCountStyle = {
-  marginBottom:
-    '7px',
-
-  color:
-    '#64748b',
 
   fontSize:
     '10px',
@@ -6922,15 +7158,12 @@ const tableStyle = {
 
   tableLayout:
     'fixed',
-
-  fontSize:
-    '10px',
 };
 
 
 const headerCellStyle = {
   padding:
-    '7px 6px',
+    '7px',
 
   border:
     '1px solid #cbd5e1',
@@ -6938,17 +7171,14 @@ const headerCellStyle = {
   background:
     '#f8fafc',
 
-  color:
-    '#334155',
-
-  textAlign:
-    'center',
-
   fontSize:
     '8px',
 
   fontWeight:
     900,
+
+  textAlign:
+    'center',
 };
 
 
@@ -6959,68 +7189,46 @@ const bodyCellStyle = {
   border:
     '1px solid #e2e8f0',
 
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
+  fontSize:
+    '9px',
 
   textAlign:
     'center',
-
-  verticalAlign:
-    'middle',
-
-  fontSize:
-    '9px',
 };
 
 
-const badgeBaseStyle = {
+const leftCellStyle = {
+  ...bodyCellStyle,
+
+  textAlign:
+    'left',
+};
+
+
+const blockingStyle = {
+  marginTop:
+    '3px',
+
+  color:
+    '#b91c1c',
+
+  fontSize:
+    '8px',
+
+  fontWeight:
+    900,
+};
+
+
+const badgeStyle = {
   display:
     'inline-flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
 
   padding:
     '4px 7px',
 
   borderRadius:
     '999px',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
-};
-
-
-const blockingTextStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '8px',
-
-  fontWeight:
-    900,
-};
-
-
-const delayTextStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#b91c1c',
 
   fontSize:
     '8px',
@@ -7049,14 +7257,22 @@ const primaryButtonStyle = {
   color:
     '#ffffff',
 
-  fontSize:
-    '11px',
-
   fontWeight:
     800,
 
   cursor:
     'pointer',
+};
+
+
+const dangerPrimaryButtonStyle = {
+  ...primaryButtonStyle,
+
+  border:
+    '1px solid #dc2626',
+
+  background:
+    '#dc2626',
 };
 
 
@@ -7078,9 +7294,6 @@ const secondaryButtonStyle = {
 
   color:
     '#334155',
-
-  fontSize:
-    '11px',
 
   fontWeight:
     700,
@@ -7120,36 +7333,15 @@ const manageButtonStyle = {
 };
 
 
-const loadingStyle = {
-  padding:
-    '50px 20px',
-
-  color:
-    '#64748b',
-
-  textAlign:
-    'center',
-
-  fontSize:
-    '12px',
-};
-
-
 const emptyStyle = {
   padding:
-    '50px 20px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#64748b',
+    '40px',
 
   textAlign:
     'center',
+
+  color:
+    '#64748b',
 };
 
 
@@ -7174,57 +7366,6 @@ const emptyInnerStyle = {
 
   fontSize:
     '9px',
-};
-
-
-const errorMessageStyle = {
-  marginBottom:
-    '14px',
-
-  padding:
-    '10px 12px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '11px',
-};
-
-
-const successMessageStyle = {
-  marginBottom:
-    '14px',
-
-  padding:
-    '10px 12px',
-
-  border:
-    '1px solid #bbf7d0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
 };
 
 
@@ -7264,16 +7405,16 @@ const drawerStyle = {
     7999,
 
   width:
-    'min(660px, 95vw)',
+    'min(660px,95vw)',
+
+  overflowY:
+    'auto',
 
   background:
     '#f8fafc',
 
   boxShadow:
     '-20px 0 60px rgba(15,23,42,0.22)',
-
-  overflowY:
-    'auto',
 };
 
 
@@ -7292,12 +7433,6 @@ const drawerHeaderStyle = {
 
   justifyContent:
     'space-between',
-
-  alignItems:
-    'flex-start',
-
-  gap:
-    '20px',
 
   padding:
     '20px',
@@ -7364,42 +7499,6 @@ const managementSectionStyle = {
 };
 
 
-const managementSummaryGridStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(3, minmax(0, 1fr))',
-
-  gap:
-    '14px',
-};
-
-
-const forecastGridStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(2, minmax(0, 1fr))',
-
-  gap:
-    '8px',
-};
-
-
-const forecastCardStyle = {
-  padding:
-    '11px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-};
-
-
 const sectionTitleStyle = {
   margin:
     0,
@@ -7424,6 +7523,18 @@ const sectionSubtitleStyle = {
 };
 
 
+const managementSummaryGridStyle = {
+  display:
+    'grid',
+
+  gridTemplateColumns:
+    'repeat(3, minmax(0,1fr))',
+
+  gap:
+    '14px',
+};
+
+
 const metaLabelStyle = {
   color:
     '#94a3b8',
@@ -7434,20 +7545,14 @@ const metaLabelStyle = {
   fontWeight:
     900,
 
-  letterSpacing:
-    '0.04em',
-
   textTransform:
     'uppercase',
 };
 
 
-const managementValueStyle = {
+const valueStyle = {
   marginTop:
     '5px',
-
-  color:
-    '#0f172a',
 
   fontSize:
     '10px',
@@ -7457,7 +7562,7 @@ const managementValueStyle = {
 };
 
 
-const managementDetailValueStyle = {
+const detailValueStyle = {
   marginTop:
     '5px',
 
@@ -7467,11 +7572,32 @@ const managementDetailValueStyle = {
   fontSize:
     '10px',
 
-  fontWeight:
-    600,
-
   lineHeight:
     1.55,
+};
+
+
+const forecastGridStyle = {
+  display:
+    'grid',
+
+  gridTemplateColumns:
+    'repeat(2,minmax(0,1fr))',
+
+  gap:
+    '8px',
+};
+
+
+const forecastCardStyle = {
+  padding:
+    '11px',
+
+  border:
+    '1px solid #e2e8f0',
+
+  borderRadius:
+    '7px',
 };
 
 
@@ -7480,14 +7606,14 @@ const actionGridStyle = {
     'grid',
 
   gridTemplateColumns:
-    'repeat(2, minmax(0, 1fr))',
+    'repeat(2,minmax(0,1fr))',
 
   gap:
     '8px',
 };
 
 
-const managementButtonStyle = {
+const actionButtonStyle = {
   display:
     'flex',
 
@@ -7498,7 +7624,7 @@ const managementButtonStyle = {
     '4px',
 
   padding:
-    '10px 11px',
+    '10px',
 
   border:
     '1px solid #cbd5e1',
@@ -7517,14 +7643,11 @@ const managementButtonStyle = {
 
   cursor:
     'pointer',
-
-  fontSize:
-    '10px',
 };
 
 
-const forecastButtonStyle = {
-  ...managementButtonStyle,
+const forecastActionButtonStyle = {
+  ...actionButtonStyle,
 
   border:
     '1px solid #fdba74',
@@ -7537,24 +7660,48 @@ const forecastButtonStyle = {
 };
 
 
-const prototypeNoticeStyle = {
+const resolvedNoticeStyle = {
   marginTop:
     '12px',
 
   padding:
-    '9px 10px',
+    '10px',
 
   border:
-    '1px solid #fde68a',
+    '1px solid #ddd6fe',
 
   borderRadius:
     '6px',
 
   background:
-    '#fffbeb',
+    '#f5f3ff',
 
   color:
-    '#92400e',
+    '#6d28d9',
+
+  fontSize:
+    '9px',
+};
+
+
+const clearedNoticeStyle = {
+  marginTop:
+    '12px',
+
+  padding:
+    '10px',
+
+  border:
+    '1px solid #bbf7d0',
+
+  borderRadius:
+    '6px',
+
+  background:
+    '#f0fdf4',
+
+  color:
+    '#166534',
 
   fontSize:
     '9px',
@@ -7562,6 +7709,9 @@ const prototypeNoticeStyle = {
 
 
 const affectedWorkCardStyle = {
+  marginBottom:
+    '8px',
+
   padding:
     '11px',
 
@@ -7573,6 +7723,33 @@ const affectedWorkCardStyle = {
 
   background:
     '#f8fafc',
+};
+
+
+const affectedLocationStyle = {
+  marginTop:
+    '4px',
+
+  color:
+    '#475569',
+
+  fontSize:
+    '10px',
+
+  fontWeight:
+    700,
+};
+
+
+const affectedMetaStyle = {
+  marginTop:
+    '7px',
+
+  color:
+    '#64748b',
+
+  fontSize:
+    '9px',
 };
 
 
@@ -7606,19 +7783,7 @@ const historyHeaderStyle = {
     'space-between',
 
   gap:
-    '12px',
-
-  flexWrap:
-    'wrap',
-};
-
-
-const historyTitleStyle = {
-  fontSize:
     '10px',
-
-  fontWeight:
-    900,
 };
 
 
@@ -7648,16 +7813,13 @@ const historyChangeStyle = {
     'grid',
 
   gridTemplateColumns:
-    '80px minmax(0, 1fr)',
+    '80px 1fr',
 
   gap:
     '8px',
 
   marginTop:
     '9px',
-
-  color:
-    '#475569',
 
   fontSize:
     '9px',
@@ -7686,7 +7848,7 @@ const historyCommentStyle = {
 
 
 // ============================================================
-// MODALS
+// MODAL
 // ============================================================
 
 const modalOverlayStyle = {
@@ -7718,7 +7880,7 @@ const modalOverlayStyle = {
 
 const modalStyle = {
   width:
-    'min(680px, 96vw)',
+    'min(680px,96vw)',
 
   maxHeight:
     '92vh',
@@ -7744,26 +7906,11 @@ const modalHeaderStyle = {
   justifyContent:
     'space-between',
 
-  alignItems:
-    'flex-start',
-
   padding:
     '18px 20px',
 
   borderBottom:
     '1px solid #e2e8f0',
-};
-
-
-const modalTitleStyle = {
-  margin:
-    '4px 0 0',
-
-  fontSize:
-    '19px',
-
-  fontWeight:
-    900,
 };
 
 
@@ -7779,6 +7926,18 @@ const eyebrowStyle = {
 
   letterSpacing:
     '0.08em',
+};
+
+
+const modalTitleStyle = {
+  margin:
+    '4px 0 0',
+
+  fontSize:
+    '19px',
+
+  fontWeight:
+    900,
 };
 
 
@@ -7816,9 +7975,6 @@ const modalLabelStyle = {
   marginBottom:
     '6px',
 
-  color:
-    '#334155',
-
   fontSize:
     '10px',
 
@@ -7845,12 +8001,6 @@ const modalInputStyle = {
 
   background:
     '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '11px',
 };
 
 
@@ -7870,17 +8020,8 @@ const modalTextareaStyle = {
   borderRadius:
     '6px',
 
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
   fontFamily:
     'inherit',
-
-  fontSize:
-    '11px',
 
   resize:
     'vertical',
@@ -7892,7 +8033,7 @@ const twoColumnStyle = {
     'grid',
 
   gridTemplateColumns:
-    'repeat(2, minmax(0, 1fr))',
+    'repeat(2,minmax(0,1fr))',
 
   gap:
     '12px',
@@ -7920,33 +8061,36 @@ const checkboxStyle = {
 
   background:
     '#f8fafc',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
 };
 
 
-const infoBoxStyle = {
-  padding:
-    '10px',
+const modalActionsStyle = {
+  display:
+    'flex',
 
-  border:
-    '1px solid #dbeafe',
+  justifyContent:
+    'flex-end',
 
-  borderRadius:
-    '6px',
+  gap:
+    '8px',
 
-  background:
-    '#eff6ff',
+  marginTop:
+    '20px',
+};
 
-  color:
-    '#1e40af',
 
-  fontSize:
-    '9px',
+const forecastModalGridStyle = {
+  display:
+    'grid',
+
+  gridTemplateColumns:
+    'repeat(2,minmax(0,1fr))',
+
+  gap:
+    '8px',
+
+  marginBottom:
+    '18px',
 };
 
 
@@ -7968,37 +8112,94 @@ const warningBoxStyle = {
 
   fontSize:
     '9px',
-
-  lineHeight:
-    1.5,
 };
 
 
-const forecastModalSummaryStyle = {
-  display:
-    'grid',
+const lifecycleDescriptionStyle = {
+  margin:
+    '0 0 16px',
 
-  gridTemplateColumns:
-    'repeat(2, minmax(0, 1fr))',
+  color:
+    '#475569',
 
-  gap:
+  fontSize:
     '10px',
 
+  lineHeight:
+    1.55,
+};
+
+
+const verificationWarningStyle = {
   marginBottom:
-    '18px',
+    '16px',
 
   padding:
-    '12px',
+    '10px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid #86efac',
 
   borderRadius:
-    '7px',
+    '6px',
 
   background:
-    '#f8fafc',
+    '#f0fdf4',
+
+  color:
+    '#166534',
 
   fontSize:
     '9px',
+
+  fontWeight:
+    700,
+};
+
+
+const errorBoxStyle = {
+  marginBottom:
+    '14px',
+
+  padding:
+    '10px',
+
+  border:
+    '1px solid #fecaca',
+
+  borderRadius:
+    '6px',
+
+  background:
+    '#fef2f2',
+
+  color:
+    '#b91c1c',
+
+  fontSize:
+    '10px',
+};
+
+
+const successBoxStyle = {
+  marginBottom:
+    '14px',
+
+  padding:
+    '10px',
+
+  border:
+    '1px solid #bbf7d0',
+
+  borderRadius:
+    '6px',
+
+  background:
+    '#f0fdf4',
+
+  color:
+    '#166534',
+
+  fontSize:
+    '10px',
 };
