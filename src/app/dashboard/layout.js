@@ -22,6 +22,10 @@ import {
 import styles from './dashboard.module.css'
 
 
+// ============================================================
+// BASE NAVIGATION
+// ============================================================
+
 const baseNavigationGroups = [
   {
     label: 'Workspace',
@@ -145,6 +149,10 @@ const baseNavigationGroups = [
 ]
 
 
+// ============================================================
+// PLATFORM NAVIGATION
+// ============================================================
+
 const platformNavigationGroup = {
   label: 'Platform',
 
@@ -157,6 +165,10 @@ const platformNavigationGroup = {
   ],
 }
 
+
+// ============================================================
+// DASHBOARD LAYOUT
+// ============================================================
 
 export default function DashboardLayout({
   children,
@@ -172,6 +184,10 @@ export default function DashboardLayout({
     )
 
 
+  // ==========================================================
+  // SIDEBAR STATE
+  // ==========================================================
+
   const [
     isCollapsed,
     setIsCollapsed,
@@ -185,6 +201,10 @@ export default function DashboardLayout({
   ] =
     useState(false)
 
+
+  // ==========================================================
+  // PLATFORM OWNER STATE
+  // ==========================================================
 
   const [
     isPlatformOwner,
@@ -200,9 +220,9 @@ export default function DashboardLayout({
     useState(false)
 
 
-  // =======================================================
+  // ==========================================================
   // COLLAPSIBLE NAVIGATION GROUPS
-  // =======================================================
+  // ==========================================================
 
   const [
     expandedGroups,
@@ -218,12 +238,13 @@ export default function DashboardLayout({
     })
 
 
-  // =======================================================
-  // PLATFORM OWNER NAVIGATION AUTHORIZATION
-  // =======================================================
+  // ==========================================================
+  // PLATFORM OWNER AUTHORIZATION
+  // ==========================================================
 
   useEffect(() => {
     let mounted = true
+
 
     async function loadPlatformAuthorization() {
       try {
@@ -235,9 +256,11 @@ export default function DashboardLayout({
             'is_platform_owner'
           )
 
+
         if (!mounted) {
           return
         }
+
 
         if (error) {
           console.error(
@@ -245,11 +268,16 @@ export default function DashboardLayout({
             error
           )
 
-          setIsPlatformOwner(false)
+
+          setIsPlatformOwner(
+            false
+          )
+
 
           setPlatformAuthorizationLoaded(
             true
           )
+
 
           return
         }
@@ -270,10 +298,12 @@ export default function DashboardLayout({
           error
         )
 
+
         if (mounted) {
           setIsPlatformOwner(
             false
           )
+
 
           setPlatformAuthorizationLoaded(
             true
@@ -295,9 +325,9 @@ export default function DashboardLayout({
   ])
 
 
-  // =======================================================
+  // ==========================================================
   // NAVIGATION GROUPS
-  // =======================================================
+  // ==========================================================
 
   const navigationGroups =
     useMemo(
@@ -322,9 +352,9 @@ export default function DashboardLayout({
     )
 
 
-  // =======================================================
+  // ==========================================================
   // ACTIVE ROUTE
-  // =======================================================
+  // ==========================================================
 
   function isActive(
     href
@@ -372,9 +402,9 @@ export default function DashboardLayout({
   }
 
 
-  // =======================================================
-  // CURRENT MODULE
-  // =======================================================
+  // ==========================================================
+  // CURRENT NAVIGATION GROUP
+  // ==========================================================
 
   const currentNavigationGroup =
     navigationGroups.find(
@@ -392,9 +422,9 @@ export default function DashboardLayout({
     )
 
 
-  // =======================================================
+  // ==========================================================
   // CURRENT PAGE
-  // =======================================================
+  // ==========================================================
 
   const currentNavigationItem =
     navigationGroups
@@ -426,9 +456,9 @@ export default function DashboardLayout({
     'Overview'
 
 
-  // =======================================================
-  // KEEP ACTIVE MODULE OPEN
-  // =======================================================
+  // ==========================================================
+  // KEEP CURRENT MODULE OPEN
+  // ==========================================================
 
   useEffect(
     () => {
@@ -478,9 +508,9 @@ export default function DashboardLayout({
   )
 
 
-  // =======================================================
-  // TOGGLE MODULE
-  // =======================================================
+  // ==========================================================
+  // TOGGLE NAVIGATION GROUP
+  // ==========================================================
 
   function toggleGroup(
     groupLabel
@@ -504,9 +534,9 @@ export default function DashboardLayout({
   }
 
 
-  // =======================================================
-  // SIDEBAR TOGGLE
-  // =======================================================
+  // ==========================================================
+  // TOGGLE SIDEBAR
+  // ==========================================================
 
   function toggleNavigation() {
 
@@ -527,6 +557,7 @@ export default function DashboardLayout({
           !currentState
       )
 
+
       return
     }
 
@@ -540,12 +571,22 @@ export default function DashboardLayout({
   }
 
 
+  // ==========================================================
+  // CLOSE MOBILE SIDEBAR
+  // ==========================================================
+
   function closeMobileNavigation() {
+
     setIsMobileOpen(
       false
     )
+
   }
 
+
+  // ==========================================================
+  // SIDEBAR CLASS
+  // ==========================================================
 
   const sidebarClassName = [
     styles.sidebar,
@@ -566,20 +607,21 @@ export default function DashboardLayout({
     )
 
 
-  // =======================================================
+  // ==========================================================
   // RENDER
-  // =======================================================
+  // ==========================================================
 
   return (
+
     <div
       className={
         styles.shell
       }
     >
 
-      {/* ===================================================
+      {/* =====================================================
           MOBILE OVERLAY
-      =================================================== */}
+      ===================================================== */}
 
       {isMobileOpen && (
 
@@ -597,9 +639,9 @@ export default function DashboardLayout({
       )}
 
 
-      {/* ===================================================
+      {/* =====================================================
           SIDEBAR
-      =================================================== */}
+      ===================================================== */}
 
       <aside
         className={
@@ -607,11 +649,12 @@ export default function DashboardLayout({
         }
       >
 
-        {/* =================================================
+        {/* ===================================================
             SIDEBAR TOP SPACER
 
-            Brand was intentionally moved into the topbar.
-        ================================================= */}
+            The RitsuFlow brand is now displayed in the
+            dashboard topbar instead of the sidebar.
+        =================================================== */}
 
         <div
           style={{
@@ -626,9 +669,9 @@ export default function DashboardLayout({
         />
 
 
-        {/* =================================================
+        {/* ===================================================
             NAVIGATION
-        ================================================= */}
+        =================================================== */}
 
         <nav
           className={
@@ -666,7 +709,7 @@ export default function DashboardLayout({
                 >
 
                   {/* =========================================
-                      MODULE HEADER
+                      GROUP HEADER
                   ========================================= */}
 
                   <button
@@ -802,7 +845,7 @@ export default function DashboardLayout({
 
 
                   {/* =========================================
-                      MODULE ITEMS
+                      GROUP ITEMS
                   ========================================= */}
 
                   {(
@@ -901,9 +944,9 @@ export default function DashboardLayout({
         </nav>
 
 
-        {/* =================================================
+        {/* ===================================================
             SIDEBAR FOOTER
-        ================================================= */}
+        =================================================== */}
 
         <div
           className={
@@ -967,9 +1010,9 @@ export default function DashboardLayout({
       </aside>
 
 
-      {/* ===================================================
+      {/* =====================================================
           WORKSPACE
-      =================================================== */}
+      ===================================================== */}
 
       <div
         className={
@@ -977,9 +1020,9 @@ export default function DashboardLayout({
         }
       >
 
-        {/* =================================================
+        {/* ===================================================
             TOPBAR
-        ================================================= */}
+        =================================================== */}
 
         <header
           className={
@@ -999,13 +1042,16 @@ export default function DashboardLayout({
                 'center',
 
               gap:
-                '14px',
+                '16px',
+
+              minWidth:
+                0,
             }}
           >
 
-            {/* =============================================
-                MENU
-            ============================================= */}
+            {/* ===============================================
+                MENU BUTTON
+            =============================================== */}
 
             <button
               type="button"
@@ -1021,9 +1067,13 @@ export default function DashboardLayout({
             </button>
 
 
-            {/* =============================================
-                BRAND IN TOPBAR
-            ============================================= */}
+            {/* ===============================================
+                RITSUFLOW BRAND
+
+                Normal full-color logo.
+                Transparent background.
+                No green container.
+            =============================================== */}
 
             <Link
               href="/"
@@ -1042,33 +1092,39 @@ export default function DashboardLayout({
                   'center',
 
                 width:
-                  '78px',
+                  '120px',
 
                 height:
-                  '48px',
+                  '56px',
 
                 flexShrink:
                   0,
 
                 padding:
-                  '6px 8px',
+                  0,
 
-                borderRadius:
-                  '9px',
+                margin:
+                  0,
 
                 background:
-                  '#387c86',
+                  'transparent',
+
+                border:
+                  'none',
+
+                borderRadius:
+                  0,
 
                 textDecoration:
                   'none',
 
                 overflow:
-                  'hidden',
+                  'visible',
               }}
             >
 
               <Image
-                src="/logo-white.png"
+                src="/logo.png"
                 alt="RitsuFlow"
                 width={
                   1600
@@ -1082,22 +1138,25 @@ export default function DashboardLayout({
                     'block',
 
                   width:
-                    '100%',
+                    '110px',
 
                   height:
-                    '100%',
+                    '52px',
 
                   objectFit:
                     'contain',
+
+                  objectPosition:
+                    'center',
                 }}
               />
 
             </Link>
 
 
-            {/* =============================================
+            {/* ===============================================
                 PAGE IDENTITY
-            ============================================= */}
+            =============================================== */}
 
             <div
               className={
@@ -1126,8 +1185,11 @@ export default function DashboardLayout({
                   margin:
                     0,
 
+                  color:
+                    '#64748b',
+
                   fontSize:
-                    '12px',
+                    '14px',
 
                   lineHeight:
                     1.2,
@@ -1137,6 +1199,9 @@ export default function DashboardLayout({
 
                   letterSpacing:
                     '0.08em',
+
+                  textTransform:
+                    'uppercase',
                 }}
               >
                 {
@@ -1153,11 +1218,14 @@ export default function DashboardLayout({
                   margin:
                     '4px 0 0',
 
+                  color:
+                    '#0f172a',
+
                   fontSize:
-                    '20px',
+                    '24px',
 
                   lineHeight:
-                    1.15,
+                    1.1,
 
                   fontWeight:
                     900,
@@ -1182,9 +1250,9 @@ export default function DashboardLayout({
         </header>
 
 
-        {/* =================================================
+        {/* ===================================================
             PAGE CONTENT
-        ================================================= */}
+        =================================================== */}
 
         <main
           className={
@@ -1197,5 +1265,6 @@ export default function DashboardLayout({
       </div>
 
     </div>
+
   )
 }
