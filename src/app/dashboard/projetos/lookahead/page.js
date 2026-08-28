@@ -3422,6 +3422,10 @@ export default function LookaheadPage() {
         };
 
 
+      // ------------------------------------------------------
+      // OPTIMISTIC UI UPDATE
+      // ------------------------------------------------------
+
       setReadiness(
         (
           current
@@ -3447,26 +3451,38 @@ export default function LookaheadPage() {
       );
 
 
+      let assessmentSaved =
+        false;
+
+
       try {
 
-        const existing =
-          readiness[
-            readinessKey
-          ];
+        // ====================================================
+        // SAVE / UPDATE THE GROUPED KOSKELA ASSESSMENT
+        //
+        // Using one UPSERT path for both existing and new
+        // assessments keeps the saved assessment UUID
+        // available for the central Constraint integration.
+        // ====================================================
 
+        const {
+          data:
+            savedAssessment,
 
-        if (
-          existing?.id
-        ) {
+          error:
+            assessmentError,
+        } =
+          await supabase
+            .from(
+              'lookahead_sheet_readiness_assessments'
+            )
+            .upsert(
+              {
 
-          const {
-            error,
-          } =
-            await supabase
-              .from(
-                'lookahead_sheet_readiness_assessments'
-              )
-              .update({
+                sheet_row_id:
+                  row.id,
+
+                category,
 
                 status:
                   nextStatus,
@@ -3474,91 +3490,134 @@ export default function LookaheadPage() {
                 updated_at:
                   new Date()
                     .toISOString(),
-              })
-              .eq(
-                'id',
-                existing.id
-              );
+              },
+              {
+
+                onConflict:
+                  'sheet_row_id,category',
+              }
+            )
+            .select(`
+              id,
+              sheet_row_id,
+              category,
+              status,
+              created_at,
+              updated_at
+            `)
+            .single();
 
 
-          if (
-            error
-          ) {
-            throw error;
-          }
+        if (
+          assessmentError
+        ) {
+          throw assessmentError;
+        }
 
-        } else {
+
+        assessmentSaved =
+          true;
+
+
+        const normalizedSavedStatus =
+          normalizeReadinessStatus(
+            savedAssessment
+              .status
+          );
+
+
+        // ----------------------------------------------------
+        // KEEP LOCAL STATE SYNCHRONIZED WITH THE SAVED ROW
+        // ----------------------------------------------------
+
+        setReadiness(
+          (
+            current
+          ) => ({
+
+            ...current,
+
+            [readinessKey]: {
+
+              id:
+                savedAssessment
+                  .id,
+
+              sheet_row_id:
+                savedAssessment
+                  .sheet_row_id,
+
+              category:
+                savedAssessment
+                  .category,
+
+              status:
+                normalizedSavedStatus,
+            },
+          })
+        );
+
+
+        // ====================================================
+        // CENTRAL CONSTRAINT LOG SYNCHRONIZATION
+        //
+        // Koskela:
+        //   No  = constrained
+        //   Yes = clear
+        //
+        // When the saved status is "constrained", SQL 108
+        // creates or reuses exactly one central Constraint
+        // through constraints.sheet_readiness_assessment_id.
+        //
+        // The database unique index prevents duplicates.
+        //
+        // IMPORTANT:
+        // Changing No -> Yes does NOT delete or automatically
+        // clear the central Constraint. Once a Constraint has
+        // entered Constraint Management, its lifecycle remains
+        // governed and auditable there.
+        // ====================================================
+
+        if (
+          normalizedSavedStatus ===
+            'constrained' &&
+          savedAssessment
+            ?.id
+        ) {
 
           const {
-            data,
-            error,
+            error:
+              constraintSyncError,
           } =
-            await supabase
-              .from(
-                'lookahead_sheet_readiness_assessments'
-              )
-              .upsert(
-                {
-
-                  sheet_row_id:
-                    row.id,
-
-                  category,
-
-                  status:
-                    nextStatus,
-
-                  updated_at:
-                    new Date()
-                      .toISOString(),
-                },
-                {
-
-                  onConflict:
-                    'sheet_row_id,category',
-                }
-              )
-              .select(`
-                id,
-                sheet_row_id,
-                category,
-                status
-              `)
-              .single();
+            await supabase.rpc(
+              'ensure_koskela_constraint',
+              {
+                target_readiness_assessment_id:
+                  savedAssessment.id,
+              }
+            );
 
 
           if (
-            error
+            constraintSyncError
           ) {
-            throw error;
+
+            console.error(
+              'Koskela -> Constraint Log synchronization:',
+              constraintSyncError
+            );
+
+
+            setErrorMessage(
+              `The Koskela assessment was saved, but the Constraint Log could not be synchronized. ${
+                constraintSyncError.message ||
+                'Please try again.'
+              }`
+            );
+
+
+            return;
           }
-
-
-          setReadiness(
-            (
-              current
-            ) => ({
-
-              ...current,
-
-              [readinessKey]: {
-
-                id:
-                  data.id,
-
-                sheet_row_id:
-                  data.sheet_row_id,
-
-                category:
-                  data.category,
-
-                status:
-                  normalizeReadinessStatus(
-                    data.status
-                  ),
-              },
-            })
-          );
 
         }
 
@@ -3570,9 +3629,19 @@ export default function LookaheadPage() {
         );
 
 
-        setReadiness(
-          previousReadiness
-        );
+        // If the assessment itself was not saved, restore the
+        // previous UI state. If it was saved successfully, keep
+        // the saved status visible even if a later integration
+        // step encountered a problem.
+        if (
+          !assessmentSaved
+        ) {
+
+          setReadiness(
+            previousReadiness
+          );
+
+        }
 
 
         setErrorMessage(
@@ -6960,10 +7029,7 @@ export default function LookaheadPage() {
 
                         <td style={bodyCellStyle}>
 
-                          {row.row_type ===
-                          'manual'
-                            ? 'Lookahead'
-                            : 'Master Plan'}
+                          Lookahead / Koskela
 
                         </td>
 
