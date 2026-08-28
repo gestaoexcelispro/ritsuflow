@@ -1311,6 +1311,10 @@ export default function WorkPackagesPage() {
                             <input
                               type="text"
 
+                              translate="no"
+
+                              className="notranslate"
+
                               maxLength={
                                 3
                               }
@@ -1357,6 +1361,10 @@ export default function WorkPackagesPage() {
                             />
                           ) : (
                             <span
+                              translate="no"
+
+                              className="notranslate"
+
                               style={{
                                 display:
                                   'inline-flex',
@@ -1672,6 +1680,10 @@ export default function WorkPackagesPage() {
 
               <input
                 type="text"
+
+                translate="no"
+
+                className="notranslate"
 
                 maxLength={
                   3
