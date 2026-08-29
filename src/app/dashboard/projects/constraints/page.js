@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -128,8 +129,8 @@ const PRIORITY_OPTIONS = [
     label: 'Low',
   },
   {
-    value: 'medium',
-    label: 'Medium',
+    value: 'normal',
+    label: 'Normal',
   },
   {
     value: 'high',
@@ -402,6 +403,13 @@ function getSourceLabel(
 ) {
   if (
     constraint
+      ?.sheet_readiness_assessment_id
+  ) {
+    return 'Lookahead / Koskela';
+  }
+
+  if (
+    constraint
       ?.readiness_assessment_id
   ) {
     return 'Lookahead';
@@ -545,6 +553,7 @@ function getPriorityStyle(
         color: '#c2410c',
       };
 
+    case 'normal':
     case 'medium':
       return {
         background: '#fefce8',
@@ -875,7 +884,7 @@ function createInitialConstraintForm() {
       '',
 
     priority:
-      'medium',
+      'normal',
 
     impact:
       'moderate',
@@ -907,7 +916,7 @@ function createManagementForm(
         ?.base_priority ||
       constraint
         ?.legacy_priority ||
-      'medium',
+      'normal',
 
     impact:
       constraint
@@ -1211,6 +1220,20 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
+  // DEEP-LINK GOVERNANCE
+  //
+  // Lookahead locked Koskela cells navigate here with:
+  // ?projectId=<project>&constraintId=<constraint>
+  //
+  // The ref prevents lifecycle refreshes from repeatedly
+  // reopening the same constraint modal.
+  // ==========================================================
+
+  const autoOpenedConstraintIdRef =
+    useRef(null);
+
+
+  // ==========================================================
   // LOAD PROJECTS
   // ==========================================================
 
@@ -1463,7 +1486,7 @@ export default function ConstraintLogPage() {
                     meta.priority ||
                     constraint.priority ||
                     constraint.base_priority ||
-                    'medium',
+                    'normal',
 
                   impact:
                     meta.impact ||
@@ -1473,6 +1496,11 @@ export default function ConstraintLogPage() {
                   resolved_at:
                     meta.resolved_at ||
                     constraint.resolved_at ||
+                    null,
+
+                  sheet_readiness_assessment_id:
+                    meta.sheet_readiness_assessment_id ||
+                    constraint.sheet_readiness_assessment_id ||
                     null,
                 };
 
@@ -1981,7 +2009,8 @@ export default function ConstraintLogPage() {
               id,
               priority,
               impact,
-              resolved_at
+              resolved_at,
+              sheet_readiness_assessment_id
             `)
             .eq(
               'id',
@@ -2005,7 +2034,7 @@ export default function ConstraintLogPage() {
               ?.priority ||
             data.priority ||
             data.base_priority ||
-            'medium',
+            'normal',
 
           impact:
             constraintMeta
@@ -2017,6 +2046,12 @@ export default function ConstraintLogPage() {
             constraintMeta
               ?.resolved_at ||
             data.resolved_at ||
+            null,
+
+          sheet_readiness_assessment_id:
+            constraintMeta
+              ?.sheet_readiness_assessment_id ||
+            data.sheet_readiness_assessment_id ||
             null,
         };
 
@@ -2205,12 +2240,83 @@ export default function ConstraintLogPage() {
 
 
   // ==========================================================
+  // OPEN DEEP-LINKED CONSTRAINT
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      if (
+        !selectedProjectId ||
+        loading ||
+        constraints.length === 0
+      ) {
+        return;
+      }
+
+
+      const params =
+        new URLSearchParams(
+          window.location.search
+        );
+
+
+      const requestedConstraintId =
+        params.get(
+          'constraintId'
+        );
+
+
+      if (
+        !requestedConstraintId ||
+        autoOpenedConstraintIdRef.current ===
+          requestedConstraintId
+      ) {
+        return;
+      }
+
+
+      const requestedConstraint =
+        constraints.find(
+          (constraint) =>
+            constraint.id ===
+            requestedConstraintId
+        );
+
+
+      if (!requestedConstraint) {
+        return;
+      }
+
+
+      autoOpenedConstraintIdRef.current =
+        requestedConstraintId;
+
+
+      openManagementDrawer(
+        requestedConstraint
+      );
+
+    },
+    [
+      selectedProjectId,
+      loading,
+      constraints,
+    ]
+  );
+
+
+  // ==========================================================
   // PROJECT CHANGE
   // ==========================================================
 
   function handleProjectChange(
     projectId
   ) {
+
+    autoOpenedConstraintIdRef.current =
+      null;
+
 
     setSelectedProjectId(
       projectId
@@ -4005,6 +4111,53 @@ export default function ConstraintLogPage() {
 
           }
         );
+
+
+        // --------------------------------------------------
+        // GROUPED LOOKAHEAD / KOSKELA TRACEABILITY
+        //
+        // SQL 120 exposes the exact grouped sheet row directly
+        // through constraint_management_overview. Koskela
+        // constraints do not require constraint_affected_work
+        // records to identify their governing Work Package.
+        // --------------------------------------------------
+
+        if (
+          constraint
+            ?.sheet_readiness_assessment_id &&
+          constraint
+            ?.koskela_package_code
+        ) {
+
+          candidates.push({
+            key:
+              `koskela-${constraint.sheet_readiness_assessment_id}`,
+
+            type:
+              'Lookahead / Koskela',
+
+            packageCode:
+              constraint.koskela_package_code ||
+              '—',
+
+            serviceName:
+              constraint.koskela_package_description ||
+              '',
+
+            location:
+              `Readiness · ${formatLabel(
+                constraint.koskela_category ||
+                constraint.category
+              )}`,
+
+            startDate:
+              null,
+
+            finishDate:
+              null,
+          });
+
+        }
 
 
         const unique =
@@ -6837,17 +6990,20 @@ export default function ConstraintLogPage() {
                               </div>
 
 
-                              <div style={affectedDateStyle}>
-                                {formatDate(
-                                  item.startDate
-                                )}
+                              {(item.startDate ||
+                                item.finishDate) && (
+                                <div style={affectedDateStyle}>
+                                  {formatDate(
+                                    item.startDate
+                                  )}
 
-                                {' → '}
+                                  {' → '}
 
-                                {formatDate(
-                                  item.finishDate
-                                )}
-                              </div>
+                                  {formatDate(
+                                    item.finishDate
+                                  )}
+                                </div>
+                              )}
 
                             </div>
                           )
