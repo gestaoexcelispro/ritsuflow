@@ -414,6 +414,16 @@ export default function LookaheadPage() {
   ] = useState({});
 
 
+  // Central Constraint records linked to grouped Koskela
+  // assessments. Keyed by sheet_readiness_assessment_id.
+  // Once a linked constraint exists, Constraint Management
+  // becomes authoritative for that Koskela criterion.
+  const [
+    constraintsByAssessment,
+    setConstraintsByAssessment,
+  ] = useState({});
+
+
   const [
     masterPlanHolidays,
     setMasterPlanHolidays,
@@ -1020,6 +1030,7 @@ export default function LookaheadPage() {
           setWorkItems([]);
           setSheetRows([]);
           setReadiness({});
+          setConstraintsByAssessment({});
           setDescriptionDrafts({});
           setPackageDrafts({});
           setManualTimelineCells({});
@@ -1336,6 +1347,10 @@ export default function LookaheadPage() {
               {}
             );
 
+            setConstraintsByAssessment(
+              {}
+            );
+
             return;
 
           }
@@ -1411,6 +1426,88 @@ export default function LookaheadPage() {
             readinessMap
           );
 
+
+
+          // --------------------------------------------------
+          // CENTRAL CONSTRAINTS LINKED TO KOSKELA
+          // --------------------------------------------------
+
+          const assessmentIds =
+            (assessments || [])
+              .map(
+                (assessment) =>
+                  assessment.id
+              )
+              .filter(Boolean);
+
+
+          if (
+            assessmentIds.length >
+            0
+          ) {
+
+            const {
+              data:
+                linkedConstraints,
+              error:
+                linkedConstraintsError,
+            } =
+              await supabase
+                .from(
+                  'constraints'
+                )
+                .select(`
+                  id,
+                  project_id,
+                  status,
+                  category,
+                  title,
+                  sheet_readiness_assessment_id
+                `)
+                .in(
+                  'sheet_readiness_assessment_id',
+                  assessmentIds
+                );
+
+
+            if (
+              linkedConstraintsError
+            ) {
+              throw linkedConstraintsError;
+            }
+
+
+            const linkedConstraintMap = {};
+
+
+            (linkedConstraints || []).forEach(
+              (constraint) => {
+
+                if (
+                  constraint
+                    .sheet_readiness_assessment_id
+                ) {
+
+                  linkedConstraintMap[
+                    constraint
+                      .sheet_readiness_assessment_id
+                  ] = constraint;
+
+                }
+
+              }
+            );
+
+
+            setConstraintsByAssessment(
+              linkedConstraintMap
+            );
+
+          } else {
+
+            setConstraintsByAssessment({});
+
+          }
 
 
           // --------------------------------------------------
@@ -1920,6 +2017,10 @@ export default function LookaheadPage() {
       );
 
       setReadiness(
+        {}
+      );
+
+      setConstraintsByAssessment(
         {}
       );
 
@@ -3407,6 +3508,70 @@ export default function LookaheadPage() {
         `${row.id}___${category}`;
 
 
+      const currentAssessment =
+        readiness[
+          readinessKey
+        ];
+
+
+      const linkedConstraint =
+        currentAssessment?.id
+          ? constraintsByAssessment[
+              currentAssessment.id
+            ] || null
+          : null;
+
+
+      // Once a central Constraint exists, Constraint Management
+      // owns this readiness criterion. The Matrix can no longer
+      // override the controlled state directly.
+      if (
+        linkedConstraint
+      ) {
+
+        setErrorMessage(
+          'This Koskela criterion is managed by Constraint Management and cannot be changed directly from the Matrix.'
+        );
+
+        return;
+
+      }
+
+
+      if (
+        nextStatus ===
+        'constrained'
+      ) {
+
+        const categoryLabel =
+          KOSKELA_COLUMNS.find(
+            (column) =>
+              column.key ===
+              category
+          )?.label || category;
+
+
+        const packageLabel =
+          row.package_code ||
+          'this Work Package';
+
+
+        const confirmed = window.confirm(
+          `${packageLabel} · ${categoryLabel} will be marked No.
+
+A Constraint Log record will be created and this criterion will be managed through Constraint Management until it is cleared.
+
+Continue?`
+        );
+
+
+        if (!confirmed) {
+          return;
+        }
+
+      }
+
+
       setSavingGroupedReadiness(
         readinessKey
       );
@@ -3617,6 +3782,47 @@ export default function LookaheadPage() {
 
 
             return;
+          }
+
+
+          const {
+            data:
+              linkedConstraintData,
+            error:
+              linkedConstraintError,
+          } =
+            await supabase
+              .from('constraints')
+              .select(`
+                id,
+                project_id,
+                status,
+                category,
+                title,
+                sheet_readiness_assessment_id
+              `)
+              .eq(
+                'sheet_readiness_assessment_id',
+                savedAssessment.id
+              )
+              .maybeSingle();
+
+
+          if (linkedConstraintError) {
+            throw linkedConstraintError;
+          }
+
+
+          if (linkedConstraintData) {
+
+            setConstraintsByAssessment(
+              (current) => ({
+                ...current,
+                [savedAssessment.id]:
+                  linkedConstraintData,
+              })
+            );
+
           }
 
         }
@@ -6095,9 +6301,29 @@ export default function LookaheadPage() {
                                 `${row.id}___${column.key}`;
 
 
-                              const disabled =
+                              const assessment =
+                                readiness[
+                                  savingKey
+                                ] || null;
+
+
+                              const linkedConstraint =
+                                assessment?.id
+                                  ? constraintsByAssessment[
+                                      assessment.id
+                                    ] || null
+                                  : null;
+
+
+                              const saving =
                                 savingGroupedReadiness ===
                                 savingKey;
+
+
+                              const governed =
+                                Boolean(
+                                  linkedConstraint
+                                );
 
 
                               return (
@@ -6119,82 +6345,96 @@ export default function LookaheadPage() {
                                   }}
                                 >
 
-                                  <select
+                                  {governed ? (
 
-                                    value={
-                                      status
-                                    }
+                                    <button
+                                      type="button"
+                                      title={`Managed in Constraint Log · ${linkedConstraint.status}. Click to open the Constraint Log.`}
+                                      onClick={() => {
 
-                                    disabled={
-                                      disabled
-                                    }
+                                        window.location.href =
+                                          `/dashboard/projects/constraints?projectId=${selectedProjectId}&constraintId=${linkedConstraint.id}`;
 
-                                    onChange={(
-                                      event
-                                    ) =>
-                                      handleGroupedReadinessChange(
-                                        row,
-                                        column.key,
-                                        event.target
-                                          .value
-                                      )
-                                    }
+                                      }}
+                                      style={{
+                                        width:
+                                          '100%',
+                                        minWidth:
+                                          0,
+                                        height:
+                                          '28px',
+                                        padding:
+                                          '0 4px',
+                                        border:
+                                          `1px solid ${style.border}`,
+                                        borderRadius:
+                                          '4px',
+                                        background:
+                                          style.background,
+                                        color:
+                                          style.color,
+                                        fontSize:
+                                          '9px',
+                                        fontWeight:
+                                          800,
+                                        cursor:
+                                          'pointer',
+                                      }}
+                                    >
+                                      {status === 'constrained'
+                                        ? 'No 🔒'
+                                        : status === 'clear'
+                                          ? 'Yes 🔒'
+                                          : 'Managed 🔒'}
+                                    </button>
 
-                                    style={{
-                                      width:
-                                        '100%',
+                                  ) : (
 
-                                      minWidth:
-                                        0,
+                                    <select
+                                      value={status}
+                                      disabled={saving}
+                                      onChange={(event) =>
+                                        handleGroupedReadinessChange(
+                                          row,
+                                          column.key,
+                                          event.target.value
+                                        )
+                                      }
+                                      title="Selecting No creates a governed Constraint Log record."
+                                      style={{
+                                        width:
+                                          '100%',
+                                        minWidth:
+                                          0,
+                                        height:
+                                          '28px',
+                                        padding:
+                                          '0 4px',
+                                        border:
+                                          `1px solid ${style.border}`,
+                                        borderRadius:
+                                          '4px',
+                                        background:
+                                          style.background,
+                                        color:
+                                          style.color,
+                                        fontSize:
+                                          '9px',
+                                        fontWeight:
+                                          700,
+                                        cursor:
+                                          saving
+                                            ? 'not-allowed'
+                                            : 'pointer',
+                                      }}
+                                    >
+                                      <option value="not_assessed">—</option>
+                                      <option value="clear">Yes</option>
+                                      <option value="constrained">No</option>
+                                      <option value="not_applicable">N/A</option>
+                                    </select>
 
-                                      height:
-                                        '28px',
-
-                                      padding:
-                                        '0 4px',
-
-                                      border:
-                                        `1px solid ${style.border}`,
-
-                                      borderRadius:
-                                        '4px',
-
-                                      background:
-                                        style.background,
-
-                                      color:
-                                        style.color,
-
-                                      fontSize:
-                                        '9px',
-
-                                      fontWeight:
-                                        700,
-
-                                      cursor:
-                                        disabled
-                                          ? 'not-allowed'
-                                          : 'pointer',
-                                    }}
-                                  >
-
-                                    <option value="not_assessed">
-                                      —
-                                    </option>
-
-                                    <option value="clear">
-                                      Yes
-                                    </option>
-
-                                    <option value="constrained">
-                                      No
-                                    </option>
-
-                                    <option value="not_applicable">
-                                      N/A
-                                    </option>
-
-                                  </select>
+                                  )}
 
                                 </td>
 
@@ -6252,6 +6492,10 @@ export default function LookaheadPage() {
 
               <span>
                 🔴 No - Active Constraint
+              </span>
+
+              <span>
+                🔒 Managed in Constraint Log
               </span>
 
               <span>
