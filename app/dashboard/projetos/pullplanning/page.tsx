@@ -3,6 +3,7 @@
 import React, {
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react';
 
@@ -11,47 +12,31 @@ import { supabase } from '../../../../lib/supabase';
 
 // ============================================================
 // RITSUFLOW™
-// PULL PLANNING - SESSION WORKSPACE
+// PULL PLANNING
 //
-// PHASE 1 APPLICATION LAYER
+// APPLICATION PHASE 2
 //
-// Purpose:
-//   - Select project
-//   - Create Pull Planning session
-//   - Create primary Pull milestone
-//   - List project sessions
-//   - Open/review a session
-//   - Manage session lifecycle
+// Adds:
 //
-// Lifecycle:
+// - Pull Planning Sessions
+// - Primary milestone
+// - Production Activities
+// - Pull Planning Items
+// - Draggable sticky notes
+// - Canonical Work Packages
+// - Canonical Locations
+// - Durable board position persistence
 //
-// DRAFT
-//   ↓
-// IN SESSION
-//   ↓
-// VALIDATION
-//   ↓
-// PUBLISHED
-//   ↓
-// ARCHIVED
+// NEXT PHASE:
 //
-// IMPORTANT:
-//
-// This page DOES NOT yet create:
-//
-//   - sticky notes
-//   - production activities
-//   - handoffs
-//   - dependency arrows
-//   - Pull canvas
-//
-// Those will be layered on top after this session
-// foundation is validated.
+// - Backward predecessor creation
+// - Production handoffs
+// - Dependency arrows
 // ============================================================
 
 
 // ============================================================
-// CONSTANTS
+// SESSION STATUS
 // ============================================================
 
 const SESSION_STATUSES = [
@@ -62,6 +47,7 @@ const SESSION_STATUSES = [
   'archived'
 ];
 
+
 const STATUS_LABELS = {
   draft: 'Draft',
   in_session: 'In Session',
@@ -70,24 +56,9 @@ const STATUS_LABELS = {
   archived: 'Archived'
 };
 
-const STATUS_DESCRIPTIONS = {
-  draft:
-    'Session created but collaborative planning has not started.',
-
-  in_session:
-    'The Last Planner team is actively building the Pull Plan.',
-
-  validation:
-    'Backward planning is complete and the plan is under forward validation.',
-
-  published:
-    'The Pull Plan has been validated and published for downstream planning.',
-
-  archived:
-    'Historical session retained for traceability.'
-};
 
 const STATUS_STYLES = {
+
   draft: {
     background: '#f1f5f9',
     color: '#475569',
@@ -117,6 +88,7 @@ const STATUS_STYLES = {
     color: '#64748b',
     border: '#e2e8f0'
   }
+
 };
 
 
@@ -124,12 +96,24 @@ const STATUS_STYLES = {
 // HELPERS
 // ============================================================
 
-const formatDate = (value) => {
-  if (!value) return '—';
+const formatDate = (
+  value
+) => {
 
-  const date = new Date(`${value}T00:00:00`);
+  if (!value) {
+    return '—';
+  }
 
-  if (Number.isNaN(date.getTime())) {
+  const date =
+    new Date(
+      `${value}T00:00:00`
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return value;
   }
 
@@ -144,12 +128,24 @@ const formatDate = (value) => {
 };
 
 
-const formatDateTime = (value) => {
-  if (!value) return '—';
+const formatDateTime = (
+  value
+) => {
 
-  const date = new Date(value);
+  if (!value) {
+    return '—';
+  }
 
-  if (Number.isNaN(date.getTime())) {
+  const date =
+    new Date(
+      value
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return value;
   }
 
@@ -166,7 +162,10 @@ const formatDateTime = (value) => {
 };
 
 
-const getNextStatus = (status) => {
+const getNextStatus = (
+  status
+) => {
+
   const index =
     SESSION_STATUSES.indexOf(
       status
@@ -174,7 +173,8 @@ const getNextStatus = (status) => {
 
   if (
     index < 0 ||
-    index >= SESSION_STATUSES.length - 1
+    index >=
+      SESSION_STATUSES.length - 1
   ) {
     return null;
   }
@@ -188,12 +188,15 @@ const getNextStatus = (status) => {
 const getPreviousStatus = (
   status
 ) => {
+
   const index =
     SESSION_STATUSES.indexOf(
       status
     );
 
-  if (index <= 0) {
+  if (
+    index <= 0
+  ) {
     return null;
   }
 
@@ -203,15 +206,78 @@ const getPreviousStatus = (
 };
 
 
+const getContrastYIQ = (
+  hexColor
+) => {
+
+  const clean =
+    String(
+      hexColor ||
+      '#64748b'
+    )
+      .replace(
+        '#',
+        ''
+      )
+      .padEnd(
+        6,
+        '0'
+      )
+      .slice(
+        0,
+        6
+      );
+
+  const r =
+    parseInt(
+      clean.substring(
+        0,
+        2
+      ),
+      16
+    );
+
+  const g =
+    parseInt(
+      clean.substring(
+        2,
+        4
+      ),
+      16
+    );
+
+  const b =
+    parseInt(
+      clean.substring(
+        4,
+        6
+      ),
+      16
+    );
+
+  const yiq =
+    (
+      r * 299 +
+      g * 587 +
+      b * 114
+    ) /
+    1000;
+
+  return yiq >= 145
+    ? '#071c31'
+    : '#ffffff';
+};
+
+
 // ============================================================
-// MAIN PAGE
+// PAGE
 // ============================================================
 
 export default function PullPlanningPage() {
 
-  // ----------------------------------------------------------
+  // ==========================================================
   // PROJECTS
-  // ----------------------------------------------------------
+  // ==========================================================
 
   const [
     projects,
@@ -229,9 +295,24 @@ export default function PullPlanningPage() {
   ] = useState({});
 
 
-  // ----------------------------------------------------------
+  // ==========================================================
+  // PROJECT CATALOGS
+  // ==========================================================
+
+  const [
+    workPackages,
+    setWorkPackages
+  ] = useState([]);
+
+  const [
+    locations,
+    setLocations
+  ] = useState([]);
+
+
+  // ==========================================================
   // SESSIONS
-  // ----------------------------------------------------------
+  // ==========================================================
 
   const [
     sessions,
@@ -249,13 +330,33 @@ export default function PullPlanningPage() {
   ] = useState({});
 
 
-  // ----------------------------------------------------------
-  // CREATE SESSION MODAL
-  // ----------------------------------------------------------
+  // ==========================================================
+  // BOARD DATA
+  // ==========================================================
 
   const [
-    showCreateModal,
-    setShowCreateModal
+    pullItems,
+    setPullItems
+  ] = useState([]);
+
+  const [
+    productionActivities,
+    setProductionActivities
+  ] = useState([]);
+
+  const [
+    loadingBoard,
+    setLoadingBoard
+  ] = useState(false);
+
+
+  // ==========================================================
+  // SESSION MODAL
+  // ==========================================================
+
+  const [
+    showSessionModal,
+    setShowSessionModal
   ] = useState(false);
 
   const [
@@ -299,9 +400,74 @@ export default function PullPlanningPage() {
   ] = useState('');
 
 
-  // ----------------------------------------------------------
+  // ==========================================================
+  // ACTIVITY MODAL
+  // ==========================================================
+
+  const [
+    showActivityModal,
+    setShowActivityModal
+  ] = useState(false);
+
+  const [
+    activityWorkPackageId,
+    setActivityWorkPackageId
+  ] = useState('');
+
+  const [
+    activityLocationId,
+    setActivityLocationId
+  ] = useState('');
+
+  const [
+    activityDescription,
+    setActivityDescription
+  ] = useState('');
+
+  const [
+    activityOperation,
+    setActivityOperation
+  ] = useState('');
+
+  const [
+    activityDuration,
+    setActivityDuration
+  ] = useState(1);
+
+  const [
+    activityQuantity,
+    setActivityQuantity
+  ] = useState('');
+
+  const [
+    activityUnit,
+    setActivityUnit
+  ] = useState('');
+
+  const [
+    activityCrew,
+    setActivityCrew
+  ] = useState('');
+
+  const [
+    activityWorkers,
+    setActivityWorkers
+  ] = useState('');
+
+  const [
+    activityRate,
+    setActivityRate
+  ] = useState('');
+
+  const [
+    activityProductivity,
+    setActivityProductivity
+  ] = useState('');
+
+
+  // ==========================================================
   // SYSTEM STATE
-  // ----------------------------------------------------------
+  // ==========================================================
 
   const [
     loadingProjects,
@@ -325,17 +491,33 @@ export default function PullPlanningPage() {
 
 
   // ==========================================================
-  // CURRENT PROJECT
+  // DRAG STATE
+  // ==========================================================
+
+  const boardRef =
+    useRef(null);
+
+  const [
+    dragState,
+    setDragState
+  ] = useState(null);
+
+
+  // ==========================================================
+  // DERIVED
   // ==========================================================
 
   const selectedProject =
     useMemo(
       () =>
         projects.find(
-          (project) =>
+          (
+            project
+          ) =>
             project.id ===
             projectId
-        ) || null,
+        ) ||
+        null,
       [
         projects,
         projectId
@@ -343,18 +525,17 @@ export default function PullPlanningPage() {
     );
 
 
-  // ==========================================================
-  // CURRENT SESSION
-  // ==========================================================
-
   const selectedSession =
     useMemo(
       () =>
         sessions.find(
-          (session) =>
+          (
+            session
+          ) =>
             session.id ===
             selectedSessionId
-        ) || null,
+        ) ||
+        null,
       [
         sessions,
         selectedSessionId
@@ -364,25 +545,93 @@ export default function PullPlanningPage() {
 
   const selectedMilestones =
     selectedSessionId
-      ? (
-          milestonesBySession[
-            selectedSessionId
-          ] || []
-        )
+      ? milestonesBySession[
+          selectedSessionId
+        ] || []
       : [];
 
 
   const primaryMilestone =
     selectedMilestones.find(
-      (milestone) =>
+      (
+        milestone
+      ) =>
         milestone.is_primary
     ) ||
     selectedMilestones[0] ||
     null;
 
 
+  const productionActivityMap =
+    useMemo(
+      () =>
+        new Map(
+          productionActivities.map(
+            (
+              activity
+            ) => [
+              activity.id,
+              activity
+            ]
+          )
+        ),
+      [
+        productionActivities
+      ]
+    );
+
+
+  const workPackageMap =
+    useMemo(
+      () =>
+        new Map(
+          workPackages.map(
+            (
+              item
+            ) => [
+              item.id,
+              item
+            ]
+          )
+        ),
+      [
+        workPackages
+      ]
+    );
+
+
+  const locationMap =
+    useMemo(
+      () =>
+        new Map(
+          locations.map(
+            (
+              location
+            ) => [
+              location.id,
+              location
+            ]
+          )
+        ),
+      [
+        locations
+      ]
+    );
+
+
+  const boardLocked =
+    selectedSession
+      ? [
+          'published',
+          'archived'
+        ].includes(
+          selectedSession.status
+        )
+      : true;
+
+
   // ==========================================================
-  // INITIAL PROJECT LOAD
+  // LOAD PROJECTS
   // ==========================================================
 
   useEffect(
@@ -394,8 +643,6 @@ export default function PullPlanningPage() {
           setLoadingProjects(
             true
           );
-
-          setErrorMessage('');
 
           try {
 
@@ -436,17 +683,13 @@ export default function PullPlanningPage() {
               throw error;
             }
 
-            const loadedProjects =
+            const loaded =
               data || [];
 
             setProjects(
-              loadedProjects
+              loaded
             );
 
-
-            // ----------------------------------------------
-            // Restore project from URL
-            // ----------------------------------------------
 
             const params =
               new URLSearchParams(
@@ -460,8 +703,10 @@ export default function PullPlanningPage() {
 
             if (
               projectFromUrl &&
-              loadedProjects.some(
-                (project) =>
+              loaded.some(
+                (
+                  project
+                ) =>
                   project.id ===
                   projectFromUrl
               )
@@ -472,20 +717,15 @@ export default function PullPlanningPage() {
             }
 
 
-            // ----------------------------------------------
-            // Project cover images
-            // ----------------------------------------------
-
             const coverEntries =
               await Promise.all(
-                loadedProjects.map(
+                loaded.map(
                   async (
                     project
                   ) => {
 
                     if (
-                      !project
-                        .cover_image_path
+                      !project.cover_image_path
                     ) {
                       return [
                         project.id,
@@ -495,9 +735,7 @@ export default function PullPlanningPage() {
 
                     const {
                       data:
-                        signedData,
-                      error:
-                        signedError
+                        signedData
                     } =
                       await supabase
                         .storage
@@ -505,31 +743,16 @@ export default function PullPlanningPage() {
                           'project-covers'
                         )
                         .createSignedUrl(
-                          project
-                            .cover_image_path,
-                          60 * 60
+                          project.cover_image_path,
+                          3600
                         );
-
-                    if (
-                      signedError
-                    ) {
-                      console.warn(
-                        'Pull Planning - cover:',
-                        signedError
-                      );
-
-                      return [
-                        project.id,
-                        ''
-                      ];
-                    }
 
                     return [
                       project.id,
-                      signedData
-                        ?.signedUrl ||
+                      signedData?.signedUrl ||
                         ''
                     ];
+
                   }
                 )
               );
@@ -540,10 +763,12 @@ export default function PullPlanningPage() {
               )
             );
 
-          } catch (error) {
+          } catch (
+            error
+          ) {
 
             console.error(
-              'Pull Planning - load projects:',
+              'Pull Planning - projects:',
               error
             );
 
@@ -559,6 +784,7 @@ export default function PullPlanningPage() {
             );
 
           }
+
         };
 
       loadProjects();
@@ -569,22 +795,144 @@ export default function PullPlanningPage() {
 
 
   // ==========================================================
+  // LOAD PROJECT CATALOGS
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      if (
+        !projectId
+      ) {
+
+        setWorkPackages([]);
+        setLocations([]);
+
+        return;
+
+      }
+
+
+      const loadCatalogs =
+        async () => {
+
+          try {
+
+            const [
+              workPackageResult,
+              locationResult
+            ] =
+              await Promise.all([
+
+                supabase.rpc(
+                  'get_project_work_packages',
+                  {
+                    target_project_id:
+                      projectId
+                  }
+                ),
+
+                supabase
+                  .from(
+                    'locations'
+                  )
+                  .select(`
+                    id,
+                    project_id,
+                    parent_id,
+                    name,
+                    location_type,
+                    environment_type,
+                    sequence_number
+                  `)
+                  .eq(
+                    'project_id',
+                    projectId
+                  )
+                  .order(
+                    'sequence_number',
+                    {
+                      ascending:
+                        true
+                    }
+                  )
+                  .order(
+                    'name',
+                    {
+                      ascending:
+                        true
+                    }
+                  )
+
+              ]);
+
+
+            if (
+              workPackageResult.error
+            ) {
+              throw workPackageResult.error;
+            }
+
+
+            if (
+              locationResult.error
+            ) {
+              throw locationResult.error;
+            }
+
+
+            setWorkPackages(
+              workPackageResult.data ||
+              []
+            );
+
+
+            setLocations(
+              locationResult.data ||
+              []
+            );
+
+          } catch (
+            error
+          ) {
+
+            console.error(
+              'Pull Planning - project catalogs:',
+              error
+            );
+
+            setErrorMessage(
+              error?.message ||
+              'Project planning catalogs could not be loaded.'
+            );
+
+          }
+
+        };
+
+      loadCatalogs();
+
+    },
+    [
+      projectId
+    ]
+  );
+
+
+  // ==========================================================
   // LOAD SESSIONS
   // ==========================================================
 
   useEffect(
     () => {
 
-      if (!projectId) {
+      if (
+        !projectId
+      ) {
 
         setSessions([]);
-        setMilestonesBySession(
-          {}
-        );
-
-        setSelectedSessionId(
-          null
-        );
+        setMilestonesBySession({});
+        setSelectedSessionId(null);
 
         return;
 
@@ -597,8 +945,6 @@ export default function PullPlanningPage() {
           setLoadingSessions(
             true
           );
-
-          setErrorMessage('');
 
           try {
 
@@ -641,11 +987,13 @@ export default function PullPlanningPage() {
                   }
                 );
 
+
             if (
               sessionError
             ) {
               throw sessionError;
             }
+
 
             const loadedSessions =
               sessionData || [];
@@ -655,32 +1003,27 @@ export default function PullPlanningPage() {
             );
 
 
-            // ----------------------------------------------
-            // Load milestones for all project sessions
-            // ----------------------------------------------
-
             if (
               loadedSessions.length ===
               0
             ) {
 
-              setMilestonesBySession(
-                {}
-              );
-
-              setSelectedSessionId(
-                null
-              );
+              setMilestonesBySession({});
+              setSelectedSessionId(null);
 
               return;
 
             }
 
+
             const sessionIds =
               loadedSessions.map(
-                (session) =>
+                (
+                  session
+                ) =>
                   session.id
               );
+
 
             const {
               data:
@@ -724,13 +1067,16 @@ export default function PullPlanningPage() {
                   }
                 );
 
+
             if (
               milestoneError
             ) {
               throw milestoneError;
             }
 
+
             const grouped = {};
+
 
             (
               milestoneData ||
@@ -745,32 +1091,24 @@ export default function PullPlanningPage() {
                     .pull_planning_session_id;
 
                 if (
-                  !grouped[
-                    key
-                  ]
+                  !grouped[key]
                 ) {
-                  grouped[
-                    key
-                  ] = [];
+                  grouped[key] =
+                    [];
                 }
 
-                grouped[
-                  key
-                ].push(
+                grouped[key].push(
                   milestone
                 );
 
               }
             );
 
+
             setMilestonesBySession(
               grouped
             );
 
-
-            // ----------------------------------------------
-            // Restore session from URL
-            // ----------------------------------------------
 
             const params =
               new URLSearchParams(
@@ -782,23 +1120,30 @@ export default function PullPlanningPage() {
                 'sessionId'
               );
 
+
             if (
               sessionFromUrl &&
               loadedSessions.some(
-                (session) =>
+                (
+                  session
+                ) =>
                   session.id ===
                   sessionFromUrl
               )
             ) {
+
               setSelectedSessionId(
                 sessionFromUrl
               );
+
             }
 
-          } catch (error) {
+          } catch (
+            error
+          ) {
 
             console.error(
-              'Pull Planning - load sessions:',
+              'Pull Planning - sessions:',
               error
             );
 
@@ -814,6 +1159,7 @@ export default function PullPlanningPage() {
             );
 
           }
+
         };
 
       loadSessions();
@@ -826,10 +1172,229 @@ export default function PullPlanningPage() {
 
 
   // ==========================================================
-  // RESET FORM
+  // LOAD BOARD
   // ==========================================================
 
-  const resetCreateForm =
+  useEffect(
+    () => {
+
+      if (
+        !selectedSessionId ||
+        !projectId
+      ) {
+
+        setPullItems([]);
+        setProductionActivities([]);
+
+        return;
+
+      }
+
+
+      const loadBoard =
+        async () => {
+
+          setLoadingBoard(
+            true
+          );
+
+          try {
+
+            const {
+              data:
+                itemData,
+              error:
+                itemError
+            } =
+              await supabase
+                .from(
+                  'pull_planning_items'
+                )
+                .select(`
+                  id,
+                  organization_id,
+                  project_id,
+                  pull_planning_session_id,
+                  production_activity_id,
+                  pull_planning_milestone_id,
+                  description_snapshot,
+                  duration_working_days,
+                  quantity_snapshot,
+                  unit_snapshot,
+                  crew_code_snapshot,
+                  planned_workers_snapshot,
+                  expected_production_rate_snapshot,
+                  expected_productivity_snapshot,
+                  planned_start_date,
+                  planned_finish_date,
+                  board_x,
+                  board_y,
+                  board_lane,
+                  board_order,
+                  sequence_number,
+                  item_status,
+                  notes,
+                  created_at,
+                  updated_at
+                `)
+                .eq(
+                  'pull_planning_session_id',
+                  selectedSessionId
+                )
+                .eq(
+                  'project_id',
+                  projectId
+                )
+                .neq(
+                  'item_status',
+                  'removed'
+                )
+                .order(
+                  'sequence_number',
+                  {
+                    ascending:
+                      true
+                  }
+                );
+
+
+            if (
+              itemError
+            ) {
+              throw itemError;
+            }
+
+
+            const items =
+              itemData ||
+              [];
+
+            setPullItems(
+              items
+            );
+
+
+            const activityIds =
+              [
+                ...new Set(
+                  items
+                    .map(
+                      (
+                        item
+                      ) =>
+                        item.production_activity_id
+                    )
+                    .filter(
+                      Boolean
+                    )
+                )
+              ];
+
+
+            if (
+              activityIds.length ===
+              0
+            ) {
+
+              setProductionActivities(
+                []
+              );
+
+              return;
+
+            }
+
+
+            const {
+              data:
+                activityData,
+              error:
+                activityError
+            } =
+              await supabase
+                .from(
+                  'production_activities'
+                )
+                .select(`
+                  id,
+                  organization_id,
+                  project_id,
+                  master_plan_package_id,
+                  organization_work_package_id,
+                  location_id,
+                  activity_code,
+                  description,
+                  operation_description,
+                  quantity,
+                  unit,
+                  planned_duration_working_days,
+                  crew_code,
+                  planned_workers,
+                  expected_production_rate,
+                  expected_productivity,
+                  lifecycle_status,
+                  notes,
+                  created_by,
+                  created_at,
+                  updated_at
+                `)
+                .in(
+                  'id',
+                  activityIds
+                );
+
+
+            if (
+              activityError
+            ) {
+              throw activityError;
+            }
+
+
+            setProductionActivities(
+              activityData ||
+              []
+            );
+
+          } catch (
+            error
+          ) {
+
+            console.error(
+              'Pull Planning - board:',
+              error
+            );
+
+            setErrorMessage(
+              error?.message ||
+              'Pull Planning board could not be loaded.'
+            );
+
+          } finally {
+
+            setLoadingBoard(
+              false
+            );
+
+          }
+
+        };
+
+      loadBoard();
+
+    },
+    [
+      selectedSessionId,
+      projectId
+    ]
+  );
+
+
+  // ==========================================================
+  // SESSION FORM
+  // ==========================================================
+
+  const resetSessionForm =
     () => {
 
       const today =
@@ -843,9 +1408,7 @@ export default function PullPlanningPage() {
       setSessionName('');
       setPhaseName('');
       setSessionDescription('');
-      setSessionDate(
-        today
-      );
+      setSessionDate(today);
       setHorizonStart('');
       setHorizonEnd('');
       setMilestoneName('');
@@ -854,16 +1417,50 @@ export default function PullPlanningPage() {
     };
 
 
-  // ==========================================================
-  // OPEN CREATE MODAL
-  // ==========================================================
-
-  const openCreateModal =
+  const openSessionModal =
     () => {
 
-      resetCreateForm();
+      resetSessionForm();
+
       setErrorMessage('');
-      setShowCreateModal(
+
+      setShowSessionModal(
+        true
+      );
+
+    };
+
+
+  // ==========================================================
+  // ACTIVITY FORM
+  // ==========================================================
+
+  const resetActivityForm =
+    () => {
+
+      setActivityWorkPackageId('');
+      setActivityLocationId('');
+      setActivityDescription('');
+      setActivityOperation('');
+      setActivityDuration(1);
+      setActivityQuantity('');
+      setActivityUnit('');
+      setActivityCrew('');
+      setActivityWorkers('');
+      setActivityRate('');
+      setActivityProductivity('');
+
+    };
+
+
+  const openActivityModal =
+    () => {
+
+      resetActivityForm();
+
+      setErrorMessage('');
+
+      setShowActivityModal(
         true
       );
 
@@ -881,11 +1478,13 @@ export default function PullPlanningPage() {
 
       event.preventDefault();
 
+
       if (
         !selectedProject
       ) {
         return;
       }
+
 
       if (
         !sessionName.trim() ||
@@ -899,6 +1498,7 @@ export default function PullPlanningPage() {
         );
 
         return;
+
       }
 
 
@@ -910,10 +1510,11 @@ export default function PullPlanningPage() {
       ) {
 
         setErrorMessage(
-          'Planning horizon end cannot be before the start date.'
+          'Planning horizon end cannot be before start.'
         );
 
         return;
+
       }
 
 
@@ -921,42 +1522,24 @@ export default function PullPlanningPage() {
         true
       );
 
-      setErrorMessage('');
-
-      let createdSessionId =
-        null;
-
 
       try {
 
-        // ----------------------------------------------
-        // Current authenticated user
-        // ----------------------------------------------
-
         const {
           data:
-            userResult,
-          error:
-            userError
+            userData
         } =
           await supabase
             .auth
             .getUser();
 
-        if (
-          userError
-        ) {
-          throw userError;
-        }
 
-        const currentUser =
-          userResult?.user ||
+        const currentUserId =
+          userData
+            ?.user
+            ?.id ||
           null;
 
-
-        // ----------------------------------------------
-        // Create session
-        // ----------------------------------------------
 
         const {
           data:
@@ -969,6 +1552,7 @@ export default function PullPlanningPage() {
               'pull_planning_sessions'
             )
             .insert({
+
               organization_id:
                 selectedProject
                   .organization_id,
@@ -1003,26 +1587,10 @@ export default function PullPlanningPage() {
                 'draft',
 
               created_by:
-                currentUser?.id ||
-                null
+                currentUserId
+
             })
-            .select(`
-              id,
-              organization_id,
-              project_id,
-              name,
-              phase_name,
-              description,
-              session_date,
-              planning_horizon_start,
-              planning_horizon_end,
-              status,
-              published_at,
-              archived_at,
-              created_by,
-              created_at,
-              updated_at
-            `)
+            .select()
             .single();
 
 
@@ -1032,13 +1600,6 @@ export default function PullPlanningPage() {
           throw sessionError;
         }
 
-        createdSessionId =
-          createdSession.id;
-
-
-        // ----------------------------------------------
-        // Create primary Pull milestone
-        // ----------------------------------------------
 
         const {
           data:
@@ -1051,6 +1612,7 @@ export default function PullPlanningPage() {
               'pull_planning_milestones'
             )
             .insert({
+
               organization_id:
                 selectedProject
                   .organization_id,
@@ -1075,40 +1637,15 @@ export default function PullPlanningPage() {
 
               sequence_number:
                 1
+
             })
-            .select(`
-              id,
-              organization_id,
-              project_id,
-              pull_planning_session_id,
-              location_id,
-              name,
-              description,
-              target_date,
-              source_type,
-              source_entity_type,
-              source_entity_id,
-              source_name_snapshot,
-              source_target_date_snapshot,
-              is_primary,
-              sequence_number,
-              notes,
-              created_at,
-              updated_at
-            `)
+            .select()
             .single();
 
 
         if (
           milestoneError
         ) {
-
-          // --------------------------------------------
-          // Client-side cleanup.
-          //
-          // SQL 129 uses cascading milestone ownership,
-          // so deleting the failed parent session is safe.
-          // --------------------------------------------
 
           await supabase
             .from(
@@ -1118,23 +1655,12 @@ export default function PullPlanningPage() {
             .eq(
               'id',
               createdSession.id
-            )
-            .eq(
-              'project_id',
-              selectedProject.id
             );
-
-          createdSessionId =
-            null;
 
           throw milestoneError;
 
         }
 
-
-        // ----------------------------------------------
-        // Update local state
-        // ----------------------------------------------
 
         setSessions(
           (
@@ -1144,6 +1670,7 @@ export default function PullPlanningPage() {
             ...current
           ]
         );
+
 
         setMilestonesBySession(
           (
@@ -1159,23 +1686,26 @@ export default function PullPlanningPage() {
           })
         );
 
+
         setSelectedSessionId(
           createdSession.id
         );
 
-        setShowCreateModal(
+
+        setShowSessionModal(
           false
         );
 
 
-        window.history
-          .replaceState(
-            {},
-            '',
-            `/dashboard/projetos/pullplanning?projectId=${selectedProject.id}&sessionId=${createdSession.id}`
-          );
+        window.history.replaceState(
+          {},
+          '',
+          `/dashboard/projetos/pullplanning?projectId=${projectId}&sessionId=${createdSession.id}`
+        );
 
-      } catch (error) {
+      } catch (
+        error
+      ) {
 
         console.error(
           'Pull Planning - create session:',
@@ -1184,7 +1714,7 @@ export default function PullPlanningPage() {
 
         setErrorMessage(
           error?.message ||
-          'The Pull Planning session could not be created.'
+          'Session could not be created.'
         );
 
       } finally {
@@ -1198,7 +1728,676 @@ export default function PullPlanningPage() {
 
 
   // ==========================================================
-  // OPEN SESSION
+  // CREATE PRODUCTION ACTIVITY + PULL ITEM
+  // ==========================================================
+
+  const createActivity =
+    async (
+      event
+    ) => {
+
+      event.preventDefault();
+
+
+      if (
+        !selectedSession ||
+        !selectedProject ||
+        boardLocked
+      ) {
+        return;
+      }
+
+
+      const selectedPackage =
+        workPackageMap.get(
+          activityWorkPackageId
+        ) ||
+        null;
+
+
+      if (
+        !selectedPackage ||
+        !activityLocationId ||
+        !activityDescription.trim()
+      ) {
+
+        setErrorMessage(
+          'Work Package, Location and Activity Description are required.'
+        );
+
+        return;
+
+      }
+
+
+      setSaving(
+        true
+      );
+
+      setErrorMessage('');
+
+
+      let createdActivityId =
+        null;
+
+
+      try {
+
+        const {
+          data:
+            userData
+        } =
+          await supabase
+            .auth
+            .getUser();
+
+
+        const currentUserId =
+          userData
+            ?.user
+            ?.id ||
+          null;
+
+
+        // ----------------------------------------------------
+        // Durable Production Activity
+        // ----------------------------------------------------
+
+        const {
+          data:
+            createdActivity,
+          error:
+            activityError
+        } =
+          await supabase
+            .from(
+              'production_activities'
+            )
+            .insert({
+
+              organization_id:
+                selectedProject
+                  .organization_id,
+
+              project_id:
+                selectedProject.id,
+
+              organization_work_package_id:
+                selectedPackage.id,
+
+              location_id:
+                activityLocationId,
+
+              activity_code:
+                selectedPackage.code,
+
+              description:
+                activityDescription.trim(),
+
+              operation_description:
+                activityOperation
+                  .trim() ||
+                null,
+
+              quantity:
+                activityQuantity === ''
+                  ? null
+                  : Number(
+                      activityQuantity
+                    ),
+
+              unit:
+                activityUnit
+                  .trim() ||
+                null,
+
+              planned_duration_working_days:
+                Math.max(
+                  1,
+                  Number(
+                    activityDuration ||
+                    1
+                  )
+                ),
+
+              crew_code:
+                activityCrew
+                  .trim() ||
+                null,
+
+              planned_workers:
+                activityWorkers === ''
+                  ? null
+                  : Number(
+                      activityWorkers
+                    ),
+
+              expected_production_rate:
+                activityRate === ''
+                  ? null
+                  : Number(
+                      activityRate
+                    ),
+
+              expected_productivity:
+                activityProductivity === ''
+                  ? null
+                  : Number(
+                      activityProductivity
+                    ),
+
+              lifecycle_status:
+                'active',
+
+              created_by:
+                currentUserId
+
+            })
+            .select()
+            .single();
+
+
+        if (
+          activityError
+        ) {
+          throw activityError;
+        }
+
+
+        createdActivityId =
+          createdActivity.id;
+
+
+        // ----------------------------------------------------
+        // Session-specific Pull Item
+        // ----------------------------------------------------
+
+        const itemCount =
+          pullItems.length;
+
+
+        const defaultX =
+          Math.max(
+            80,
+            760 -
+              (
+                itemCount %
+                4
+              ) *
+                180
+          );
+
+
+        const defaultY =
+          100 +
+          (
+            Math.floor(
+              itemCount /
+              4
+            ) %
+            4
+          ) *
+            150;
+
+
+        const {
+          data:
+            createdItem,
+          error:
+            itemError
+        } =
+          await supabase
+            .from(
+              'pull_planning_items'
+            )
+            .insert({
+
+              organization_id:
+                selectedProject
+                  .organization_id,
+
+              project_id:
+                selectedProject.id,
+
+              pull_planning_session_id:
+                selectedSession.id,
+
+              production_activity_id:
+                createdActivity.id,
+
+              pull_planning_milestone_id:
+                primaryMilestone?.id ||
+                null,
+
+              description_snapshot:
+                activityDescription.trim(),
+
+              duration_working_days:
+                Math.max(
+                  1,
+                  Number(
+                    activityDuration ||
+                    1
+                  )
+                ),
+
+              quantity_snapshot:
+                activityQuantity === ''
+                  ? null
+                  : Number(
+                      activityQuantity
+                    ),
+
+              unit_snapshot:
+                activityUnit
+                  .trim() ||
+                null,
+
+              crew_code_snapshot:
+                activityCrew
+                  .trim() ||
+                null,
+
+              planned_workers_snapshot:
+                activityWorkers === ''
+                  ? null
+                  : Number(
+                      activityWorkers
+                    ),
+
+              expected_production_rate_snapshot:
+                activityRate === ''
+                  ? null
+                  : Number(
+                      activityRate
+                    ),
+
+              expected_productivity_snapshot:
+                activityProductivity === ''
+                  ? null
+                  : Number(
+                      activityProductivity
+                    ),
+
+              board_x:
+                defaultX,
+
+              board_y:
+                defaultY,
+
+              board_lane:
+                null,
+
+              board_order:
+                itemCount + 1,
+
+              sequence_number:
+                itemCount + 1,
+
+              item_status:
+                'active'
+
+            })
+            .select()
+            .single();
+
+
+        if (
+          itemError
+        ) {
+
+          await supabase
+            .from(
+              'production_activities'
+            )
+            .delete()
+            .eq(
+              'id',
+              createdActivity.id
+            );
+
+          createdActivityId =
+            null;
+
+          throw itemError;
+
+        }
+
+
+        setProductionActivities(
+          (
+            current
+          ) => [
+            ...current,
+            createdActivity
+          ]
+        );
+
+
+        setPullItems(
+          (
+            current
+          ) => [
+            ...current,
+            createdItem
+          ]
+        );
+
+
+        setShowActivityModal(
+          false
+        );
+
+
+        resetActivityForm();
+
+      } catch (
+        error
+      ) {
+
+        console.error(
+          'Pull Planning - create activity:',
+          error
+        );
+
+        setErrorMessage(
+          error?.message ||
+          'Activity could not be created.'
+        );
+
+      } finally {
+
+        setSaving(
+          false
+        );
+
+      }
+    };
+
+
+  // ==========================================================
+  // DRAG
+  // ==========================================================
+
+  const startDrag =
+    (
+      event,
+      item
+    ) => {
+
+      if (
+        boardLocked
+      ) {
+        return;
+      }
+
+
+      const board =
+        boardRef.current;
+
+
+      if (
+        !board
+      ) {
+        return;
+      }
+
+
+      event.preventDefault();
+
+
+      const rect =
+        board.getBoundingClientRect();
+
+
+      const itemX =
+        Number(
+          item.board_x ||
+          0
+        );
+
+
+      const itemY =
+        Number(
+          item.board_y ||
+          0
+        );
+
+
+      setDragState({
+
+        itemId:
+          item.id,
+
+        offsetX:
+          event.clientX -
+          rect.left -
+          itemX,
+
+        offsetY:
+          event.clientY -
+          rect.top -
+          itemY
+
+      });
+
+    };
+
+
+  useEffect(
+    () => {
+
+      if (
+        !dragState
+      ) {
+        return;
+      }
+
+
+      const handleMove =
+        (
+          event
+        ) => {
+
+          const board =
+            boardRef.current;
+
+
+          if (
+            !board
+          ) {
+            return;
+          }
+
+
+          const rect =
+            board.getBoundingClientRect();
+
+
+          const noteWidth =
+            165;
+
+
+          const noteHeight =
+            110;
+
+
+          let x =
+            event.clientX -
+            rect.left -
+            dragState.offsetX;
+
+
+          let y =
+            event.clientY -
+            rect.top -
+            dragState.offsetY;
+
+
+          x =
+            Math.max(
+              5,
+              Math.min(
+                x,
+                rect.width -
+                  noteWidth -
+                  5
+              )
+            );
+
+
+          y =
+            Math.max(
+              5,
+              Math.min(
+                y,
+                rect.height -
+                  noteHeight -
+                  5
+              )
+            );
+
+
+          setPullItems(
+            (
+              current
+            ) =>
+              current.map(
+                (
+                  item
+                ) =>
+                  item.id ===
+                  dragState.itemId
+                    ? {
+                        ...item,
+                        board_x:
+                          Math.round(
+                            x
+                          ),
+                        board_y:
+                          Math.round(
+                            y
+                          )
+                      }
+                    : item
+              )
+          );
+
+        };
+
+
+      const handleUp =
+        async () => {
+
+          const item =
+            pullItems.find(
+              (
+                item
+              ) =>
+                item.id ===
+                dragState.itemId
+            );
+
+
+          setDragState(
+            null
+          );
+
+
+          if (
+            !item
+          ) {
+            return;
+          }
+
+
+          const {
+            error
+          } =
+            await supabase
+              .from(
+                'pull_planning_items'
+              )
+              .update({
+
+                board_x:
+                  Number(
+                    item.board_x ||
+                    0
+                  ),
+
+                board_y:
+                  Number(
+                    item.board_y ||
+                    0
+                  )
+
+              })
+              .eq(
+                'id',
+                item.id
+              )
+              .eq(
+                'pull_planning_session_id',
+                selectedSessionId
+              );
+
+
+          if (
+            error
+          ) {
+
+            console.error(
+              'Pull Planning - persist board position:',
+              error
+            );
+
+            setErrorMessage(
+              error.message
+            );
+
+          }
+
+        };
+
+
+      window.addEventListener(
+        'mousemove',
+        handleMove
+      );
+
+
+      window.addEventListener(
+        'mouseup',
+        handleUp
+      );
+
+
+      return () => {
+
+        window.removeEventListener(
+          'mousemove',
+          handleMove
+        );
+
+        window.removeEventListener(
+          'mouseup',
+          handleUp
+        );
+
+      };
+
+    },
+    [
+      dragState,
+      pullItems,
+      selectedSessionId
+    ]
+  );
+
+
+  // ==========================================================
+  // SESSION NAVIGATION
   // ==========================================================
 
   const openSession =
@@ -1210,19 +2409,15 @@ export default function PullPlanningPage() {
         sessionId
       );
 
-      window.history
-        .replaceState(
-          {},
-          '',
-          `/dashboard/projetos/pullplanning?projectId=${projectId}&sessionId=${sessionId}`
-        );
+
+      window.history.replaceState(
+        {},
+        '',
+        `/dashboard/projetos/pullplanning?projectId=${projectId}&sessionId=${sessionId}`
+      );
 
     };
 
-
-  // ==========================================================
-  // CLOSE SESSION DETAIL
-  // ==========================================================
 
   const closeSession =
     () => {
@@ -1231,19 +2426,15 @@ export default function PullPlanningPage() {
         null
       );
 
-      window.history
-        .replaceState(
-          {},
-          '',
-          `/dashboard/projetos/pullplanning?projectId=${projectId}`
-        );
+
+      window.history.replaceState(
+        {},
+        '',
+        `/dashboard/projetos/pullplanning?projectId=${projectId}`
+      );
 
     };
 
-
-  // ==========================================================
-  // CHANGE PROJECT
-  // ==========================================================
 
   const changeProject =
     (
@@ -1258,32 +2449,32 @@ export default function PullPlanningPage() {
         null
       );
 
+
       if (
         newProjectId
       ) {
 
-        window.history
-          .replaceState(
-            {},
-            '',
-            `/dashboard/projetos/pullplanning?projectId=${newProjectId}`
-          );
+        window.history.replaceState(
+          {},
+          '',
+          `/dashboard/projetos/pullplanning?projectId=${newProjectId}`
+        );
 
       } else {
 
-        window.history
-          .replaceState(
-            {},
-            '',
-            '/dashboard/projetos/pullplanning'
-          );
+        window.history.replaceState(
+          {},
+          '',
+          '/dashboard/projetos/pullplanning'
+        );
 
       }
+
     };
 
 
   // ==========================================================
-  // UPDATE SESSION STATUS
+  // STATUS
   // ==========================================================
 
   const updateSessionStatus =
@@ -1293,38 +2484,17 @@ export default function PullPlanningPage() {
 
       if (
         !selectedSession ||
-        !projectId ||
-        saving
+        !newStatus
       ) {
         return;
       }
-
-      if (
-        !SESSION_STATUSES.includes(
-          newStatus
-        )
-      ) {
-        return;
-      }
-
-
-      const currentLabel =
-        STATUS_LABELS[
-          selectedSession.status
-        ] ||
-        selectedSession.status;
-
-      const targetLabel =
-        STATUS_LABELS[
-          newStatus
-        ] ||
-        newStatus;
 
 
       const confirmed =
         window.confirm(
-          `Change this Pull Planning session from "${currentLabel}" to "${targetLabel}"?`
+          `Change this session from "${STATUS_LABELS[selectedSession.status]}" to "${STATUS_LABELS[newStatus]}"?`
         );
+
 
       if (
         !confirmed
@@ -1336,8 +2506,6 @@ export default function PullPlanningPage() {
       setSaving(
         true
       );
-
-      setErrorMessage('');
 
 
       try {
@@ -1352,11 +2520,9 @@ export default function PullPlanningPage() {
           newStatus ===
           'published'
         ) {
-
           payload.published_at =
             new Date()
               .toISOString();
-
         }
 
 
@@ -1364,11 +2530,9 @@ export default function PullPlanningPage() {
           newStatus ===
           'archived'
         ) {
-
           payload.archived_at =
             new Date()
               .toISOString();
-
         }
 
 
@@ -1391,23 +2555,7 @@ export default function PullPlanningPage() {
               'project_id',
               projectId
             )
-            .select(`
-              id,
-              organization_id,
-              project_id,
-              name,
-              phase_name,
-              description,
-              session_date,
-              planning_horizon_start,
-              planning_horizon_end,
-              status,
-              published_at,
-              archived_at,
-              created_by,
-              created_at,
-              updated_at
-            `)
+            .select()
             .single();
 
 
@@ -1433,7 +2581,9 @@ export default function PullPlanningPage() {
             )
         );
 
-      } catch (error) {
+      } catch (
+        error
+      ) {
 
         console.error(
           'Pull Planning - status:',
@@ -1442,7 +2592,7 @@ export default function PullPlanningPage() {
 
         setErrorMessage(
           error?.message ||
-          'Session status could not be updated.'
+          'Status could not be updated.'
         );
 
       } finally {
@@ -1469,13 +2619,10 @@ export default function PullPlanningPage() {
         style={{
           minHeight:
             'calc(100vh - 80px)',
-
           padding:
             '24px 22px 50px',
-
           background:
             'radial-gradient(circle at top right, rgba(8,170,150,0.06), transparent 28%), #f8fafc',
-
           fontFamily:
             'sans-serif'
         }}
@@ -1492,21 +2639,14 @@ export default function PullPlanningPage() {
             style={{
               margin:
                 '0 0 10px',
-
               color:
                 '#009f8e',
-
               fontSize:
                 '0.78rem',
-
               fontWeight:
                 900,
-
               letterSpacing:
-                '0.13em',
-
-              textTransform:
-                'uppercase'
+                '0.13em'
             }}
           >
             LAST PLANNER SYSTEM
@@ -1517,19 +2657,14 @@ export default function PullPlanningPage() {
             style={{
               margin:
                 0,
-
               color:
                 '#061b2f',
-
               fontSize:
                 '3.35rem',
-
               lineHeight:
                 1,
-
               fontWeight:
                 900,
-
               letterSpacing:
                 '-0.04em'
             }}
@@ -1542,100 +2677,23 @@ export default function PullPlanningPage() {
             style={{
               margin:
                 '18px 0 0',
-
               color:
                 '#536a86',
-
               fontSize:
-                '0.95rem',
-
-              maxWidth:
-                '700px',
-
-              lineHeight:
-                1.6
+                '0.95rem'
             }}
           >
-            Select a project to create or continue a collaborative phase planning session.
+            Select a project to access collaborative phase planning.
           </p>
 
         </section>
 
 
-        {errorMessage && (
-
-          <div
-            style={{
-              marginBottom:
-                '20px',
-
-              padding:
-                '13px 15px',
-
-              border:
-                '1px solid #fecaca',
-
-              borderRadius:
-                '9px',
-
-              background:
-                '#fff1f2',
-
-              color:
-                '#be123c',
-
-              fontSize:
-                '0.8rem',
-
-              fontWeight:
-                700
-            }}
-          >
-            {errorMessage}
-          </div>
-
-        )}
-
-
         {loadingProjects ? (
 
-          <div
-            style={{
-              padding:
-                '28px',
-
-              color:
-                '#64748b'
-            }}
-          >
+          <p>
             Loading projects...
-          </div>
-
-        ) : projects.length === 0 ? (
-
-          <div
-            style={{
-              maxWidth:
-                '620px',
-
-              padding:
-                '28px',
-
-              border:
-                '1px dashed #cbd5e1',
-
-              borderRadius:
-                '14px',
-
-              background:
-                '#fff',
-
-              color:
-                '#64748b'
-            }}
-          >
-            No projects are available for Pull Planning.
-          </div>
+          </p>
 
         ) : (
 
@@ -1643,15 +2701,10 @@ export default function PullPlanningPage() {
             style={{
               display:
                 'grid',
-
               gridTemplateColumns:
-                'repeat(auto-fill, minmax(330px, 365px))',
-
+                'repeat(auto-fill, minmax(330px,365px))',
               gap:
-                '22px',
-
-              alignItems:
-                'start'
+                '22px'
             }}
           >
 
@@ -1665,19 +2718,6 @@ export default function PullPlanningPage() {
                     project.id
                   ];
 
-                const locationText =
-                  [
-                    project.city,
-                    project
-                      .state_region
-                  ]
-                    .filter(
-                      Boolean
-                    )
-                    .join(
-                      ', '
-                    );
-
 
                 return (
 
@@ -1688,18 +2728,12 @@ export default function PullPlanningPage() {
                     style={{
                       overflow:
                         'hidden',
-
                       border:
                         '1px solid #d9e2ec',
-
                       borderRadius:
                         '15px',
-
                       background:
-                        '#fff',
-
-                      boxShadow:
-                        '0 14px 30px rgba(15,23,42,0.055)'
+                        '#fff'
                     }}
                   >
 
@@ -1707,74 +2741,31 @@ export default function PullPlanningPage() {
                       style={{
                         position:
                           'relative',
-
                         height:
-                          '215px',
-
-                        overflow:
-                          'hidden',
-
+                          '210px',
                         background:
-                          'linear-gradient(135deg,#173b5f,#2f6e78)'
+                          '#173b5f'
                       }}
                     >
 
-                      {coverUrl ? (
+                      {coverUrl && (
 
                         <img
                           src={
                             coverUrl
                           }
-                          alt={`${project.name} project`}
+                          alt={
+                            project.name
+                          }
                           style={{
                             width:
                               '100%',
-
                             height:
                               '100%',
-
                             objectFit:
-                              'cover',
-
-                            display:
-                              'block'
+                              'cover'
                           }}
                         />
-
-                      ) : (
-
-                        <div
-                          style={{
-                            width:
-                              '100%',
-
-                            height:
-                              '100%',
-
-                            display:
-                              'flex',
-
-                            alignItems:
-                              'center',
-
-                            justifyContent:
-                              'center',
-
-                            color:
-                              'rgba(255,255,255,0.72)',
-
-                            fontSize:
-                              '0.8rem',
-
-                            fontWeight:
-                              800,
-
-                            letterSpacing:
-                              '0.08em'
-                          }}
-                        >
-                          PROJECT COVER
-                        </div>
 
                       )}
 
@@ -1783,12 +2774,10 @@ export default function PullPlanningPage() {
                         style={{
                           position:
                             'absolute',
-
                           inset:
                             0,
-
                           background:
-                            'linear-gradient(to top, rgba(4,24,43,0.88), rgba(4,24,43,0.08))'
+                            'linear-gradient(to top,rgba(4,24,43,.9),transparent)'
                         }}
                       />
 
@@ -1797,142 +2786,29 @@ export default function PullPlanningPage() {
                         style={{
                           position:
                             'absolute',
-
                           left:
                             '18px',
-
-                          right:
-                            '18px',
-
                           bottom:
-                            '17px',
-
+                            '18px',
                           color:
                             '#fff'
                         }}
                       >
 
-                        <div
+                        <strong
                           style={{
-                            marginBottom:
-                              '6px',
-
-                            fontSize:
-                              '0.68rem',
-
-                            fontWeight:
-                              900,
-
-                            letterSpacing:
-                              '0.12em'
+                            display:
+                              'block'
                           }}
                         >
-                          {project.code ||
-                            'UNASSIGNED'}
-                        </div>
+                          {project.code}
+                        </strong>
 
-
-                        <div
-                          style={{
-                            fontSize:
-                              '1.05rem',
-
-                            fontWeight:
-                              900,
-
-                            textTransform:
-                              'uppercase'
-                          }}
-                        >
+                        <strong>
                           {project.name}
-                        </div>
+                        </strong>
 
                       </div>
-
-                    </div>
-
-
-                    <div
-                      style={{
-                        padding:
-                          '18px 19px 16px'
-                      }}
-                    >
-
-                      <p
-                        style={{
-                          margin:
-                            '0 0 7px',
-
-                          color:
-                            '#00a18f',
-
-                          fontSize:
-                            '0.63rem',
-
-                          fontWeight:
-                            900,
-
-                          letterSpacing:
-                            '0.13em'
-                        }}
-                      >
-                        PULL PLANNING
-                      </p>
-
-
-                      <h2
-                        style={{
-                          margin:
-                            '0 0 7px',
-
-                          color:
-                            '#061b2f',
-
-                          fontSize:
-                            '1.05rem',
-
-                          fontWeight:
-                            900
-                        }}
-                      >
-                        {project.name}
-                      </h2>
-
-
-                      <p
-                        style={{
-                          margin:
-                            '0 0 5px',
-
-                          color:
-                            '#536a86',
-
-                          fontSize:
-                            '0.78rem'
-                        }}
-                      >
-                        {project.client_name ||
-                          'Client not assigned'}
-                      </p>
-
-
-                      <p
-                        style={{
-                          margin:
-                            0,
-
-                          color:
-                            '#7890a8',
-
-                          fontSize:
-                            '0.74rem'
-                        }}
-                      >
-                        {locationText ||
-                          project.country_code ||
-                          'Location not assigned'}
-                      </p>
 
                     </div>
 
@@ -1947,91 +2823,27 @@ export default function PullPlanningPage() {
                       style={{
                         width:
                           '100%',
-
-                        minHeight:
-                          '48px',
-
                         padding:
-                          '0 19px',
-
-                        display:
-                          'flex',
-
-                        alignItems:
-                          'center',
-
-                        justifyContent:
-                          'space-between',
-
+                          '15px 18px',
                         border:
-                          0,
-
-                        borderTop:
-                          '1px solid #e6edf3',
-
+                          'none',
                         background:
                           '#fff',
-
-                        color:
-                          '#071c31',
-
                         cursor:
                           'pointer',
-
-                        fontSize:
-                          '0.73rem',
-
-                        fontWeight:
-                          900,
-
                         textAlign:
-                          'left'
+                          'left',
+                        fontWeight:
+                          900
                       }}
                     >
-
-                      <span>
-                        Open Pull Planning
-                      </span>
-
-
-                      <span
-                        style={{
-                          width:
-                            '28px',
-
-                          height:
-                            '28px',
-
-                          display:
-                            'inline-flex',
-
-                          alignItems:
-                            'center',
-
-                          justifyContent:
-                            'center',
-
-                          borderRadius:
-                            '8px',
-
-                          background:
-                            '#e8faf6',
-
-                          color:
-                            '#008f80',
-
-                          fontSize:
-                            '1rem'
-                        }}
-                      >
-                        →
-                      </span>
-
+                      Open Pull Planning →
                     </button>
 
                   </article>
 
                 );
+
               }
             )}
 
@@ -2056,13 +2868,10 @@ export default function PullPlanningPage() {
       style={{
         minHeight:
           'calc(100vh - 80px)',
-
         padding:
-          '24px',
-
+          '22px',
         background:
-          '#f7f9fb',
-
+          '#f6f8fa',
         fontFamily:
           'sans-serif'
       }}
@@ -2072,25 +2881,20 @@ export default function PullPlanningPage() {
           HEADER
       ==================================================== */}
 
-      <section
+      <div
         style={{
-          marginBottom:
-            '22px',
-
           display:
             'flex',
-
           justifyContent:
             'space-between',
-
           alignItems:
             'flex-end',
-
           gap:
-            '18px',
-
+            '14px',
           flexWrap:
-            'wrap'
+            'wrap',
+          marginBottom:
+            '20px'
         }}
       >
 
@@ -2099,19 +2903,15 @@ export default function PullPlanningPage() {
           <p
             style={{
               margin:
-                '0 0 7px',
-
+                '0 0 6px',
               color:
-                '#009f8e',
-
+                '#008f80',
               fontSize:
                 '0.68rem',
-
               fontWeight:
                 900,
-
               letterSpacing:
-                '0.14em'
+                '0.12em'
             }}
           >
             LAST PLANNER SYSTEM
@@ -2122,18 +2922,12 @@ export default function PullPlanningPage() {
             style={{
               margin:
                 0,
-
               color:
                 '#071c31',
-
               fontSize:
                 '2rem',
-
               fontWeight:
-                900,
-
-              letterSpacing:
-                '-0.035em'
+                900
             }}
           >
             Pull Planning
@@ -2143,13 +2937,11 @@ export default function PullPlanningPage() {
           <p
             style={{
               margin:
-                '8px 0 0',
-
+                '7px 0 0',
               color:
                 '#64748b',
-
               fontSize:
-                '0.82rem'
+                '0.8rem'
             }}
           >
             {selectedProject?.code
@@ -2166,13 +2958,8 @@ export default function PullPlanningPage() {
           style={{
             display:
               'flex',
-
             gap:
-              '10px',
-
-            alignItems:
-              'center',
-
+              '9px',
             flexWrap:
               'wrap'
           }}
@@ -2186,37 +2973,20 @@ export default function PullPlanningPage() {
               event
             ) =>
               changeProject(
-                event.target
-                  .value
+                event.target.value
               )
             }
             style={{
               minWidth:
-                '260px',
-
+                '250px',
               padding:
-                '10px 12px',
-
+                '10px',
               border:
                 '1px solid #cbd5e1',
-
               borderRadius:
-                '8px',
-
-              background:
-                '#fff',
-
-              color:
-                '#334155',
-
-              fontWeight:
-                700
+                '8px'
             }}
           >
-
-            <option value="">
-              Select project
-            </option>
 
             {projects.map(
               (
@@ -2244,40 +3014,43 @@ export default function PullPlanningPage() {
           </select>
 
 
-          <button
-            type="button"
-            onClick={
-              openCreateModal
-            }
-            style={{
-              padding:
-                '10px 16px',
+          {!selectedSession && (
 
-              border:
-                'none',
+            <button
+              type="button"
+              onClick={
+                openSessionModal
+              }
+              style={
+                primaryButton
+              }
+            >
+              + New Pull Session
+            </button>
 
-              borderRadius:
-                '8px',
+          )}
 
-              background:
-                '#008f80',
 
-              color:
-                '#fff',
+          {selectedSession &&
+            !boardLocked && (
 
-              cursor:
-                'pointer',
+              <button
+                type="button"
+                onClick={
+                  openActivityModal
+                }
+                style={
+                  primaryButton
+                }
+              >
+                + Add Activity
+              </button>
 
-              fontWeight:
-                900
-            }}
-          >
-            + New Pull Session
-          </button>
+            )}
 
         </div>
 
-      </section>
+      </div>
 
 
       {errorMessage && (
@@ -2285,26 +3058,19 @@ export default function PullPlanningPage() {
         <div
           style={{
             marginBottom:
-              '18px',
-
+              '15px',
             padding:
-              '13px 15px',
-
+              '11px 14px',
             border:
               '1px solid #fecaca',
-
             borderRadius:
-              '9px',
-
+              '8px',
             background:
               '#fff1f2',
-
             color:
               '#be123c',
-
             fontSize:
-              '0.8rem',
-
+              '0.78rem',
             fontWeight:
               700
           }}
@@ -2316,12 +3082,12 @@ export default function PullPlanningPage() {
 
 
       {/* ====================================================
-          SESSION DETAIL
+          SELECTED SESSION
       ==================================================== */}
 
       {selectedSession ? (
 
-        <section>
+        <>
 
           <button
             type="button"
@@ -2330,472 +3096,374 @@ export default function PullPlanningPage() {
             }
             style={{
               marginBottom:
-                '16px',
-
+                '13px',
               border:
                 'none',
-
               background:
                 'transparent',
-
               color:
                 '#008f80',
-
-              fontSize:
-                '0.78rem',
-
-              fontWeight:
-                900,
-
               cursor:
-                'pointer'
+                'pointer',
+              fontWeight:
+                900
             }}
           >
             ← Back to Sessions
           </button>
 
 
-          <div
+          {/* ==================================================
+              SESSION BAR
+          ================================================== */}
+
+          <section
             style={{
+              marginBottom:
+                '14px',
+              padding:
+                '15px 17px',
+              border:
+                '1px solid #dce5ec',
+              borderRadius:
+                '10px',
+              background:
+                '#fff',
               display:
-                'grid',
-
-              gridTemplateColumns:
-                'minmax(0, 1fr) 330px',
-
-              gap:
-                '20px',
-
+                'flex',
+              justifyContent:
+                'space-between',
               alignItems:
-                'start'
+                'center',
+              gap:
+                '15px',
+              flexWrap:
+                'wrap'
             }}
           >
 
-            {/* --------------------------------------------
-                MAIN SESSION CARD
-            -------------------------------------------- */}
+            <div>
+
+              <p
+                style={{
+                  margin:
+                    '0 0 4px',
+                  color:
+                    '#008f80',
+                  fontSize:
+                    '0.62rem',
+                  fontWeight:
+                    900,
+                  textTransform:
+                    'uppercase'
+                }}
+              >
+                {selectedSession.phase_name}
+              </p>
+
+
+              <h2
+                style={{
+                  margin:
+                    0,
+                  color:
+                    '#071c31',
+                  fontSize:
+                    '1.15rem'
+                }}
+              >
+                {selectedSession.name}
+              </h2>
+
+            </div>
+
 
             <div
               style={{
-                border:
-                  '1px solid #dce5ec',
-
-                borderRadius:
-                  '14px',
-
-                background:
-                  '#fff',
-
-                overflow:
-                  'hidden',
-
-                boxShadow:
-                  '0 12px 35px rgba(15,23,42,0.05)'
+                display:
+                  'flex',
+                gap:
+                  '8px',
+                alignItems:
+                  'center',
+                flexWrap:
+                  'wrap'
               }}
             >
 
-              <div
-                style={{
-                  padding:
-                    '24px',
+              <SessionBadge
+                status={
+                  selectedSession.status
+                }
+              />
 
-                  borderBottom:
-                    '1px solid #e5eaf0'
-                }}
+
+              <button
+                disabled={
+                  !getPreviousStatus(
+                    selectedSession.status
+                  )
+                }
+                type="button"
+                onClick={() =>
+                  updateSessionStatus(
+                    getPreviousStatus(
+                      selectedSession.status
+                    )
+                  )
+                }
+                style={
+                  secondaryButton
+                }
               >
+                ← Previous
+              </button>
 
-                <div
+
+              <button
+                disabled={
+                  !getNextStatus(
+                    selectedSession.status
+                  )
+                }
+                type="button"
+                onClick={() =>
+                  updateSessionStatus(
+                    getNextStatus(
+                      selectedSession.status
+                    )
+                  )
+                }
+                style={
+                  secondaryButton
+                }
+              >
+                Next →
+              </button>
+
+            </div>
+
+          </section>
+
+
+          {/* ==================================================
+              BOARD
+          ================================================== */}
+
+          <section
+            style={{
+              border:
+                '1px solid #cbd5e1',
+              borderRadius:
+                '12px',
+              background:
+                '#fff',
+              overflow:
+                'hidden'
+            }}
+          >
+
+            {/* ----------------------------------------------
+                BOARD TOOLBAR
+            ---------------------------------------------- */}
+
+            <div
+              style={{
+                padding:
+                  '10px 14px',
+                display:
+                  'flex',
+                justifyContent:
+                  'space-between',
+                alignItems:
+                  'center',
+                borderBottom:
+                  '1px solid #e2e8f0',
+                background:
+                  '#f8fafc'
+              }}
+            >
+
+              <div>
+
+                <strong
                   style={{
-                    display:
-                      'flex',
-
-                    justifyContent:
-                      'space-between',
-
-                    gap:
-                      '18px',
-
-                    alignItems:
-                      'flex-start',
-
-                    flexWrap:
-                      'wrap'
+                    color:
+                      '#334155',
+                    fontSize:
+                      '0.82rem'
                   }}
                 >
-
-                  <div>
-
-                    <p
-                      style={{
-                        margin:
-                          '0 0 6px',
-
-                        color:
-                          '#008f80',
-
-                        fontSize:
-                          '0.67rem',
-
-                        fontWeight:
-                          900,
-
-                        letterSpacing:
-                          '0.12em'
-                      }}
-                    >
-                      {selectedSession.phase_name ||
-                        'PHASE'}
-                    </p>
+                  Collaborative Pull Board
+                </strong>
 
 
-                    <h2
-                      style={{
-                        margin:
-                          0,
-
-                        color:
-                          '#071c31',
-
-                        fontSize:
-                          '1.65rem',
-
-                        fontWeight:
-                          900
-                      }}
-                    >
-                      {selectedSession.name}
-                    </h2>
-
-                  </div>
-
-
-                  {(() => {
-
-                    const style =
-                      STATUS_STYLES[
-                        selectedSession.status
-                      ] ||
-                      STATUS_STYLES.draft;
-
-                    return (
-
-                      <span
-                        style={{
-                          padding:
-                            '7px 11px',
-
-                          border:
-                            `1px solid ${style.border}`,
-
-                          borderRadius:
-                            '999px',
-
-                          background:
-                            style.background,
-
-                          color:
-                            style.color,
-
-                          fontSize:
-                            '0.7rem',
-
-                          fontWeight:
-                            900,
-
-                          textTransform:
-                            'uppercase',
-
-                          letterSpacing:
-                            '0.06em'
-                        }}
-                      >
-                        {STATUS_LABELS[
-                          selectedSession.status
-                        ] ||
-                          selectedSession.status}
-                      </span>
-
-                    );
-
-                  })()}
-
-                </div>
-
-
-                {selectedSession.description && (
-
-                  <p
-                    style={{
-                      margin:
-                        '17px 0 0',
-
-                      color:
-                        '#64748b',
-
-                      lineHeight:
-                        1.6,
-
-                      fontSize:
-                        '0.85rem'
-                    }}
-                  >
-                    {selectedSession.description}
-                  </p>
-
-                )}
+                <span
+                  style={{
+                    marginLeft:
+                      '10px',
+                    color:
+                      '#94a3b8',
+                    fontSize:
+                      '0.7rem'
+                  }}
+                >
+                  Time flows left → right
+                </span>
 
               </div>
 
 
-              {/* ------------------------------------------
-                  MILESTONE
-              ------------------------------------------ */}
-
               <div
                 style={{
-                  padding:
-                    '22px 24px'
+                  color:
+                    boardLocked
+                      ? '#b45309'
+                      : '#64748b',
+                  fontSize:
+                    '0.7rem',
+                  fontWeight:
+                    700
+                }}
+              >
+                {boardLocked
+                  ? 'Read-only session'
+                  : 'Drag notes to organize the phase plan'}
+              </div>
+
+            </div>
+
+
+            {/* ----------------------------------------------
+                CANVAS
+            ---------------------------------------------- */}
+
+            <div
+              style={{
+                overflowX:
+                  'auto',
+                overflowY:
+                  'auto'
+              }}
+            >
+
+              <div
+                ref={
+                  boardRef
+                }
+                style={{
+                  position:
+                    'relative',
+                  width:
+                    '1200px',
+                  height:
+                    '650px',
+                  backgroundColor:
+                    '#fbfcfd',
+                  backgroundImage:
+                    `
+                      linear-gradient(#edf2f7 1px, transparent 1px),
+                      linear-gradient(90deg, #edf2f7 1px, transparent 1px)
+                    `,
+                  backgroundSize:
+                    '40px 40px',
+                  userSelect:
+                    'none'
                 }}
               >
 
-                <p
-                  style={{
-                    margin:
-                      '0 0 12px',
-
-                    color:
-                      '#64748b',
-
-                    fontSize:
-                      '0.65rem',
-
-                    fontWeight:
-                      900,
-
-                    letterSpacing:
-                      '0.11em'
-                  }}
-                >
-                  PRIMARY PULL MILESTONE
-                </p>
-
-
-                {primaryMilestone ? (
-
-                  <div
-                    style={{
-                      padding:
-                        '18px',
-
-                      border:
-                        '1px solid #99f6e4',
-
-                      borderRadius:
-                        '11px',
-
-                      background:
-                        '#f0fdfa'
-                    }}
-                  >
-
-                    <div
-                      style={{
-                        display:
-                          'flex',
-
-                        justifyContent:
-                          'space-between',
-
-                        gap:
-                          '16px',
-
-                        alignItems:
-                          'center',
-
-                        flexWrap:
-                          'wrap'
-                      }}
-                    >
-
-                      <div>
-
-                        <strong
-                          style={{
-                            display:
-                              'block',
-
-                            color:
-                              '#0f766e',
-
-                            fontSize:
-                              '1rem'
-                          }}
-                        >
-                          {primaryMilestone.name}
-                        </strong>
-
-
-                        <span
-                          style={{
-                            display:
-                              'block',
-
-                            marginTop:
-                              '5px',
-
-                            color:
-                              '#64748b',
-
-                            fontSize:
-                              '0.74rem'
-                          }}
-                        >
-                          Pull backward from this milestone.
-                        </span>
-
-                      </div>
-
-
-                      <div
-                        style={{
-                          textAlign:
-                            'right'
-                        }}
-                      >
-
-                        <span
-                          style={{
-                            display:
-                              'block',
-
-                            color:
-                              '#64748b',
-
-                            fontSize:
-                              '0.62rem',
-
-                            fontWeight:
-                              900
-                          }}
-                        >
-                          TARGET
-                        </span>
-
-
-                        <strong
-                          style={{
-                            color:
-                              '#071c31',
-
-                            fontSize:
-                              '1rem'
-                          }}
-                        >
-                          {formatDate(
-                            primaryMilestone.target_date
-                          )}
-                        </strong>
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
-                ) : (
-
-                  <div
-                    style={{
-                      color:
-                        '#94a3b8',
-
-                      fontSize:
-                        '0.8rem'
-                    }}
-                  >
-                    No milestone associated with this session.
-                  </div>
-
-                )}
-
-
-                {/* ----------------------------------------
-                    PLACEHOLDER FOR NEXT PHASE
-                ---------------------------------------- */}
+                {/* ------------------------------------------
+                    TIME DIRECTION
+                ------------------------------------------ */}
 
                 <div
                   style={{
-                    marginTop:
-                      '24px',
-
-                    minHeight:
-                      '260px',
-
-                    display:
-                      'flex',
-
-                    alignItems:
-                      'center',
-
-                    justifyContent:
-                      'center',
-
-                    border:
-                      '2px dashed #cbd5e1',
-
-                    borderRadius:
-                      '12px',
-
-                    background:
-                      '#f8fafc',
-
-                    textAlign:
-                      'center',
-
-                    padding:
-                      '30px'
+                    position:
+                      'absolute',
+                    left:
+                      '25px',
+                    top:
+                      '22px',
+                    color:
+                      '#94a3b8',
+                    fontSize:
+                      '0.66rem',
+                    fontWeight:
+                      900,
+                    letterSpacing:
+                      '0.08em'
                   }}
                 >
+                  EARLIER WORK
+                </div>
 
-                  <div>
+
+                <div
+                  style={{
+                    position:
+                      'absolute',
+                    right:
+                      '35px',
+                    top:
+                      '22px',
+                    color:
+                      '#94a3b8',
+                    fontSize:
+                      '0.66rem',
+                    fontWeight:
+                      900,
+                    letterSpacing:
+                      '0.08em'
+                  }}
+                >
+                  TARGET
+                </div>
+
+
+                {/* ------------------------------------------
+                    MILESTONE
+                ------------------------------------------ */}
+
+                {primaryMilestone && (
+
+                  <div
+                    style={{
+                      position:
+                        'absolute',
+                      right:
+                        '30px',
+                      top:
+                        '250px',
+                      width:
+                        '210px',
+                      padding:
+                        '17px',
+                      border:
+                        '2px solid #0f766e',
+                      borderRadius:
+                        '10px',
+                      background:
+                        '#ecfdf5',
+                      boxShadow:
+                        '0 10px 25px rgba(15,118,110,0.13)'
+                    }}
+                  >
 
                     <div
                       style={{
-                        width:
-                          '52px',
-
-                        height:
-                          '52px',
-
-                        margin:
-                          '0 auto 14px',
-
-                        display:
-                          'flex',
-
-                        alignItems:
-                          'center',
-
-                        justifyContent:
-                          'center',
-
-                        borderRadius:
-                          '14px',
-
-                        background:
-                          '#e6faf6',
-
+                        marginBottom:
+                          '8px',
                         color:
-                          '#008f80',
-
+                          '#0f766e',
                         fontSize:
-                          '1.4rem',
-
+                          '0.61rem',
                         fontWeight:
-                          900
+                          900,
+                        letterSpacing:
+                          '0.11em'
                       }}
                     >
-                      ◫
+                      MILESTONE
                     </div>
 
 
@@ -2803,522 +3471,336 @@ export default function PullPlanningPage() {
                       style={{
                         display:
                           'block',
-
                         color:
-                          '#334155',
-
+                          '#064e3b',
                         fontSize:
-                          '0.95rem'
+                          '0.9rem',
+                        lineHeight:
+                          1.35
                       }}
                     >
-                      Pull Planning Board
+                      {primaryMilestone.name}
                     </strong>
 
 
-                    <p
+                    <div
                       style={{
-                        margin:
-                          '8px auto 0',
-
-                        maxWidth:
-                          '430px',
-
+                        marginTop:
+                          '9px',
                         color:
-                          '#94a3b8',
-
+                          '#047857',
                         fontSize:
-                          '0.78rem',
-
-                        lineHeight:
-                          1.5
+                          '0.74rem',
+                        fontWeight:
+                          900
                       }}
                     >
-                      The collaborative sticky-note board will be implemented in the next application phase.
-                    </p>
+                      {formatDate(
+                        primaryMilestone.target_date
+                      )}
+                    </div>
+
+
+                    <div
+                      style={{
+                        marginTop:
+                          '10px',
+                        paddingTop:
+                          '9px',
+                        borderTop:
+                          '1px solid #a7f3d0',
+                        color:
+                          '#64748b',
+                        fontSize:
+                          '0.66rem'
+                      }}
+                    >
+                      Plan backward from here
+                    </div>
 
                   </div>
 
-                </div>
+                )}
+
+
+                {/* ------------------------------------------
+                    EMPTY STATE
+                ------------------------------------------ */}
+
+                {!loadingBoard &&
+                  pullItems.length ===
+                    0 && (
+
+                    <div
+                      style={{
+                        position:
+                          'absolute',
+                        left:
+                          '50%',
+                        top:
+                          '50%',
+                        transform:
+                          'translate(-58%, -50%)',
+                        textAlign:
+                          'center',
+                        color:
+                          '#94a3b8'
+                      }}
+                    >
+
+                      <div
+                        style={{
+                          fontSize:
+                            '2rem',
+                          marginBottom:
+                            '8px'
+                        }}
+                      >
+                        ▧
+                      </div>
+
+
+                      <strong
+                        style={{
+                          display:
+                            'block',
+                          color:
+                            '#64748b',
+                          fontSize:
+                            '0.85rem'
+                        }}
+                      >
+                        No activities yet
+                      </strong>
+
+
+                      <p
+                        style={{
+                          margin:
+                            '6px 0 0',
+                          fontSize:
+                            '0.72rem'
+                        }}
+                      >
+                        Add the activity immediately required before the milestone.
+                      </p>
+
+                    </div>
+
+                  )}
+
+
+                {/* ------------------------------------------
+                    STICKY NOTES
+                ------------------------------------------ */}
+
+                {pullItems.map(
+                  (
+                    item
+                  ) => {
+
+                    const activity =
+                      productionActivityMap.get(
+                        item.production_activity_id
+                      ) ||
+                      null;
+
+
+                    const packageData =
+                      activity
+                        ? workPackageMap.get(
+                            activity.organization_work_package_id
+                          )
+                        : null;
+
+
+                    const location =
+                      activity
+                        ? locationMap.get(
+                            activity.location_id
+                          )
+                        : null;
+
+
+                    const color =
+                      packageData?.color ||
+                      '#facc15';
+
+
+                    const textColor =
+                      getContrastYIQ(
+                        color
+                      );
+
+
+                    return (
+
+                      <div
+                        key={
+                          item.id
+                        }
+                        onMouseDown={(
+                          event
+                        ) =>
+                          startDrag(
+                            event,
+                            item
+                          )
+                        }
+                        style={{
+                          position:
+                            'absolute',
+                          left:
+                            `${Number(item.board_x || 50)}px`,
+                          top:
+                            `${Number(item.board_y || 80)}px`,
+                          width:
+                            '165px',
+                          minHeight:
+                            '110px',
+                          padding:
+                            '11px 12px',
+                          border:
+                            '1px solid rgba(15,23,42,0.15)',
+                          borderRadius:
+                            '4px',
+                          background:
+                            color,
+                          color:
+                            textColor,
+                          boxShadow:
+                            dragState?.itemId ===
+                            item.id
+                              ? '0 18px 35px rgba(15,23,42,0.25)'
+                              : '0 6px 15px rgba(15,23,42,0.14)',
+                          transform:
+                            dragState?.itemId ===
+                            item.id
+                              ? 'rotate(1.5deg) scale(1.03)'
+                              : 'none',
+                          cursor:
+                            boardLocked
+                              ? 'default'
+                              : 'grab',
+                          zIndex:
+                            dragState?.itemId ===
+                            item.id
+                              ? 50
+                              : 5
+                        }}
+                      >
+
+                        <div
+                          style={{
+                            display:
+                              'flex',
+                            justifyContent:
+                              'space-between',
+                            alignItems:
+                              'center',
+                            gap:
+                              '8px'
+                          }}
+                        >
+
+                          <strong
+                            style={{
+                              fontSize:
+                                '0.78rem',
+                              letterSpacing:
+                                '0.08em'
+                            }}
+                          >
+                            {packageData?.code ||
+                              activity?.activity_code ||
+                              'ACT'}
+                          </strong>
+
+
+                          <span
+                            style={{
+                              fontSize:
+                                '0.63rem',
+                              fontWeight:
+                                900
+                            }}
+                          >
+                            {item.duration_working_days}d
+                          </span>
+
+                        </div>
+
+
+                        <div
+                          style={{
+                            marginTop:
+                              '8px',
+                            fontSize:
+                              '0.76rem',
+                            fontWeight:
+                              900,
+                            lineHeight:
+                              1.25
+                          }}
+                        >
+                          {item.description_snapshot}
+                        </div>
+
+
+                        <div
+                          style={{
+                            marginTop:
+                              '8px',
+                            fontSize:
+                              '0.62rem',
+                            lineHeight:
+                              1.3,
+                            opacity:
+                              0.85
+                          }}
+                        >
+                          {location?.name ||
+                            'Location not assigned'}
+                        </div>
+
+
+                        {(item.quantity_snapshot !==
+                          null &&
+                          item.quantity_snapshot !==
+                            undefined) && (
+
+                          <div
+                            style={{
+                              marginTop:
+                                '5px',
+                              fontSize:
+                                '0.61rem',
+                              fontWeight:
+                                800
+                            }}
+                          >
+                            {item.quantity_snapshot}
+                            {item.unit_snapshot
+                              ? ` ${item.unit_snapshot}`
+                              : ''}
+                          </div>
+
+                        )}
+
+                      </div>
+
+                    );
+
+                  }
+                )}
 
               </div>
 
             </div>
 
+          </section>
 
-            {/* --------------------------------------------
-                SIDE PANEL
-            -------------------------------------------- */}
-
-            <aside
-              style={{
-                display:
-                  'flex',
-
-                flexDirection:
-                  'column',
-
-                gap:
-                  '14px'
-              }}
-            >
-
-              <div
-                style={{
-                  padding:
-                    '18px',
-
-                  border:
-                    '1px solid #dce5ec',
-
-                  borderRadius:
-                    '12px',
-
-                  background:
-                    '#fff'
-                }}
-              >
-
-                <p
-                  style={{
-                    margin:
-                      '0 0 14px',
-
-                    color:
-                      '#64748b',
-
-                    fontSize:
-                      '0.64rem',
-
-                    fontWeight:
-                      900,
-
-                    letterSpacing:
-                      '0.1em'
-                  }}
-                >
-                  SESSION DETAILS
-                </p>
-
-
-                {[
-                  [
-                    'Session Date',
-                    formatDate(
-                      selectedSession.session_date
-                    )
-                  ],
-
-                  [
-                    'Horizon Start',
-                    formatDate(
-                      selectedSession.planning_horizon_start
-                    )
-                  ],
-
-                  [
-                    'Horizon End',
-                    formatDate(
-                      selectedSession.planning_horizon_end
-                    )
-                  ],
-
-                  [
-                    'Updated',
-                    formatDateTime(
-                      selectedSession.updated_at
-                    )
-                  ]
-                ].map(
-                  (
-                    [
-                      label,
-                      value
-                    ]
-                  ) => (
-
-                    <div
-                      key={
-                        label
-                      }
-                      style={{
-                        display:
-                          'flex',
-
-                        justifyContent:
-                          'space-between',
-
-                        gap:
-                          '12px',
-
-                        padding:
-                          '9px 0',
-
-                        borderBottom:
-                          '1px solid #eef2f6',
-
-                        fontSize:
-                          '0.74rem'
-                      }}
-                    >
-
-                      <span
-                        style={{
-                          color:
-                            '#64748b'
-                        }}
-                      >
-                        {label}
-                      </span>
-
-
-                      <strong
-                        style={{
-                          color:
-                            '#334155',
-
-                          textAlign:
-                            'right'
-                        }}
-                      >
-                        {value}
-                      </strong>
-
-                    </div>
-
-                  )
-                )}
-
-              </div>
-
-
-              {/* ----------------------------------------
-                  LIFECYCLE
-              ---------------------------------------- */}
-
-              <div
-                style={{
-                  padding:
-                    '18px',
-
-                  border:
-                    '1px solid #dce5ec',
-
-                  borderRadius:
-                    '12px',
-
-                  background:
-                    '#fff'
-                }}
-              >
-
-                <p
-                  style={{
-                    margin:
-                      '0 0 8px',
-
-                    color:
-                      '#64748b',
-
-                    fontSize:
-                      '0.64rem',
-
-                    fontWeight:
-                      900,
-
-                    letterSpacing:
-                      '0.1em'
-                  }}
-                >
-                  SESSION LIFECYCLE
-                </p>
-
-
-                <p
-                  style={{
-                    margin:
-                      '0 0 15px',
-
-                    color:
-                      '#94a3b8',
-
-                    fontSize:
-                      '0.72rem',
-
-                    lineHeight:
-                      1.45
-                  }}
-                >
-                  {STATUS_DESCRIPTIONS[
-                    selectedSession.status
-                  ]}
-                </p>
-
-
-                <div
-                  style={{
-                    display:
-                      'flex',
-
-                    flexDirection:
-                      'column',
-
-                    gap:
-                      '8px'
-                  }}
-                >
-
-                  {SESSION_STATUSES.map(
-                    (
-                      status,
-                      index
-                    ) => {
-
-                      const active =
-                        selectedSession.status ===
-                        status;
-
-                      const style =
-                        STATUS_STYLES[
-                          status
-                        ];
-
-
-                      return (
-
-                        <div
-                          key={
-                            status
-                          }
-                          style={{
-                            display:
-                              'grid',
-
-                            gridTemplateColumns:
-                              '28px 1fr',
-
-                            gap:
-                              '8px',
-
-                            alignItems:
-                              'center',
-
-                            padding:
-                              '8px 9px',
-
-                            border:
-                              active
-                                ? `1px solid ${style.border}`
-                                : '1px solid transparent',
-
-                            borderRadius:
-                              '8px',
-
-                            background:
-                              active
-                                ? style.background
-                                : 'transparent'
-                          }}
-                        >
-
-                          <span
-                            style={{
-                              width:
-                                '24px',
-
-                              height:
-                                '24px',
-
-                              display:
-                                'inline-flex',
-
-                              alignItems:
-                                'center',
-
-                              justifyContent:
-                                'center',
-
-                              borderRadius:
-                                '999px',
-
-                              background:
-                                active
-                                  ? style.color
-                                  : '#e2e8f0',
-
-                              color:
-                                '#fff',
-
-                              fontSize:
-                                '0.68rem',
-
-                              fontWeight:
-                                900
-                            }}
-                          >
-                            {index + 1}
-                          </span>
-
-
-                          <span
-                            style={{
-                              color:
-                                active
-                                  ? style.color
-                                  : '#64748b',
-
-                              fontSize:
-                                '0.73rem',
-
-                              fontWeight:
-                                active
-                                  ? 900
-                                  : 700
-                            }}
-                          >
-                            {STATUS_LABELS[
-                              status
-                            ]}
-                          </span>
-
-                        </div>
-
-                      );
-                    }
-                  )}
-
-                </div>
-
-
-                <div
-                  style={{
-                    display:
-                      'grid',
-
-                    gridTemplateColumns:
-                      '1fr 1fr',
-
-                    gap:
-                      '8px',
-
-                    marginTop:
-                      '16px'
-                  }}
-                >
-
-                  <button
-                    type="button"
-                    disabled={
-                      !getPreviousStatus(
-                        selectedSession.status
-                      ) ||
-                      saving
-                    }
-                    onClick={() =>
-                      updateSessionStatus(
-                        getPreviousStatus(
-                          selectedSession.status
-                        )
-                      )
-                    }
-                    style={{
-                      padding:
-                        '9px',
-
-                      border:
-                        '1px solid #cbd5e1',
-
-                      borderRadius:
-                        '7px',
-
-                      background:
-                        '#fff',
-
-                      color:
-                        '#475569',
-
-                      fontWeight:
-                        800,
-
-                      cursor:
-                        !getPreviousStatus(
-                          selectedSession.status
-                        )
-                          ? 'not-allowed'
-                          : 'pointer',
-
-                      opacity:
-                        !getPreviousStatus(
-                          selectedSession.status
-                        )
-                          ? 0.45
-                          : 1
-                    }}
-                  >
-                    ← Previous
-                  </button>
-
-
-                  <button
-                    type="button"
-                    disabled={
-                      !getNextStatus(
-                        selectedSession.status
-                      ) ||
-                      saving
-                    }
-                    onClick={() =>
-                      updateSessionStatus(
-                        getNextStatus(
-                          selectedSession.status
-                        )
-                      )
-                    }
-                    style={{
-                      padding:
-                        '9px',
-
-                      border:
-                        'none',
-
-                      borderRadius:
-                        '7px',
-
-                      background:
-                        '#008f80',
-
-                      color:
-                        '#fff',
-
-                      fontWeight:
-                        900,
-
-                      cursor:
-                        !getNextStatus(
-                          selectedSession.status
-                        )
-                          ? 'not-allowed'
-                          : 'pointer',
-
-                      opacity:
-                        !getNextStatus(
-                          selectedSession.status
-                        )
-                          ? 0.45
-                          : 1
-                    }}
-                  >
-                    Next →
-                  </button>
-
-                </div>
-
-              </div>
-
-            </aside>
-
-          </div>
-
-        </section>
+        </>
 
       ) : (
 
@@ -3328,176 +3810,62 @@ export default function PullPlanningPage() {
 
         <section>
 
-          <div
+          <h2
             style={{
-              display:
-                'flex',
-
-              justifyContent:
-                'space-between',
-
-              alignItems:
-                'center',
-
-              marginBottom:
-                '14px'
+              margin:
+                '0 0 14px',
+              color:
+                '#172033',
+              fontSize:
+                '1.05rem'
             }}
           >
-
-            <div>
-
-              <h2
-                style={{
-                  margin:
-                    0,
-
-                  color:
-                    '#172033',
-
-                  fontSize:
-                    '1.05rem',
-
-                  fontWeight:
-                    900
-                }}
-              >
-                Pull Planning Sessions
-              </h2>
-
-
-              <p
-                style={{
-                  margin:
-                    '5px 0 0',
-
-                  color:
-                    '#94a3b8',
-
-                  fontSize:
-                    '0.75rem'
-                }}
-              >
-                Collaborative phase planning history for this project.
-              </p>
-
-            </div>
-
-          </div>
+            Pull Planning Sessions
+          </h2>
 
 
           {loadingSessions ? (
 
-            <div
-              style={{
-                padding:
-                  '28px',
-
-                color:
-                  '#64748b'
-              }}
-            >
+            <p>
               Loading sessions...
-            </div>
+            </p>
 
           ) : sessions.length === 0 ? (
 
             <div
               style={{
-                minHeight:
-                  '300px',
-
-                display:
-                  'flex',
-
-                alignItems:
-                  'center',
-
-                justifyContent:
-                  'center',
-
                 padding:
-                  '30px',
-
+                  '35px',
                 border:
                   '2px dashed #cbd5e1',
-
                 borderRadius:
-                  '13px',
-
+                  '12px',
                 background:
                   '#fff',
-
                 textAlign:
                   'center'
               }}
             >
 
-              <div>
+              <strong>
+                No Pull Planning sessions yet.
+              </strong>
 
-                <strong
-                  style={{
-                    display:
-                      'block',
+              <br />
 
-                    color:
-                      '#334155',
-
-                    fontSize:
-                      '1rem'
-                  }}
-                >
-                  No Pull Planning sessions yet
-                </strong>
-
-
-                <p
-                  style={{
-                    margin:
-                      '8px 0 18px',
-
-                    color:
-                      '#94a3b8',
-
-                    fontSize:
-                      '0.78rem'
-                  }}
-                >
-                  Create the first collaborative phase planning session for this project.
-                </p>
-
-
-                <button
-                  type="button"
-                  onClick={
-                    openCreateModal
-                  }
-                  style={{
-                    padding:
-                      '10px 16px',
-
-                    border:
-                      'none',
-
-                    borderRadius:
-                      '8px',
-
-                    background:
-                      '#008f80',
-
-                    color:
-                      '#fff',
-
-                    cursor:
-                      'pointer',
-
-                    fontWeight:
-                      900
-                  }}
-                >
-                  + New Pull Session
-                </button>
-
-              </div>
+              <button
+                type="button"
+                onClick={
+                  openSessionModal
+                }
+                style={{
+                  ...primaryButton,
+                  marginTop:
+                    '15px'
+                }}
+              >
+                + New Pull Session
+              </button>
 
             </div>
 
@@ -3507,12 +3875,10 @@ export default function PullPlanningPage() {
               style={{
                 display:
                   'grid',
-
                 gridTemplateColumns:
-                  'repeat(auto-fill, minmax(310px, 1fr))',
-
+                  'repeat(auto-fill,minmax(300px,1fr))',
                 gap:
-                  '16px'
+                  '15px'
               }}
             >
 
@@ -3532,19 +3898,7 @@ export default function PullPlanningPage() {
                       ) =>
                         item.is_primary
                     ) ||
-                    (
-                      milestonesBySession[
-                        session.id
-                      ] || []
-                    )[0] ||
                     null;
-
-
-                  const statusStyle =
-                    STATUS_STYLES[
-                      session.status
-                    ] ||
-                    STATUS_STYLES.draft;
 
 
                   return (
@@ -3556,25 +3910,19 @@ export default function PullPlanningPage() {
                       style={{
                         border:
                           '1px solid #dce5ec',
-
                         borderRadius:
-                          '12px',
-
+                          '11px',
                         background:
                           '#fff',
-
                         overflow:
-                          'hidden',
-
-                        boxShadow:
-                          '0 8px 24px rgba(15,23,42,0.045)'
+                          'hidden'
                       }}
                     >
 
                       <div
                         style={{
                           padding:
-                            '18px'
+                            '17px'
                         }}
                       >
 
@@ -3582,59 +3930,35 @@ export default function PullPlanningPage() {
                           style={{
                             display:
                               'flex',
-
                             justifyContent:
                               'space-between',
-
-                            alignItems:
-                              'flex-start',
-
                             gap:
-                              '10px'
+                              '8px'
                           }}
                         >
 
                           <div>
 
-                            <div
+                            <span
                               style={{
-                                marginBottom:
-                                  '5px',
-
                                 color:
                                   '#008f80',
-
                                 fontSize:
                                   '0.62rem',
-
                                 fontWeight:
-                                  900,
-
-                                letterSpacing:
-                                  '0.1em',
-
-                                textTransform:
-                                  'uppercase'
+                                  900
                               }}
                             >
-                              {session.phase_name ||
-                                'Phase'}
-                            </div>
+                              {session.phase_name}
+                            </span>
 
 
                             <h3
                               style={{
                                 margin:
-                                  0,
-
+                                  '5px 0 0',
                                 color:
-                                  '#071c31',
-
-                                fontSize:
-                                  '1rem',
-
-                                fontWeight:
-                                  900
+                                  '#071c31'
                               }}
                             >
                               {session.name}
@@ -3643,38 +3967,11 @@ export default function PullPlanningPage() {
                           </div>
 
 
-                          <span
-                            style={{
-                              padding:
-                                '5px 8px',
-
-                              border:
-                                `1px solid ${statusStyle.border}`,
-
-                              borderRadius:
-                                '999px',
-
-                              background:
-                                statusStyle.background,
-
-                              color:
-                                statusStyle.color,
-
-                              fontSize:
-                                '0.58rem',
-
-                              fontWeight:
-                                900,
-
-                              textTransform:
-                                'uppercase'
-                            }}
-                          >
-                            {STATUS_LABELS[
+                          <SessionBadge
+                            status={
                               session.status
-                            ] ||
-                              session.status}
-                          </span>
+                            }
+                          />
 
                         </div>
 
@@ -3682,80 +3979,23 @@ export default function PullPlanningPage() {
                         <div
                           style={{
                             marginTop:
-                              '17px',
-
-                            paddingTop:
                               '14px',
-
-                            borderTop:
-                              '1px solid #eef2f6'
+                            color:
+                              '#64748b',
+                            fontSize:
+                              '0.73rem'
                           }}
                         >
+                          {milestone?.name ||
+                            'No milestone'}
 
-                          <span
-                            style={{
-                              display:
-                                'block',
+                          <br />
 
-                              color:
-                                '#94a3b8',
-
-                              fontSize:
-                                '0.58rem',
-
-                              fontWeight:
-                                900,
-
-                              letterSpacing:
-                                '0.08em'
-                            }}
-                          >
-                            PRIMARY MILESTONE
-                          </span>
-
-
-                          <strong
-                            style={{
-                              display:
-                                'block',
-
-                              marginTop:
-                                '5px',
-
-                              color:
-                                '#334155',
-
-                              fontSize:
-                                '0.78rem'
-                            }}
-                          >
-                            {milestone
-                              ?.name ||
-                              'No milestone'}
-                          </strong>
-
-
-                          <span
-                            style={{
-                              display:
-                                'block',
-
-                              marginTop:
-                                '3px',
-
-                              color:
-                                '#64748b',
-
-                              fontSize:
-                                '0.7rem'
-                            }}
-                          >
+                          <strong>
                             {formatDate(
-                              milestone
-                                ?.target_date
+                              milestone?.target_date
                             )}
-                          </span>
-
+                          </strong>
                         </div>
 
                       </div>
@@ -3771,61 +4011,29 @@ export default function PullPlanningPage() {
                         style={{
                           width:
                             '100%',
-
                           padding:
-                            '12px 18px',
-
-                          display:
-                            'flex',
-
-                          justifyContent:
-                            'space-between',
-
-                          alignItems:
-                            'center',
-
+                            '12px 17px',
                           border:
                             'none',
-
                           borderTop:
                             '1px solid #e6edf3',
-
                           background:
                             '#fff',
-
-                          color:
-                            '#071c31',
-
                           cursor:
                             'pointer',
-
-                          fontSize:
-                            '0.72rem',
-
+                          textAlign:
+                            'left',
                           fontWeight:
                             900
                         }}
                       >
-                        <span>
-                          Open Session
-                        </span>
-
-                        <span
-                          style={{
-                            color:
-                              '#008f80',
-
-                            fontSize:
-                              '1rem'
-                          }}
-                        >
-                          →
-                        </span>
+                        Open Session →
                       </button>
 
                     </article>
 
                   );
+
                 }
               )}
 
@@ -3839,733 +4047,1007 @@ export default function PullPlanningPage() {
 
 
       {/* ====================================================
-          CREATE SESSION MODAL
+          SESSION MODAL
       ==================================================== */}
 
-      {showCreateModal && (
+      {showSessionModal && (
 
-        <div
-          style={{
-            position:
-              'fixed',
+        <ModalShell>
 
-            inset:
-              0,
-
-            zIndex:
-              5000,
-
-            display:
-              'flex',
-
-            alignItems:
-              'center',
-
-            justifyContent:
-              'center',
-
-            padding:
-              '22px',
-
-            background:
-              'rgba(3,17,30,0.58)'
-          }}
-        >
-
-          <div
-            style={{
-              width:
-                'min(760px,96vw)',
-
-              maxHeight:
-                '92vh',
-
-              overflowY:
-                'auto',
-
-              borderRadius:
-                '14px',
-
-              background:
-                '#fff',
-
-              boxShadow:
-                '0 30px 90px rgba(0,0,0,0.3)'
-            }}
+          <form
+            onSubmit={
+              createSession
+            }
           >
 
+            <ModalHeader
+              title="New Pull Session"
+              onClose={() =>
+                setShowSessionModal(
+                  false
+                )
+              }
+            />
+
+
             <div
-              style={{
-                padding:
-                  '20px 24px',
-
-                display:
-                  'flex',
-
-                justifyContent:
-                  'space-between',
-
-                alignItems:
-                  'center',
-
-                borderBottom:
-                  '1px solid #e5eaf0'
-              }}
+              style={
+                modalGrid
+              }
             >
 
-              <div>
-
-                <p
-                  style={{
-                    margin:
-                      '0 0 5px',
-
-                    color:
-                      '#008f80',
-
-                    fontSize:
-                      '0.65rem',
-
-                    fontWeight:
-                      900,
-
-                    letterSpacing:
-                      '0.11em'
-                  }}
-                >
-                  PULL PLANNING
-                </p>
-
-
-                <h2
-                  style={{
-                    margin:
-                      0,
-
-                    color:
-                      '#071c31',
-
-                    fontSize:
-                      '1.35rem'
-                  }}
-                >
-                  New Pull Session
-                </h2>
-
-              </div>
-
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowCreateModal(
-                    false
-                  )
-                }
-                style={{
-                  border:
-                    'none',
-
-                  background:
-                    'transparent',
-
-                  color:
-                    '#64748b',
-
-                  cursor:
-                    'pointer',
-
-                  fontSize:
-                    '1.5rem'
-                }}
+              <Field
+                label="Session Name *"
               >
-                ×
-              </button>
+                <input
+                  required
+                  value={
+                    sessionName
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setSessionName(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+              </Field>
+
+
+              <Field
+                label="Phase *"
+              >
+                <input
+                  required
+                  value={
+                    phaseName
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setPhaseName(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+              </Field>
+
+
+              <Field
+                label="Session Date"
+              >
+                <input
+                  type="date"
+                  value={
+                    sessionDate
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setSessionDate(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+              </Field>
+
+
+              <Field
+                label="Planning Horizon Start"
+              >
+                <input
+                  type="date"
+                  value={
+                    horizonStart
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setHorizonStart(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+              </Field>
+
+
+              <Field
+                label="Planning Horizon End"
+              >
+                <input
+                  type="date"
+                  value={
+                    horizonEnd
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setHorizonEnd(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+              </Field>
+
+
+              <Field
+                label="Description"
+                full
+              >
+                <textarea
+                  rows={3}
+                  value={
+                    sessionDescription
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setSessionDescription(
+                      event.target.value
+                    )
+                  }
+                  style={{
+                    ...inputStyle,
+                    resize:
+                      'vertical'
+                  }}
+                />
+              </Field>
+
+
+              <Field
+                label="Primary Milestone *"
+              >
+                <input
+                  required
+                  value={
+                    milestoneName
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setMilestoneName(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+              </Field>
+
+
+              <Field
+                label="Target Date *"
+              >
+                <input
+                  required
+                  type="date"
+                  value={
+                    milestoneTargetDate
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setMilestoneTargetDate(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+              </Field>
 
             </div>
 
 
-            <form
-              onSubmit={
-                createSession
+            <ModalFooter
+              saving={
+                saving
+              }
+              onCancel={() =>
+                setShowSessionModal(
+                  false
+                )
+              }
+              actionLabel="Create Session"
+            />
+
+          </form>
+
+        </ModalShell>
+
+      )}
+
+
+      {/* ====================================================
+          ACTIVITY MODAL
+      ==================================================== */}
+
+      {showActivityModal && (
+
+        <ModalShell>
+
+          <form
+            onSubmit={
+              createActivity
+            }
+          >
+
+            <ModalHeader
+              title="Add Pull Activity"
+              onClose={() =>
+                setShowActivityModal(
+                  false
+                )
+              }
+            />
+
+
+            <div
+              style={
+                modalGrid
               }
             >
 
-              <div
-                style={{
-                  padding:
-                    '22px 24px',
-
-                  display:
-                    'grid',
-
-                  gridTemplateColumns:
-                    '1fr 1fr',
-
-                  gap:
-                    '16px'
-                }}
+              <Field
+                label="Work Package *"
               >
 
-                <div
-                  style={{
-                    gridColumn:
-                      '1 / -1'
-                  }}
-                >
-
-                  <label
-                    style={
-                      labelStyle
-                    }
-                  >
-                    Session Name *
-                  </label>
-
-                  <input
-                    required
-                    type="text"
-                    value={
-                      sessionName
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setSessionName(
-                        event.target
-                          .value
-                      )
-                    }
-                    placeholder="Example: Interior Finishes Phase Planning"
-                    style={
-                      inputStyle
-                    }
-                  />
-
-                </div>
-
-
-                <div>
-
-                  <label
-                    style={
-                      labelStyle
-                    }
-                  >
-                    Phase *
-                  </label>
-
-                  <input
-                    required
-                    type="text"
-                    value={
-                      phaseName
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setPhaseName(
-                        event.target
-                          .value
-                      )
-                    }
-                    placeholder="Example: Interior Finishes"
-                    style={
-                      inputStyle
-                    }
-                  />
-
-                </div>
-
-
-                <div>
-
-                  <label
-                    style={
-                      labelStyle
-                    }
-                  >
-                    Session Date
-                  </label>
-
-                  <input
-                    type="date"
-                    value={
-                      sessionDate
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setSessionDate(
-                        event.target
-                          .value
-                      )
-                    }
-                    style={
-                      inputStyle
-                    }
-                  />
-
-                </div>
-
-
-                <div>
-
-                  <label
-                    style={
-                      labelStyle
-                    }
-                  >
-                    Planning Horizon Start
-                  </label>
-
-                  <input
-                    type="date"
-                    value={
-                      horizonStart
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setHorizonStart(
-                        event.target
-                          .value
-                      )
-                    }
-                    style={
-                      inputStyle
-                    }
-                  />
-
-                </div>
-
-
-                <div>
-
-                  <label
-                    style={
-                      labelStyle
-                    }
-                  >
-                    Planning Horizon End
-                  </label>
-
-                  <input
-                    type="date"
-                    value={
-                      horizonEnd
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setHorizonEnd(
-                        event.target
-                          .value
-                      )
-                    }
-                    style={
-                      inputStyle
-                    }
-                  />
-
-                </div>
-
-
-                <div
-                  style={{
-                    gridColumn:
-                      '1 / -1'
-                  }}
-                >
-
-                  <label
-                    style={
-                      labelStyle
-                    }
-                  >
-                    Description
-                  </label>
-
-                  <textarea
-                    value={
-                      sessionDescription
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setSessionDescription(
-                        event.target
-                          .value
-                      )
-                    }
-                    placeholder="Session scope, participants or planning objective..."
-                    rows={3}
-                    style={{
-                      ...inputStyle,
-
-                      resize:
-                        'vertical'
-                    }}
-                  />
-
-                </div>
-
-
-                {/* --------------------------------------
-                    MILESTONE
-                -------------------------------------- */}
-
-                <div
-                  style={{
-                    gridColumn:
-                      '1 / -1',
-
-                    marginTop:
-                      '4px',
-
-                    padding:
-                      '17px',
-
-                    border:
-                      '1px solid #99f6e4',
-
-                    borderRadius:
-                      '10px',
-
-                    background:
-                      '#f0fdfa'
-                  }}
-                >
-
-                  <div
-                    style={{
-                      marginBottom:
-                        '14px'
-                    }}
-                  >
-
-                    <strong
-                      style={{
-                        display:
-                          'block',
-
-                        color:
-                          '#0f766e',
-
-                        fontSize:
-                          '0.85rem'
-                      }}
-                    >
-                      Primary Pull Milestone
-                    </strong>
-
-
-                    <span
-                      style={{
-                        display:
-                          'block',
-
-                        marginTop:
-                          '4px',
-
-                        color:
-                          '#64748b',
-
-                        fontSize:
-                          '0.71rem'
-                      }}
-                    >
-                      The team will plan backward from this target.
-                    </span>
-
-                  </div>
-
-
-                  <div
-                    style={{
-                      display:
-                        'grid',
-
-                      gridTemplateColumns:
-                        '1fr 190px',
-
-                      gap:
-                        '12px'
-                    }}
-                  >
-
-                    <div>
-
-                      <label
-                        style={
-                          labelStyle
-                        }
-                      >
-                        Milestone *
-                      </label>
-
-                      <input
-                        required
-                        type="text"
-                        value={
-                          milestoneName
-                        }
-                        onChange={(
-                          event
-                        ) =>
-                          setMilestoneName(
-                            event.target
-                              .value
-                          )
-                        }
-                        placeholder="Example: Level 03 Ready for Turnover"
-                        style={
-                          inputStyle
-                        }
-                      />
-
-                    </div>
-
-
-                    <div>
-
-                      <label
-                        style={
-                          labelStyle
-                        }
-                      >
-                        Target Date *
-                      </label>
-
-                      <input
-                        required
-                        type="date"
-                        value={
-                          milestoneTargetDate
-                        }
-                        onChange={(
-                          event
-                        ) =>
-                          setMilestoneTargetDate(
-                            event.target
-                              .value
-                          )
-                        }
-                        style={
-                          inputStyle
-                        }
-                      />
-
-                    </div>
-
-                  </div>
-
-                </div>
-
-
-                {errorMessage && (
-
-                  <div
-                    style={{
-                      gridColumn:
-                        '1 / -1',
-
-                      padding:
-                        '11px 13px',
-
-                      border:
-                        '1px solid #fecaca',
-
-                      borderRadius:
-                        '7px',
-
-                      background:
-                        '#fff1f2',
-
-                      color:
-                        '#be123c',
-
-                      fontSize:
-                        '0.75rem',
-
-                      fontWeight:
-                        700
-                    }}
-                  >
-                    {errorMessage}
-                  </div>
-
-                )}
-
-              </div>
-
-
-              <div
-                style={{
-                  padding:
-                    '16px 24px',
-
-                  display:
-                    'flex',
-
-                  justifyContent:
-                    'flex-end',
-
-                  gap:
-                    '10px',
-
-                  borderTop:
-                    '1px solid #e5eaf0'
-                }}
-              >
-
-                <button
-                  type="button"
-                  disabled={
-                    saving
+                <select
+                  required
+                  value={
+                    activityWorkPackageId
                   }
-                  onClick={() =>
-                    setShowCreateModal(
-                      false
+                  onChange={(
+                    event
+                  ) => {
+
+                    const id =
+                      event.target.value;
+
+                    setActivityWorkPackageId(
+                      id
+                    );
+
+                    const item =
+                      workPackageMap.get(
+                        id
+                      );
+
+                    if (
+                      item &&
+                      !activityDescription
+                    ) {
+                      setActivityDescription(
+                        item.description ||
+                        ''
+                      );
+                    }
+
+                  }}
+                  style={
+                    inputStyle
+                  }
+                >
+
+                  <option value="">
+                    Select Work Package
+                  </option>
+
+
+                  {workPackages.map(
+                    (
+                      item
+                    ) => (
+
+                      <option
+                        key={
+                          item.id
+                        }
+                        value={
+                          item.id
+                        }
+                      >
+                        {item.code} - {item.description}
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
+              </Field>
+
+
+              <Field
+                label="Location *"
+              >
+
+                <select
+                  required
+                  value={
+                    activityLocationId
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityLocationId(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                >
+
+                  <option value="">
+                    Select Location
+                  </option>
+
+
+                  {locations.map(
+                    (
+                      location
+                    ) => (
+
+                      <option
+                        key={
+                          location.id
+                        }
+                        value={
+                          location.id
+                        }
+                      >
+                        {location.name}
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
+              </Field>
+
+
+              <Field
+                label="Activity Description *"
+                full
+              >
+
+                <input
+                  required
+                  value={
+                    activityDescription
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityDescription(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Example: Hang drywall board - Zone A"
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Operation / Method"
+                full
+              >
+
+                <textarea
+                  rows={2}
+                  value={
+                    activityOperation
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityOperation(
+                      event.target.value
                     )
                   }
                   style={{
-                    padding:
-                      '10px 15px',
-
-                    border:
-                      '1px solid #cbd5e1',
-
-                    borderRadius:
-                      '7px',
-
-                    background:
-                      '#fff',
-
-                    color:
-                      '#475569',
-
-                    cursor:
-                      'pointer',
-
-                    fontWeight:
-                      800
+                    ...inputStyle,
+                    resize:
+                      'vertical'
                   }}
-                >
-                  Cancel
-                </button>
+                />
+
+              </Field>
 
 
-                <button
-                  type="submit"
-                  disabled={
-                    saving
+              <Field
+                label="Duration (workdays) *"
+              >
+
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={
+                    activityDuration
                   }
-                  style={{
-                    padding:
-                      '10px 17px',
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityDuration(
+                      Math.max(
+                        1,
+                        Number(
+                          event.target.value ||
+                          1
+                        )
+                      )
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
 
-                    border:
-                      'none',
+              </Field>
 
-                    borderRadius:
-                      '7px',
 
-                    background:
-                      '#008f80',
+              <Field
+                label="Quantity"
+              >
 
-                    color:
-                      '#fff',
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={
+                    activityQuantity
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityQuantity(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
 
-                    cursor:
-                      saving
-                        ? 'not-allowed'
-                        : 'pointer',
+              </Field>
 
-                    fontWeight:
-                      900,
 
-                    opacity:
-                      saving
-                        ? 0.65
-                        : 1
-                  }}
-                >
-                  {saving
-                    ? 'Creating...'
-                    : 'Create Session'}
-                </button>
+              <Field
+                label="Unit"
+              >
 
-              </div>
+                <input
+                  value={
+                    activityUnit
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityUnit(
+                      event.target.value
+                    )
+                  }
+                  placeholder="SF, LF, EA..."
+                  style={
+                    inputStyle
+                  }
+                />
 
-            </form>
+              </Field>
 
-          </div>
 
-        </div>
+              <Field
+                label="Crew"
+              >
+
+                <input
+                  value={
+                    activityCrew
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityCrew(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Crew A"
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Workers"
+              >
+
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={
+                    activityWorkers
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityWorkers(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Expected Production Rate"
+              >
+
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={
+                    activityRate
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityRate(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Expected Productivity"
+              >
+
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={
+                    activityProductivity
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setActivityProductivity(
+                      event.target.value
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+            </div>
+
+
+            <ModalFooter
+              saving={
+                saving
+              }
+              onCancel={() =>
+                setShowActivityModal(
+                  false
+                )
+              }
+              actionLabel="Add Activity"
+            />
+
+          </form>
+
+        </ModalShell>
 
       )}
 
     </main>
 
   );
-
 }
 
 
 // ============================================================
-// SHARED INLINE STYLES
+// SMALL UI COMPONENTS
 // ============================================================
 
-const labelStyle = {
-  display:
-    'block',
+function SessionBadge({
+  status
+}) {
 
-  marginBottom:
-    '5px',
+  const style =
+    STATUS_STYLES[
+      status
+    ] ||
+    STATUS_STYLES.draft;
 
-  color:
-    '#475569',
 
-  fontSize:
-    '0.7rem',
+  return (
 
-  fontWeight:
-    900,
+    <span
+      style={{
+        padding:
+          '5px 8px',
+        border:
+          `1px solid ${style.border}`,
+        borderRadius:
+          '999px',
+        background:
+          style.background,
+        color:
+          style.color,
+        fontSize:
+          '0.6rem',
+        fontWeight:
+          900,
+        textTransform:
+          'uppercase',
+        whiteSpace:
+          'nowrap'
+      }}
+    >
+      {STATUS_LABELS[
+        status
+      ] ||
+        status}
+    </span>
 
-  textTransform:
-    'uppercase',
+  );
+}
 
-  letterSpacing:
-    '0.04em'
-};
 
+function ModalShell({
+  children
+}) {
+
+  return (
+
+    <div
+      style={{
+        position:
+          'fixed',
+        inset:
+          0,
+        zIndex:
+          5000,
+        display:
+          'flex',
+        alignItems:
+          'center',
+        justifyContent:
+          'center',
+        padding:
+          '20px',
+        background:
+          'rgba(3,17,30,0.6)'
+      }}
+    >
+
+      <div
+        style={{
+          width:
+            'min(760px,96vw)',
+          maxHeight:
+            '92vh',
+          overflowY:
+            'auto',
+          borderRadius:
+            '13px',
+          background:
+            '#fff',
+          boxShadow:
+            '0 30px 90px rgba(0,0,0,.3)'
+        }}
+      >
+        {children}
+      </div>
+
+    </div>
+
+  );
+}
+
+
+function ModalHeader({
+  title,
+  onClose
+}) {
+
+  return (
+
+    <div
+      style={{
+        padding:
+          '18px 22px',
+        borderBottom:
+          '1px solid #e5eaf0',
+        display:
+          'flex',
+        justifyContent:
+          'space-between',
+        alignItems:
+          'center'
+      }}
+    >
+
+      <div>
+
+        <span
+          style={{
+            color:
+              '#008f80',
+            fontSize:
+              '0.62rem',
+            fontWeight:
+              900
+          }}
+        >
+          PULL PLANNING
+        </span>
+
+
+        <h2
+          style={{
+            margin:
+              '4px 0 0',
+            color:
+              '#071c31',
+            fontSize:
+              '1.25rem'
+          }}
+        >
+          {title}
+        </h2>
+
+      </div>
+
+
+      <button
+        type="button"
+        onClick={
+          onClose
+        }
+        style={{
+          border:
+            'none',
+          background:
+            'transparent',
+          fontSize:
+            '1.4rem',
+          cursor:
+            'pointer',
+          color:
+            '#64748b'
+        }}
+      >
+        ×
+      </button>
+
+    </div>
+
+  );
+}
+
+
+function ModalFooter({
+  saving,
+  onCancel,
+  actionLabel
+}) {
+
+  return (
+
+    <div
+      style={{
+        padding:
+          '15px 22px',
+        borderTop:
+          '1px solid #e5eaf0',
+        display:
+          'flex',
+        justifyContent:
+          'flex-end',
+        gap:
+          '9px'
+      }}
+    >
+
+      <button
+        type="button"
+        disabled={
+          saving
+        }
+        onClick={
+          onCancel
+        }
+        style={
+          secondaryButton
+        }
+      >
+        Cancel
+      </button>
+
+
+      <button
+        type="submit"
+        disabled={
+          saving
+        }
+        style={
+          primaryButton
+        }
+      >
+        {saving
+          ? 'Saving...'
+          : actionLabel}
+      </button>
+
+    </div>
+
+  );
+}
+
+
+function Field({
+  label,
+  children,
+  full = false
+}) {
+
+  return (
+
+    <div
+      style={{
+        gridColumn:
+          full
+            ? '1 / -1'
+            : 'auto'
+      }}
+    >
+
+      <label
+        style={{
+          display:
+            'block',
+          marginBottom:
+            '5px',
+          color:
+            '#475569',
+          fontSize:
+            '0.68rem',
+          fontWeight:
+            900,
+          textTransform:
+            'uppercase',
+          letterSpacing:
+            '0.04em'
+        }}
+      >
+        {label}
+      </label>
+
+
+      {children}
+
+    </div>
+
+  );
+}
+
+
+// ============================================================
+// SHARED STYLES
+// ============================================================
 
 const inputStyle = {
   width:
     '100%',
-
   padding:
-    '10px 11px',
-
+    '9px 10px',
   border:
     '1px solid #cbd5e1',
-
   borderRadius:
     '7px',
-
+  boxSizing:
+    'border-box',
   outline:
     'none',
-
   background:
     '#fff',
-
   color:
     '#172033',
-
   fontSize:
-    '0.82rem',
+    '0.8rem'
+};
 
-  boxSizing:
-    'border-box'
+
+const modalGrid = {
+  padding:
+    '20px 22px',
+  display:
+    'grid',
+  gridTemplateColumns:
+    '1fr 1fr',
+  gap:
+    '14px'
+};
+
+
+const primaryButton = {
+  padding:
+    '10px 15px',
+  border:
+    'none',
+  borderRadius:
+    '7px',
+  background:
+    '#008f80',
+  color:
+    '#fff',
+  fontWeight:
+    900,
+  cursor:
+    'pointer'
+};
+
+
+const secondaryButton = {
+  padding:
+    '9px 12px',
+  border:
+    '1px solid #cbd5e1',
+  borderRadius:
+    '7px',
+  background:
+    '#fff',
+  color:
+    '#475569',
+  fontWeight:
+    800,
+  cursor:
+    'pointer'
 };
