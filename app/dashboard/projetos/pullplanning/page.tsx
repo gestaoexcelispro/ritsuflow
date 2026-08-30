@@ -14,29 +14,35 @@ import { supabase } from '../../../../lib/supabase';
 // RITSUFLOW™
 // PULL PLANNING
 //
-// APPLICATION PHASE 2
+// APPLICATION PHASE 3
 //
-// Adds:
-//
-// - Pull Planning Sessions
+// CAPABILITIES
+// ------------------------------------------------------------
+// - Project portfolio
+// - Pull Planning sessions
+// - Session lifecycle
 // - Primary milestone
-// - Production Activities
-// - Pull Planning Items
-// - Draggable sticky notes
-// - Canonical Work Packages
+// - Durable Production Activities
+// - Session-specific Pull Items
+// - Organization Work Package catalog
 // - Canonical Locations
-// - Durable board position persistence
-//
-// NEXT PHASE:
-//
+// - Draggable sticky notes
+// - Persisted board positions
 // - Backward predecessor creation
-// - Production handoffs
-// - Dependency arrows
+// - Production Activity Handoffs
+// - Visual handoff arrows
+//
+// NEXT:
+// - Handoff editor
+// - Selected / All arrow visibility
+// - Partial release handoffs
+// - Forward validation
+// - Milestone feasibility
 // ============================================================
 
 
 // ============================================================
-// SESSION STATUS
+// SESSION LIFECYCLE
 // ============================================================
 
 const SESSION_STATUSES = [
@@ -47,7 +53,6 @@ const SESSION_STATUSES = [
   'archived'
 ];
 
-
 const STATUS_LABELS = {
   draft: 'Draft',
   in_session: 'In Session',
@@ -56,9 +61,7 @@ const STATUS_LABELS = {
   archived: 'Archived'
 };
 
-
 const STATUS_STYLES = {
-
   draft: {
     background: '#f1f5f9',
     color: '#475569',
@@ -88,21 +91,30 @@ const STATUS_STYLES = {
     color: '#64748b',
     border: '#e2e8f0'
   }
-
 };
+
+
+// ============================================================
+// BOARD CONSTANTS
+// ============================================================
+
+const BOARD_WIDTH = 1400;
+const BOARD_HEIGHT = 720;
+
+const NOTE_WIDTH = 180;
+const NOTE_HEIGHT = 145;
+
+const MILESTONE_X = 1130;
+const MILESTONE_Y = 275;
+const MILESTONE_WIDTH = 220;
 
 
 // ============================================================
 // HELPERS
 // ============================================================
 
-const formatDate = (
-  value
-) => {
-
-  if (!value) {
-    return '—';
-  }
+const formatDate = (value) => {
+  if (!value) return '—';
 
   const date =
     new Date(
@@ -128,18 +140,11 @@ const formatDate = (
 };
 
 
-const formatDateTime = (
-  value
-) => {
-
-  if (!value) {
-    return '—';
-  }
+const formatDateTime = (value) => {
+  if (!value) return '—';
 
   const date =
-    new Date(
-      value
-    );
+    new Date(value);
 
   if (
     Number.isNaN(
@@ -162,10 +167,7 @@ const formatDateTime = (
 };
 
 
-const getNextStatus = (
-  status
-) => {
-
+const getNextStatus = (status) => {
   const index =
     SESSION_STATUSES.indexOf(
       status
@@ -185,18 +187,13 @@ const getNextStatus = (
 };
 
 
-const getPreviousStatus = (
-  status
-) => {
-
+const getPreviousStatus = (status) => {
   const index =
     SESSION_STATUSES.indexOf(
       status
     );
 
-  if (
-    index <= 0
-  ) {
+  if (index <= 0) {
     return null;
   }
 
@@ -206,52 +203,31 @@ const getPreviousStatus = (
 };
 
 
-const getContrastYIQ = (
-  hexColor
-) => {
-
+const getContrastYIQ = (hexColor) => {
   const clean =
     String(
       hexColor ||
       '#64748b'
     )
-      .replace(
-        '#',
-        ''
-      )
-      .padEnd(
-        6,
-        '0'
-      )
-      .slice(
-        0,
-        6
-      );
+      .replace('#', '')
+      .padEnd(6, '0')
+      .slice(0, 6);
 
   const r =
     parseInt(
-      clean.substring(
-        0,
-        2
-      ),
+      clean.substring(0, 2),
       16
     );
 
   const g =
     parseInt(
-      clean.substring(
-        2,
-        4
-      ),
+      clean.substring(2, 4),
       16
     );
 
   const b =
     parseInt(
-      clean.substring(
-        4,
-        6
-      ),
+      clean.substring(4, 6),
       16
     );
 
@@ -269,8 +245,122 @@ const getContrastYIQ = (
 };
 
 
+const buildLocationOptions = (
+  locations
+) => {
+  const map =
+    new Map(
+      locations.map(
+        (location) => [
+          location.id,
+          location
+        ]
+      )
+    );
+
+  const childrenCount =
+    new Map();
+
+  locations.forEach(
+    (location) => {
+      if (!location.parent_id) {
+        return;
+      }
+
+      childrenCount.set(
+        location.parent_id,
+        (
+          childrenCount.get(
+            location.parent_id
+          ) || 0
+        ) + 1
+      );
+    }
+  );
+
+  const buildPath = (
+    location
+  ) => {
+    if (!location) {
+      return '';
+    }
+
+    const parts = [];
+    const visited =
+      new Set();
+
+    let current =
+      location;
+
+    while (
+      current &&
+      !visited.has(
+        current.id
+      )
+    ) {
+      visited.add(
+        current.id
+      );
+
+      if (
+        current.name
+      ) {
+        parts.unshift(
+          current.name
+        );
+      }
+
+      current =
+        current.parent_id
+          ? map.get(
+              current.parent_id
+            )
+          : null;
+    }
+
+    return parts.join(
+      ' / '
+    );
+  };
+
+  const leaves =
+    locations.filter(
+      (location) =>
+        !childrenCount.has(
+          location.id
+        )
+    );
+
+  const source =
+    leaves.length > 0
+      ? leaves
+      : locations;
+
+  return source
+    .map(
+      (location) => ({
+        ...location,
+        path:
+          buildPath(
+            location
+          )
+      })
+    )
+    .sort(
+      (a, b) =>
+        String(
+          a.path
+        ).localeCompare(
+          String(
+            b.path
+          )
+        )
+    );
+};
+
+
 // ============================================================
-// PAGE
+// MAIN PAGE
 // ============================================================
 
 export default function PullPlanningPage() {
@@ -345,13 +435,28 @@ export default function PullPlanningPage() {
   ] = useState([]);
 
   const [
+    handoffs,
+    setHandoffs
+  ] = useState([]);
+
+  const [
     loadingBoard,
     setLoadingBoard
   ] = useState(false);
 
 
   // ==========================================================
-  // SESSION MODAL
+  // SELECTED NOTE
+  // ==========================================================
+
+  const [
+    selectedItemId,
+    setSelectedItemId
+  ] = useState(null);
+
+
+  // ==========================================================
+  // CREATE SESSION MODAL
   // ==========================================================
 
   const [
@@ -401,13 +506,25 @@ export default function PullPlanningPage() {
 
 
   // ==========================================================
-  // ACTIVITY MODAL
+  // ACTIVITY / PREDECESSOR MODAL
   // ==========================================================
 
   const [
     showActivityModal,
     setShowActivityModal
   ] = useState(false);
+
+  const [
+    activityMode,
+    setActivityMode
+  ] = useState(
+    'milestone'
+  );
+
+  const [
+    successorItemId,
+    setSuccessorItemId
+  ] = useState(null);
 
   const [
     activityWorkPackageId,
@@ -464,6 +581,16 @@ export default function PullPlanningPage() {
     setActivityProductivity
   ] = useState('');
 
+  const [
+    handoffCondition,
+    setHandoffCondition
+  ] = useState('');
+
+  const [
+    handoffResponsible,
+    setHandoffResponsible
+  ] = useState('');
+
 
   // ==========================================================
   // SYSTEM STATE
@@ -497,23 +624,35 @@ export default function PullPlanningPage() {
   const boardRef =
     useRef(null);
 
+  const pullItemsRef =
+    useRef([]);
+
   const [
     dragState,
     setDragState
   ] = useState(null);
 
 
+  useEffect(
+    () => {
+      pullItemsRef.current =
+        pullItems;
+    },
+    [
+      pullItems
+    ]
+  );
+
+
   // ==========================================================
-  // DERIVED
+  // DERIVED DATA
   // ==========================================================
 
   const selectedProject =
     useMemo(
       () =>
         projects.find(
-          (
-            project
-          ) =>
+          (project) =>
             project.id ===
             projectId
         ) ||
@@ -529,9 +668,7 @@ export default function PullPlanningPage() {
     useMemo(
       () =>
         sessions.find(
-          (
-            session
-          ) =>
+          (session) =>
             session.id ===
             selectedSessionId
         ) ||
@@ -545,38 +682,31 @@ export default function PullPlanningPage() {
 
   const selectedMilestones =
     selectedSessionId
-      ? milestonesBySession[
-          selectedSessionId
-        ] || []
+      ? (
+          milestonesBySession[
+            selectedSessionId
+          ] || []
+        )
       : [];
 
 
   const primaryMilestone =
     selectedMilestones.find(
-      (
-        milestone
-      ) =>
+      (milestone) =>
         milestone.is_primary
     ) ||
     selectedMilestones[0] ||
     null;
 
 
-  const productionActivityMap =
+  const locationOptions =
     useMemo(
       () =>
-        new Map(
-          productionActivities.map(
-            (
-              activity
-            ) => [
-              activity.id,
-              activity
-            ]
-          )
+        buildLocationOptions(
+          locations
         ),
       [
-        productionActivities
+        locations
       ]
     );
 
@@ -586,9 +716,7 @@ export default function PullPlanningPage() {
       () =>
         new Map(
           workPackages.map(
-            (
-              item
-            ) => [
+            (item) => [
               item.id,
               item
             ]
@@ -604,17 +732,75 @@ export default function PullPlanningPage() {
     useMemo(
       () =>
         new Map(
-          locations.map(
-            (
-              location
-            ) => [
+          locationOptions.map(
+            (location) => [
               location.id,
               location
             ]
           )
         ),
       [
-        locations
+        locationOptions
+      ]
+    );
+
+
+  const productionActivityMap =
+    useMemo(
+      () =>
+        new Map(
+          productionActivities.map(
+            (activity) => [
+              activity.id,
+              activity
+            ]
+          )
+        ),
+      [
+        productionActivities
+      ]
+    );
+
+
+  const pullItemByActivityId =
+    useMemo(
+      () => {
+        const map =
+          new Map();
+
+        pullItems.forEach(
+          (item) => {
+            if (
+              item.production_activity_id
+            ) {
+              map.set(
+                item.production_activity_id,
+                item
+              );
+            }
+          }
+        );
+
+        return map;
+      },
+      [
+        pullItems
+      ]
+    );
+
+
+  const selectedItem =
+    useMemo(
+      () =>
+        pullItems.find(
+          (item) =>
+            item.id ===
+            selectedItemId
+        ) ||
+        null,
+      [
+        pullItems,
+        selectedItemId
       ]
     );
 
@@ -643,6 +829,8 @@ export default function PullPlanningPage() {
           setLoadingProjects(
             true
           );
+
+          setErrorMessage('');
 
           try {
 
@@ -679,15 +867,18 @@ export default function PullPlanningPage() {
                   }
                 );
 
+
             if (error) {
               throw error;
             }
 
-            const loaded =
+
+            const loadedProjects =
               data || [];
 
+
             setProjects(
-              loaded
+              loadedProjects
             );
 
 
@@ -696,17 +887,17 @@ export default function PullPlanningPage() {
                 window.location.search
               );
 
+
             const projectFromUrl =
               params.get(
                 'projectId'
               );
 
+
             if (
               projectFromUrl &&
-              loaded.some(
-                (
-                  project
-                ) =>
+              loadedProjects.some(
+                (project) =>
                   project.id ===
                   projectFromUrl
               )
@@ -719,7 +910,7 @@ export default function PullPlanningPage() {
 
             const coverEntries =
               await Promise.all(
-                loaded.map(
+                loadedProjects.map(
                   async (
                     project
                   ) => {
@@ -732,6 +923,7 @@ export default function PullPlanningPage() {
                         ''
                       ];
                     }
+
 
                     const {
                       data:
@@ -747,6 +939,7 @@ export default function PullPlanningPage() {
                           3600
                         );
 
+
                     return [
                       project.id,
                       signedData?.signedUrl ||
@@ -756,6 +949,7 @@ export default function PullPlanningPage() {
                   }
                 )
               );
+
 
             setProjectCoverUrls(
               Object.fromEntries(
@@ -787,6 +981,7 @@ export default function PullPlanningPage() {
 
         };
 
+
       loadProjects();
 
     },
@@ -795,14 +990,14 @@ export default function PullPlanningPage() {
 
 
   // ==========================================================
-  // LOAD PROJECT CATALOGS
+  // LOAD ORGANIZATION WORK PACKAGE CATALOG + LOCATIONS
   // ==========================================================
 
   useEffect(
     () => {
 
       if (
-        !projectId
+        !selectedProject
       ) {
 
         setWorkPackages([]);
@@ -824,13 +1019,35 @@ export default function PullPlanningPage() {
             ] =
               await Promise.all([
 
-                supabase.rpc(
-                  'get_project_work_packages',
-                  {
-                    target_project_id:
-                      projectId
-                  }
-                ),
+                supabase
+                  .from(
+                    'organization_work_packages'
+                  )
+                  .select(`
+                    id,
+                    organization_id,
+                    code,
+                    description,
+                    color,
+                    is_active,
+                    created_at,
+                    updated_at
+                  `)
+                  .eq(
+                    'organization_id',
+                    selectedProject.organization_id
+                  )
+                  .eq(
+                    'is_active',
+                    true
+                  )
+                  .order(
+                    'code',
+                    {
+                      ascending:
+                        true
+                    }
+                  ),
 
                 supabase
                   .from(
@@ -847,7 +1064,7 @@ export default function PullPlanningPage() {
                   `)
                   .eq(
                     'project_id',
-                    projectId
+                    selectedProject.id
                   )
                   .order(
                     'sequence_number',
@@ -897,30 +1114,31 @@ export default function PullPlanningPage() {
           ) {
 
             console.error(
-              'Pull Planning - project catalogs:',
+              'Pull Planning - catalogs:',
               error
             );
 
             setErrorMessage(
               error?.message ||
-              'Project planning catalogs could not be loaded.'
+              'Planning catalogs could not be loaded.'
             );
 
           }
 
         };
 
+
       loadCatalogs();
 
     },
     [
-      projectId
+      selectedProject
     ]
   );
 
 
   // ==========================================================
-  // LOAD SESSIONS
+  // LOAD SESSIONS + MILESTONES
   // ==========================================================
 
   useEffect(
@@ -945,6 +1163,8 @@ export default function PullPlanningPage() {
           setLoadingSessions(
             true
           );
+
+          setErrorMessage('');
 
           try {
 
@@ -998,6 +1218,7 @@ export default function PullPlanningPage() {
             const loadedSessions =
               sessionData || [];
 
+
             setSessions(
               loadedSessions
             );
@@ -1008,8 +1229,13 @@ export default function PullPlanningPage() {
               0
             ) {
 
-              setMilestonesBySession({});
-              setSelectedSessionId(null);
+              setMilestonesBySession(
+                {}
+              );
+
+              setSelectedSessionId(
+                null
+              );
 
               return;
 
@@ -1018,9 +1244,7 @@ export default function PullPlanningPage() {
 
             const sessionIds =
               loadedSessions.map(
-                (
-                  session
-                ) =>
+                (session) =>
                   session.id
               );
 
@@ -1075,20 +1299,20 @@ export default function PullPlanningPage() {
             }
 
 
-            const grouped = {};
+            const grouped =
+              {};
 
 
             (
               milestoneData ||
               []
             ).forEach(
-              (
-                milestone
-              ) => {
+              (milestone) => {
 
                 const key =
                   milestone
                     .pull_planning_session_id;
+
 
                 if (
                   !grouped[key]
@@ -1097,7 +1321,10 @@ export default function PullPlanningPage() {
                     [];
                 }
 
-                grouped[key].push(
+
+                grouped[
+                  key
+                ].push(
                   milestone
                 );
 
@@ -1115,6 +1342,7 @@ export default function PullPlanningPage() {
                 window.location.search
               );
 
+
             const sessionFromUrl =
               params.get(
                 'sessionId'
@@ -1124,9 +1352,7 @@ export default function PullPlanningPage() {
             if (
               sessionFromUrl &&
               loadedSessions.some(
-                (
-                  session
-                ) =>
+                (session) =>
                   session.id ===
                   sessionFromUrl
               )
@@ -1162,6 +1388,7 @@ export default function PullPlanningPage() {
 
         };
 
+
       loadSessions();
 
     },
@@ -1185,6 +1412,8 @@ export default function PullPlanningPage() {
 
         setPullItems([]);
         setProductionActivities([]);
+        setHandoffs([]);
+        setSelectedItemId(null);
 
         return;
 
@@ -1198,79 +1427,135 @@ export default function PullPlanningPage() {
             true
           );
 
+          setErrorMessage('');
+
+
           try {
 
-            const {
-              data:
-                itemData,
-              error:
-                itemError
-            } =
-              await supabase
-                .from(
-                  'pull_planning_items'
-                )
-                .select(`
-                  id,
-                  organization_id,
-                  project_id,
-                  pull_planning_session_id,
-                  production_activity_id,
-                  pull_planning_milestone_id,
-                  description_snapshot,
-                  duration_working_days,
-                  quantity_snapshot,
-                  unit_snapshot,
-                  crew_code_snapshot,
-                  planned_workers_snapshot,
-                  expected_production_rate_snapshot,
-                  expected_productivity_snapshot,
-                  planned_start_date,
-                  planned_finish_date,
-                  board_x,
-                  board_y,
-                  board_lane,
-                  board_order,
-                  sequence_number,
-                  item_status,
-                  notes,
-                  created_at,
-                  updated_at
-                `)
-                .eq(
-                  'pull_planning_session_id',
-                  selectedSessionId
-                )
-                .eq(
-                  'project_id',
-                  projectId
-                )
-                .neq(
-                  'item_status',
-                  'removed'
-                )
-                .order(
-                  'sequence_number',
-                  {
-                    ascending:
-                      true
-                  }
-                );
+            const [
+              itemResult,
+              handoffResult
+            ] =
+              await Promise.all([
+
+                supabase
+                  .from(
+                    'pull_planning_items'
+                  )
+                  .select(`
+                    id,
+                    organization_id,
+                    project_id,
+                    pull_planning_session_id,
+                    production_activity_id,
+                    pull_planning_milestone_id,
+                    description_snapshot,
+                    duration_working_days,
+                    quantity_snapshot,
+                    unit_snapshot,
+                    crew_code_snapshot,
+                    planned_workers_snapshot,
+                    expected_production_rate_snapshot,
+                    expected_productivity_snapshot,
+                    planned_start_date,
+                    planned_finish_date,
+                    board_x,
+                    board_y,
+                    board_lane,
+                    board_order,
+                    sequence_number,
+                    item_status,
+                    notes,
+                    created_at,
+                    updated_at
+                  `)
+                  .eq(
+                    'pull_planning_session_id',
+                    selectedSessionId
+                  )
+                  .eq(
+                    'project_id',
+                    projectId
+                  )
+                  .neq(
+                    'item_status',
+                    'removed'
+                  )
+                  .order(
+                    'sequence_number',
+                    {
+                      ascending:
+                        true
+                    }
+                  ),
+
+                supabase
+                  .from(
+                    'production_activity_handoffs'
+                  )
+                  .select(`
+                    id,
+                    organization_id,
+                    project_id,
+                    pull_planning_session_id,
+                    predecessor_activity_id,
+                    successor_activity_id,
+                    release_condition,
+                    handoff_type,
+                    required_by_date,
+                    planned_release_date,
+                    actual_release_date,
+                    responsible_party,
+                    validation_status,
+                    validated_at,
+                    notes,
+                    created_by,
+                    created_at,
+                    updated_at
+                  `)
+                  .eq(
+                    'pull_planning_session_id',
+                    selectedSessionId
+                  )
+                  .eq(
+                    'project_id',
+                    projectId
+                  )
+                  .neq(
+                    'validation_status',
+                    'superseded'
+                  )
+
+              ]);
 
 
             if (
-              itemError
+              itemResult.error
             ) {
-              throw itemError;
+              throw itemResult.error;
+            }
+
+
+            if (
+              handoffResult.error
+            ) {
+              throw handoffResult.error;
             }
 
 
             const items =
-              itemData ||
+              itemResult.data ||
               [];
+
 
             setPullItems(
               items
+            );
+
+
+            setHandoffs(
+              handoffResult.data ||
+              []
             );
 
 
@@ -1279,9 +1564,7 @@ export default function PullPlanningPage() {
                 ...new Set(
                   items
                     .map(
-                      (
-                        item
-                      ) =>
+                      (item) =>
                         item.production_activity_id
                     )
                     .filter(
@@ -1380,6 +1663,7 @@ export default function PullPlanningPage() {
 
         };
 
+
       loadBoard();
 
     },
@@ -1404,6 +1688,7 @@ export default function PullPlanningPage() {
             0,
             10
           );
+
 
       setSessionName('');
       setPhaseName('');
@@ -1449,14 +1734,59 @@ export default function PullPlanningPage() {
       setActivityWorkers('');
       setActivityRate('');
       setActivityProductivity('');
+      setHandoffCondition('');
+      setHandoffResponsible('');
 
     };
 
 
-  const openActivityModal =
+  const openMilestoneActivityModal =
     () => {
 
       resetActivityForm();
+
+      setActivityMode(
+        'milestone'
+      );
+
+      setSuccessorItemId(
+        null
+      );
+
+      setErrorMessage('');
+
+      setShowActivityModal(
+        true
+      );
+
+    };
+
+
+  const openPredecessorModal =
+    (
+      event,
+      successor
+    ) => {
+
+      event.stopPropagation();
+
+
+      if (
+        boardLocked
+      ) {
+        return;
+      }
+
+
+      resetActivityForm();
+
+      setActivityMode(
+        'predecessor'
+      );
+
+      setSuccessorItemId(
+        successor.id
+      );
 
       setErrorMessage('');
 
@@ -1510,7 +1840,7 @@ export default function PullPlanningPage() {
       ) {
 
         setErrorMessage(
-          'Planning horizon end cannot be before start.'
+          'Planning horizon end cannot be before the start date.'
         );
 
         return;
@@ -1522,22 +1852,31 @@ export default function PullPlanningPage() {
         true
       );
 
+      setErrorMessage('');
+
 
       try {
 
         const {
           data:
-            userData
+            userResult,
+          error:
+            userError
         } =
           await supabase
             .auth
             .getUser();
 
 
+        if (
+          userError
+        ) {
+          throw userError;
+        }
+
+
         const currentUserId =
-          userData
-            ?.user
-            ?.id ||
+          userResult?.user?.id ||
           null;
 
 
@@ -1554,8 +1893,7 @@ export default function PullPlanningPage() {
             .insert({
 
               organization_id:
-                selectedProject
-                  .organization_id,
+                selectedProject.organization_id,
 
               project_id:
                 selectedProject.id,
@@ -1567,8 +1905,7 @@ export default function PullPlanningPage() {
                 phaseName.trim(),
 
               description:
-                sessionDescription
-                  .trim() ||
+                sessionDescription.trim() ||
                 null,
 
               session_date:
@@ -1614,8 +1951,7 @@ export default function PullPlanningPage() {
             .insert({
 
               organization_id:
-                selectedProject
-                  .organization_id,
+                selectedProject.organization_id,
 
               project_id:
                 selectedProject.id,
@@ -1657,15 +1993,14 @@ export default function PullPlanningPage() {
               createdSession.id
             );
 
+
           throw milestoneError;
 
         }
 
 
         setSessions(
-          (
-            current
-          ) => [
+          (current) => [
             createdSession,
             ...current
           ]
@@ -1673,9 +2008,7 @@ export default function PullPlanningPage() {
 
 
         setMilestonesBySession(
-          (
-            current
-          ) => ({
+          (current) => ({
             ...current,
 
             [
@@ -1724,11 +2057,12 @@ export default function PullPlanningPage() {
         );
 
       }
+
     };
 
 
   // ==========================================================
-  // CREATE PRODUCTION ACTIVITY + PULL ITEM
+  // CREATE PRODUCTION ACTIVITY + PULL ITEM + OPTIONAL HANDOFF
   // ==========================================================
 
   const createActivity =
@@ -1770,6 +2104,45 @@ export default function PullPlanningPage() {
       }
 
 
+      const successorItem =
+        activityMode ===
+          'predecessor'
+          ? pullItems.find(
+              (item) =>
+                item.id ===
+                successorItemId
+            ) ||
+            null
+          : null;
+
+
+      const successorActivity =
+        successorItem
+          ? productionActivityMap.get(
+              successorItem.production_activity_id
+            ) ||
+            null
+          : null;
+
+
+      if (
+        activityMode ===
+          'predecessor' &&
+        (
+          !successorItem ||
+          !successorActivity
+        )
+      ) {
+
+        setErrorMessage(
+          'The successor activity could not be found.'
+        );
+
+        return;
+
+      }
+
+
       setSaving(
         true
       );
@@ -1780,27 +2153,37 @@ export default function PullPlanningPage() {
       let createdActivityId =
         null;
 
+      let createdItemId =
+        null;
+
 
       try {
 
         const {
           data:
-            userData
+            userResult,
+          error:
+            userError
         } =
           await supabase
             .auth
             .getUser();
 
 
+        if (
+          userError
+        ) {
+          throw userError;
+        }
+
+
         const currentUserId =
-          userData
-            ?.user
-            ?.id ||
+          userResult?.user?.id ||
           null;
 
 
         // ----------------------------------------------------
-        // Durable Production Activity
+        // 1. CREATE DURABLE PRODUCTION ACTIVITY
         // ----------------------------------------------------
 
         const {
@@ -1816,11 +2199,13 @@ export default function PullPlanningPage() {
             .insert({
 
               organization_id:
-                selectedProject
-                  .organization_id,
+                selectedProject.organization_id,
 
               project_id:
                 selectedProject.id,
+
+              master_plan_package_id:
+                null,
 
               organization_work_package_id:
                 selectedPackage.id,
@@ -1829,14 +2214,22 @@ export default function PullPlanningPage() {
                 activityLocationId,
 
               activity_code:
-                selectedPackage.code,
+                String(
+                  selectedPackage.code ||
+                  ''
+                )
+                  .trim()
+                  .toUpperCase()
+                  .slice(
+                    0,
+                    3
+                  ),
 
               description:
                 activityDescription.trim(),
 
               operation_description:
-                activityOperation
-                  .trim() ||
+                activityOperation.trim() ||
                 null,
 
               quantity:
@@ -1847,8 +2240,7 @@ export default function PullPlanningPage() {
                     ),
 
               unit:
-                activityUnit
-                  .trim() ||
+                activityUnit.trim() ||
                 null,
 
               planned_duration_working_days:
@@ -1861,8 +2253,7 @@ export default function PullPlanningPage() {
                 ),
 
               crew_code:
-                activityCrew
-                  .trim() ||
+                activityCrew.trim() ||
                 null,
 
               planned_workers:
@@ -1909,36 +2300,84 @@ export default function PullPlanningPage() {
 
 
         // ----------------------------------------------------
-        // Session-specific Pull Item
+        // 2. CALCULATE INITIAL BOARD POSITION
+        //
+        // Normal activity:
+        // close to milestone.
+        //
+        // Predecessor:
+        // automatically placed to LEFT of successor.
         // ----------------------------------------------------
 
-        const itemCount =
-          pullItems.length;
+        let boardX =
+          870;
+
+        let boardY =
+          270;
 
 
-        const defaultX =
-          Math.max(
-            80,
-            760 -
-              (
-                itemCount %
-                4
-              ) *
-                180
-          );
+        if (
+          activityMode ===
+            'predecessor' &&
+          successorItem
+        ) {
+
+          boardX =
+            Math.max(
+              40,
+              Number(
+                successorItem.board_x ||
+                870
+              ) -
+                230
+            );
 
 
-        const defaultY =
-          100 +
-          (
-            Math.floor(
-              itemCount /
+          boardY =
+            Math.max(
+              70,
+              Number(
+                successorItem.board_y ||
+                270
+              )
+            );
+
+        } else {
+
+          const rootCount =
+            pullItems.filter(
+              (item) =>
+                !handoffs.some(
+                  (handoff) =>
+                    handoff.predecessor_activity_id ===
+                    item.production_activity_id
+                )
+            ).length;
+
+
+          boardX =
+            870 -
+            (
+              rootCount %
+              3
+            ) *
+              20;
+
+
+          boardY =
+            180 +
+            (
+              rootCount %
               4
-            ) %
-            4
-          ) *
-            150;
+            ) *
+              140;
 
+        }
+
+
+        // ----------------------------------------------------
+        // 3. CREATE SESSION-SPECIFIC PULL ITEM
+        // ----------------------------------------------------
 
         const {
           data:
@@ -1953,8 +2392,7 @@ export default function PullPlanningPage() {
             .insert({
 
               organization_id:
-                selectedProject
-                  .organization_id,
+                selectedProject.organization_id,
 
               project_id:
                 selectedProject.id,
@@ -1989,13 +2427,11 @@ export default function PullPlanningPage() {
                     ),
 
               unit_snapshot:
-                activityUnit
-                  .trim() ||
+                activityUnit.trim() ||
                 null,
 
               crew_code_snapshot:
-                activityCrew
-                  .trim() ||
+                activityCrew.trim() ||
                 null,
 
               planned_workers_snapshot:
@@ -2020,19 +2456,21 @@ export default function PullPlanningPage() {
                     ),
 
               board_x:
-                defaultX,
+                boardX,
 
               board_y:
-                defaultY,
+                boardY,
 
               board_lane:
                 null,
 
               board_order:
-                itemCount + 1,
+                pullItems.length +
+                1,
 
               sequence_number:
-                itemCount + 1,
+                pullItems.length +
+                1,
 
               item_status:
                 'active'
@@ -2056,18 +2494,125 @@ export default function PullPlanningPage() {
               createdActivity.id
             );
 
-          createdActivityId =
-            null;
 
           throw itemError;
 
         }
 
 
+        createdItemId =
+          createdItem.id;
+
+
+        let createdHandoff =
+          null;
+
+
+        // ----------------------------------------------------
+        // 4. CREATE BACKWARD-PLANNING HANDOFF
+        //
+        // New activity is PREDECESSOR.
+        // Existing selected activity is SUCCESSOR.
+        // ----------------------------------------------------
+
+        if (
+          activityMode ===
+            'predecessor' &&
+          successorActivity
+        ) {
+
+          const {
+            data:
+              handoffData,
+            error:
+              handoffError
+          } =
+            await supabase
+              .from(
+                'production_activity_handoffs'
+              )
+              .insert({
+
+                organization_id:
+                  selectedProject.organization_id,
+
+                project_id:
+                  selectedProject.id,
+
+                pull_planning_session_id:
+                  selectedSession.id,
+
+                predecessor_activity_id:
+                  createdActivity.id,
+
+                successor_activity_id:
+                  successorActivity.id,
+
+                release_condition:
+                  handoffCondition.trim() ||
+                  null,
+
+                handoff_type:
+                  'finish_to_start',
+
+                responsible_party:
+                  handoffResponsible.trim() ||
+                  null,
+
+                validation_status:
+                  'proposed',
+
+                created_by:
+                  currentUserId
+
+              })
+              .select()
+              .single();
+
+
+          if (
+            handoffError
+          ) {
+
+            await supabase
+              .from(
+                'pull_planning_items'
+              )
+              .delete()
+              .eq(
+                'id',
+                createdItem.id
+              );
+
+
+            await supabase
+              .from(
+                'production_activities'
+              )
+              .delete()
+              .eq(
+                'id',
+                createdActivity.id
+              );
+
+
+            throw handoffError;
+
+          }
+
+
+          createdHandoff =
+            handoffData;
+
+        }
+
+
+        // ----------------------------------------------------
+        // 5. LOCAL STATE
+        // ----------------------------------------------------
+
         setProductionActivities(
-          (
-            current
-          ) => [
+          (current) => [
             ...current,
             createdActivity
           ]
@@ -2075,12 +2620,29 @@ export default function PullPlanningPage() {
 
 
         setPullItems(
-          (
-            current
-          ) => [
+          (current) => [
             ...current,
             createdItem
           ]
+        );
+
+
+        if (
+          createdHandoff
+        ) {
+
+          setHandoffs(
+            (current) => [
+              ...current,
+              createdHandoff
+            ]
+          );
+
+        }
+
+
+        setSelectedItemId(
+          createdItem.id
         );
 
 
@@ -2090,6 +2652,7 @@ export default function PullPlanningPage() {
 
 
         resetActivityForm();
+
 
       } catch (
         error
@@ -2112,11 +2675,12 @@ export default function PullPlanningPage() {
         );
 
       }
+
     };
 
 
   // ==========================================================
-  // DRAG
+  // DRAGGING
   // ==========================================================
 
   const startDrag =
@@ -2127,6 +2691,15 @@ export default function PullPlanningPage() {
 
       if (
         boardLocked
+      ) {
+        return;
+      }
+
+
+      if (
+        event.target.closest(
+          '[data-no-drag="true"]'
+        )
       ) {
         return;
       }
@@ -2146,22 +2719,13 @@ export default function PullPlanningPage() {
       event.preventDefault();
 
 
+      setSelectedItemId(
+        item.id
+      );
+
+
       const rect =
         board.getBoundingClientRect();
-
-
-      const itemX =
-        Number(
-          item.board_x ||
-          0
-        );
-
-
-      const itemY =
-        Number(
-          item.board_y ||
-          0
-        );
 
 
       setDragState({
@@ -2172,12 +2736,18 @@ export default function PullPlanningPage() {
         offsetX:
           event.clientX -
           rect.left -
-          itemX,
+          Number(
+            item.board_x ||
+            0
+          ),
 
         offsetY:
           event.clientY -
           rect.top -
-          itemY
+          Number(
+            item.board_y ||
+            0
+          )
 
       });
 
@@ -2194,7 +2764,7 @@ export default function PullPlanningPage() {
       }
 
 
-      const handleMove =
+      const handleMouseMove =
         (
           event
         ) => {
@@ -2214,14 +2784,6 @@ export default function PullPlanningPage() {
             board.getBoundingClientRect();
 
 
-          const noteWidth =
-            165;
-
-
-          const noteHeight =
-            110;
-
-
           let x =
             event.clientX -
             rect.left -
@@ -2236,36 +2798,32 @@ export default function PullPlanningPage() {
 
           x =
             Math.max(
-              5,
+              10,
               Math.min(
                 x,
-                rect.width -
-                  noteWidth -
-                  5
+                BOARD_WIDTH -
+                  NOTE_WIDTH -
+                  10
               )
             );
 
 
           y =
             Math.max(
-              5,
+              55,
               Math.min(
                 y,
-                rect.height -
-                  noteHeight -
-                  5
+                BOARD_HEIGHT -
+                  NOTE_HEIGHT -
+                  10
               )
             );
 
 
           setPullItems(
-            (
-              current
-            ) =>
+            (current) =>
               current.map(
-                (
-                  item
-                ) =>
+                (item) =>
                   item.id ===
                   dragState.itemId
                     ? {
@@ -2286,15 +2844,13 @@ export default function PullPlanningPage() {
         };
 
 
-      const handleUp =
+      const handleMouseUp =
         async () => {
 
           const item =
-            pullItems.find(
-              (
-                item
-              ) =>
-                item.id ===
+            pullItemsRef.current.find(
+              (candidate) =>
+                candidate.id ===
                 dragState.itemId
             );
 
@@ -2348,7 +2904,7 @@ export default function PullPlanningPage() {
           ) {
 
             console.error(
-              'Pull Planning - persist board position:',
+              'Pull Planning - save board position:',
               error
             );
 
@@ -2363,13 +2919,13 @@ export default function PullPlanningPage() {
 
       window.addEventListener(
         'mousemove',
-        handleMove
+        handleMouseMove
       );
 
 
       window.addEventListener(
         'mouseup',
-        handleUp
+        handleMouseUp
       );
 
 
@@ -2377,12 +2933,13 @@ export default function PullPlanningPage() {
 
         window.removeEventListener(
           'mousemove',
-          handleMove
+          handleMouseMove
         );
+
 
         window.removeEventListener(
           'mouseup',
-          handleUp
+          handleMouseUp
         );
 
       };
@@ -2390,14 +2947,13 @@ export default function PullPlanningPage() {
     },
     [
       dragState,
-      pullItems,
       selectedSessionId
     ]
   );
 
 
   // ==========================================================
-  // SESSION NAVIGATION
+  // NAVIGATION
   // ==========================================================
 
   const openSession =
@@ -2426,6 +2982,10 @@ export default function PullPlanningPage() {
         null
       );
 
+      setSelectedItemId(
+        null
+      );
+
 
       window.history.replaceState(
         {},
@@ -2446,6 +3006,10 @@ export default function PullPlanningPage() {
       );
 
       setSelectedSessionId(
+        null
+      );
+
+      setSelectedItemId(
         null
       );
 
@@ -2474,7 +3038,7 @@ export default function PullPlanningPage() {
 
 
   // ==========================================================
-  // STATUS
+  // SESSION STATUS
   // ==========================================================
 
   const updateSessionStatus =
@@ -2484,7 +3048,8 @@ export default function PullPlanningPage() {
 
       if (
         !selectedSession ||
-        !newStatus
+        !newStatus ||
+        saving
       ) {
         return;
       }
@@ -2520,9 +3085,11 @@ export default function PullPlanningPage() {
           newStatus ===
           'published'
         ) {
+
           payload.published_at =
             new Date()
               .toISOString();
+
         }
 
 
@@ -2530,9 +3097,11 @@ export default function PullPlanningPage() {
           newStatus ===
           'archived'
         ) {
+
           payload.archived_at =
             new Date()
               .toISOString();
+
         }
 
 
@@ -2567,19 +3136,16 @@ export default function PullPlanningPage() {
 
 
         setSessions(
-          (
-            current
-          ) =>
+          (current) =>
             current.map(
-              (
-                session
-              ) =>
+              (session) =>
                 session.id ===
                 data.id
                   ? data
                   : session
             )
         );
+
 
       } catch (
         error
@@ -2592,7 +3158,7 @@ export default function PullPlanningPage() {
 
         setErrorMessage(
           error?.message ||
-          'Status could not be updated.'
+          'Session status could not be updated.'
         );
 
       } finally {
@@ -2602,6 +3168,7 @@ export default function PullPlanningPage() {
         );
 
       }
+
     };
 
 
@@ -2689,9 +3256,23 @@ export default function PullPlanningPage() {
         </section>
 
 
+        {errorMessage && (
+
+          <ErrorBox>
+            {errorMessage}
+          </ErrorBox>
+
+        )}
+
+
         {loadingProjects ? (
 
-          <p>
+          <p
+            style={{
+              color:
+                '#64748b'
+            }}
+          >
             Loading projects...
           </p>
 
@@ -2709,9 +3290,7 @@ export default function PullPlanningPage() {
           >
 
             {projects.map(
-              (
-                project
-              ) => {
+              (project) => {
 
                 const coverUrl =
                   projectCoverUrls[
@@ -2733,7 +3312,9 @@ export default function PullPlanningPage() {
                       borderRadius:
                         '15px',
                       background:
-                        '#fff'
+                        '#fff',
+                      boxShadow:
+                        '0 14px 30px rgba(15,23,42,.05)'
                     }}
                   >
 
@@ -2744,11 +3325,13 @@ export default function PullPlanningPage() {
                         height:
                           '210px',
                         background:
-                          '#173b5f'
+                          '#173b5f',
+                        overflow:
+                          'hidden'
                       }}
                     >
 
-                      {coverUrl && (
+                      {coverUrl ? (
 
                         <img
                           src={
@@ -2767,6 +3350,31 @@ export default function PullPlanningPage() {
                           }}
                         />
 
+                      ) : (
+
+                        <div
+                          style={{
+                            width:
+                              '100%',
+                            height:
+                              '100%',
+                            display:
+                              'flex',
+                            alignItems:
+                              'center',
+                            justifyContent:
+                              'center',
+                            color:
+                              'rgba(255,255,255,.6)',
+                            fontSize:
+                              '.72rem',
+                            fontWeight:
+                              900
+                          }}
+                        >
+                          PROJECT COVER
+                        </div>
+
                       )}
 
 
@@ -2777,7 +3385,7 @@ export default function PullPlanningPage() {
                           inset:
                             0,
                           background:
-                            'linear-gradient(to top,rgba(4,24,43,.9),transparent)'
+                            'linear-gradient(to top,rgba(4,24,43,.92),rgba(4,24,43,.03))'
                         }}
                       />
 
@@ -2788,6 +3396,8 @@ export default function PullPlanningPage() {
                             'absolute',
                           left:
                             '18px',
+                          right:
+                            '18px',
                           bottom:
                             '18px',
                           color:
@@ -2795,16 +3405,31 @@ export default function PullPlanningPage() {
                         }}
                       >
 
-                        <strong
+                        <span
                           style={{
                             display:
-                              'block'
+                              'block',
+                            marginBottom:
+                              '6px',
+                            fontSize:
+                              '.65rem',
+                            fontWeight:
+                              900,
+                            letterSpacing:
+                              '.1em'
                           }}
                         >
-                          {project.code}
-                        </strong>
+                          {project.code ||
+                            'UNASSIGNED'}
+                        </span>
 
-                        <strong>
+
+                        <strong
+                          style={{
+                            fontSize:
+                              '1rem'
+                          }}
+                        >
                           {project.name}
                         </strong>
 
@@ -2834,7 +3459,9 @@ export default function PullPlanningPage() {
                         textAlign:
                           'left',
                         fontWeight:
-                          900
+                          900,
+                        color:
+                          '#071c31'
                       }}
                     >
                       Open Pull Planning →
@@ -2877,9 +3504,7 @@ export default function PullPlanningPage() {
       }}
     >
 
-      {/* ====================================================
-          HEADER
-      ==================================================== */}
+      {/* HEADER */}
 
       <div
         style={{
@@ -2984,14 +3609,14 @@ export default function PullPlanningPage() {
               border:
                 '1px solid #cbd5e1',
               borderRadius:
-                '8px'
+                '8px',
+              background:
+                '#fff'
             }}
           >
 
             {projects.map(
-              (
-                project
-              ) => (
+              (project) => (
 
                 <option
                   key={
@@ -3037,13 +3662,13 @@ export default function PullPlanningPage() {
               <button
                 type="button"
                 onClick={
-                  openActivityModal
+                  openMilestoneActivityModal
                 }
                 style={
                   primaryButton
                 }
               >
-                + Add Activity
+                + Add Activity Before Milestone
               </button>
 
             )}
@@ -3055,28 +3680,9 @@ export default function PullPlanningPage() {
 
       {errorMessage && (
 
-        <div
-          style={{
-            marginBottom:
-              '15px',
-            padding:
-              '11px 14px',
-            border:
-              '1px solid #fecaca',
-            borderRadius:
-              '8px',
-            background:
-              '#fff1f2',
-            color:
-              '#be123c',
-            fontSize:
-              '0.78rem',
-            fontWeight:
-              700
-          }}
-        >
+        <ErrorBox>
           {errorMessage}
-        </div>
+        </ErrorBox>
 
       )}
 
@@ -3113,9 +3719,7 @@ export default function PullPlanningPage() {
           </button>
 
 
-          {/* ==================================================
-              SESSION BAR
-          ================================================== */}
+          {/* SESSION BAR */}
 
           <section
             style={{
@@ -3185,9 +3789,7 @@ export default function PullPlanningPage() {
                 gap:
                   '8px',
                 alignItems:
-                  'center',
-                flexWrap:
-                  'wrap'
+                  'center'
               }}
             >
 
@@ -3199,12 +3801,12 @@ export default function PullPlanningPage() {
 
 
               <button
+                type="button"
                 disabled={
                   !getPreviousStatus(
                     selectedSession.status
                   )
                 }
-                type="button"
                 onClick={() =>
                   updateSessionStatus(
                     getPreviousStatus(
@@ -3221,12 +3823,12 @@ export default function PullPlanningPage() {
 
 
               <button
+                type="button"
                 disabled={
                   !getNextStatus(
                     selectedSession.status
                   )
                 }
-                type="button"
                 onClick={() =>
                   updateSessionStatus(
                     getNextStatus(
@@ -3263,10 +3865,6 @@ export default function PullPlanningPage() {
             }}
           >
 
-            {/* ----------------------------------------------
-                BOARD TOOLBAR
-            ---------------------------------------------- */}
-
             <div
               style={{
                 padding:
@@ -3277,6 +3875,8 @@ export default function PullPlanningPage() {
                   'space-between',
                 alignItems:
                   'center',
+                gap:
+                  '10px',
                 borderBottom:
                   '1px solid #e2e8f0',
                 background:
@@ -3328,21 +3928,15 @@ export default function PullPlanningPage() {
               >
                 {boardLocked
                   ? 'Read-only session'
-                  : 'Drag notes to organize the phase plan'}
+                  : 'Choose a note and ask: What must happen before this?'}
               </div>
 
             </div>
 
 
-            {/* ----------------------------------------------
-                CANVAS
-            ---------------------------------------------- */}
-
             <div
               style={{
-                overflowX:
-                  'auto',
-                overflowY:
+                overflow:
                   'auto'
               }}
             >
@@ -3351,13 +3945,25 @@ export default function PullPlanningPage() {
                 ref={
                   boardRef
                 }
+                onMouseDown={(
+                  event
+                ) => {
+                  if (
+                    event.target ===
+                    boardRef.current
+                  ) {
+                    setSelectedItemId(
+                      null
+                    );
+                  }
+                }}
                 style={{
                   position:
                     'relative',
                   width:
-                    '1200px',
+                    `${BOARD_WIDTH}px`,
                   height:
-                    '650px',
+                    `${BOARD_HEIGHT}px`,
                   backgroundColor:
                     '#fbfcfd',
                   backgroundImage:
@@ -3372,9 +3978,7 @@ export default function PullPlanningPage() {
                 }}
               >
 
-                {/* ------------------------------------------
-                    TIME DIRECTION
-                ------------------------------------------ */}
+                {/* TIME LABELS */}
 
                 <div
                   style={{
@@ -3387,11 +3991,11 @@ export default function PullPlanningPage() {
                     color:
                       '#94a3b8',
                     fontSize:
-                      '0.66rem',
+                      '0.64rem',
                     fontWeight:
                       900,
                     letterSpacing:
-                      '0.08em'
+                      '.1em'
                   }}
                 >
                   EARLIER WORK
@@ -3403,26 +4007,283 @@ export default function PullPlanningPage() {
                     position:
                       'absolute',
                     right:
-                      '35px',
+                      '42px',
                     top:
                       '22px',
                     color:
                       '#94a3b8',
                     fontSize:
-                      '0.66rem',
+                      '0.64rem',
                     fontWeight:
                       900,
                     letterSpacing:
-                      '0.08em'
+                      '.1em'
                   }}
                 >
                   TARGET
                 </div>
 
 
-                {/* ------------------------------------------
-                    MILESTONE
-                ------------------------------------------ */}
+                {/* =================================================
+                    HANDOFF SVG NETWORK
+                ================================================= */}
+
+                <svg
+                  width={
+                    BOARD_WIDTH
+                  }
+                  height={
+                    BOARD_HEIGHT
+                  }
+                  style={{
+                    position:
+                      'absolute',
+                    inset:
+                      0,
+                    zIndex:
+                      2,
+                    overflow:
+                      'visible',
+                    pointerEvents:
+                      'none'
+                  }}
+                >
+
+                  <defs>
+
+                    <marker
+                      id="pull-arrow"
+                      markerWidth="9"
+                      markerHeight="9"
+                      refX="8"
+                      refY="4.5"
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <path
+                        d="M0,0 L9,4.5 L0,9 z"
+                        fill="#48647c"
+                      />
+                    </marker>
+
+                  </defs>
+
+
+                  {handoffs.map(
+                    (handoff) => {
+
+                      const predecessorItem =
+                        pullItemByActivityId.get(
+                          handoff.predecessor_activity_id
+                        );
+
+
+                      const successorItem =
+                        pullItemByActivityId.get(
+                          handoff.successor_activity_id
+                        );
+
+
+                      if (
+                        !predecessorItem ||
+                        !successorItem
+                      ) {
+                        return null;
+                      }
+
+
+                      const startX =
+                        Number(
+                          predecessorItem.board_x ||
+                          0
+                        ) +
+                        NOTE_WIDTH;
+
+
+                      const startY =
+                        Number(
+                          predecessorItem.board_y ||
+                          0
+                        ) +
+                        NOTE_HEIGHT /
+                          2;
+
+
+                      const endX =
+                        Number(
+                          successorItem.board_x ||
+                          0
+                        );
+
+
+                      const endY =
+                        Number(
+                          successorItem.board_y ||
+                          0
+                        ) +
+                        NOTE_HEIGHT /
+                          2;
+
+
+                      const distance =
+                        Math.max(
+                          40,
+                          Math.abs(
+                            endX -
+                            startX
+                          ) /
+                            2
+                        );
+
+
+                      const path =
+                        `M ${startX} ${startY}
+                         C ${startX + distance} ${startY},
+                           ${endX - distance} ${endY},
+                           ${endX - 7} ${endY}`;
+
+
+                      return (
+
+                        <g
+                          key={
+                            handoff.id
+                          }
+                        >
+
+                          <path
+                            d={
+                              path
+                            }
+                            fill="none"
+                            stroke="#48647c"
+                            strokeWidth="2"
+                            markerEnd="url(#pull-arrow)"
+                          />
+
+
+                          {handoff.validation_status ===
+                            'proposed' && (
+
+                            <circle
+                              cx={
+                                (
+                                  startX +
+                                  endX
+                                ) /
+                                2
+                              }
+                              cy={
+                                (
+                                  startY +
+                                  endY
+                                ) /
+                                2
+                              }
+                              r="4"
+                              fill="#f59e0b"
+                            />
+
+                          )}
+
+                        </g>
+
+                      );
+
+                    }
+                  )}
+
+
+                  {/* ROOT ACTIVITY → MILESTONE VISUAL LINK */}
+
+                  {pullItems
+                    .filter(
+                      (item) => {
+
+                        const isPredecessor =
+                          handoffs.some(
+                            (handoff) =>
+                              handoff.predecessor_activity_id ===
+                              item.production_activity_id
+                          );
+
+
+                        return (
+                          !isPredecessor &&
+                          item.pull_planning_milestone_id ===
+                            primaryMilestone?.id
+                        );
+
+                      }
+                    )
+                    .map(
+                      (item) => {
+
+                        const startX =
+                          Number(
+                            item.board_x ||
+                            0
+                          ) +
+                          NOTE_WIDTH;
+
+
+                        const startY =
+                          Number(
+                            item.board_y ||
+                            0
+                          ) +
+                          NOTE_HEIGHT /
+                            2;
+
+
+                        const endX =
+                          MILESTONE_X;
+
+
+                        const endY =
+                          MILESTONE_Y +
+                          65;
+
+
+                        const distance =
+                          Math.max(
+                            40,
+                            Math.abs(
+                              endX -
+                              startX
+                            ) /
+                              2
+                          );
+
+
+                        return (
+
+                          <path
+                            key={`milestone-${item.id}`}
+                            d={
+                              `M ${startX} ${startY}
+                               C ${startX + distance} ${startY},
+                                 ${endX - distance} ${endY},
+                                 ${endX - 7} ${endY}`
+                            }
+                            fill="none"
+                            stroke="#0f766e"
+                            strokeWidth="2"
+                            strokeDasharray="5 4"
+                            markerEnd="url(#pull-arrow)"
+                          />
+
+                        );
+
+                      }
+                    )}
+
+                </svg>
+
+
+                {/* =================================================
+                    PRIMARY MILESTONE
+                ================================================= */}
 
                 {primaryMilestone && (
 
@@ -3430,12 +4291,14 @@ export default function PullPlanningPage() {
                     style={{
                       position:
                         'absolute',
-                      right:
-                        '30px',
+                      left:
+                        `${MILESTONE_X}px`,
                       top:
-                        '250px',
+                        `${MILESTONE_Y}px`,
                       width:
-                        '210px',
+                        `${MILESTONE_WIDTH}px`,
+                      minHeight:
+                        '130px',
                       padding:
                         '17px',
                       border:
@@ -3445,7 +4308,9 @@ export default function PullPlanningPage() {
                       background:
                         '#ecfdf5',
                       boxShadow:
-                        '0 10px 25px rgba(15,118,110,0.13)'
+                        '0 10px 25px rgba(15,118,110,.13)',
+                      zIndex:
+                        4
                     }}
                   >
 
@@ -3515,7 +4380,7 @@ export default function PullPlanningPage() {
                           '0.66rem'
                       }}
                     >
-                      Plan backward from here
+                      Plan backward from this target.
                     </div>
 
                   </div>
@@ -3523,9 +4388,7 @@ export default function PullPlanningPage() {
                 )}
 
 
-                {/* ------------------------------------------
-                    EMPTY STATE
-                ------------------------------------------ */}
+                {/* EMPTY STATE */}
 
                 {!loadingBoard &&
                   pullItems.length ===
@@ -3536,15 +4399,17 @@ export default function PullPlanningPage() {
                         position:
                           'absolute',
                         left:
-                          '50%',
+                          '52%',
                         top:
                           '50%',
                         transform:
-                          'translate(-58%, -50%)',
+                          'translate(-60%,-50%)',
                         textAlign:
                           'center',
                         color:
-                          '#94a3b8'
+                          '#94a3b8',
+                        zIndex:
+                          3
                       }}
                     >
 
@@ -3570,34 +4435,49 @@ export default function PullPlanningPage() {
                             '0.85rem'
                         }}
                       >
-                        No activities yet
+                        Start at the milestone
                       </strong>
 
 
                       <p
                         style={{
                           margin:
-                            '6px 0 0',
+                            '6px 0 14px',
                           fontSize:
                             '0.72rem'
                         }}
                       >
-                        Add the activity immediately required before the milestone.
+                        What must be completed immediately before the target?
                       </p>
+
+
+                      {!boardLocked && (
+
+                        <button
+                          type="button"
+                          onClick={
+                            openMilestoneActivityModal
+                          }
+                          style={
+                            primaryButton
+                          }
+                        >
+                          + Add Activity Before Milestone
+                        </button>
+
+                      )}
 
                     </div>
 
                   )}
 
 
-                {/* ------------------------------------------
+                {/* =================================================
                     STICKY NOTES
-                ------------------------------------------ */}
+                ================================================= */}
 
                 {pullItems.map(
-                  (
-                    item
-                  ) => {
+                  (item) => {
 
                     const activity =
                       productionActivityMap.get(
@@ -3633,6 +4513,19 @@ export default function PullPlanningPage() {
                       );
 
 
+                    const selected =
+                      selectedItemId ===
+                      item.id;
+
+
+                    const predecessorCount =
+                      handoffs.filter(
+                        (handoff) =>
+                          handoff.successor_activity_id ===
+                          item.production_activity_id
+                      ).length;
+
+
                     return (
 
                       <div
@@ -3647,6 +4540,17 @@ export default function PullPlanningPage() {
                             item
                           )
                         }
+                        onClick={(
+                          event
+                        ) => {
+
+                          event.stopPropagation();
+
+                          setSelectedItemId(
+                            item.id
+                          );
+
+                        }}
                         style={{
                           position:
                             'absolute',
@@ -3655,13 +4559,15 @@ export default function PullPlanningPage() {
                           top:
                             `${Number(item.board_y || 80)}px`,
                           width:
-                            '165px',
+                            `${NOTE_WIDTH}px`,
                           minHeight:
-                            '110px',
+                            `${NOTE_HEIGHT}px`,
                           padding:
                             '11px 12px',
                           border:
-                            '1px solid rgba(15,23,42,0.15)',
+                            selected
+                              ? '3px solid #071c31'
+                              : '1px solid rgba(15,23,42,.18)',
                           borderRadius:
                             '4px',
                           background:
@@ -3671,8 +4577,10 @@ export default function PullPlanningPage() {
                           boxShadow:
                             dragState?.itemId ===
                             item.id
-                              ? '0 18px 35px rgba(15,23,42,0.25)'
-                              : '0 6px 15px rgba(15,23,42,0.14)',
+                              ? '0 18px 35px rgba(15,23,42,.28)'
+                              : selected
+                                ? '0 10px 24px rgba(15,23,42,.22)'
+                                : '0 6px 15px rgba(15,23,42,.14)',
                           transform:
                             dragState?.itemId ===
                             item.id
@@ -3685,8 +4593,12 @@ export default function PullPlanningPage() {
                           zIndex:
                             dragState?.itemId ===
                             item.id
-                              ? 50
-                              : 5
+                              ? 40
+                              : selected
+                                ? 12
+                                : 8,
+                          boxSizing:
+                            'border-box'
                         }}
                       >
 
@@ -3720,7 +4632,7 @@ export default function PullPlanningPage() {
                           <span
                             style={{
                               fontSize:
-                                '0.63rem',
+                                '0.62rem',
                               fontWeight:
                                 900
                             }}
@@ -3734,9 +4646,9 @@ export default function PullPlanningPage() {
                         <div
                           style={{
                             marginTop:
-                              '8px',
+                              '7px',
                             fontSize:
-                              '0.76rem',
+                              '0.75rem',
                             fontWeight:
                               900,
                             lineHeight:
@@ -3748,42 +4660,124 @@ export default function PullPlanningPage() {
 
 
                         <div
+                          title={
+                            location?.path ||
+                            location?.name ||
+                            ''
+                          }
                           style={{
                             marginTop:
-                              '8px',
+                              '7px',
                             fontSize:
-                              '0.62rem',
+                              '0.6rem',
                             lineHeight:
                               1.3,
                             opacity:
-                              0.85
+                              0.88,
+                            overflow:
+                              'hidden',
+                            textOverflow:
+                              'ellipsis',
+                            whiteSpace:
+                              'nowrap'
                           }}
                         >
-                          {location?.name ||
+                          {location?.path ||
+                            location?.name ||
                             'Location not assigned'}
                         </div>
 
 
-                        {(item.quantity_snapshot !==
-                          null &&
-                          item.quantity_snapshot !==
-                            undefined) && (
+                        <div
+                          style={{
+                            marginTop:
+                              '5px',
+                            display:
+                              'flex',
+                            justifyContent:
+                              'space-between',
+                            gap:
+                              '5px',
+                            fontSize:
+                              '0.58rem',
+                            opacity:
+                              0.88
+                          }}
+                        >
 
-                          <div
+                          <span>
+                            {item.quantity_snapshot !==
+                              null &&
+                            item.quantity_snapshot !==
+                              undefined
+                              ? `${item.quantity_snapshot}${item.unit_snapshot ? ` ${item.unit_snapshot}` : ''}`
+                              : ''}
+                          </span>
+
+
+                          {predecessorCount >
+                            0 && (
+
+                            <span>
+                              ← {predecessorCount}
+                            </span>
+
+                          )}
+
+                        </div>
+
+
+                        {!boardLocked && (
+
+                          <button
+                            type="button"
+                            data-no-drag="true"
+                            onMouseDown={(
+                              event
+                            ) =>
+                              event.stopPropagation()
+                            }
+                            onClick={(
+                              event
+                            ) =>
+                              openPredecessorModal(
+                                event,
+                                item
+                              )
+                            }
                             style={{
+                              width:
+                                '100%',
                               marginTop:
-                                '5px',
+                                '9px',
+                              padding:
+                                '5px 6px',
+                              border:
+                                `1px solid ${
+                                  textColor ===
+                                  '#ffffff'
+                                    ? 'rgba(255,255,255,.65)'
+                                    : 'rgba(7,28,49,.35)'
+                                }`,
+                              borderRadius:
+                                '4px',
+                              background:
+                                textColor ===
+                                '#ffffff'
+                                  ? 'rgba(255,255,255,.14)'
+                                  : 'rgba(255,255,255,.35)',
+                              color:
+                                textColor,
+                              cursor:
+                                'pointer',
                               fontSize:
-                                '0.61rem',
+                                '0.58rem',
                               fontWeight:
-                                800
+                                900
                             }}
                           >
-                            {item.quantity_snapshot}
-                            {item.unit_snapshot
-                              ? ` ${item.unit_snapshot}`
-                              : ''}
-                          </div>
+                            + What must happen before this?
+                          </button>
 
                         )}
 
@@ -3799,6 +4793,52 @@ export default function PullPlanningPage() {
             </div>
 
           </section>
+
+
+          {/* SELECTED HANDOFF INFORMATION */}
+
+          {selectedItem && (
+
+            <SelectedActivityPanel
+              item={
+                selectedItem
+              }
+              activity={
+                productionActivityMap.get(
+                  selectedItem.production_activity_id
+                )
+              }
+              workPackage={
+                workPackageMap.get(
+                  productionActivityMap.get(
+                    selectedItem.production_activity_id
+                  )?.organization_work_package_id
+                )
+              }
+              location={
+                locationMap.get(
+                  productionActivityMap.get(
+                    selectedItem.production_activity_id
+                  )?.location_id
+                )
+              }
+              predecessors={
+                handoffs.filter(
+                  (handoff) =>
+                    handoff.successor_activity_id ===
+                    selectedItem.production_activity_id
+                )
+              }
+              successors={
+                handoffs.filter(
+                  (handoff) =>
+                    handoff.predecessor_activity_id ===
+                    selectedItem.production_activity_id
+                )
+              }
+            />
+
+          )}
 
         </>
 
@@ -3830,7 +4870,8 @@ export default function PullPlanningPage() {
               Loading sessions...
             </p>
 
-          ) : sessions.length === 0 ? (
+          ) : sessions.length ===
+              0 ? (
 
             <div
               style={{
@@ -3851,7 +4892,9 @@ export default function PullPlanningPage() {
                 No Pull Planning sessions yet.
               </strong>
 
+
               <br />
+
 
               <button
                 type="button"
@@ -3883,9 +4926,7 @@ export default function PullPlanningPage() {
             >
 
               {sessions.map(
-                (
-                  session
-                ) => {
+                (session) => {
 
                   const milestone =
                     (
@@ -3893,9 +4934,7 @@ export default function PullPlanningPage() {
                         session.id
                       ] || []
                     ).find(
-                      (
-                        item
-                      ) =>
+                      (item) =>
                         item.is_primary
                     ) ||
                     null;
@@ -4062,6 +5101,7 @@ export default function PullPlanningPage() {
 
             <ModalHeader
               title="New Pull Session"
+              subtitle="SESSION FOUNDATION"
               onClose={() =>
                 setShowSessionModal(
                   false
@@ -4078,7 +5118,9 @@ export default function PullPlanningPage() {
 
               <Field
                 label="Session Name *"
+                full
               >
+
                 <input
                   required
                   value={
@@ -4095,12 +5137,14 @@ export default function PullPlanningPage() {
                     inputStyle
                   }
                 />
+
               </Field>
 
 
               <Field
                 label="Phase *"
               >
+
                 <input
                   required
                   value={
@@ -4117,12 +5161,14 @@ export default function PullPlanningPage() {
                     inputStyle
                   }
                 />
+
               </Field>
 
 
               <Field
                 label="Session Date"
               >
+
                 <input
                   type="date"
                   value={
@@ -4139,12 +5185,14 @@ export default function PullPlanningPage() {
                     inputStyle
                   }
                 />
+
               </Field>
 
 
               <Field
                 label="Planning Horizon Start"
               >
+
                 <input
                   type="date"
                   value={
@@ -4161,12 +5209,14 @@ export default function PullPlanningPage() {
                     inputStyle
                   }
                 />
+
               </Field>
 
 
               <Field
                 label="Planning Horizon End"
               >
+
                 <input
                   type="date"
                   value={
@@ -4183,6 +5233,7 @@ export default function PullPlanningPage() {
                     inputStyle
                   }
                 />
+
               </Field>
 
 
@@ -4190,6 +5241,7 @@ export default function PullPlanningPage() {
                 label="Description"
                 full
               >
+
                 <textarea
                   rows={3}
                   value={
@@ -4208,12 +5260,14 @@ export default function PullPlanningPage() {
                       'vertical'
                   }}
                 />
+
               </Field>
 
 
               <Field
                 label="Primary Milestone *"
               >
+
                 <input
                   required
                   value={
@@ -4230,12 +5284,14 @@ export default function PullPlanningPage() {
                     inputStyle
                   }
                 />
+
               </Field>
 
 
               <Field
                 label="Target Date *"
               >
+
                 <input
                   required
                   type="date"
@@ -4253,6 +5309,7 @@ export default function PullPlanningPage() {
                     inputStyle
                   }
                 />
+
               </Field>
 
             </div>
@@ -4278,7 +5335,7 @@ export default function PullPlanningPage() {
 
 
       {/* ====================================================
-          ACTIVITY MODAL
+          ACTIVITY / PREDECESSOR MODAL
       ==================================================== */}
 
       {showActivityModal && (
@@ -4292,13 +5349,100 @@ export default function PullPlanningPage() {
           >
 
             <ModalHeader
-              title="Add Pull Activity"
+              title={
+                activityMode ===
+                'predecessor'
+                  ? 'Add Predecessor Activity'
+                  : 'Add Activity Before Milestone'
+              }
+              subtitle={
+                activityMode ===
+                  'predecessor'
+                  ? 'BACKWARD PLANNING'
+                  : 'MILESTONE PULL'
+              }
               onClose={() =>
                 setShowActivityModal(
                   false
                 )
               }
             />
+
+
+            {activityMode ===
+              'predecessor' && (
+
+              <div
+                style={{
+                  margin:
+                    '18px 22px 0',
+                  padding:
+                    '13px 15px',
+                  border:
+                    '1px solid #99f6e4',
+                  borderRadius:
+                    '8px',
+                  background:
+                    '#f0fdfa'
+                }}
+              >
+
+                <span
+                  style={{
+                    display:
+                      'block',
+                    color:
+                      '#0f766e',
+                    fontSize:
+                      '.62rem',
+                    fontWeight:
+                      900,
+                    letterSpacing:
+                      '.08em'
+                  }}
+                >
+                  SUCCESSOR
+                </span>
+
+
+                <strong
+                  style={{
+                    display:
+                      'block',
+                    marginTop:
+                      '4px',
+                    color:
+                      '#134e4a',
+                    fontSize:
+                      '.82rem'
+                  }}
+                >
+                  {
+                    pullItems.find(
+                      (item) =>
+                        item.id ===
+                        successorItemId
+                    )?.description_snapshot
+                  }
+                </strong>
+
+
+                <p
+                  style={{
+                    margin:
+                      '6px 0 0',
+                    color:
+                      '#64748b',
+                    fontSize:
+                      '.7rem'
+                  }}
+                >
+                  What must be released before this activity can start?
+                </p>
+
+              </div>
+
+            )}
 
 
             <div
@@ -4323,23 +5467,28 @@ export default function PullPlanningPage() {
                     const id =
                       event.target.value;
 
+
                     setActivityWorkPackageId(
                       id
                     );
 
-                    const item =
+
+                    const workPackage =
                       workPackageMap.get(
                         id
                       );
 
+
                     if (
-                      item &&
+                      workPackage &&
                       !activityDescription
                     ) {
+
                       setActivityDescription(
-                        item.description ||
+                        workPackage.description ||
                         ''
                       );
+
                     }
 
                   }}
@@ -4354,9 +5503,7 @@ export default function PullPlanningPage() {
 
 
                   {workPackages.map(
-                    (
-                      item
-                    ) => (
+                    (item) => (
 
                       <option
                         key={
@@ -4403,10 +5550,8 @@ export default function PullPlanningPage() {
                   </option>
 
 
-                  {locations.map(
-                    (
-                      location
-                    ) => (
+                  {locationOptions.map(
+                    (location) => (
 
                       <option
                         key={
@@ -4416,7 +5561,7 @@ export default function PullPlanningPage() {
                           location.id
                         }
                       >
-                        {location.name}
+                        {location.path}
                       </option>
 
                     )
@@ -4444,7 +5589,7 @@ export default function PullPlanningPage() {
                       event.target.value
                     )
                   }
-                  placeholder="Example: Hang drywall board - Zone A"
+                  placeholder="Example: Install metal framing - Zone A"
                   style={
                     inputStyle
                   }
@@ -4664,6 +5809,68 @@ export default function PullPlanningPage() {
 
               </Field>
 
+
+              {activityMode ===
+                'predecessor' && (
+
+                <>
+
+                  <Field
+                    label="Handoff / Release Condition"
+                    full
+                  >
+
+                    <textarea
+                      rows={2}
+                      value={
+                        handoffCondition
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setHandoffCondition(
+                          event.target.value
+                        )
+                      }
+                      placeholder="Example: Framing complete, inspected and area released to drywall crew."
+                      style={{
+                        ...inputStyle,
+                        resize:
+                          'vertical'
+                      }}
+                    />
+
+                  </Field>
+
+
+                  <Field
+                    label="Responsible Party"
+                    full
+                  >
+
+                    <input
+                      value={
+                        handoffResponsible
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setHandoffResponsible(
+                          event.target.value
+                        )
+                      }
+                      placeholder="Trade, crew, foreman or responsible party"
+                      style={
+                        inputStyle
+                      }
+                    />
+
+                  </Field>
+
+                </>
+
+              )}
+
             </div>
 
 
@@ -4676,7 +5883,12 @@ export default function PullPlanningPage() {
                   false
                 )
               }
-              actionLabel="Add Activity"
+              actionLabel={
+                activityMode ===
+                  'predecessor'
+                  ? 'Create Predecessor'
+                  : 'Add Activity'
+              }
             />
 
           </form>
@@ -4688,12 +5900,279 @@ export default function PullPlanningPage() {
     </main>
 
   );
+
 }
 
 
 // ============================================================
-// SMALL UI COMPONENTS
+// SELECTED ACTIVITY PANEL
 // ============================================================
+
+function SelectedActivityPanel({
+  item,
+  activity,
+  workPackage,
+  location,
+  predecessors,
+  successors
+}) {
+
+  return (
+
+    <section
+      style={{
+        marginTop:
+          '14px',
+        padding:
+          '15px 17px',
+        border:
+          '1px solid #dce5ec',
+        borderRadius:
+          '10px',
+        background:
+          '#fff'
+      }}
+    >
+
+      <div
+        style={{
+          display:
+            'flex',
+          justifyContent:
+            'space-between',
+          gap:
+            '18px',
+          flexWrap:
+            'wrap'
+        }}
+      >
+
+        <div>
+
+          <span
+            style={{
+              color:
+                '#008f80',
+              fontSize:
+                '.62rem',
+              fontWeight:
+                900,
+              letterSpacing:
+                '.08em'
+            }}
+          >
+            SELECTED ACTIVITY
+          </span>
+
+
+          <h3
+            style={{
+              margin:
+                '5px 0 0',
+              color:
+                '#071c31',
+              fontSize:
+                '.95rem'
+            }}
+          >
+            {workPackage?.code
+              ? `${workPackage.code} · `
+              : ''}
+
+            {item.description_snapshot}
+          </h3>
+
+
+          <p
+            style={{
+              margin:
+                '5px 0 0',
+              color:
+                '#64748b',
+              fontSize:
+                '.72rem'
+            }}
+          >
+            {location?.path ||
+              location?.name ||
+              'No location'}
+          </p>
+
+        </div>
+
+
+        <div
+          style={{
+            display:
+              'flex',
+            gap:
+              '22px'
+          }}
+        >
+
+          <Metric
+            label="Duration"
+            value={`${item.duration_working_days}d`}
+          />
+
+          <Metric
+            label="Predecessors"
+            value={
+              predecessors.length
+            }
+          />
+
+          <Metric
+            label="Successors"
+            value={
+              successors.length
+            }
+          />
+
+          <Metric
+            label="Crew"
+            value={
+              activity?.crew_code ||
+              '—'
+            }
+          />
+
+        </div>
+
+      </div>
+
+
+      {predecessors.length >
+        0 && (
+
+        <div
+          style={{
+            marginTop:
+              '13px',
+            paddingTop:
+              '12px',
+            borderTop:
+              '1px solid #edf2f7'
+          }}
+        >
+
+          <strong
+            style={{
+              display:
+                'block',
+              marginBottom:
+                '7px',
+              color:
+                '#475569',
+              fontSize:
+                '.66rem'
+            }}
+          >
+            REQUIRED HANDOFFS
+          </strong>
+
+
+          {predecessors.map(
+            (handoff) => (
+
+              <div
+                key={
+                  handoff.id
+                }
+                style={{
+                  marginTop:
+                    '5px',
+                  color:
+                    '#64748b',
+                  fontSize:
+                    '.7rem'
+                }}
+              >
+                <strong
+                  style={{
+                    color:
+                      '#334155'
+                  }}
+                >
+                  {handoff.validation_status}
+                </strong>
+
+                {handoff.release_condition
+                  ? ` · ${handoff.release_condition}`
+                  : ' · Finish-to-start handoff'}
+              </div>
+
+            )
+          )}
+
+        </div>
+
+      )}
+
+    </section>
+
+  );
+
+}
+
+
+// ============================================================
+// SMALL COMPONENTS
+// ============================================================
+
+function Metric({
+  label,
+  value
+}) {
+
+  return (
+
+    <div
+      style={{
+        textAlign:
+          'center'
+      }}
+    >
+
+      <span
+        style={{
+          display:
+            'block',
+          color:
+            '#94a3b8',
+          fontSize:
+            '.58rem',
+          fontWeight:
+            900,
+          textTransform:
+            'uppercase'
+        }}
+      >
+        {label}
+      </span>
+
+
+      <strong
+        style={{
+          display:
+            'block',
+          marginTop:
+            '3px',
+          color:
+            '#334155',
+          fontSize:
+            '.82rem'
+        }}
+      >
+        {value}
+      </strong>
+
+    </div>
+
+  );
+
+}
+
 
 function SessionBadge({
   status
@@ -4737,6 +6216,41 @@ function SessionBadge({
     </span>
 
   );
+
+}
+
+
+function ErrorBox({
+  children
+}) {
+
+  return (
+
+    <div
+      style={{
+        marginBottom:
+          '15px',
+        padding:
+          '11px 14px',
+        border:
+          '1px solid #fecaca',
+        borderRadius:
+          '8px',
+        background:
+          '#fff1f2',
+        color:
+          '#be123c',
+        fontSize:
+          '0.78rem',
+        fontWeight:
+          700
+      }}
+    >
+      {children}
+    </div>
+
+  );
+
 }
 
 
@@ -4763,14 +6277,14 @@ function ModalShell({
         padding:
           '20px',
         background:
-          'rgba(3,17,30,0.6)'
+          'rgba(3,17,30,.6)'
       }}
     >
 
       <div
         style={{
           width:
-            'min(760px,96vw)',
+            'min(780px,96vw)',
           maxHeight:
             '92vh',
           overflowY:
@@ -4789,11 +6303,13 @@ function ModalShell({
     </div>
 
   );
+
 }
 
 
 function ModalHeader({
   title,
+  subtitle,
   onClose
 }) {
 
@@ -4823,10 +6339,13 @@ function ModalHeader({
             fontSize:
               '0.62rem',
             fontWeight:
-              900
+              900,
+            letterSpacing:
+              '.08em'
           }}
         >
-          PULL PLANNING
+          {subtitle ||
+            'PULL PLANNING'}
         </span>
 
 
@@ -4870,6 +6389,7 @@ function ModalHeader({
     </div>
 
   );
+
 }
 
 
@@ -4917,9 +6437,13 @@ function ModalFooter({
         disabled={
           saving
         }
-        style={
-          primaryButton
-        }
+        style={{
+          ...primaryButton,
+          opacity:
+            saving
+              ? .65
+              : 1
+        }}
       >
         {saving
           ? 'Saving...'
@@ -4929,6 +6453,7 @@ function ModalFooter({
     </div>
 
   );
+
 }
 
 
@@ -4976,6 +6501,7 @@ function Field({
     </div>
 
   );
+
 }
 
 
