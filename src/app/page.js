@@ -91,6 +91,93 @@ const capabilities = [
   },
 ]
 
+const roadmapSteps = [
+  {
+    number: '01',
+    date: 'AUG 2026',
+    title: 'Planning Architecture',
+    description:
+      'Master Plan, Lookahead Planning, Make Ready logic, and Constraint Management architecture.',
+  },
+  {
+    number: '02',
+    date: 'SEP 2026',
+    title: 'Production Control Integration',
+    description:
+      'Weekly planning, release logic, constraint verification, and integrated production-control workflows.',
+  },
+  {
+    number: '03',
+    date: 'SEP 2026',
+    title: 'Field Execution Connection',
+    description:
+      'Connect Daily Reports, field production data, workforce information, and execution feedback.',
+  },
+  {
+    number: '04',
+    date: 'SEP 2026',
+    title: 'Closed-Loop Planning & Control',
+    description:
+      'Use actual execution information to support planning decisions and continuously improve production flow.',
+  },
+  {
+    number: '05',
+    date: 'OCT 2026',
+    title: 'V1 Integration & Testing',
+    description:
+      'Validate the complete work-package journey through end-to-end integration and internal testing.',
+  },
+  {
+    number: '06',
+    date: 'NOV 2026',
+    title: 'RitsuFlow™ V1 Trial Release',
+    description:
+      'Release the first external trial version for real project environments and practitioner evaluation.',
+    featured: true,
+  },
+  {
+    number: '07',
+    date: 'NOV–DEC 2026',
+    title: 'Field Validation',
+    description:
+      'Collect practitioner feedback, evaluate workflows, and refine the platform from real project experience.',
+  },
+  {
+    number: '08',
+    date: 'H1 2027',
+    title: 'Commercial Launch & Evolution',
+    description:
+      'Refine the product, prepare commercial deployment, and continue expanding the RitsuFlow platform.',
+  },
+]
+
+const roadmapPrinciples = [
+  {
+    icon: 'LB',
+    title: 'Location-Based Planning',
+    description:
+      'Planning structured around project locations, production zones, and work packages.',
+  },
+  {
+    icon: 'FR',
+    title: 'Flow & Readiness Focus',
+    description:
+      'Make upcoming work ready while protecting production continuity and reliable handoffs.',
+  },
+  {
+    icon: 'CM',
+    title: 'Constraint Management',
+    description:
+      'Expose, assign, track, and remove restrictions before they interrupt production.',
+  },
+  {
+    icon: 'CI',
+    title: 'Continuous Improvement',
+    description:
+      'Turn planning and execution information into learning for the next production cycle.',
+  },
+]
+
 export default function HomePage() {
   return (
     <div className={styles.page}>
@@ -125,6 +212,10 @@ export default function HomePage() {
 
             <a href="#capabilities">
               Capabilities
+            </a>
+
+            <a href="#roadmap">
+              Roadmap
             </a>
 
             <a href="#about">
@@ -165,6 +256,18 @@ export default function HomePage() {
           </div>
 
           <div className={styles.heroContent}>
+            <div className={styles.developmentStatus}>
+              <span className={styles.developmentStatusDot} />
+
+              <span>
+                RitsuFlow™ is coming soon
+              </span>
+
+              <strong>
+                Currently in development
+              </strong>
+            </div>
+
             <p className={styles.eyebrow}>
               <span className={styles.eyebrowDot} />
 
@@ -193,10 +296,10 @@ export default function HomePage() {
               </a>
 
               <a
-                href="/login"
+                href="#roadmap"
                 className={styles.secondaryButton}
               >
-                Private access
+                View development roadmap
               </a>
             </div>
 
@@ -401,6 +504,119 @@ export default function HomePage() {
                   <p>
                     {capability.description}
                   </p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================
+            DEVELOPMENT ROADMAP
+        =================================================== */}
+
+        <section
+          className={styles.roadmapSection}
+          id="roadmap"
+        >
+          <div className={styles.roadmapGlowOne} />
+          <div className={styles.roadmapGlowTwo} />
+
+          <div className={styles.roadmapInner}>
+            <div className={styles.roadmapHeader}>
+              <p className={styles.roadmapEyebrow}>
+                <span />
+
+                Development roadmap
+              </p>
+
+              <h2>
+                Building the future of
+                <br />
+                construction production management.
+              </h2>
+
+              <p>
+                RitsuFlow™ is being developed through a
+                structured sequence of planning,
+                integration, validation, and field-testing
+                milestones.
+              </p>
+            </div>
+
+            <div className={styles.roadmapGrid}>
+              {roadmapSteps.map((step) => (
+                <article
+                  key={step.number}
+                  className={`${styles.roadmapCard} ${
+                    step.featured
+                      ? styles.roadmapCardFeatured
+                      : ''
+                  }`}
+                >
+                  <div className={styles.roadmapCardTop}>
+                    <span className={styles.roadmapNumber}>
+                      {step.number}
+                    </span>
+
+                    <span className={styles.roadmapDate}>
+                      {step.date}
+                    </span>
+                  </div>
+
+                  <div className={styles.roadmapNode}>
+                    <span />
+                  </div>
+
+                  <h3>
+                    {step.title}
+                  </h3>
+
+                  <p>
+                    {step.description}
+                  </p>
+
+                  {step.featured && (
+                    <span className={styles.roadmapFeaturedBadge}>
+                      External trial milestone
+                    </span>
+                  )}
+                </article>
+              ))}
+            </div>
+
+            <div className={styles.trialRelease}>
+              <div className={styles.trialReleaseLabel}>
+                RitsuFlow™ V1 Trial Release
+              </div>
+
+              <strong>
+                November 2026
+              </strong>
+
+              <p>
+                Real projects. Real feedback. Real impact.
+              </p>
+            </div>
+
+            <div className={styles.roadmapPrinciples}>
+              {roadmapPrinciples.map((principle) => (
+                <article
+                  key={principle.title}
+                  className={styles.roadmapPrinciple}
+                >
+                  <span className={styles.roadmapPrincipleIcon}>
+                    {principle.icon}
+                  </span>
+
+                  <div>
+                    <h3>
+                      {principle.title}
+                    </h3>
+
+                    <p>
+                      {principle.description}
+                    </p>
+                  </div>
                 </article>
               ))}
             </div>
