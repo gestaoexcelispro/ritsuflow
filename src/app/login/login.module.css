@@ -386,6 +386,8 @@
   max-width: 460px;
 
   justify-self: end;
+
+  margin-right: 42px;
 }
 
 .loginCard {
@@ -992,6 +994,10 @@
     font-size: 0.69rem;
   }
 
+  .loginArea {
+    margin-right: 34px;
+  }
+
   .loginCard {
     padding:
       24px
@@ -1081,6 +1087,8 @@
 
   .loginArea {
     max-width: 430px;
+
+    margin-right: 16px;
   }
 }
 
