@@ -18,6 +18,7 @@
 
   position: relative;
 
+  width: 100%;
   min-height: 100svh;
 
   overflow-x: hidden;
@@ -31,6 +32,14 @@
     Arial,
     Helvetica,
     sans-serif;
+
+  box-sizing: border-box;
+}
+
+.page *,
+.page *::before,
+.page *::after {
+  box-sizing: border-box;
 }
 
 
@@ -59,11 +68,11 @@
   background:
     linear-gradient(
       90deg,
-      rgba(2, 12, 24, 0.8) 0%,
-      rgba(3, 17, 32, 0.66) 26%,
-      rgba(4, 24, 42, 0.4) 50%,
-      rgba(3, 20, 36, 0.16) 75%,
-      rgba(2, 12, 24, 0.06) 100%
+      rgba(2, 12, 24, 0.76) 0%,
+      rgba(3, 17, 32, 0.62) 25%,
+      rgba(4, 24, 42, 0.38) 50%,
+      rgba(3, 20, 36, 0.16) 74%,
+      rgba(2, 12, 24, 0.08) 100%
     ),
     linear-gradient(
       180deg,
@@ -82,15 +91,15 @@
 
   z-index: 2;
 
-  left: -8%;
+  left: -9%;
   bottom: -12%;
 
   width: 58%;
-  height: 49%;
+  height: 48%;
 
   pointer-events: none;
 
-  opacity: 0.34;
+  opacity: 0.3;
 }
 
 .flowLines span {
@@ -124,7 +133,7 @@
   top: 19%;
 
   border-color:
-    rgba(21, 133, 220, 0.18);
+    rgba(21, 133, 220, 0.17);
 
   animation:
     flowTwo
@@ -136,10 +145,8 @@
 .flowLines span:nth-child(3) {
   top: 35%;
 
-  border-width: 1px;
-
   border-color:
-    rgba(17, 199, 178, 0.26);
+    rgba(17, 199, 178, 0.24);
 
   animation:
     flowThree
@@ -162,7 +169,7 @@
   top: 69%;
 
   border-color:
-    rgba(21, 133, 220, 0.12);
+    rgba(21, 133, 220, 0.11);
 
   animation:
     flowOne
@@ -184,19 +191,21 @@
   display: grid;
 
   grid-template-columns:
-    minmax(440px, 1fr)
-    minmax(420px, 0.76fr);
+    minmax(0, 1fr)
+    minmax(400px, 460px);
 
   align-items: center;
 
-  gap: clamp(
-    72px,
-    7vw,
-    140px
+  column-gap: clamp(
+    56px,
+    6vw,
+    110px
   );
 
-  width: 100%;
-  max-width: 1540px;
+  width: min(
+    100%,
+    1480px
+  );
 
   min-height: 100svh;
 
@@ -204,7 +213,11 @@
 
   padding:
     28px
-    64px;
+    clamp(
+      32px,
+      4vw,
+      64px
+    );
 }
 
 
@@ -215,11 +228,10 @@
 .brandPanel {
   display: flex;
   flex-direction: column;
-
   justify-content: center;
 
   width: 100%;
-  max-width: 620px;
+  max-width: 600px;
 }
 
 .brand {
@@ -227,11 +239,13 @@
 
   width: fit-content;
 
-  margin-bottom: 34px;
+  margin-bottom: 28px;
 }
 
 .logo {
-  width: 245px;
+  display: block;
+
+  width: 230px;
   height: auto;
 
   object-fit: contain;
@@ -242,15 +256,15 @@
 }
 
 .brandContent h1 {
-  margin: 0;
+  max-width: 590px;
 
-  max-width: 610px;
+  margin: 0;
 
   font-size:
     clamp(
       3rem,
       4vw,
-      4.55rem
+      4.4rem
     );
 
   line-height: 1.02;
@@ -263,12 +277,14 @@
 }
 
 .accentLine {
-  width: 64px;
+  width: 62px;
   height: 3px;
 
-  margin: 24px 0;
+  margin:
+    22px
+    0;
 
-  border-radius: 99px;
+  border-radius: 999px;
 
   background:
     linear-gradient(
@@ -279,14 +295,14 @@
 }
 
 .brandDescription {
-  max-width: 560px;
+  max-width: 540px;
 
   margin: 0;
 
   color: rgba(226, 232, 240, 0.84);
 
-  font-size: 0.95rem;
-  line-height: 1.65;
+  font-size: 0.92rem;
+  line-height: 1.62;
 }
 
 
@@ -298,16 +314,16 @@
   display: flex;
   flex-direction: column;
 
-  gap: 16px;
+  gap: 14px;
 
-  margin-top: 30px;
+  margin-top: 26px;
 }
 
 .principle {
   display: flex;
   align-items: flex-start;
 
-  gap: 14px;
+  gap: 13px;
 }
 
 .principleIcon {
@@ -315,8 +331,8 @@
   align-items: center;
   justify-content: center;
 
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
 
   flex-shrink: 0;
 
@@ -342,15 +358,21 @@
 
   color: var(--white);
 
-  font-size: 0.86rem;
+  font-size: 0.84rem;
 }
 
 .principle p {
   margin: 0;
 
-  color: rgba(182, 195, 209, 0.84);
+  color:
+    rgba(
+      182,
+      195,
+      209,
+      0.84
+    );
 
-  font-size: 0.75rem;
+  font-size: 0.73rem;
   line-height: 1.42;
 }
 
@@ -361,13 +383,15 @@
 
 .loginArea {
   width: 100%;
-  max-width: 485px;
+  max-width: 460px;
 
   justify-self: end;
 }
 
 .loginCard {
   position: relative;
+
+  width: 100%;
 
   padding:
     30px
@@ -384,8 +408,8 @@
   background:
     linear-gradient(
       145deg,
-      rgba(5, 27, 47, 0.66),
-      rgba(2, 15, 29, 0.75)
+      rgba(5, 27, 47, 0.62),
+      rgba(2, 15, 29, 0.72)
     );
 
   box-shadow:
@@ -445,17 +469,26 @@
 .loginHeader h2 {
   margin: 0;
 
-  font-size: 1.85rem;
+  font-size: 1.82rem;
 
   letter-spacing: -0.035em;
 }
 
 .loginHeader p {
-  margin: 7px 0 0;
+  margin:
+    7px
+    0
+    0;
 
-  color: rgba(148, 163, 184, 0.9);
+  color:
+    rgba(
+      148,
+      163,
+      184,
+      0.92
+    );
 
-  font-size: 0.84rem;
+  font-size: 0.82rem;
 }
 
 
@@ -467,7 +500,7 @@
   display: flex;
   flex-direction: column;
 
-  gap: 16px;
+  gap: 15px;
 }
 
 .field {
@@ -486,11 +519,14 @@
   display: flex;
   align-items: center;
 
-  min-height: 52px;
+  width: 100%;
+  min-height: 50px;
 
   padding:
     0
     13px;
+
+  overflow: hidden;
 
   border:
     1px solid
@@ -499,7 +535,7 @@
   border-radius: 10px;
 
   background:
-    rgba(1, 11, 22, 0.3);
+    rgba(1, 11, 22, 0.34);
 
   transition:
     border-color 160ms ease,
@@ -508,10 +544,11 @@
 }
 
 .inputWrapper:focus-within {
-  border-color: var(--teal-500);
+  border-color:
+    var(--teal-500);
 
   background:
-    rgba(2, 17, 31, 0.5);
+    rgba(2, 17, 31, 0.52);
 
   box-shadow:
     0 0 0 3px
@@ -533,6 +570,7 @@
 }
 
 .inputWrapper input {
+  min-width: 0;
   width: 100%;
 
   padding:
@@ -542,7 +580,6 @@
   color: var(--white);
 
   border: 0;
-
   outline: none;
 
   background: transparent;
@@ -554,7 +591,46 @@
   color: #718196;
 }
 
+
+/* ============================================================
+   CHROME AUTOFILL
+============================================================ */
+
+.inputWrapper input:-webkit-autofill,
+.inputWrapper input:-webkit-autofill:hover,
+.inputWrapper input:-webkit-autofill:focus,
+.inputWrapper input:-webkit-autofill:active {
+  -webkit-text-fill-color:
+    #ffffff !important;
+
+  caret-color:
+    #ffffff;
+
+  -webkit-box-shadow:
+    0 0 0 1000px
+    #061525
+    inset !important;
+
+  box-shadow:
+    0 0 0 1000px
+    #061525
+    inset !important;
+
+  transition:
+    background-color
+    9999s
+    ease-out
+    0s;
+}
+
+
+/* ============================================================
+   PASSWORD TOGGLE
+============================================================ */
+
 .passwordToggle {
+  flex-shrink: 0;
+
   padding:
     6px
     4px;
@@ -613,7 +689,8 @@
 
   gap: 10px;
 
-  min-height: 52px;
+  width: 100%;
+  min-height: 50px;
 
   margin-top: 1px;
 
@@ -646,7 +723,8 @@
 }
 
 .submitButton:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform:
+    translateY(-2px);
 
   box-shadow:
     0 16px 34px
@@ -670,9 +748,11 @@
 
   gap: 12px;
 
-  margin-top: 20px;
+  width: 100%;
 
-  padding: 13px;
+  margin-top: 18px;
+
+  padding: 12px;
 
   border:
     1px solid
@@ -711,15 +791,18 @@
 
   color: var(--slate-100);
 
-  font-size: 0.79rem;
+  font-size: 0.78rem;
 }
 
 .privateAccess p {
-  margin: 3px 0 0;
+  margin:
+    3px
+    0
+    0;
 
   color: var(--slate-400);
 
-  font-size: 0.68rem;
+  font-size: 0.67rem;
   line-height: 1.4;
 }
 
@@ -731,13 +814,20 @@
 .support {
   display: flex;
   justify-content: center;
+
   gap: 4px;
 
-  margin-top: 16px;
+  margin-top: 14px;
 
-  color: rgba(226, 232, 240, 0.76);
+  color:
+    rgba(
+      226,
+      232,
+      240,
+      0.78
+    );
 
-  font-size: 0.71rem;
+  font-size: 0.7rem;
 }
 
 .support span:last-child {
@@ -745,30 +835,44 @@
 }
 
 .copyright {
-  margin-top: 6px;
+  margin-top: 5px;
 
-  color: rgba(226, 232, 240, 0.5);
+  color:
+    rgba(
+      226,
+      232,
+      240,
+      0.5
+    );
 
   text-align: center;
 
-  font-size: 0.63rem;
+  font-size: 0.62rem;
 }
 
 
 /* ============================================================
-   ANIMATION
+   ANIMATIONS
 ============================================================ */
 
 @keyframes flowOne {
   from {
     transform:
-      translate3d(0, 0, 0)
+      translate3d(
+        0,
+        0,
+        0
+      )
       rotate(-1deg);
   }
 
   to {
     transform:
-      translate3d(35px, -14px, 0)
+      translate3d(
+        35px,
+        -14px,
+        0
+      )
       rotate(2deg);
   }
 }
@@ -776,13 +880,21 @@
 @keyframes flowTwo {
   from {
     transform:
-      translate3d(-10px, 6px, 0)
+      translate3d(
+        -10px,
+        6px,
+        0
+      )
       rotate(1deg);
   }
 
   to {
     transform:
-      translate3d(44px, -10px, 0)
+      translate3d(
+        44px,
+        -10px,
+        0
+      )
       rotate(-2deg);
   }
 }
@@ -790,14 +902,22 @@
 @keyframes flowThree {
   from {
     transform:
-      translate3d(0, -5px, 0)
+      translate3d(
+        0,
+        -5px,
+        0
+      )
       rotate(-1deg)
       scaleX(0.98);
   }
 
   to {
     transform:
-      translate3d(52px, 13px, 0)
+      translate3d(
+        52px,
+        13px,
+        0
+      )
       rotate(2deg)
       scaleX(1.05);
   }
@@ -808,95 +928,90 @@
    SHORT DESKTOP VIEWPORT
 ============================================================ */
 
-@media (min-width: 851px) and (max-height: 850px) {
+@media
+  (min-width: 851px)
+  and
+  (max-height: 850px) {
 
   .shell {
-    gap: clamp(
-      54px,
-      6vw,
-      110px
-    );
+    column-gap:
+      clamp(
+        44px,
+        5vw,
+        88px
+      );
 
-    padding:
-      18px
-      56px;
-  }
-
-  .brandPanel {
-    max-width: 600px;
+    padding-top: 16px;
+    padding-bottom: 16px;
   }
 
   .brand {
-    margin-bottom: 24px;
+    margin-bottom: 18px;
   }
 
   .logo {
-    width: 220px;
+    width: 205px;
   }
 
   .brandContent h1 {
     font-size:
       clamp(
-        2.7rem,
-        3.6vw,
-        4rem
+        2.65rem,
+        3.5vw,
+        3.85rem
       );
   }
 
   .accentLine {
-    margin: 18px 0;
+    margin:
+      16px
+      0;
   }
 
   .brandDescription {
-    max-width: 535px;
-
-    font-size: 0.86rem;
-    line-height: 1.52;
+    font-size: 0.84rem;
+    line-height: 1.5;
   }
 
   .principles {
-    gap: 11px;
+    gap: 10px;
 
-    margin-top: 22px;
+    margin-top: 19px;
   }
 
   .principleIcon {
-    width: 31px;
-    height: 31px;
+    width: 30px;
+    height: 30px;
   }
 
   .principle strong {
-    font-size: 0.81rem;
+    font-size: 0.8rem;
   }
 
   .principle p {
-    font-size: 0.7rem;
-  }
-
-  .loginArea {
-    max-width: 470px;
+    font-size: 0.69rem;
   }
 
   .loginCard {
     padding:
-      25px
-      29px;
+      24px
+      28px;
   }
 
   .loginHeader {
-    margin-bottom: 17px;
+    margin-bottom: 16px;
   }
 
   .loginHeader h2 {
-    font-size: 1.7rem;
+    font-size: 1.65rem;
   }
 
   .loginHeader p {
-    font-size: 0.79rem;
+    font-size: 0.77rem;
   }
 
   .form {
-    gap: 13px;
+    gap: 12px;
   }
 
   .field {
@@ -904,7 +1019,7 @@
   }
 
   .inputWrapper {
-    min-height: 47px;
+    min-height: 46px;
   }
 
   .inputWrapper input {
@@ -914,60 +1029,59 @@
   }
 
   .submitButton {
-    min-height: 47px;
+    min-height: 46px;
   }
 
   .privateAccess {
-    margin-top: 15px;
+    margin-top: 14px;
 
-    padding: 10px 12px;
+    padding:
+      10px
+      11px;
   }
 
   .support {
-    margin-top: 11px;
+    margin-top: 10px;
   }
-
 }
 
 
 /* ============================================================
-   TABLET / SMALL DESKTOP
+   SMALL DESKTOP / TABLET LANDSCAPE
 ============================================================ */
 
 @media (max-width: 1180px) {
 
   .shell {
     grid-template-columns:
-      minmax(360px, 1fr)
-      minmax(390px, 0.82fr);
+      minmax(0, 1fr)
+      minmax(380px, 430px);
 
-    gap: 44px;
+    column-gap: 38px;
 
-    padding:
-      28px
-      36px;
+    padding-left: 32px;
+    padding-right: 32px;
   }
 
   .brandPanel {
-    max-width: 500px;
+    max-width: 490px;
   }
 
   .logo {
-    width: 215px;
+    width: 210px;
   }
 
   .brandContent h1 {
-    font-size: 2.9rem;
+    font-size: 2.85rem;
   }
 
   .brandDescription {
-    max-width: 470px;
+    max-width: 465px;
   }
 
   .loginArea {
-    max-width: 445px;
+    max-width: 430px;
   }
-
 }
 
 
@@ -984,14 +1098,14 @@
   .shell {
     display: flex;
     flex-direction: column;
-
     justify-content: center;
 
+    width: 100%;
     min-height: 100svh;
 
     padding:
-      34px
-      22px;
+      32px
+      20px;
   }
 
   .brandPanel {
@@ -1002,7 +1116,7 @@
     width: 100%;
     max-width: 455px;
 
-    justify-self: initial;
+    margin: 0 auto;
   }
 
   .cardLogo {
@@ -1013,13 +1127,14 @@
     background:
       linear-gradient(
         180deg,
-        rgba(2, 12, 24, 0.46),
-        rgba(2, 12, 24, 0.72)
+        rgba(2, 12, 24, 0.43),
+        rgba(2, 12, 24, 0.7)
       );
   }
 
   .background {
-    background-position: 68% center;
+    background-position:
+      68% center;
   }
 
   .flowLines {
@@ -1027,18 +1142,17 @@
 
     width: 130%;
 
-    opacity: 0.24;
+    opacity: 0.2;
   }
 
   .loginCard {
     background:
       linear-gradient(
         145deg,
-        rgba(5, 27, 47, 0.7),
-        rgba(2, 15, 29, 0.8)
+        rgba(5, 27, 47, 0.68),
+        rgba(2, 15, 29, 0.78)
       );
   }
-
 }
 
 
@@ -1050,8 +1164,8 @@
 
   .shell {
     padding:
-      24px
-      16px;
+      22px
+      14px;
   }
 
   .loginCard {
@@ -1079,7 +1193,6 @@
 
     text-align: center;
   }
-
 }
 
 
@@ -1097,5 +1210,4 @@
   .inputWrapper {
     transition: none;
   }
-
 }
