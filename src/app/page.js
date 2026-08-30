@@ -2,9 +2,9 @@ import Image from 'next/image'
 import styles from './landing.module.css'
 
 export const metadata = {
-  title: 'Coming Soon',
+  title: 'RitsuFlow™ | Construction Planning & Flow Control',
   description:
-    'RitsuFlow is a location-based construction planning and flow control platform currently in private development.',
+    'RitsuFlow is a construction planning and flow control platform connecting Master Planning, Lookahead Planning, constraint management, and weekly production control.',
 }
 
 const workflowSteps = [
@@ -12,40 +12,58 @@ const workflowSteps = [
     number: '01',
     title: 'Master Plan',
     description:
-      'Structure the project by locations, production sequence, milestones, and strategic flow.',
+      'Build the long-term plan by location and visualize the production sequence through the Line of Balance.',
+    image: '/masterplan.png',
+    imageAlt:
+      'RitsuFlow Master Plan showing the physical schedule and Line of Balance.',
+    highlights: [
+      'Plan by location',
+      'Sequence work',
+      'Visualize production flow',
+    ],
   },
   {
     number: '02',
     title: 'Lookahead Planning',
     description:
-      'Identify constraints, prepare upcoming work, and protect production continuity.',
+      'Translate the Master Plan into a reliable medium-term horizon and assess whether upcoming work is ready for execution.',
+    image: '/lookahead.png',
+    imageAlt:
+      'RitsuFlow Lookahead Planning showing the medium-term plan and Koskela readiness matrix.',
+    highlights: [
+      'Prepare upcoming work',
+      'Assess readiness',
+      'Expose constraints early',
+    ],
   },
   {
     number: '03',
-    title: 'Weekly Planning',
+    title: 'Constraint Management',
     description:
-      'Transform ready work into reliable weekly commitments for field execution.',
-  },
-  {
-    number: '04',
-    title: 'Flow Control',
-    description:
-      'Monitor progress, production rhythm, deviations, and plan reliability.',
+      'Turn readiness issues into visible, assigned, and traceable constraints before they interrupt production.',
+    image: '/constraint.png',
+    imageAlt:
+      'RitsuFlow Constraint Log showing active constraints, priorities, responsibilities, and resolution status.',
+    highlights: [
+      'Capture restrictions',
+      'Assign responsibility',
+      'Track resolution',
+    ],
   },
 ]
 
 const capabilities = [
   {
     icon: 'LB',
-    title: 'Location Breakdown',
+    title: 'Location-Based Planning',
     description:
-      'Organize the project around physical locations and production zones.',
+      'Organize the project around physical locations, production zones, and work packages.',
   },
   {
     icon: 'FL',
     title: 'Flow-Based Planning',
     description:
-      'Connect activities through sequence, continuity, rhythm, and handoffs.',
+      'Connect work through sequence, continuity, rhythm, and reliable handoffs.',
   },
   {
     icon: 'CM',
@@ -57,19 +75,19 @@ const capabilities = [
     icon: 'WP',
     title: 'Weekly Commitments',
     description:
-      'Build executable weekly plans from work that is genuinely ready.',
+      'Transform ready work into executable weekly production commitments.',
   },
   {
     icon: 'PC',
     title: 'Planning Control',
     description:
-      'Measure PPC, deviations, production stability, and corrective actions.',
+      'Compare planning and execution to expose deviations and protect flow.',
   },
   {
-    icon: 'BI',
-    title: 'Production Intelligence',
+    icon: 'CI',
+    title: 'Continuous Improvement',
     description:
-      'Turn planning and field information into actionable management insight.',
+      'Turn production information into learning for the next planning cycle.',
   },
 ]
 
@@ -109,30 +127,22 @@ export default function HomePage() {
               Capabilities
             </a>
 
-            <a href="#platform">
-              Platform
+            <a href="#about">
+              About
             </a>
           </nav>
 
-          <div
-            className={
-              styles.navigationActions
-            }
-          >
+          <div className={styles.navigationActions}>
             <a
               href="/login"
-              className={
-                styles.secondaryButton
-              }
+              className={styles.secondaryButton}
             >
               Sign in
             </a>
 
             <a
               href="/login"
-              className={
-                styles.primaryButton
-              }
+              className={styles.primaryButton}
             >
               Private access
             </a>
@@ -141,386 +151,125 @@ export default function HomePage() {
       </header>
 
       <main>
-        <section className={styles.hero}>
-          <div>
-            <p
-              className={styles.eyebrow}
-            >
-              <span
-                className={
-                  styles.eyebrowDot
-                }
-              />
+        {/* ===================================================
+            HERO
+        =================================================== */}
 
-              Coming soon ·
-              Location-based
-              construction planning
+        <section className={styles.hero}>
+          <div className={styles.heroFlowBackground}>
+            <span className={styles.flowLineOne} />
+            <span className={styles.flowLineTwo} />
+            <span className={styles.flowLineThree} />
+            <span className={styles.flowLineFour} />
+            <span className={styles.flowLineFive} />
+          </div>
+
+          <div className={styles.heroContent}>
+            <p className={styles.eyebrow}>
+              <span className={styles.eyebrowDot} />
+
+              Construction planning & flow control
             </p>
 
             <h1>
-              Plan by location.
+              Plan the <span>flow.</span>
               <br />
-              Control by{' '}
-              <span>flow.</span>
+              Control the work.
             </h1>
 
-            <p
-              className={
-                styles.heroDescription
-              }
-            >
-              RitsuFlow connects
-              master planning,
-              lookahead preparation,
-              weekly commitments,
-              and production control
-              in one integrated
-              construction workflow.
+            <p className={styles.heroDescription}>
+              RitsuFlow™ connects Master Planning,
+              Lookahead Planning, constraint management,
+              and Weekly Production Control into one
+              continuous construction workflow.
             </p>
 
-            <div
-              className={
-                styles.heroActions
-              }
-            >
+            <div className={styles.heroActions}>
               <a
                 href="#workflow"
-                className={
-                  styles.primaryButton
-                }
+                className={styles.primaryButton}
               >
-                Explore the workflow
+                See the workflow
               </a>
 
               <a
                 href="/login"
-                className={
-                  styles.secondaryButton
-                }
+                className={styles.secondaryButton}
               >
                 Private access
               </a>
             </div>
 
-            <p
-              className={
-                styles.heroNote
-              }
-            >
-              Currently in private
-              development. Public
-              release coming soon.
-            </p>
-          </div>
-
-          <div
-            className={styles.preview}
-            id="platform"
-          >
-            <div
-              className={
-                styles.previewHeader
-              }
-            >
-              <p
-                className={
-                  styles.previewTitle
-                }
-              >
-                Production Flow
-                Overview
-              </p>
-
-              <span
-                className={
-                  styles.previewStatus
-                }
-              >
-                Plan synchronized
-              </span>
-            </div>
-
-            <div
-              className={
-                styles.flowPanel
-              }
-            >
-              <div
-                className={
-                  styles.flowHeading
-                }
-              >
-                <span>
-                  Locations
-                </span>
+            <div className={styles.heroPrinciples}>
+              <div>
+                <strong>
+                  Flow-Based Planning
+                </strong>
 
                 <span>
-                  Production sequence
+                  Align locations, sequence, and production.
                 </span>
               </div>
 
-              <div
-                className={
-                  styles.flowGrid
-                }
-              >
-                <div
-                  className={
-                    styles.flowColumn
-                  }
-                >
-                  <span
-                    className={
-                      styles.flowLocation
-                    }
-                  >
-                    ZONE 01
-                  </span>
+              <div>
+                <strong>
+                  Reliable Execution
+                </strong>
 
-                  <div
-                    className={`${styles.flowBlock} ${styles.flowBlockTeal}`}
-                  />
-
-                  <div
-                    className={
-                      styles.flowBlock
-                    }
-                  />
-
-                  <div
-                    className={`${styles.flowBlock} ${styles.flowBlockLight}`}
-                  />
-                </div>
-
-                <div
-                  className={
-                    styles.flowColumn
-                  }
-                >
-                  <span
-                    className={
-                      styles.flowLocation
-                    }
-                  >
-                    ZONE 02
-                  </span>
-
-                  <div
-                    className={
-                      styles.flowBlock
-                    }
-                  />
-
-                  <div
-                    className={`${styles.flowBlock} ${styles.flowBlockTeal}`}
-                  />
-
-                  <div
-                    className={
-                      styles.flowBlock
-                    }
-                  />
-                </div>
-
-                <div
-                  className={
-                    styles.flowColumn
-                  }
-                >
-                  <span
-                    className={
-                      styles.flowLocation
-                    }
-                  >
-                    ZONE 03
-                  </span>
-
-                  <div
-                    className={`${styles.flowBlock} ${styles.flowBlockLight}`}
-                  />
-
-                  <div
-                    className={
-                      styles.flowBlock
-                    }
-                  />
-
-                  <div
-                    className={`${styles.flowBlock} ${styles.flowBlockTeal}`}
-                  />
-                </div>
-
-                <div
-                  className={
-                    styles.flowColumn
-                  }
-                >
-                  <span
-                    className={
-                      styles.flowLocation
-                    }
-                  >
-                    ZONE 04
-                  </span>
-
-                  <div
-                    className={
-                      styles.flowBlock
-                    }
-                  />
-
-                  <div
-                    className={`${styles.flowBlock} ${styles.flowBlockLight}`}
-                  />
-
-                  <div
-                    className={
-                      styles.flowBlock
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div
-              className={
-                styles.metricGrid
-              }
-            >
-              <div
-                className={
-                  styles.metric
-                }
-              >
-                <div
-                  className={
-                    styles.metricLabel
-                  }
-                >
-                  Plan reliability
-                </div>
-
-                <div
-                  className={
-                    styles.metricValue
-                  }
-                >
-                  86%
-                </div>
+                <span>
+                  Make work ready before commitment.
+                </span>
               </div>
 
-              <div
-                className={
-                  styles.metric
-                }
-              >
-                <div
-                  className={
-                    styles.metricLabel
-                  }
-                >
-                  Open constraints
-                </div>
+              <div>
+                <strong>
+                  Continuous Control
+                </strong>
 
-                <div
-                  className={
-                    styles.metricValue
-                  }
-                >
-                  12
-                </div>
-              </div>
-
-              <div
-                className={
-                  styles.metric
-                }
-              >
-                <div
-                  className={
-                    styles.metricLabel
-                  }
-                >
-                  Flow variance
-                </div>
-
-                <div
-                  className={
-                    styles.metricValue
-                  }
-                >
-                  -4%
-                </div>
+                <span>
+                  Connect planning decisions to execution.
+                </span>
               </div>
             </div>
           </div>
         </section>
 
+        {/* ===================================================
+            PRODUCT WORKFLOW
+        =================================================== */}
+
         <section
-          className={`${styles.section} ${styles.sectionMuted}`}
+          className={styles.productWorkflow}
           id="workflow"
         >
-          <div
-            className={
-              styles.sectionInner
-            }
-          >
-            <div
-              className={
-                styles.sectionHeader
-              }
-            >
-              <p
-                className={
-                  styles.eyebrow
-                }
-              >
-                <span
-                  className={
-                    styles.eyebrowDot
-                  }
-                />
+          <div className={styles.sectionInner}>
+            <div className={styles.sectionHeader}>
+              <p className={styles.eyebrow}>
+                <span className={styles.eyebrowDot} />
 
-                One connected planning
-                system
+                The RitsuFlow™ workflow
               </p>
 
               <h2>
-                From long-term strategy
-                to reliable field
-                commitments.
+                From strategy to executable work.
               </h2>
 
               <p>
-                Each planning level
-                prepares the conditions
-                required by the next,
-                creating a continuous
-                flow of information and
-                production decisions.
+                Each planning level prepares the conditions
+                required by the next, creating a continuous
+                flow from long-term strategy to reliable
+                production commitments.
               </p>
             </div>
 
-            <div
-              className={
-                styles.workflowGrid
-              }
-            >
-              {workflowSteps.map(
-                (step) => (
-                  <article
-                    className={
-                      styles.workflowCard
-                    }
-                    key={
-                      step.number
-                    }
-                  >
-                    <span
-                      className={
-                        styles.workflowNumber
-                      }
-                    >
+            <div className={styles.productStory}>
+              {workflowSteps.map((step) => (
+                <article
+                  className={styles.productStep}
+                  key={step.number}
+                >
+                  <div className={styles.productStepCopy}>
+                    <span className={styles.productStepNumber}>
                       {step.number}
                     </span>
 
@@ -529,150 +278,188 @@ export default function HomePage() {
                     </h3>
 
                     <p>
-                      {
-                        step.description
-                      }
+                      {step.description}
                     </p>
-                  </article>
-                )
-              )}
+
+                    <div className={styles.productHighlights}>
+                      {step.highlights.map((highlight) => (
+                        <span key={highlight}>
+                          {highlight}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={styles.productScreenshot}>
+                    <Image
+                      src={step.image}
+                      alt={step.imageAlt}
+                      width={1772}
+                      height={858}
+                      sizes="(max-width: 900px) 100vw, 78vw"
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        display: 'block',
+                      }}
+                    />
+                  </div>
+                </article>
+              ))}
             </div>
           </div>
         </section>
+
+        {/* ===================================================
+            FLOW BRIDGE
+        =================================================== */}
+
+        <section className={styles.flowBridge}>
+          <div className={styles.sectionInner}>
+            <div className={styles.flowBridgeLine}>
+              <span>
+                Master Plan
+              </span>
+
+              <strong>
+                →
+              </strong>
+
+              <span>
+                Lookahead
+              </span>
+
+              <strong>
+                →
+              </strong>
+
+              <span>
+                Make Ready
+              </span>
+
+              <strong>
+                →
+              </strong>
+
+              <span>
+                Weekly Plan
+              </span>
+
+              <strong>
+                →
+              </strong>
+
+              <span>
+                Production
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================
+            CAPABILITIES
+        =================================================== */}
 
         <section
           className={styles.section}
           id="capabilities"
         >
-          <div
-            className={
-              styles.sectionInner
-            }
-          >
-            <div
-              className={
-                styles.sectionHeader
-              }
-            >
-              <p
-                className={
-                  styles.eyebrow
-                }
-              >
-                <span
-                  className={
-                    styles.eyebrowDot
-                  }
-                />
+          <div className={styles.sectionInner}>
+            <div className={styles.sectionHeader}>
+              <p className={styles.eyebrow}>
+                <span className={styles.eyebrowDot} />
 
-                Built around production
-                flow
+                Built around production flow
               </p>
 
               <h2>
-                A construction planning
-                platform designed for
-                execution.
+                Planning designed for execution.
               </h2>
 
               <p>
-                RitsuFlow brings
-                locations, activities,
-                constraints,
-                commitments, and
-                performance indicators
-                into the same
-                operational
+                RitsuFlow brings locations, work packages,
+                readiness, constraints, commitments, and
+                production control into the same planning
                 environment.
               </p>
             </div>
 
-            <div
-              className={
-                styles.capabilityGrid
-              }
-            >
-              {capabilities.map(
-                (capability) => (
-                  <article
-                    className={
-                      styles.capabilityCard
-                    }
-                    key={
-                      capability.title
-                    }
-                  >
-                    <span
-                      className={
-                        styles.capabilityIcon
-                      }
-                    >
-                      {
-                        capability.icon
-                      }
-                    </span>
+            <div className={styles.capabilityGrid}>
+              {capabilities.map((capability) => (
+                <article
+                  className={styles.capabilityCard}
+                  key={capability.title}
+                >
+                  <span className={styles.capabilityIcon}>
+                    {capability.icon}
+                  </span>
 
-                    <h3>
-                      {
-                        capability.title
-                      }
-                    </h3>
+                  <h3>
+                    {capability.title}
+                  </h3>
 
-                    <p>
-                      {
-                        capability.description
-                      }
-                    </p>
-                  </article>
-                )
-              )}
+                  <p>
+                    {capability.description}
+                  </p>
+                </article>
+              ))}
             </div>
           </div>
         </section>
 
+        {/* ===================================================
+            ABOUT / CLOSING
+        =================================================== */}
+
         <section
-          className={
-            styles.closing
-          }
+          className={styles.closing}
+          id="about"
         >
-          <h2>
-            RitsuFlow is coming soon.
-          </h2>
+          <div className={styles.closingFlowBackground}>
+            <span />
+            <span />
+            <span />
+          </div>
 
-          <p>
-            We are building a
-            location-based planning
-            and flow control platform
-            to make construction
-            production more
-            predictable.
-          </p>
+          <div className={styles.closingContent}>
+            <p className={styles.eyebrow}>
+              <span className={styles.eyebrowDot} />
 
-          <a
-            href="/login"
-            className={
-              styles.primaryButton
-            }
-          >
-            Private access
-          </a>
+              RitsuFlow™
+            </p>
+
+            <h2>
+              One continuous flow.
+              <br />
+              Better projects.
+            </h2>
+
+            <p>
+              RitsuFlow™ is being developed to help
+              construction teams plan better, make ready
+              what matters, and create more predictable
+              production flow.
+            </p>
+
+            <a
+              href="/login"
+              className={styles.primaryButton}
+            >
+              Private access
+            </a>
+          </div>
         </section>
       </main>
 
-      <footer
-        className={styles.footer}
-      >
+      <footer className={styles.footer}>
         <span>
-          ©{' '}
-          {new Date().getFullYear()}{' '}
-          Eduardo Fernandes de
-          Freitas. All rights
-          reserved.
+          © {new Date().getFullYear()}{' '}
+          Eduardo Fernandes de Freitas.
+          All rights reserved.
         </span>
 
         <span>
-          Location-based planning and
-          flow control.
+          Construction planning & flow control.
         </span>
       </footer>
     </div>
