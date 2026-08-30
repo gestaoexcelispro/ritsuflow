@@ -177,6 +177,23 @@ function NavIcon({
       )
 
 
+    case 'pullplanning':
+      return (
+        <svg {...commonProps}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M7 8h3" />
+          <path d="M14 8h3" />
+          <path d="M7 12h3" />
+          <path d="M14 12h3" />
+          <path d="M7 16h3" />
+          <path d="M14 16h3" />
+          <path d="M10 8h4" />
+          <path d="M10 12h4" />
+          <path d="M10 16h4" />
+        </svg>
+      )
+
+
     case 'lookahead':
       return (
         <svg {...commonProps}>
@@ -368,6 +385,12 @@ const baseNavigationGroups = [
         label: 'Master Plan',
         href: '/dashboard/projetos/masterplan',
         icon: 'masterplan',
+      },
+
+      {
+        label: 'Pull Planning',
+        href: '/dashboard/projects/pullplanning',
+        icon: 'pullplanning',
       },
 
       {
