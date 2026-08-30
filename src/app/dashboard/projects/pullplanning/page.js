@@ -609,6 +609,19 @@ export default function PullPlanningPage() {
     setErrorMessage,
   ] = useState('')
 
+  const [
+    accessDiagnostic,
+    setAccessDiagnostic,
+  ] = useState({
+    userId: '',
+    email: '',
+    projectCount: null,
+    membershipCount: null,
+    memberships: [],
+    projectError: '',
+    membershipError: '',
+  })
+
 
   // ==========================================================
   // DRAG STATE
@@ -814,16 +827,13 @@ export default function PullPlanningPage() {
   // ==========================================================
   //
   // IMPORTANT:
-  // Project discovery intentionally follows the same proven
-  // access pattern used by Master Plan.
-  //
-  // Step 1:
-  // Load the projects visible to the authenticated user.
-  //
-  // Step 2:
-  // Resolve organization_id separately because Pull Planning
-  // requires organization context for sessions, activities,
-  // milestones and handoffs.
+  // - Uses the same direct public.projects query pattern as
+  //   the working Master Plan.
+  // - Keeps organization_id in the original SELECT because
+  //   Pull Planning requires organization context.
+  // - If RLS returns zero rows, a small frontend diagnostic
+  //   records the authenticated user and visible membership
+  //   context. This is diagnostic only; it does not bypass RLS.
   // ==========================================================
 
   useEffect(() => {
@@ -833,9 +843,19 @@ export default function PullPlanningPage() {
       setLoadingProjects(true)
       setErrorMessage('')
 
+      setAccessDiagnostic({
+        userId: '',
+        email: '',
+        projectCount: null,
+        membershipCount: null,
+        memberships: [],
+        projectError: '',
+        membershipError: '',
+      })
+
       try {
         // ----------------------------------------------------
-        // 1. AUTHENTICATION CHECK
+        // 1. AUTHENTICATED BROWSER IDENTITY
         // ----------------------------------------------------
 
         const {
@@ -847,27 +867,41 @@ export default function PullPlanningPage() {
           throw userError
         }
 
-        if (!userResult?.user) {
+        const currentUser =
+          userResult?.user || null
+
+        if (!currentUser) {
           throw new Error(
             'Your authenticated session could not be found.',
           )
+        }
+
+        const diagnostic = {
+          userId: currentUser.id || '',
+          email: currentUser.email || '',
+          projectCount: null,
+          membershipCount: null,
+          memberships: [],
+          projectError: '',
+          membershipError: '',
         }
 
 
         // ----------------------------------------------------
         // 2. LOAD PROJECTS
         //
-        // This query intentionally matches the working
-        // Master Plan project selector.
+        // This intentionally mirrors the proven Master Plan
+        // access pattern and relies on existing project RLS.
         // ----------------------------------------------------
 
         const {
-          data,
-          error,
+          data: projectData,
+          error: projectError,
         } = await supabase
           .from('projects')
           .select(`
             id,
+            organization_id,
             code,
             name,
             client_name,
@@ -883,75 +917,89 @@ export default function PullPlanningPage() {
             ascending: false,
           })
 
-        if (error) {
-          throw error
+        if (projectError) {
+          diagnostic.projectError =
+            projectError.message || String(projectError)
+
+          if (mounted) {
+            setAccessDiagnostic(diagnostic)
+          }
+
+          throw projectError
         }
 
-        const visibleProjects = data || []
+        const loadedProjects =
+          projectData || []
+
+        diagnostic.projectCount =
+          loadedProjects.length
 
 
         // ----------------------------------------------------
-        // 3. RESOLVE ORGANIZATION CONTEXT
+        // 3. DIAGNOSTIC MEMBERSHIP CHECK
         //
-        // We do this separately so project discovery remains
-        // identical to Master Plan.
+        // This query does NOT grant access and does NOT replace
+        // project RLS. It only helps us compare the browser's
+        // auth.uid() with the organization membership visible
+        // to that same authenticated session.
         // ----------------------------------------------------
 
-        const enrichedProjects = await Promise.all(
-          visibleProjects.map(async (project) => {
-            const {
-              data: organizationData,
-              error: organizationError,
-            } = await supabase
-              .from('projects')
-              .select('organization_id')
-              .eq('id', project.id)
-              .maybeSingle()
+        const {
+          data: membershipData,
+          error: membershipError,
+        } = await supabase
+          .from('organization_members')
+          .select(`
+            organization_id,
+            user_id,
+            role,
+            status,
+            project_access_mode
+          `)
+          .eq('user_id', currentUser.id)
 
-            if (organizationError) {
-              console.error(
-                `Pull Planning - organization for project ${project.id}:`,
-                organizationError,
-              )
+        if (membershipError) {
+          diagnostic.membershipError =
+            membershipError.message ||
+            String(membershipError)
+        } else {
+          diagnostic.memberships =
+            membershipData || []
 
-              return {
-                ...project,
-                organization_id: null,
-              }
-            }
-
-            return {
-              ...project,
-              organization_id:
-                organizationData?.organization_id || null,
-            }
-          }),
-        )
+          diagnostic.membershipCount =
+            diagnostic.memberships.length
+        }
 
         if (!mounted) {
           return
         }
 
-        setProjects(enrichedProjects)
+        setAccessDiagnostic(diagnostic)
+        setProjects(loadedProjects)
 
 
         // ----------------------------------------------------
         // 4. RESTORE PROJECT FROM URL
         // ----------------------------------------------------
 
-        const params = new URLSearchParams(
-          window.location.search,
-        )
+        const params =
+          new URLSearchParams(
+            window.location.search,
+          )
 
-        const projectFromUrl = params.get('projectId')
+        const projectFromUrl =
+          params.get('projectId')
 
         if (
           projectFromUrl &&
-          enrichedProjects.some(
-            (project) => project.id === projectFromUrl,
+          loadedProjects.some(
+            (project) =>
+              project.id === projectFromUrl,
           )
         ) {
-          setProjectId(projectFromUrl)
+          setProjectId(
+            projectFromUrl,
+          )
         }
 
 
@@ -959,45 +1007,60 @@ export default function PullPlanningPage() {
         // 5. PROJECT COVER IMAGES
         // ----------------------------------------------------
 
-        const coverEntries = await Promise.all(
-          enrichedProjects.map(async (project) => {
-            if (!project.cover_image_path) {
-              return [project.id, '']
-            }
+        const coverEntries =
+          await Promise.all(
+            loadedProjects.map(
+              async (project) => {
+                if (
+                  !project.cover_image_path
+                ) {
+                  return [
+                    project.id,
+                    '',
+                  ]
+                }
 
-            const {
-              data: signedData,
-              error: signedError,
-            } = await supabase
-              .storage
-              .from('project-covers')
-              .createSignedUrl(
-                project.cover_image_path,
-                60 * 60,
-              )
+                const {
+                  data: signedData,
+                  error: signedError,
+                } = await supabase
+                  .storage
+                  .from(
+                    'project-covers',
+                  )
+                  .createSignedUrl(
+                    project.cover_image_path,
+                    60 * 60,
+                  )
 
-            if (signedError) {
-              console.warn(
-                'Pull Planning - project cover:',
-                signedError,
-              )
+                if (signedError) {
+                  console.warn(
+                    'Pull Planning - project cover:',
+                    signedError,
+                  )
 
-              return [project.id, '']
-            }
+                  return [
+                    project.id,
+                    '',
+                  ]
+                }
 
-            return [
-              project.id,
-              signedData?.signedUrl || '',
-            ]
-          }),
-        )
+                return [
+                  project.id,
+                  signedData?.signedUrl || '',
+                ]
+              },
+            ),
+          )
 
         if (!mounted) {
           return
         }
 
         setProjectCoverUrls(
-          Object.fromEntries(coverEntries),
+          Object.fromEntries(
+            coverEntries,
+          ),
         )
 
       } catch (error) {
@@ -3381,7 +3444,137 @@ export default function PullPlanningPage() {
                 '#64748b',
             }}
           >
-            No projects are available.
+            <strong
+              style={{
+                display:
+                  'block',
+
+                marginBottom:
+                  '10px',
+
+                color:
+                  '#334155',
+              }}
+            >
+              No projects are available.
+            </strong>
+
+            <div
+              style={{
+                fontSize:
+                  '0.74rem',
+
+                lineHeight:
+                  1.7,
+              }}
+            >
+              <div>
+                <strong>Authenticated user:</strong>{' '}
+                {accessDiagnostic.email ||
+                  'Unknown'}
+              </div>
+
+              <div>
+                <strong>User ID:</strong>{' '}
+                <code>
+                  {accessDiagnostic.userId ||
+                    'Unavailable'}
+                </code>
+              </div>
+
+              <div>
+                <strong>Projects returned by RLS:</strong>{' '}
+                {accessDiagnostic.projectCount ===
+                null
+                  ? 'Not checked'
+                  : accessDiagnostic.projectCount}
+              </div>
+
+              <div>
+                <strong>Visible organization memberships:</strong>{' '}
+                {accessDiagnostic.membershipCount ===
+                null
+                  ? 'Not checked'
+                  : accessDiagnostic.membershipCount}
+              </div>
+
+              {accessDiagnostic.memberships.map(
+                (
+                  membership,
+                  index,
+                ) => (
+                  <div
+                    key={`${membership.organization_id}-${index}`}
+                    style={{
+                      marginTop:
+                        '7px',
+
+                      padding:
+                        '8px 10px',
+
+                      border:
+                        '1px solid #e2e8f0',
+
+                      borderRadius:
+                        '6px',
+
+                      background:
+                        '#f8fafc',
+                    }}
+                  >
+                    Organization:{' '}
+                    <code>
+                      {membership.organization_id}
+                    </code>
+                    {' · '}
+                    Role:{' '}
+                    <strong>
+                      {membership.role}
+                    </strong>
+                    {' · '}
+                    Status:{' '}
+                    <strong>
+                      {membership.status}
+                    </strong>
+                    {' · '}
+                    Access:{' '}
+                    <strong>
+                      {membership.project_access_mode}
+                    </strong>
+                  </div>
+                ),
+              )}
+
+              {accessDiagnostic.membershipError && (
+                <div
+                  style={{
+                    marginTop:
+                      '8px',
+
+                    color:
+                      '#b45309',
+                  }}
+                >
+                  Membership diagnostic:{' '}
+                  {accessDiagnostic.membershipError}
+                </div>
+              )}
+
+              {accessDiagnostic.projectError && (
+                <div
+                  style={{
+                    marginTop:
+                      '8px',
+
+                    color:
+                      '#be123c',
+                  }}
+                >
+                  Project query:{' '}
+                  {accessDiagnostic.projectError}
+                </div>
+              )}
+            </div>
           </div>
 
         ) : (
