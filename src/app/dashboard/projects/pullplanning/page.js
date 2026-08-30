@@ -812,176 +812,222 @@ export default function PullPlanningPage() {
   // ==========================================================
   // LOAD PROJECTS
   // ==========================================================
+  //
+  // IMPORTANT:
+  // Project discovery intentionally follows the same proven
+  // access pattern used by Master Plan.
+  //
+  // Step 1:
+  // Load the projects visible to the authenticated user.
+  //
+  // Step 2:
+  // Resolve organization_id separately because Pull Planning
+  // requires organization context for sessions, activities,
+  // milestones and handoffs.
+  // ==========================================================
 
-  useEffect(
-    () => {
+  useEffect(() => {
+    let mounted = true
 
-      const loadProjects =
-        async () => {
+    const loadProjects = async () => {
+      setLoadingProjects(true)
+      setErrorMessage('')
 
-          setLoadingProjects(
-            true,
+      try {
+        // ----------------------------------------------------
+        // 1. AUTHENTICATION CHECK
+        // ----------------------------------------------------
+
+        const {
+          data: userResult,
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError) {
+          throw userError
+        }
+
+        if (!userResult?.user) {
+          throw new Error(
+            'Your authenticated session could not be found.',
           )
-
-          setErrorMessage(
-            '',
-          )
-
-          try {
-
-            const {
-              data,
-              error,
-            } =
-              await supabase
-                .from(
-                  'projects',
-                )
-                .select(`
-                  id,
-                  organization_id,
-                  code,
-                  name,
-                  client_name,
-                  status,
-                  city,
-                  state_region,
-                  country_code,
-                  cover_image_path,
-                  created_at
-                `)
-                .neq(
-                  'status',
-                  'archived',
-                )
-                .order(
-                  'created_at',
-                  {
-                    ascending:
-                      false,
-                  },
-                )
-
-
-            if (error) {
-              throw error
-            }
-
-
-            const loadedProjects =
-              data || []
-
-
-            setProjects(
-              loadedProjects,
-            )
-
-
-            const params =
-              new URLSearchParams(
-                window.location.search,
-              )
-
-
-            const projectFromUrl =
-              params.get(
-                'projectId',
-              )
-
-
-            if (
-              projectFromUrl &&
-              loadedProjects.some(
-                (project) =>
-                  project.id ===
-                  projectFromUrl,
-              )
-            ) {
-              setProjectId(
-                projectFromUrl,
-              )
-            }
-
-
-            const coverEntries =
-              await Promise.all(
-                loadedProjects.map(
-                  async (
-                    project,
-                  ) => {
-
-                    if (
-                      !project.cover_image_path
-                    ) {
-                      return [
-                        project.id,
-                        '',
-                      ]
-                    }
-
-
-                    const {
-                      data:
-                        signedData,
-                    } =
-                      await supabase
-                        .storage
-                        .from(
-                          'project-covers',
-                        )
-                        .createSignedUrl(
-                          project.cover_image_path,
-                          3600,
-                        )
-
-
-                    return [
-                      project.id,
-                      signedData?.signedUrl ||
-                        '',
-                    ]
-
-                  },
-                ),
-              )
-
-
-            setProjectCoverUrls(
-              Object.fromEntries(
-                coverEntries,
-              ),
-            )
-
-          } catch (
-            error
-          ) {
-
-            console.error(
-              'Pull Planning - projects:',
-              error,
-            )
-
-            setErrorMessage(
-              error?.message ||
-              'Projects could not be loaded.',
-            )
-
-          } finally {
-
-            setLoadingProjects(
-              false,
-            )
-
-          }
-
         }
 
 
-      loadProjects()
+        // ----------------------------------------------------
+        // 2. LOAD PROJECTS
+        //
+        // This query intentionally matches the working
+        // Master Plan project selector.
+        // ----------------------------------------------------
 
-    },
-    [],
-  )
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('projects')
+          .select(`
+            id,
+            code,
+            name,
+            client_name,
+            status,
+            city,
+            state_region,
+            country_code,
+            cover_image_path,
+            created_at
+          `)
+          .neq('status', 'archived')
+          .order('created_at', {
+            ascending: false,
+          })
+
+        if (error) {
+          throw error
+        }
+
+        const visibleProjects = data || []
+
+
+        // ----------------------------------------------------
+        // 3. RESOLVE ORGANIZATION CONTEXT
+        //
+        // We do this separately so project discovery remains
+        // identical to Master Plan.
+        // ----------------------------------------------------
+
+        const enrichedProjects = await Promise.all(
+          visibleProjects.map(async (project) => {
+            const {
+              data: organizationData,
+              error: organizationError,
+            } = await supabase
+              .from('projects')
+              .select('organization_id')
+              .eq('id', project.id)
+              .maybeSingle()
+
+            if (organizationError) {
+              console.error(
+                `Pull Planning - organization for project ${project.id}:`,
+                organizationError,
+              )
+
+              return {
+                ...project,
+                organization_id: null,
+              }
+            }
+
+            return {
+              ...project,
+              organization_id:
+                organizationData?.organization_id || null,
+            }
+          }),
+        )
+
+        if (!mounted) {
+          return
+        }
+
+        setProjects(enrichedProjects)
+
+
+        // ----------------------------------------------------
+        // 4. RESTORE PROJECT FROM URL
+        // ----------------------------------------------------
+
+        const params = new URLSearchParams(
+          window.location.search,
+        )
+
+        const projectFromUrl = params.get('projectId')
+
+        if (
+          projectFromUrl &&
+          enrichedProjects.some(
+            (project) => project.id === projectFromUrl,
+          )
+        ) {
+          setProjectId(projectFromUrl)
+        }
+
+
+        // ----------------------------------------------------
+        // 5. PROJECT COVER IMAGES
+        // ----------------------------------------------------
+
+        const coverEntries = await Promise.all(
+          enrichedProjects.map(async (project) => {
+            if (!project.cover_image_path) {
+              return [project.id, '']
+            }
+
+            const {
+              data: signedData,
+              error: signedError,
+            } = await supabase
+              .storage
+              .from('project-covers')
+              .createSignedUrl(
+                project.cover_image_path,
+                60 * 60,
+              )
+
+            if (signedError) {
+              console.warn(
+                'Pull Planning - project cover:',
+                signedError,
+              )
+
+              return [project.id, '']
+            }
+
+            return [
+              project.id,
+              signedData?.signedUrl || '',
+            ]
+          }),
+        )
+
+        if (!mounted) {
+          return
+        }
+
+        setProjectCoverUrls(
+          Object.fromEntries(coverEntries),
+        )
+
+      } catch (error) {
+        console.error(
+          'Pull Planning - projects:',
+          error,
+        )
+
+        if (mounted) {
+          setProjects([])
+
+          setErrorMessage(
+            error?.message ||
+              'Projects could not be loaded.',
+          )
+        }
+
+      } finally {
+        if (mounted) {
+          setLoadingProjects(false)
+        }
+      }
+    }
+
+    loadProjects()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
 
   // ==========================================================
@@ -1818,6 +1864,17 @@ export default function PullPlanningPage() {
       if (
         !selectedProject
       ) {
+        return
+      }
+
+
+      if (
+        !selectedProject.organization_id
+      ) {
+        setErrorMessage(
+          'The organization associated with this project could not be identified. Pull Planning cannot create a session without organization context.',
+        )
+
         return
       }
 
