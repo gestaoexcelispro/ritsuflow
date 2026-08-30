@@ -1,0 +1,936 @@
+.page {
+  --navy-950: #020c18;
+  --navy-900: #04182a;
+  --navy-850: #062137;
+  --navy-800: #082a4a;
+  --navy-700: #0b3b66;
+
+  --teal-600: #079785;
+  --teal-500: #08aa96;
+  --teal-400: #11c7b2;
+
+  --blue-500: #1585dc;
+
+  --white: #ffffff;
+  --slate-100: #e2e8f0;
+  --slate-300: #b6c3d1;
+  --slate-400: #94a3b8;
+
+  position: relative;
+
+  min-height: 100vh;
+
+  overflow: hidden;
+
+  color: var(--white);
+
+  background: var(--navy-950);
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+
+/* ============================================================
+   BACKGROUND
+============================================================ */
+
+.background {
+  position: absolute;
+  inset: 0;
+
+  z-index: 0;
+
+  background:
+    url('/login-construction.jpg')
+    center center / cover
+    no-repeat;
+
+  transform: scale(1.02);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+
+  z-index: 1;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(2, 12, 24, 0.98) 0%,
+      rgba(3, 17, 32, 0.94) 31%,
+      rgba(4, 24, 42, 0.82) 53%,
+      rgba(3, 20, 36, 0.5) 77%,
+      rgba(2, 12, 24, 0.46) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(2, 12, 24, 0.2),
+      rgba(2, 12, 24, 0.8)
+    );
+}
+
+
+/* ============================================================
+   FLOW LINES
+============================================================ */
+
+.flowLines {
+  position: absolute;
+
+  z-index: 2;
+
+  left: -6%;
+  bottom: -4%;
+
+  width: 54%;
+  height: 55%;
+
+  pointer-events: none;
+}
+
+.flowLines span {
+  position: absolute;
+
+  left: -10%;
+
+  width: 120%;
+  height: 170px;
+
+  border-top:
+    1px solid
+    rgba(8, 170, 150, 0.28);
+
+  border-radius: 50%;
+
+  transform-origin: left center;
+}
+
+.flowLines span:nth-child(1) {
+  top: 4%;
+
+  animation:
+    flowOne
+    15s
+    ease-in-out
+    infinite alternate;
+}
+
+.flowLines span:nth-child(2) {
+  top: 19%;
+
+  border-color:
+    rgba(21, 133, 220, 0.32);
+
+  animation:
+    flowTwo
+    18s
+    ease-in-out
+    infinite alternate;
+}
+
+.flowLines span:nth-child(3) {
+  top: 35%;
+
+  border-width: 2px;
+
+  border-color:
+    rgba(17, 199, 178, 0.48);
+
+  animation:
+    flowThree
+    12s
+    ease-in-out
+    infinite alternate;
+}
+
+.flowLines span:nth-child(4) {
+  top: 52%;
+
+  animation:
+    flowTwo
+    20s
+    ease-in-out
+    infinite alternate-reverse;
+}
+
+.flowLines span:nth-child(5) {
+  top: 69%;
+
+  border-color:
+    rgba(21, 133, 220, 0.2);
+
+  animation:
+    flowOne
+    16s
+    ease-in-out
+    infinite alternate-reverse;
+}
+
+
+/* ============================================================
+   MAIN SHELL
+============================================================ */
+
+.shell {
+  position: relative;
+
+  z-index: 5;
+
+  display: grid;
+
+  grid-template-columns:
+    minmax(380px, 0.9fr)
+    minmax(430px, 0.65fr);
+
+  align-items: center;
+
+  gap: clamp(
+    60px,
+    8vw,
+    150px
+  );
+
+  width: 100%;
+  max-width: 1450px;
+
+  min-height: 100vh;
+
+  margin: 0 auto;
+
+  padding:
+    70px
+    70px;
+}
+
+
+/* ============================================================
+   BRAND PANEL
+============================================================ */
+
+.brandPanel {
+  display: flex;
+  flex-direction: column;
+
+  max-width: 540px;
+}
+
+.brand {
+  display: inline-flex;
+
+  width: fit-content;
+
+  margin-bottom: 60px;
+}
+
+.logo {
+  width: 270px;
+  height: auto;
+
+  object-fit: contain;
+}
+
+.brandContent h1 {
+  margin: 0;
+
+  font-size:
+    clamp(
+      2.7rem,
+      4vw,
+      4.5rem
+    );
+
+  line-height: 1.07;
+
+  letter-spacing: -0.055em;
+}
+
+.brandContent h1 span {
+  color: var(--teal-400);
+}
+
+.accentLine {
+  width: 58px;
+  height: 3px;
+
+  margin: 34px 0;
+
+  border-radius: 99px;
+
+  background:
+    linear-gradient(
+      90deg,
+      var(--teal-400),
+      var(--blue-500)
+    );
+}
+
+.brandDescription {
+  max-width: 500px;
+
+  margin: 0;
+
+  color: var(--slate-300);
+
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+
+/* ============================================================
+   PRINCIPLES
+============================================================ */
+
+.principles {
+  display: flex;
+  flex-direction: column;
+
+  gap: 24px;
+
+  margin-top: 46px;
+}
+
+.principle {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 16px;
+}
+
+.principleIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 38px;
+  height: 38px;
+
+  flex-shrink: 0;
+
+  color: var(--teal-400);
+
+  border:
+    1px solid
+    rgba(17, 199, 178, 0.4);
+
+  border-radius: 50%;
+
+  background:
+    rgba(8, 170, 150, 0.08);
+
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.principle strong {
+  display: block;
+
+  margin-bottom: 5px;
+
+  font-size: 0.9rem;
+}
+
+.principle p {
+  margin: 0;
+
+  color: var(--slate-400);
+
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   LOGIN AREA
+============================================================ */
+
+.loginArea {
+  width: 100%;
+  max-width: 470px;
+
+  justify-self: center;
+}
+
+.loginCard {
+  position: relative;
+
+  padding:
+    42px
+    38px;
+
+  overflow: hidden;
+
+  border:
+    1px solid
+    rgba(8, 170, 150, 0.42);
+
+  border-radius: 22px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(5, 27, 47, 0.96),
+      rgba(2, 15, 29, 0.97)
+    );
+
+  box-shadow:
+    0 35px 90px
+    rgba(0, 0, 0, 0.45),
+    0 0 80px
+    rgba(8, 170, 150, 0.04);
+
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.loginCard::before {
+  position: absolute;
+
+  top: 0;
+  left: 15%;
+
+  width: 70%;
+  height: 1px;
+
+  content: '';
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(17, 199, 178, 0.75),
+      transparent
+    );
+}
+
+.cardLogo {
+  display: none;
+
+  justify-content: center;
+
+  margin-bottom: 20px;
+}
+
+.cardLogo img {
+  width: 170px;
+  height: auto;
+}
+
+
+/* ============================================================
+   LOGIN HEADER
+============================================================ */
+
+.loginHeader {
+  margin-bottom: 34px;
+
+  text-align: center;
+}
+
+.loginHeader h2 {
+  margin: 0;
+
+  font-size: 2rem;
+
+  letter-spacing: -0.035em;
+}
+
+.loginHeader p {
+  margin: 9px 0 0;
+
+  color: var(--slate-400);
+
+  font-size: 0.92rem;
+}
+
+
+/* ============================================================
+   FORM
+============================================================ */
+
+.form {
+  display: flex;
+  flex-direction: column;
+
+  gap: 22px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+
+  gap: 9px;
+
+  color: var(--slate-100);
+
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.inputWrapper {
+  display: flex;
+  align-items: center;
+
+  min-height: 58px;
+
+  padding:
+    0
+    15px;
+
+  border:
+    1px solid
+    rgba(148, 163, 184, 0.36);
+
+  border-radius: 10px;
+
+  background:
+    rgba(1, 11, 22, 0.42);
+
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.inputWrapper:focus-within {
+  border-color: var(--teal-500);
+
+  background:
+    rgba(2, 17, 31, 0.75);
+
+  box-shadow:
+    0 0 0 3px
+    rgba(8, 170, 150, 0.09);
+}
+
+.inputIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 28px;
+
+  flex-shrink: 0;
+
+  color: var(--slate-400);
+
+  font-size: 1rem;
+}
+
+.inputWrapper input {
+  width: 100%;
+
+  padding:
+    17px
+    10px;
+
+  color: var(--white);
+
+  border: 0;
+
+  outline: none;
+
+  background: transparent;
+
+  font-size: 0.95rem;
+}
+
+.inputWrapper input::placeholder {
+  color: #718196;
+}
+
+.passwordToggle {
+  padding:
+    7px
+    5px;
+
+  color: var(--teal-400);
+
+  border: 0;
+
+  background: transparent;
+
+  cursor: pointer;
+
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.passwordToggle:hover {
+  color: #4ee1d0;
+}
+
+
+/* ============================================================
+   ERROR
+============================================================ */
+
+.error {
+  padding:
+    12px
+    14px;
+
+  color: #fecaca;
+
+  border:
+    1px solid
+    rgba(248, 113, 113, 0.3);
+
+  border-radius: 9px;
+
+  background:
+    rgba(127, 29, 29, 0.22);
+
+  text-align: center;
+
+  font-size: 0.82rem;
+}
+
+
+/* ============================================================
+   SUBMIT BUTTON
+============================================================ */
+
+.submitButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 12px;
+
+  min-height: 58px;
+
+  margin-top: 3px;
+
+  color: var(--white);
+
+  border: 0;
+
+  border-radius: 10px;
+
+  background:
+    linear-gradient(
+      110deg,
+      var(--teal-400),
+      var(--teal-600)
+    );
+
+  box-shadow:
+    0 15px 35px
+    rgba(8, 170, 150, 0.18);
+
+  cursor: pointer;
+
+  font-size: 1rem;
+  font-weight: 800;
+
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.submitButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 20px 42px
+    rgba(8, 170, 150, 0.26);
+}
+
+.submitButton:disabled {
+  cursor: not-allowed;
+
+  opacity: 0.55;
+}
+
+
+/* ============================================================
+   PRIVATE ACCESS
+============================================================ */
+
+.privateAccess {
+  display: flex;
+  align-items: center;
+
+  gap: 14px;
+
+  margin-top: 32px;
+
+  padding:
+    17px;
+
+  border:
+    1px solid
+    rgba(148, 163, 184, 0.18);
+
+  border-radius: 11px;
+
+  background:
+    rgba(255, 255, 255, 0.025);
+}
+
+.lockIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 38px;
+  height: 38px;
+
+  flex-shrink: 0;
+
+  border:
+    1px solid
+    rgba(8, 170, 150, 0.3);
+
+  border-radius: 10px;
+
+  background:
+    rgba(8, 170, 150, 0.06);
+
+  font-size: 0.9rem;
+}
+
+.privateAccess strong {
+  display: block;
+
+  color: var(--slate-100);
+
+  font-size: 0.83rem;
+}
+
+.privateAccess p {
+  margin: 4px 0 0;
+
+  color: var(--slate-400);
+
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   SUPPORT / COPYRIGHT
+============================================================ */
+
+.support {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+
+  margin-top: 28px;
+
+  color: var(--slate-400);
+
+  font-size: 0.76rem;
+}
+
+.support span:last-child {
+  color: var(--teal-400);
+}
+
+.copyright {
+  margin-top: 12px;
+
+  color: rgba(148, 163, 184, 0.7);
+
+  text-align: center;
+
+  font-size: 0.68rem;
+}
+
+
+/* ============================================================
+   ANIMATION
+============================================================ */
+
+@keyframes flowOne {
+  from {
+    transform:
+      translate3d(0, 0, 0)
+      rotate(-1deg);
+  }
+
+  to {
+    transform:
+      translate3d(35px, -14px, 0)
+      rotate(2deg);
+  }
+}
+
+@keyframes flowTwo {
+  from {
+    transform:
+      translate3d(-10px, 6px, 0)
+      rotate(1deg);
+  }
+
+  to {
+    transform:
+      translate3d(44px, -10px, 0)
+      rotate(-2deg);
+  }
+}
+
+@keyframes flowThree {
+  from {
+    transform:
+      translate3d(0, -5px, 0)
+      rotate(-1deg)
+      scaleX(0.98);
+  }
+
+  to {
+    transform:
+      translate3d(52px, 13px, 0)
+      rotate(2deg)
+      scaleX(1.05);
+  }
+}
+
+
+/* ============================================================
+   TABLET
+============================================================ */
+
+@media (max-width: 1100px) {
+
+  .shell {
+    gap: 50px;
+
+    padding:
+      60px
+      40px;
+  }
+
+  .brandPanel {
+    max-width: 450px;
+  }
+
+  .brandContent h1 {
+    font-size: 3rem;
+  }
+
+}
+
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (max-width: 850px) {
+
+  .page {
+    overflow-y: auto;
+  }
+
+  .shell {
+    display: flex;
+    flex-direction: column;
+
+    justify-content: center;
+
+    min-height: 100vh;
+
+    padding:
+      48px
+      22px;
+  }
+
+  .brandPanel {
+    display: none;
+  }
+
+  .loginArea {
+    max-width: 470px;
+  }
+
+  .cardLogo {
+    display: flex;
+  }
+
+  .overlay {
+    background:
+      linear-gradient(
+        180deg,
+        rgba(2, 12, 24, 0.82),
+        rgba(2, 12, 24, 0.94)
+      );
+  }
+
+  .background {
+    background-position: 68% center;
+  }
+
+  .flowLines {
+    left: -20%;
+
+    width: 130%;
+
+    opacity: 0.45;
+  }
+
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+============================================================ */
+
+@media (max-width: 520px) {
+
+  .shell {
+    padding:
+      28px
+      16px;
+  }
+
+  .loginCard {
+    padding:
+      34px
+      22px;
+
+    border-radius: 18px;
+  }
+
+  .loginHeader h2 {
+    font-size: 1.7rem;
+  }
+
+  .inputWrapper {
+    min-height: 54px;
+  }
+
+  .submitButton {
+    min-height: 54px;
+  }
+
+  .support {
+    flex-direction: column;
+
+    text-align: center;
+  }
+
+}
+
+
+/* ============================================================
+   REDUCED MOTION
+============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .flowLines span {
+    animation: none !important;
+  }
+
+  .submitButton,
+  .inputWrapper {
+    transition: none;
+  }
+
+}
