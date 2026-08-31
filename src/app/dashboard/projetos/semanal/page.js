@@ -631,7 +631,7 @@ export default function WeeklyPlanningPage() {
   }, [loadWeeklyPlan]);
 
   // ==========================================================
-  // LOAD LOOKAHEAD CANDIDATES
+  // LOAD READY LOOKAHEAD CANDIDATES
   // ==========================================================
 
   const loadLookaheadCandidates =
@@ -650,46 +650,59 @@ export default function WeeklyPlanningPage() {
         } =
           await supabase
             .from(
-              'lookahead_work_items',
+              'weekly_ready_lookahead_candidates',
             )
             .select(`
-              id,
               project_id,
               lookahead_plan_id,
+              sheet_row_id,
+              lookahead_work_item_id,
               master_plan_package_id,
+              scenario_id,
               package_code,
               service_code,
               service_name,
-              lookahead_description,
+              description,
+              location_id,
               location_name,
               location_path,
-              lookahead_start_date,
-              lookahead_finish_date,
-              readiness_status,
-              committed_to_weekly
+              sequence_number,
+              scheduled_start_date,
+              scheduled_finish_date,
+              duration_working_days,
+              committed_to_weekly,
+              assessed_category_count,
+              clear_category_count,
+              readiness_is_clear
             `)
             .eq(
               'project_id',
               selectedProjectId,
             )
             .eq(
-              'readiness_status',
-              'ready',
+              'readiness_is_clear',
+              true,
             )
             .eq(
               'committed_to_weekly',
               false,
             )
             .lte(
-              'lookahead_start_date',
+              'scheduled_start_date',
               weekEndDate,
             )
             .gte(
-              'lookahead_finish_date',
+              'scheduled_finish_date',
               weekStartDate,
             )
             .order(
-              'lookahead_start_date',
+              'scheduled_start_date',
+              {
+                ascending: true,
+              },
+            )
+            .order(
+              'sequence_number',
               {
                 ascending: true,
               },
@@ -789,20 +802,24 @@ export default function WeeklyPlanningPage() {
   // ADD FROM LOOKAHEAD
   // ==========================================================
 
-  const toggleCandidate = (id) => {
-    setSelectedCandidateIds(
-      (previous) =>
-        previous.includes(id)
-          ? previous.filter(
-              (itemId) =>
-                itemId !== id,
-            )
-          : [
-              ...previous,
-              id,
-            ],
-    );
-  };
+  const toggleCandidate =
+    (lookaheadWorkItemId) => {
+      setSelectedCandidateIds(
+        (previous) =>
+          previous.includes(
+            lookaheadWorkItemId,
+          )
+            ? previous.filter(
+                (itemId) =>
+                  itemId !==
+                  lookaheadWorkItemId,
+              )
+            : [
+                ...previous,
+                lookaheadWorkItemId,
+              ],
+      );
+    };
 
   const addSelectedFromLookahead =
     async () => {
@@ -844,9 +861,17 @@ export default function WeeklyPlanningPage() {
           lookaheadCandidates.filter(
             (candidate) =>
               selectedCandidateIds.includes(
-                candidate.id,
+                candidate.lookahead_work_item_id,
               ),
           );
+
+        if (
+          selected.length === 0
+        ) {
+          throw new Error(
+            'The selected Lookahead activities could not be found.',
+          );
+        }
 
         const currentMaxSequence =
           items.reduce(
@@ -874,7 +899,7 @@ export default function WeeklyPlanningPage() {
                 selectedProject.id,
 
               lookahead_work_item_id:
-                candidate.id,
+                candidate.lookahead_work_item_id,
 
               master_plan_package_id:
                 candidate.master_plan_package_id,
@@ -886,7 +911,7 @@ export default function WeeklyPlanningPage() {
                 candidate.package_code,
 
               activity_description:
-                candidate.lookahead_description ||
+                candidate.description ||
                 candidate.service_name ||
                 candidate.service_code ||
                 candidate.package_code ||
@@ -899,10 +924,10 @@ export default function WeeklyPlanningPage() {
                 candidate.location_path,
 
               planned_start_date:
-                candidate.lookahead_start_date,
+                candidate.scheduled_start_date,
 
               planned_finish_date:
-                candidate.lookahead_finish_date,
+                candidate.scheduled_finish_date,
 
               sequence_number:
                 currentMaxSequence +
@@ -2009,6 +2034,10 @@ export default function WeeklyPlanningPage() {
                     <button
                       type="button"
                       onClick={async () => {
+                        setSelectedCandidateIds(
+                          [],
+                        );
+
                         setShowLookaheadPanel(
                           true,
                         );
@@ -3120,17 +3149,21 @@ export default function WeeklyPlanningPage() {
                             '0.85rem',
                         }}
                       >
-                        Only Ready activities within the selected week are eligible.
+                        Only activities from Koskela-cleared Lookahead packages that overlap this week are eligible.
                       </p>
                     </div>
 
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
                         setShowLookaheadPanel(
                           false,
-                        )
-                      }
+                        );
+
+                        setSelectedCandidateIds(
+                          [],
+                        );
+                      }}
                       style={
                         styles.closeModalButton
                       }
@@ -3164,15 +3197,18 @@ export default function WeeklyPlanningPage() {
                         (
                           candidate,
                         ) => {
+                          const candidateId =
+                            candidate.lookahead_work_item_id;
+
                           const selected =
                             selectedCandidateIds.includes(
-                              candidate.id,
+                              candidateId,
                             );
 
                           return (
                             <label
                               key={
-                                candidate.id
+                                candidateId
                               }
                               style={{
                                 display:
@@ -3205,7 +3241,7 @@ export default function WeeklyPlanningPage() {
                                 }
                                 onChange={() =>
                                   toggleCandidate(
-                                    candidate.id,
+                                    candidateId,
                                   )
                                 }
                               />
@@ -3223,7 +3259,7 @@ export default function WeeklyPlanningPage() {
                                       700,
                                   }}
                                 >
-                                  {candidate.lookahead_description ||
+                                  {candidate.description ||
                                     candidate.service_name ||
                                     'Lookahead Activity'}
                                 </div>
@@ -3238,7 +3274,10 @@ export default function WeeklyPlanningPage() {
                                       '3px',
                                   }}
                                 >
-                                  Ready
+                                  Ready ·{' '}
+                                  {candidate.clear_category_count ||
+                                    0}
+                                  /7 clear
                                 </div>
                               </div>
 
@@ -3264,11 +3303,11 @@ export default function WeeklyPlanningPage() {
                                 }}
                               >
                                 {formatShortDate(
-                                  candidate.lookahead_start_date,
+                                  candidate.scheduled_start_date,
                                 )}{' '}
                                 –{' '}
                                 {formatShortDate(
-                                  candidate.lookahead_finish_date,
+                                  candidate.scheduled_finish_date,
                                 )}
                               </div>
                             </label>
@@ -3285,11 +3324,15 @@ export default function WeeklyPlanningPage() {
                   >
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
                         setShowLookaheadPanel(
                           false,
-                        )
-                      }
+                        );
+
+                        setSelectedCandidateIds(
+                          [],
+                        );
+                      }}
                       style={
                         styles.secondaryButton
                       }
