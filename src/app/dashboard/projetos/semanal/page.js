@@ -29,6 +29,47 @@ const VARIANCE_REASONS = [
   { value: 'other', label: 'Other' },
 ];
 
+const MAKE_READY_CATEGORIES = [
+  {
+    key: 'projects_information_status',
+    label: 'Projects / Information',
+  },
+  {
+    key: 'materials_status',
+    label: 'Materials',
+  },
+  {
+    key: 'labor_status',
+    label: 'Labor',
+  },
+  {
+    key: 'equipment_status',
+    label: 'Equipment',
+  },
+  {
+    key: 'space_status',
+    label: 'Space',
+  },
+  {
+    key: 'predecessor_status',
+    label: 'Predecessor',
+  },
+  {
+    key: 'external_conditions_status',
+    label: 'External Conditions',
+  },
+];
+
+const EMPTY_ACTIVITY_FORM = {
+  activityDescription: '',
+  lookaheadSheetRowId: '',
+  locationName: '',
+  responsibleParty: '',
+  plannedQuantity: '',
+  unit: '',
+  notes: '',
+};
+
 const EMPTY_UNPLANNED_FORM = {
   activityDescription: '',
   locationName: '',
@@ -228,6 +269,52 @@ function planStatusLabel(status) {
   }
 }
 
+function makeReadyStatusLabel(status) {
+  switch (status) {
+    case 'clear':
+      return 'Clear';
+
+    case 'not_applicable':
+      return 'N/A';
+
+    case 'constrained':
+      return 'Constrained';
+
+    case 'not_assessed':
+      return 'Not Assessed';
+
+    default:
+      return status || 'Not Assessed';
+  }
+}
+
+function makeReadyStatusStyle(status) {
+  if (
+    status === 'clear' ||
+    status === 'not_applicable'
+  ) {
+    return {
+      background: '#dcfce7',
+      color: '#166534',
+      border: '1px solid #bbf7d0',
+    };
+  }
+
+  if (status === 'constrained') {
+    return {
+      background: '#fee2e2',
+      color: '#991b1b',
+      border: '1px solid #fecaca',
+    };
+  }
+
+  return {
+    background: '#f1f5f9',
+    color: '#64748b',
+    border: '1px solid #e2e8f0',
+  };
+}
+
 // ============================================================
 // PAGE
 // ============================================================
@@ -288,19 +375,21 @@ export default function WeeklyPlanningPage() {
   ] = useState([]);
 
   const [
-    lookaheadCandidates,
-    setLookaheadCandidates,
+    workPackages,
+    setWorkPackages,
   ] = useState([]);
 
   const [
-    selectedCandidateIds,
-    setSelectedCandidateIds,
-  ] = useState([]);
-
-  const [
-    showLookaheadPanel,
-    setShowLookaheadPanel,
+    showActivityPanel,
+    setShowActivityPanel,
   ] = useState(false);
+
+  const [
+    activityForm,
+    setActivityForm,
+  ] = useState(
+    EMPTY_ACTIVITY_FORM,
+  );
 
   const [
     showUnplannedPanel,
@@ -350,6 +439,13 @@ export default function WeeklyPlanningPage() {
         selectedProjectId,
     ) || null;
 
+  const selectedWorkPackage =
+    workPackages.find(
+      (workPackage) =>
+        workPackage.sheet_row_id ===
+        activityForm.lookaheadSheetRowId,
+    ) || null;
+
   const weekEndDate = addDays(
     weekStartDate,
     4,
@@ -379,6 +475,27 @@ export default function WeeklyPlanningPage() {
       (item) =>
         item.is_unplanned_work,
     );
+
+  const selectedPackageReady =
+    selectedWorkPackage?.readiness_is_clear ===
+    true;
+
+  const blockingCategories =
+    selectedWorkPackage
+      ? MAKE_READY_CATEGORIES.filter(
+          (category) => {
+            const status =
+              selectedWorkPackage[
+                category.key
+              ];
+
+            return ![
+              'clear',
+              'not_applicable',
+            ].includes(status);
+          },
+        )
+      : [];
 
   // ----------------------------------------------------------
   // FEEDBACK
@@ -631,18 +748,16 @@ export default function WeeklyPlanningPage() {
   }, [loadWeeklyPlan]);
 
   // ==========================================================
-  // LOAD READY LOOKAHEAD CANDIDATES
+  // LOAD LOOKAHEAD WORK PACKAGE READINESS
   // ==========================================================
 
-  const loadLookaheadCandidates =
+  const loadWorkPackages =
     useCallback(
       async () => {
         if (!selectedProjectId) {
-          setLookaheadCandidates([]);
+          setWorkPackages([]);
           return;
         }
-
-        clearMessages();
 
         const {
           data,
@@ -650,59 +765,15 @@ export default function WeeklyPlanningPage() {
         } =
           await supabase
             .from(
-              'weekly_ready_lookahead_candidates',
+              'weekly_lookahead_package_readiness',
             )
-            .select(`
-              project_id,
-              lookahead_plan_id,
-              sheet_row_id,
-              lookahead_work_item_id,
-              master_plan_package_id,
-              scenario_id,
-              package_code,
-              service_code,
-              service_name,
-              description,
-              location_id,
-              location_name,
-              location_path,
-              sequence_number,
-              scheduled_start_date,
-              scheduled_finish_date,
-              duration_working_days,
-              committed_to_weekly,
-              assessed_category_count,
-              clear_category_count,
-              readiness_is_clear
-            `)
+            .select('*')
             .eq(
               'project_id',
               selectedProjectId,
             )
-            .eq(
-              'readiness_is_clear',
-              true,
-            )
-            .eq(
-              'committed_to_weekly',
-              false,
-            )
-            .lte(
-              'scheduled_start_date',
-              weekEndDate,
-            )
-            .gte(
-              'scheduled_finish_date',
-              weekStartDate,
-            )
             .order(
-              'scheduled_start_date',
-              {
-                ascending: true,
-              },
-            )
-            .order(
-              'sequence_number',
+              'package_code',
               {
                 ascending: true,
               },
@@ -710,22 +781,23 @@ export default function WeeklyPlanningPage() {
 
         if (error) {
           showError(error);
-          setLookaheadCandidates([]);
+          setWorkPackages([]);
           return;
         }
 
-        setLookaheadCandidates(
+        setWorkPackages(
           data || [],
         );
       },
       [
         selectedProjectId,
-        weekStartDate,
-        weekEndDate,
-        clearMessages,
         showError,
       ],
     );
+
+  useEffect(() => {
+    loadWorkPackages();
+  }, [loadWorkPackages]);
 
   // ==========================================================
   // CREATE WEEKLY PLAN
@@ -799,36 +871,69 @@ export default function WeeklyPlanningPage() {
     };
 
   // ==========================================================
-  // ADD FROM LOOKAHEAD
+  // ADD WEEKLY ACTIVITY
   // ==========================================================
 
-  const toggleCandidate =
-    (lookaheadWorkItemId) => {
-      setSelectedCandidateIds(
-        (previous) =>
-          previous.includes(
-            lookaheadWorkItemId,
-          )
-            ? previous.filter(
-                (itemId) =>
-                  itemId !==
-                  lookaheadWorkItemId,
-              )
-            : [
-                ...previous,
-                lookaheadWorkItemId,
-              ],
+  const openActivityModal =
+    async () => {
+      clearMessages();
+
+      setActivityForm(
+        EMPTY_ACTIVITY_FORM,
+      );
+
+      await loadWorkPackages();
+
+      setShowActivityPanel(
+        true,
       );
     };
 
-  const addSelectedFromLookahead =
+  const addWeeklyActivity =
     async () => {
+      if (!weeklyPlan) {
+        return;
+      }
+
+      if (!isDraft) {
+        setErrorMessage(
+          'Activities can only be added while the Weekly Plan is Draft.',
+        );
+
+        return;
+      }
+
       if (
-        selectedCandidateIds.length ===
-        0
+        !activityForm.activityDescription.trim()
       ) {
         setErrorMessage(
-          'Select at least one Ready Lookahead activity.',
+          'Activity description is required.',
+        );
+
+        return;
+      }
+
+      if (
+        !activityForm.lookaheadSheetRowId
+      ) {
+        setErrorMessage(
+          'Select a Work Package.',
+        );
+
+        return;
+      }
+
+      if (!selectedWorkPackage) {
+        setErrorMessage(
+          'The selected Work Package could not be found.',
+        );
+
+        return;
+      }
+
+      if (!selectedPackageReady) {
+        setErrorMessage(
+          `Work Package ${selectedWorkPackage.package_code} is not Make Ready and cannot move to Weekly Planning.`,
         );
 
         return;
@@ -838,42 +943,7 @@ export default function WeeklyPlanningPage() {
       setActionLoading(true);
 
       try {
-        let plan = weeklyPlan;
-
-        if (!plan) {
-          plan =
-            await createWeeklyPlan();
-        }
-
-        if (!plan) {
-          return;
-        }
-
-        if (
-          plan.status !== 'draft'
-        ) {
-          throw new Error(
-            'Only Draft Weekly Plans can receive planned work from Lookahead.',
-          );
-        }
-
-        const selected =
-          lookaheadCandidates.filter(
-            (candidate) =>
-              selectedCandidateIds.includes(
-                candidate.lookahead_work_item_id,
-              ),
-          );
-
-        if (
-          selected.length === 0
-        ) {
-          throw new Error(
-            'The selected Lookahead activities could not be found.',
-          );
-        }
-
-        const currentMaxSequence =
+        const maxSequence =
           items.reduce(
             (max, item) =>
               Math.max(
@@ -883,56 +953,68 @@ export default function WeeklyPlanningPage() {
             0,
           );
 
-        const rows =
-          selected.map(
-            (
-              candidate,
-              index,
-            ) => ({
+        const {
+          error,
+        } =
+          await supabase
+            .from(
+              'weekly_plan_items',
+            )
+            .insert({
               weekly_plan_id:
-                plan.id,
+                weeklyPlan.id,
 
               organization_id:
-                selectedProject.organization_id,
+                weeklyPlan.organization_id,
 
               project_id:
-                selectedProject.id,
+                weeklyPlan.project_id,
 
-              lookahead_work_item_id:
-                candidate.lookahead_work_item_id,
-
-              master_plan_package_id:
-                candidate.master_plan_package_id,
+              lookahead_sheet_row_id:
+                selectedWorkPackage.sheet_row_id,
 
               source_type:
-                'lookahead',
+                'manual',
 
               package_code:
-                candidate.package_code,
+                selectedWorkPackage.package_code,
 
               activity_description:
-                candidate.description ||
-                candidate.service_name ||
-                candidate.service_code ||
-                candidate.package_code ||
-                'Lookahead Activity',
+                activityForm.activityDescription.trim(),
 
               location_name:
-                candidate.location_name,
+                activityForm.locationName.trim() ||
+                null,
 
               location_path:
-                candidate.location_path,
+                activityForm.locationName.trim() ||
+                null,
 
               planned_start_date:
-                candidate.scheduled_start_date,
+                weekStartDate,
 
               planned_finish_date:
-                candidate.scheduled_finish_date,
+                weekEndDate,
+
+              responsible_party:
+                activityForm.responsibleParty.trim() ||
+                null,
+
+              planned_quantity:
+                numberOrNull(
+                  activityForm.plannedQuantity,
+                ),
+
+              unit:
+                activityForm.unit.trim() ||
+                null,
+
+              notes:
+                activityForm.notes.trim() ||
+                null,
 
               sequence_number:
-                currentMaxSequence +
-                index +
-                1,
+                maxSequence + 1,
 
               is_unplanned_work:
                 false,
@@ -942,38 +1024,25 @@ export default function WeeklyPlanningPage() {
 
               execution_result:
                 'pending',
-            }),
-          );
-
-        const {
-          error,
-        } =
-          await supabase
-            .from(
-              'weekly_plan_items',
-            )
-            .insert(rows);
+            });
 
         if (error) {
           throw error;
         }
 
-        setSelectedCandidateIds([]);
+        setActivityForm(
+          EMPTY_ACTIVITY_FORM,
+        );
 
-        setShowLookaheadPanel(
+        setShowActivityPanel(
           false,
         );
 
         setMessage(
-          `${rows.length} Lookahead ${
-            rows.length === 1
-              ? 'activity'
-              : 'activities'
-          } added to the Weekly Plan.`,
+          'Weekly Activity added.',
         );
 
         await loadWeeklyPlan();
-        await loadLookaheadCandidates();
       } catch (error) {
         showError(error);
       } finally {
@@ -1083,7 +1152,6 @@ export default function WeeklyPlanningPage() {
       );
 
       await loadWeeklyPlan();
-      await loadLookaheadCandidates();
     };
 
   // ==========================================================
@@ -1153,7 +1221,7 @@ export default function WeeklyPlanningPage() {
         0
       ) {
         setErrorMessage(
-          'Add at least one Ready Lookahead activity before committing the week.',
+          'Add at least one Make Ready activity before committing the week.',
         );
 
         return;
@@ -1192,7 +1260,6 @@ export default function WeeklyPlanningPage() {
         );
 
         await loadWeeklyPlan();
-        await loadLookaheadCandidates();
       } catch (error) {
         showError(error);
       } finally {
@@ -1591,7 +1658,7 @@ export default function WeeklyPlanningPage() {
         ),
       );
 
-      setShowLookaheadPanel(
+      setShowActivityPanel(
         false,
       );
 
@@ -1599,8 +1666,8 @@ export default function WeeklyPlanningPage() {
         false,
       );
 
-      setSelectedCandidateIds(
-        [],
+      setActivityForm(
+        EMPTY_ACTIVITY_FORM,
       );
 
       clearMessages();
@@ -1623,7 +1690,7 @@ export default function WeeklyPlanningPage() {
         monday,
       );
 
-      setShowLookaheadPanel(
+      setShowActivityPanel(
         false,
       );
 
@@ -1631,8 +1698,8 @@ export default function WeeklyPlanningPage() {
         false,
       );
 
-      setSelectedCandidateIds(
-        [],
+      setActivityForm(
+        EMPTY_ACTIVITY_FORM,
       );
 
       clearMessages();
@@ -1734,7 +1801,7 @@ export default function WeeklyPlanningPage() {
                 '0.9rem',
             }}
           >
-            Convert Ready Lookahead work into reliable weekly commitments and measure PPC.
+            Create reliable weekly commitments from Work Packages that have passed Make Ready.
           </p>
         </div>
 
@@ -2033,22 +2100,14 @@ export default function WeeklyPlanningPage() {
                   <>
                     <button
                       type="button"
-                      onClick={async () => {
-                        setSelectedCandidateIds(
-                          [],
-                        );
-
-                        setShowLookaheadPanel(
-                          true,
-                        );
-
-                        await loadLookaheadCandidates();
-                      }}
+                      onClick={
+                        openActivityModal
+                      }
                       style={
                         styles.primaryButton
                       }
                     >
-                      + Add from Lookahead
+                      + Add Activity
                     </button>
 
                     <button
@@ -2395,7 +2454,7 @@ export default function WeeklyPlanningPage() {
                       '#64748b',
                   }}
                 >
-                  Create the plan, then add activities that have passed Lookahead readiness.
+                  Create the plan, then add Weekly Activities linked to Make Ready Work Packages.
                 </p>
 
                 <button
@@ -2468,7 +2527,7 @@ export default function WeeklyPlanningPage() {
                         '4px',
                     }}
                   >
-                    Ready work becomes a commitment only when the week is committed.
+                    Activities become commitments only when the week is committed.
                   </div>
                 </div>
 
@@ -2525,7 +2584,7 @@ export default function WeeklyPlanningPage() {
                         </TableHeader>
 
                         <TableHeader>
-                          Package
+                          Work Package
                         </TableHeader>
 
                         <TableHeader>
@@ -2537,7 +2596,7 @@ export default function WeeklyPlanningPage() {
                         </TableHeader>
 
                         <TableHeader>
-                          Dates
+                          Week
                         </TableHeader>
 
                         <TableHeader>
@@ -2633,7 +2692,7 @@ export default function WeeklyPlanningPage() {
                                 >
                                   {item.is_unplanned_work
                                     ? 'Unplanned'
-                                    : 'Lookahead'}
+                                    : 'Weekly'}
                                 </span>
                               </TableCell>
 
@@ -3113,9 +3172,9 @@ export default function WeeklyPlanningPage() {
               </div>
             )}
 
-          {/* LOOKAHEAD MODAL */}
+          {/* ADD ACTIVITY MODAL */}
 
-          {showLookaheadPanel &&
+          {showActivityPanel &&
             isDraft && (
               <ModalOverlay>
                 <div
@@ -3136,7 +3195,7 @@ export default function WeeklyPlanningPage() {
                             '#0f2745',
                         }}
                       >
-                        Add from Lookahead
+                        Add Weekly Activity
                       </h2>
 
                       <p
@@ -3149,19 +3208,19 @@ export default function WeeklyPlanningPage() {
                             '0.85rem',
                         }}
                       >
-                        Only activities from Koskela-cleared Lookahead packages that overlap this week are eligible.
+                        Create the activity, link it to its Work Package, and verify Make Ready before adding it to the Weekly Plan.
                       </p>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => {
-                        setShowLookaheadPanel(
+                        setShowActivityPanel(
                           false,
                         );
 
-                        setSelectedCandidateIds(
-                          [],
+                        setActivityForm(
+                          EMPTY_ACTIVITY_FORM,
                         );
                       }}
                       style={
@@ -3172,150 +3231,471 @@ export default function WeeklyPlanningPage() {
                     </button>
                   </div>
 
-                  {lookaheadCandidates.length ===
-                  0 ? (
-                    <div
-                      style={
-                        styles.tableEmpty
-                      }
-                    >
-                      No Ready Lookahead activities are available for this week.
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'minmax(0, 1fr) minmax(320px, 0.9fr)',
+                      gap: '20px',
+                    }}
+                  >
+                    <div>
+                      <FormField label="Activity">
+                        <input
+                          value={
+                            activityForm.activityDescription
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                activityDescription:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={
+                            styles.input
+                          }
+                          placeholder="Example: Install drywall"
+                        />
+                      </FormField>
+
+                      <FormField label="Work Package">
+                        <select
+                          value={
+                            activityForm.lookaheadSheetRowId
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                lookaheadSheetRowId:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={{
+                            ...styles.select,
+                            width: '100%',
+                          }}
+                        >
+                          <option value="">
+                            Select Work Package
+                          </option>
+
+                          {workPackages.map(
+                            (
+                              workPackage,
+                            ) => (
+                              <option
+                                key={
+                                  workPackage.sheet_row_id
+                                }
+                                value={
+                                  workPackage.sheet_row_id
+                                }
+                              >
+                                {workPackage.package_code}
+                                {' - '}
+                                {workPackage.package_description}
+                                {workPackage.readiness_is_clear
+                                  ? ' · Ready'
+                                  : ' · Not Ready'}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </FormField>
+
+                      <FormField label="Location">
+                        <input
+                          value={
+                            activityForm.locationName
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                locationName:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={
+                            styles.input
+                          }
+                          placeholder="Example: LEVEL 1 ZONE 1"
+                        />
+                      </FormField>
+
+                      <FormField label="Responsible">
+                        <input
+                          value={
+                            activityForm.responsibleParty
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                responsibleParty:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={
+                            styles.input
+                          }
+                          placeholder="Responsible person or crew"
+                        />
+                      </FormField>
+
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns:
+                            '1fr 1fr',
+                          gap: '10px',
+                        }}
+                      >
+                        <FormField label="Planned Quantity">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={
+                              activityForm.plannedQuantity
+                            }
+                            onChange={(
+                              event,
+                            ) =>
+                              setActivityForm(
+                                (
+                                  previous,
+                                ) => ({
+                                  ...previous,
+                                  plannedQuantity:
+                                    event.target.value,
+                                }),
+                              )
+                            }
+                            style={
+                              styles.input
+                            }
+                          />
+                        </FormField>
+
+                        <FormField label="Unit">
+                          <input
+                            value={
+                              activityForm.unit
+                            }
+                            onChange={(
+                              event,
+                            ) =>
+                              setActivityForm(
+                                (
+                                  previous,
+                                ) => ({
+                                  ...previous,
+                                  unit:
+                                    event.target.value,
+                                }),
+                              )
+                            }
+                            style={
+                              styles.input
+                            }
+                            placeholder="m²"
+                          />
+                        </FormField>
+                      </div>
+
+                      <FormField label="Notes">
+                        <textarea
+                          rows="3"
+                          value={
+                            activityForm.notes
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                notes:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={{
+                            ...styles.input,
+                            resize:
+                              'vertical',
+                          }}
+                        />
+                      </FormField>
                     </div>
-                  ) : (
-                    <div
-                      style={{
-                        display:
-                          'grid',
-                        gap: '8px',
-                        maxHeight:
-                          '460px',
-                        overflowY:
-                          'auto',
-                      }}
-                    >
-                      {lookaheadCandidates.map(
-                        (
-                          candidate,
-                        ) => {
-                          const candidateId =
-                            candidate.lookahead_work_item_id;
 
-                          const selected =
-                            selectedCandidateIds.includes(
-                              candidateId,
-                            );
-
-                          return (
-                            <label
-                              key={
-                                candidateId
+                    <div>
+                      <div
+                        style={{
+                          border:
+                            '1px solid #e2e8f0',
+                          borderRadius:
+                            '10px',
+                          padding:
+                            '16px',
+                          background:
+                            '#f8fafc',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display:
+                              'flex',
+                            justifyContent:
+                              'space-between',
+                            alignItems:
+                              'center',
+                            gap:
+                              '10px',
+                            marginBottom:
+                              '14px',
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={
+                                styles.smallLabel
                               }
+                            >
+                              Make Ready
+                            </div>
+
+                            <div
+                              style={{
+                                fontWeight:
+                                  900,
+                                color:
+                                  '#0f2745',
+                                marginTop:
+                                  '4px',
+                              }}
+                            >
+                              {selectedWorkPackage
+                                ? `${selectedWorkPackage.package_code} - ${selectedWorkPackage.package_description}`
+                                : 'Select a Work Package'}
+                            </div>
+                          </div>
+
+                          {selectedWorkPackage && (
+                            <span
+                              style={{
+                                ...styles.statusBadge,
+                                ...(selectedPackageReady
+                                  ? styles.closedBadge
+                                  : styles.cancelledBadge),
+                                background:
+                                  selectedPackageReady
+                                    ? '#dcfce7'
+                                    : '#fee2e2',
+                                color:
+                                  selectedPackageReady
+                                    ? '#166534'
+                                    : '#991b1b',
+                              }}
+                            >
+                              {selectedPackageReady
+                                ? 'Ready'
+                                : 'Not Ready'}
+                            </span>
+                          )}
+                        </div>
+
+                        {!selectedWorkPackage ? (
+                          <div
+                            style={{
+                              color:
+                                '#64748b',
+                              fontSize:
+                                '0.82rem',
+                            }}
+                          >
+                            Choose a Work Package to verify its Koskela Make Ready conditions.
+                          </div>
+                        ) : (
+                          <>
+                            <div
                               style={{
                                 display:
                                   'grid',
-                                gridTemplateColumns:
-                                  '26px 90px minmax(240px, 1fr) 220px 150px',
-                                gap: '10px',
-                                alignItems:
-                                  'center',
-                                padding:
-                                  '12px',
-                                border:
-                                  selected
-                                    ? '1px solid #3b82f6'
-                                    : '1px solid #e2e8f0',
-                                borderRadius:
+                                gap:
                                   '8px',
-                                background:
-                                  selected
-                                    ? '#eff6ff'
-                                    : '#ffffff',
-                                cursor:
-                                  'pointer',
                               }}
                             >
-                              <input
-                                type="checkbox"
-                                checked={
-                                  selected
-                                }
-                                onChange={() =>
-                                  toggleCandidate(
-                                    candidateId,
-                                  )
-                                }
-                              />
+                              {MAKE_READY_CATEGORIES.map(
+                                (
+                                  category,
+                                ) => {
+                                  const status =
+                                    selectedWorkPackage[
+                                      category.key
+                                    ];
 
-                              <strong>
-                                {candidate.package_code ||
-                                  candidate.service_code ||
-                                  '—'}
-                              </strong>
+                                  return (
+                                    <div
+                                      key={
+                                        category.key
+                                      }
+                                      style={{
+                                        display:
+                                          'flex',
+                                        justifyContent:
+                                          'space-between',
+                                        alignItems:
+                                          'center',
+                                        gap:
+                                          '10px',
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontSize:
+                                            '0.82rem',
+                                          color:
+                                            '#334155',
+                                        }}
+                                      >
+                                        {category.label}
+                                      </span>
 
-                              <div>
+                                      <span
+                                        style={{
+                                          ...styles.readinessBadge,
+                                          ...makeReadyStatusStyle(
+                                            status,
+                                          ),
+                                        }}
+                                      >
+                                        {makeReadyStatusLabel(
+                                          status,
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                },
+                              )}
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop:
+                                  '16px',
+                                paddingTop:
+                                  '14px',
+                                borderTop:
+                                  '1px solid #e2e8f0',
+                              }}
+                            >
+                              {selectedPackageReady ? (
                                 <div
                                   style={{
-                                    fontWeight:
-                                      700,
-                                  }}
-                                >
-                                  {candidate.description ||
-                                    candidate.service_name ||
-                                    'Lookahead Activity'}
-                                </div>
-
-                                <div
-                                  style={{
-                                    fontSize:
-                                      '0.75rem',
+                                    padding:
+                                      '10px 12px',
+                                    background:
+                                      '#f0fdf4',
+                                    border:
+                                      '1px solid #bbf7d0',
+                                    borderRadius:
+                                      '8px',
                                     color:
-                                      '#16a34a',
-                                    marginTop:
-                                      '3px',
+                                      '#166534',
+                                    fontSize:
+                                      '0.8rem',
+                                    fontWeight:
+                                      800,
                                   }}
                                 >
-                                  Ready ·{' '}
-                                  {candidate.clear_category_count ||
-                                    0}
-                                  /7 clear
+                                  ✓ Make Ready complete. This Work Package can move to Weekly Planning.
                                 </div>
-                              </div>
+                              ) : (
+                                <div
+                                  style={{
+                                    padding:
+                                      '10px 12px',
+                                    background:
+                                      '#fef2f2',
+                                    border:
+                                      '1px solid #fecaca',
+                                    borderRadius:
+                                      '8px',
+                                    color:
+                                      '#991b1b',
+                                    fontSize:
+                                      '0.8rem',
+                                  }}
+                                >
+                                  <strong>
+                                    Activity blocked.
+                                  </strong>
 
-                              <div
-                                style={{
-                                  fontSize:
-                                    '0.82rem',
-                                  color:
-                                    '#475569',
-                                }}
-                              >
-                                {candidate.location_path ||
-                                  candidate.location_name ||
-                                  '—'}
-                              </div>
+                                  <div
+                                    style={{
+                                      marginTop:
+                                        '6px',
+                                    }}
+                                  >
+                                    Resolve or assess:
+                                  </div>
 
-                              <div
-                                style={{
-                                  fontSize:
-                                    '0.8rem',
-                                  color:
-                                    '#64748b',
-                                }}
-                              >
-                                {formatShortDate(
-                                  candidate.scheduled_start_date,
-                                )}{' '}
-                                –{' '}
-                                {formatShortDate(
-                                  candidate.scheduled_finish_date,
-                                )}
-                              </div>
-                            </label>
-                          );
-                        },
-                      )}
+                                  <ul
+                                    style={{
+                                      margin:
+                                        '7px 0 0 18px',
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {blockingCategories.map(
+                                      (
+                                        category,
+                                      ) => (
+                                        <li
+                                          key={
+                                            category.key
+                                          }
+                                        >
+                                          {category.label}
+                                        </li>
+                                      ),
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </div>
 
                   <div
                     style={
@@ -3325,12 +3705,12 @@ export default function WeeklyPlanningPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setShowLookaheadPanel(
+                        setShowActivityPanel(
                           false,
                         );
 
-                        setSelectedCandidateIds(
-                          [],
+                        setActivityForm(
+                          EMPTY_ACTIVITY_FORM,
                         );
                       }}
                       style={
@@ -3343,19 +3723,30 @@ export default function WeeklyPlanningPage() {
                     <button
                       type="button"
                       disabled={
-                        selectedCandidateIds.length ===
-                          0 ||
-                        actionLoading
+                        actionLoading ||
+                        !activityForm.activityDescription.trim() ||
+                        !selectedPackageReady
                       }
                       onClick={
-                        addSelectedFromLookahead
+                        addWeeklyActivity
                       }
-                      style={
-                        styles.primaryButton
-                      }
+                      style={{
+                        ...styles.primaryButton,
+                        opacity:
+                          actionLoading ||
+                          !activityForm.activityDescription.trim() ||
+                          !selectedPackageReady
+                            ? 0.45
+                            : 1,
+                        cursor:
+                          actionLoading ||
+                          !activityForm.activityDescription.trim() ||
+                          !selectedPackageReady
+                            ? 'not-allowed'
+                            : 'pointer',
+                      }}
                     >
-                      Add Selected (
-                      {selectedCandidateIds.length})
+                      Add Activity
                     </button>
                   </div>
                 </div>
@@ -4212,6 +4603,12 @@ const styles = {
 
     color:
       '#0f172a',
+
+    width:
+      '100%',
+
+    boxSizing:
+      'border-box',
   },
 
   select: {
@@ -4588,6 +4985,29 @@ const styles = {
       'capitalize',
   },
 
+  readinessBadge: {
+    display:
+      'inline-block',
+
+    minWidth:
+      '94px',
+
+    textAlign:
+      'center',
+
+    padding:
+      '4px 8px',
+
+    borderRadius:
+      '999px',
+
+    fontSize:
+      '0.7rem',
+
+    fontWeight:
+      800,
+  },
+
   successBox: {
     background:
       '#f0fdf4',
@@ -4665,7 +5085,7 @@ const styles = {
       '100%',
 
     maxWidth:
-      '1050px',
+      '980px',
 
     maxHeight:
       '90vh',
