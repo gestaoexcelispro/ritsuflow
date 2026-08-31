@@ -52,9 +52,7 @@ function dateToIso(date) {
 }
 
 function parseLocalDate(value) {
-  const [year, month, day] = value
-    .split('-')
-    .map(Number);
+  const [year, month, day] = value.split('-').map(Number);
 
   return new Date(
     year,
@@ -111,21 +109,19 @@ function getIsoWeekInfo(value) {
     ),
   );
 
-  const day =
-    date.getUTCDay() || 7;
+  const day = date.getUTCDay() || 7;
 
   date.setUTCDate(
     date.getUTCDate() + 4 - day,
   );
 
-  const yearStart =
-    new Date(
-      Date.UTC(
-        date.getUTCFullYear(),
-        0,
-        1,
-      ),
-    );
+  const yearStart = new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      0,
+      1,
+    ),
+  );
 
   const week = Math.ceil(
     (
@@ -181,18 +177,15 @@ function numberOrNull(value) {
     return null;
   }
 
-  const text =
-    String(value).trim();
+  const text = String(value).trim();
 
   if (!text) {
     return null;
   }
 
-  const normalized =
-    text.replace(',', '.');
+  const normalized = text.replace(',', '.');
 
-  const parsed =
-    Number(normalized);
+  const parsed = Number(normalized);
 
   return Number.isFinite(parsed)
     ? parsed
@@ -357,28 +350,23 @@ export default function WeeklyPlanningPage() {
         selectedProjectId,
     ) || null;
 
-  const weekEndDate =
-    addDays(
-      weekStartDate,
-      4,
-    );
+  const weekEndDate = addDays(
+    weekStartDate,
+    4,
+  );
 
-  const weekInfo =
-    getIsoWeekInfo(
-      weekStartDate,
-    );
+  const weekInfo = getIsoWeekInfo(
+    weekStartDate,
+  );
 
   const isDraft =
-    weeklyPlan?.status ===
-    'draft';
+    weeklyPlan?.status === 'draft';
 
   const isCommitted =
-    weeklyPlan?.status ===
-    'committed';
+    weeklyPlan?.status === 'committed';
 
   const isClosed =
-    weeklyPlan?.status ===
-    'closed';
+    weeklyPlan?.status === 'closed';
 
   const formalItems =
     items.filter(
@@ -396,32 +384,30 @@ export default function WeeklyPlanningPage() {
   // FEEDBACK
   // ----------------------------------------------------------
 
-  const clearMessages =
-    useCallback(() => {
-      setMessage('');
-      setErrorMessage('');
-    }, []);
+  const clearMessages = useCallback(() => {
+    setMessage('');
+    setErrorMessage('');
+  }, []);
 
-  const showError =
-    useCallback((error) => {
-      console.error(error);
+  const showError = useCallback((error) => {
+    console.error(error);
 
-      if (
-        error &&
-        typeof error === 'object' &&
-        error.message
-      ) {
-        setErrorMessage(
-          String(error.message),
-        );
-
-        return;
-      }
-
+    if (
+      error &&
+      typeof error === 'object' &&
+      error.message
+    ) {
       setErrorMessage(
-        'Unexpected error.',
+        String(error.message),
       );
-    }, []);
+
+      return;
+    }
+
+    setErrorMessage(
+      'Unexpected error.',
+    );
+  }, []);
 
   // ==========================================================
   // LOAD PROJECTS
@@ -471,9 +457,7 @@ export default function WeeklyPlanningPage() {
   const loadWeeklyPlan =
     useCallback(
       async () => {
-        if (
-          !selectedProjectId
-        ) {
+        if (!selectedProjectId) {
           setWeeklyPlan(null);
           setItems([]);
           setPerformance(null);
@@ -492,9 +476,7 @@ export default function WeeklyPlanningPage() {
             error: planError,
           } =
             await supabase
-              .from(
-                'weekly_plans',
-              )
+              .from('weekly_plans')
               .select('*')
               .eq(
                 'project_id',
@@ -551,10 +533,8 @@ export default function WeeklyPlanningPage() {
                 .order(
                   'sequence_number',
                   {
-                    ascending:
-                      true,
-                    nullsFirst:
-                      false,
+                    ascending: true,
+                    nullsFirst: false,
                   },
                 ),
 
@@ -592,54 +572,41 @@ export default function WeeklyPlanningPage() {
                 .order(
                   'variance_count',
                   {
-                    ascending:
-                      false,
+                    ascending: false,
                   },
                 ),
             ]);
 
-          if (
-            itemsResult.error
-          ) {
+          if (itemsResult.error) {
             throw itemsResult.error;
           }
 
-          if (
-            performanceResult.error
-          ) {
+          if (performanceResult.error) {
             throw performanceResult.error;
           }
 
-          if (
-            trendResult.error
-          ) {
+          if (trendResult.error) {
             throw trendResult.error;
           }
 
-          if (
-            paretoResult.error
-          ) {
+          if (paretoResult.error) {
             throw paretoResult.error;
           }
 
           setItems(
-            itemsResult.data ||
-              [],
+            itemsResult.data || [],
           );
 
           setPerformance(
-            performanceResult.data ||
-              null,
+            performanceResult.data || null,
           );
 
           setTrend(
-            trendResult.data ||
-              null,
+            trendResult.data || null,
           );
 
           setPareto(
-            paretoResult.data ||
-              [],
+            paretoResult.data || [],
           );
         } catch (error) {
           showError(error);
@@ -667,13 +634,8 @@ export default function WeeklyPlanningPage() {
   const loadLookaheadCandidates =
     useCallback(
       async () => {
-        if (
-          !selectedProjectId
-        ) {
-          setLookaheadCandidates(
-            [],
-          );
-
+        if (!selectedProjectId) {
+          setLookaheadCandidates([]);
           return;
         }
 
@@ -695,7 +657,7 @@ export default function WeeklyPlanningPage() {
               package_code,
               service_code,
               service_name,
-              description,
+              lookahead_description,
               location_name,
               location_path,
               lookahead_start_date,
@@ -732,7 +694,7 @@ export default function WeeklyPlanningPage() {
 
         if (error) {
           showError(error);
-
+          setLookaheadCandidates([]);
           return;
         }
 
@@ -816,7 +778,6 @@ export default function WeeklyPlanningPage() {
         return data;
       } catch (error) {
         showError(error);
-
         return null;
       }
     };
@@ -825,9 +786,7 @@ export default function WeeklyPlanningPage() {
   // ADD FROM LOOKAHEAD
   // ==========================================================
 
-  const toggleCandidate = (
-    id,
-  ) => {
+  const toggleCandidate = (id) => {
     setSelectedCandidateIds(
       (previous) =>
         previous.includes(id)
@@ -859,8 +818,7 @@ export default function WeeklyPlanningPage() {
       setActionLoading(true);
 
       try {
-        let plan =
-          weeklyPlan;
+        let plan = weeklyPlan;
 
         if (!plan) {
           plan =
@@ -892,8 +850,7 @@ export default function WeeklyPlanningPage() {
             (max, item) =>
               Math.max(
                 max,
-                item.sequence_number ||
-                  0,
+                item.sequence_number || 0,
               ),
             0,
           );
@@ -926,7 +883,7 @@ export default function WeeklyPlanningPage() {
                 candidate.package_code,
 
               activity_description:
-                candidate.description ||
+                candidate.lookahead_description ||
                 candidate.service_name ||
                 candidate.service_code ||
                 candidate.package_code ||
@@ -973,9 +930,7 @@ export default function WeeklyPlanningPage() {
           throw error;
         }
 
-        setSelectedCandidateIds(
-          [],
-        );
+        setSelectedCandidateIds([]);
 
         setShowLookaheadPanel(
           false,
@@ -1018,8 +973,7 @@ export default function WeeklyPlanningPage() {
           ? numberOrNull(value)
           : String(
               value || '',
-            ).trim() ||
-            null;
+            ).trim() || null;
 
       setItems(
         (previous) =>
@@ -1053,7 +1007,6 @@ export default function WeeklyPlanningPage() {
 
       if (error) {
         showError(error);
-
         await loadWeeklyPlan();
       }
     };
@@ -1094,7 +1047,6 @@ export default function WeeklyPlanningPage() {
 
       if (error) {
         showError(error);
-
         return;
       }
 
@@ -1154,7 +1106,6 @@ export default function WeeklyPlanningPage() {
 
       if (error) {
         showError(error);
-
         await loadWeeklyPlan();
       }
     };
@@ -1286,18 +1237,16 @@ export default function WeeklyPlanningPage() {
         itemId: item.id,
 
         varianceReason:
-          item.variance_reason ||
-          '',
+          item.variance_reason || '',
 
         varianceNotes:
-          item.variance_notes ||
-          '',
+          item.variance_notes || '',
 
         actualQuantity:
           item.actual_quantity !==
-          null &&
+            null &&
           item.actual_quantity !==
-          undefined
+            undefined
             ? String(
                 item.actual_quantity,
               )
@@ -1307,9 +1256,7 @@ export default function WeeklyPlanningPage() {
 
   const saveMissedCommitment =
     async () => {
-      if (
-        !missedCommitment
-      ) {
+      if (!missedCommitment) {
         return;
       }
 
@@ -1426,7 +1373,6 @@ export default function WeeklyPlanningPage() {
 
       if (error) {
         showError(error);
-
         await loadWeeklyPlan();
       }
     };
@@ -1463,8 +1409,7 @@ export default function WeeklyPlanningPage() {
             (max, item) =>
               Math.max(
                 max,
-                item.sequence_number ||
-                  0,
+                item.sequence_number || 0,
               ),
             0,
           );
@@ -1519,8 +1464,7 @@ export default function WeeklyPlanningPage() {
                 null,
 
               sequence_number:
-                maxSequence +
-                1,
+                maxSequence + 1,
 
               is_unplanned_work:
                 true,
@@ -3274,7 +3218,7 @@ export default function WeeklyPlanningPage() {
                                       700,
                                   }}
                                 >
-                                  {candidate.description ||
+                                  {candidate.lookahead_description ||
                                     candidate.service_name ||
                                     'Lookahead Activity'}
                                 </div>
