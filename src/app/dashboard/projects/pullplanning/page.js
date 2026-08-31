@@ -684,6 +684,56 @@ export default function PullPlanningPage() {
 
 
   // ==========================================================
+  // COLLABORATION / PARTICIPANTS
+  // ==========================================================
+
+  const [
+    participants,
+    setParticipants,
+  ] = useState([])
+
+  const [
+    showParticipantsModal,
+    setShowParticipantsModal,
+  ] = useState(false)
+
+  const [
+    participantName,
+    setParticipantName,
+  ] = useState('')
+
+  const [
+    participantCompany,
+    setParticipantCompany,
+  ] = useState('')
+
+  const [
+    participantTrade,
+    setParticipantTrade,
+  ] = useState('')
+
+  const [
+    participantRoleTitle,
+    setParticipantRoleTitle,
+  ] = useState('')
+
+  const [
+    participantRole,
+    setParticipantRole,
+  ] = useState('last_planner')
+
+  const [
+    participantInitials,
+    setParticipantInitials,
+  ] = useState('')
+
+  const [
+    participantIsLastPlanner,
+    setParticipantIsLastPlanner,
+  ] = useState(true)
+
+
+  // ==========================================================
   // SESSION MODAL
   // ==========================================================
 
@@ -705,6 +755,16 @@ export default function PullPlanningPage() {
   const [
     sessionDescription,
     setSessionDescription,
+  ] = useState('')
+
+  const [
+    sessionScope,
+    setSessionScope,
+  ] = useState('')
+
+  const [
+    facilitatorName,
+    setFacilitatorName,
   ] = useState('')
 
   const [
@@ -730,6 +790,11 @@ export default function PullPlanningPage() {
   const [
     milestoneTargetDate,
     setMilestoneTargetDate,
+  ] = useState('')
+
+  const [
+    milestoneTargetCondition,
+    setMilestoneTargetCondition,
   ] = useState('')
 
 
@@ -807,6 +872,11 @@ export default function PullPlanningPage() {
   const [
     activityProductivity,
     setActivityProductivity,
+  ] = useState('')
+
+  const [
+    activityPromisedBy,
+    setActivityPromisedBy,
   ] = useState('')
 
   const [
@@ -1623,6 +1693,8 @@ export default function PullPlanningPage() {
                   name,
                   phase_name,
                   description,
+                  scope_description,
+                  facilitator_name,
                   session_date,
                   planning_horizon_start,
                   planning_horizon_end,
@@ -1705,6 +1777,7 @@ export default function PullPlanningPage() {
                   location_id,
                   name,
                   description,
+                  target_condition,
                   target_date,
                   source_type,
                   source_entity_type,
@@ -1854,6 +1927,7 @@ export default function PullPlanningPage() {
         setPullItems([])
         setProductionActivities([])
         setHandoffs([])
+        setParticipants([])
         setSelectedItemId(null)
 
         return
@@ -1878,6 +1952,7 @@ export default function PullPlanningPage() {
             const [
               itemResult,
               handoffResult,
+              participantResult,
             ] =
               await Promise.all([
 
@@ -1900,6 +1975,7 @@ export default function PullPlanningPage() {
                     planned_workers_snapshot,
                     expected_production_rate_snapshot,
                     expected_productivity_snapshot,
+                    promised_by_participant_id,
                     planned_start_date,
                     planned_finish_date,
                     board_x,
@@ -1969,6 +2045,44 @@ export default function PullPlanningPage() {
                     'superseded',
                   ),
 
+                supabase
+                  .from(
+                    'pull_planning_session_participants',
+                  )
+                  .select(`
+                    id,
+                    organization_id,
+                    project_id,
+                    pull_planning_session_id,
+                    user_id,
+                    display_name,
+                    company_name,
+                    trade_name,
+                    role_title,
+                    participant_role,
+                    initials,
+                    is_last_planner,
+                    attended,
+                    notes,
+                    created_at,
+                    updated_at
+                  `)
+                  .eq(
+                    'pull_planning_session_id',
+                    selectedSessionId,
+                  )
+                  .eq(
+                    'project_id',
+                    projectId,
+                  )
+                  .order(
+                    'display_name',
+                    {
+                      ascending:
+                        true,
+                    },
+                  ),
+
               ])
 
 
@@ -1984,6 +2098,19 @@ export default function PullPlanningPage() {
             ) {
               throw handoffResult.error
             }
+
+
+            if (
+              participantResult.error
+            ) {
+              throw participantResult.error
+            }
+
+
+            setParticipants(
+              participantResult.data ||
+              [],
+            )
 
 
             const items =
@@ -2372,6 +2499,14 @@ export default function PullPlanningPage() {
                 sessionDescription.trim() ||
                 null,
 
+              scope_description:
+                sessionScope.trim() ||
+                null,
+
+              facilitator_name:
+                facilitatorName.trim() ||
+                null,
+
               session_date:
                 sessionDate ||
                 null,
@@ -2425,6 +2560,10 @@ export default function PullPlanningPage() {
 
               name:
                 milestoneName.trim(),
+
+              target_condition:
+                milestoneTargetCondition.trim() ||
+                null,
 
               target_date:
                 milestoneTargetDate,
@@ -2513,6 +2652,173 @@ export default function PullPlanningPage() {
         setErrorMessage(
           error?.message ||
           'Session could not be created.',
+        )
+
+      } finally {
+
+        setSaving(
+          false,
+        )
+
+      }
+
+    }
+
+
+  // ==========================================================
+  // ADD SESSION PARTICIPANT
+  // ==========================================================
+
+  const addSessionParticipant =
+    async (
+      event,
+    ) => {
+
+      event.preventDefault()
+
+
+      if (
+        !selectedProject ||
+        !selectedSession ||
+        !participantName.trim()
+      ) {
+
+        setErrorMessage(
+          'Participant name is required.',
+        )
+
+        return
+
+      }
+
+
+      setSaving(
+        true,
+      )
+
+      setErrorMessage(
+        '',
+      )
+
+
+      try {
+
+        const initials =
+          participantInitials.trim() ||
+          participantName
+            .trim()
+            .split(/\s+/)
+            .slice(0, 2)
+            .map(
+              (part) =>
+                part
+                  .slice(0, 1)
+                  .toUpperCase(),
+            )
+            .join('')
+
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              'pull_planning_session_participants',
+            )
+            .insert({
+
+              organization_id:
+                selectedProject.organization_id,
+
+              project_id:
+                selectedProject.id,
+
+              pull_planning_session_id:
+                selectedSession.id,
+
+              display_name:
+                participantName.trim(),
+
+              company_name:
+                participantCompany.trim() ||
+                null,
+
+              trade_name:
+                participantTrade.trim() ||
+                null,
+
+              role_title:
+                participantRoleTitle.trim() ||
+                null,
+
+              participant_role:
+                participantRole,
+
+              initials:
+                initials ||
+                null,
+
+              is_last_planner:
+                participantIsLastPlanner,
+
+              attended:
+                true,
+
+            })
+            .select()
+            .single()
+
+
+        if (
+          error
+        ) {
+          throw error
+        }
+
+
+        setParticipants(
+          (current) =>
+            [
+              ...current,
+              data,
+            ].sort(
+              (
+                first,
+                second,
+              ) =>
+                (
+                  first.display_name ||
+                  ''
+                ).localeCompare(
+                  second.display_name ||
+                  '',
+                ),
+            ),
+        )
+
+
+        setParticipantName('')
+        setParticipantCompany('')
+        setParticipantTrade('')
+        setParticipantRoleTitle('')
+        setParticipantRole('last_planner')
+        setParticipantInitials('')
+        setParticipantIsLastPlanner(true)
+
+      } catch (
+        error
+      ) {
+
+        console.error(
+          'Pull Planning - participant:',
+          error,
+        )
+
+
+        setErrorMessage(
+          error?.message ||
+          'Participant could not be added.',
         )
 
       } finally {
@@ -2918,6 +3224,10 @@ export default function PullPlanningPage() {
                   : Number(
                       activityProductivity,
                     ),
+
+              promised_by_participant_id:
+                activityPromisedBy ||
+                null,
 
               board_x:
                 boardX,
@@ -4370,6 +4680,50 @@ export default function PullPlanningPage() {
                 {selectedSession.name}
               </h2>
 
+
+              <div
+                style={{
+                  marginTop:
+                    '8px',
+
+                  display:
+                    'flex',
+
+                  gap:
+                    '16px',
+
+                  flexWrap:
+                    'wrap',
+
+                  color:
+                    '#64748b',
+
+                  fontSize:
+                    '.7rem',
+                }}
+              >
+                {selectedSession.scope_description && (
+                  <span>
+                    <strong>Scope:</strong>{' '}
+                    {selectedSession.scope_description}
+                  </span>
+                )}
+
+                {primaryMilestone?.target_condition && (
+                  <span>
+                    <strong>Target:</strong>{' '}
+                    {primaryMilestone.target_condition}
+                  </span>
+                )}
+
+                {selectedSession.facilitator_name && (
+                  <span>
+                    <strong>Facilitator:</strong>{' '}
+                    {selectedSession.facilitator_name}
+                  </span>
+                )}
+              </div>
+
             </div>
 
 
@@ -4394,6 +4748,21 @@ export default function PullPlanningPage() {
                   selectedSession.status
                 }
               />
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowParticipantsModal(
+                    true,
+                  )
+                }
+                style={
+                  secondaryButton
+                }
+              >
+                Participants ({participants.length})
+              </button>
 
 
               <button
@@ -5790,6 +6159,59 @@ export default function PullPlanningPage() {
 
 
               <Field
+                label="Scope of Work"
+                full
+              >
+
+                <textarea
+                  rows={3}
+                  value={
+                    sessionScope
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setSessionScope(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Example: Level 2 exterior enclosure and interior framing, Zones A-C"
+                  style={{
+                    ...inputStyle,
+
+                    resize:
+                      'vertical',
+                  }}
+                />
+
+              </Field>
+
+
+              <Field
+                label="Facilitator"
+              >
+
+                <input
+                  value={
+                    facilitatorName
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setFacilitatorName(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Session facilitator"
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
                 label="Primary Milestone *"
               >
 
@@ -5808,6 +6230,35 @@ export default function PullPlanningPage() {
                   style={
                     inputStyle
                   }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Target Condition"
+                full
+              >
+
+                <textarea
+                  rows={2}
+                  value={
+                    milestoneTargetCondition
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setMilestoneTargetCondition(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Example: Area released and ready for inspection"
+                  style={{
+                    ...inputStyle,
+
+                    resize:
+                      'vertical',
+                  }}
                 />
 
               </Field>
@@ -5850,6 +6301,452 @@ export default function PullPlanningPage() {
                 )
               }
               actionLabel="Create Session"
+            />
+
+          </form>
+
+        </ModalShell>
+
+      )}
+
+
+      {/* ====================================================
+          SESSION PARTICIPANTS MODAL
+      ==================================================== */}
+
+      {showParticipantsModal && (
+
+        <ModalShell>
+
+          <form
+            onSubmit={
+              addSessionParticipant
+            }
+          >
+
+            <ModalHeader
+              title="Session Participants"
+              subtitle="LAST PLANNERS & FACILITATION"
+              onClose={() =>
+                setShowParticipantsModal(
+                  false,
+                )
+              }
+            />
+
+
+            <div
+              style={{
+                padding:
+                  '18px 22px 0',
+              }}
+            >
+
+              {participants.length === 0 ? (
+
+                <div
+                  style={{
+                    padding:
+                      '14px',
+
+                    border:
+                      '1px dashed #cbd5e1',
+
+                    borderRadius:
+                      '8px',
+
+                    color:
+                      '#64748b',
+
+                    fontSize:
+                      '.72rem',
+                  }}
+                >
+                  No participants have been added to this Pull Planning session yet.
+                </div>
+
+              ) : (
+
+                <div
+                  style={{
+                    display:
+                      'grid',
+
+                    gap:
+                      '8px',
+                  }}
+                >
+
+                  {participants.map(
+                    (
+                      participant,
+                    ) => (
+
+                      <div
+                        key={
+                          participant.id
+                        }
+                        style={{
+                          display:
+                            'flex',
+
+                          justifyContent:
+                            'space-between',
+
+                          gap:
+                            '12px',
+
+                          alignItems:
+                            'center',
+
+                          padding:
+                            '10px 12px',
+
+                          border:
+                            '1px solid #e2e8f0',
+
+                          borderRadius:
+                            '8px',
+
+                          background:
+                            '#f8fafc',
+                        }}
+                      >
+
+                        <div>
+
+                          <strong
+                            style={{
+                              display:
+                                'block',
+
+                              color:
+                                '#0f172a',
+
+                              fontSize:
+                                '.76rem',
+                            }}
+                          >
+                            {participant.display_name}
+                          </strong>
+
+
+                          <span
+                            style={{
+                              color:
+                                '#64748b',
+
+                              fontSize:
+                                '.66rem',
+                            }}
+                          >
+                            {participant.trade_name ||
+                              participant.company_name ||
+                              participant.role_title ||
+                              participant.participant_role}
+
+                            {participant.is_last_planner
+                              ? ' · Last Planner'
+                              : ''}
+                          </span>
+
+                        </div>
+
+
+                        <span
+                          style={{
+                            minWidth:
+                              '34px',
+
+                            height:
+                              '34px',
+
+                            display:
+                              'inline-flex',
+
+                            alignItems:
+                              'center',
+
+                            justifyContent:
+                              'center',
+
+                            borderRadius:
+                              '50%',
+
+                            background:
+                              '#e2e8f0',
+
+                            color:
+                              '#0f172a',
+
+                            fontSize:
+                              '.7rem',
+
+                            fontWeight:
+                              900,
+                          }}
+                        >
+                          {participant.initials ||
+                            'LP'}
+                        </span>
+
+                      </div>
+
+                    ),
+                  )}
+
+                </div>
+
+              )}
+
+            </div>
+
+
+            <div
+              style={
+                modalGrid
+              }
+            >
+
+              <Field
+                label="Name *"
+              >
+
+                <input
+                  required
+                  value={
+                    participantName
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setParticipantName(
+                      event.target.value,
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Trade"
+              >
+
+                <input
+                  value={
+                    participantTrade
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setParticipantTrade(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Example: Drywall"
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Company"
+              >
+
+                <input
+                  value={
+                    participantCompany
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setParticipantCompany(
+                      event.target.value,
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Role / Title"
+              >
+
+                <input
+                  value={
+                    participantRoleTitle
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setParticipantRoleTitle(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Example: Foreman"
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Session Role"
+              >
+
+                <select
+                  value={
+                    participantRole
+                  }
+                  onChange={(
+                    event,
+                  ) => {
+
+                    const role =
+                      event.target.value
+
+                    setParticipantRole(
+                      role,
+                    )
+
+                    if (
+                      role ===
+                      'facilitator'
+                    ) {
+                      setParticipantIsLastPlanner(
+                        false,
+                      )
+                    }
+
+                  }}
+                  style={
+                    inputStyle
+                  }
+                >
+
+                  <option value="last_planner">Last Planner</option>
+                  <option value="facilitator">Facilitator</option>
+                  <option value="superintendent">Superintendent</option>
+                  <option value="project_manager">Project Manager</option>
+                  <option value="designer">Designer</option>
+                  <option value="owner">Owner</option>
+                  <option value="vendor">Vendor</option>
+                  <option value="observer">Observer</option>
+                  <option value="other">Other</option>
+
+                </select>
+
+              </Field>
+
+
+              <Field
+                label="Initials"
+              >
+
+                <input
+                  value={
+                    participantInitials
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setParticipantInitials(
+                      event.target.value
+                        .toUpperCase()
+                        .slice(
+                          0,
+                          4,
+                        ),
+                    )
+                  }
+                  placeholder="EF"
+                  style={
+                    inputStyle
+                  }
+                />
+
+              </Field>
+
+
+              <Field
+                label="Commitment Authority"
+                full
+              >
+
+                <label
+                  style={{
+                    display:
+                      'flex',
+
+                    gap:
+                      '9px',
+
+                    alignItems:
+                      'center',
+
+                    padding:
+                      '10px 12px',
+
+                    border:
+                      '1px solid #cbd5e1',
+
+                    borderRadius:
+                      '8px',
+
+                    fontSize:
+                      '.72rem',
+
+                    color:
+                      '#334155',
+                  }}
+                >
+
+                  <input
+                    type="checkbox"
+                    checked={
+                      participantIsLastPlanner
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setParticipantIsLastPlanner(
+                        event.target.checked,
+                      )
+                    }
+                  />
+
+                  This participant can make Pull Planning commitments as a Last Planner.
+
+                </label>
+
+              </Field>
+
+            </div>
+
+
+            <ModalFooter
+              saving={
+                saving
+              }
+              onCancel={() =>
+                setShowParticipantsModal(
+                  false,
+                )
+              }
+              actionLabel="Add Participant"
             />
 
           </form>
@@ -6111,6 +7008,64 @@ export default function PullPlanningPage() {
 
                     ),
                   )}
+
+                </select>
+
+              </Field>
+
+
+              <Field
+                label="Last Planner / Promised By"
+              >
+
+                <select
+                  value={
+                    activityPromisedBy
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setActivityPromisedBy(
+                      event.target.value,
+                    )
+                  }
+                  style={
+                    inputStyle
+                  }
+                >
+
+                  <option value="">
+                    Unassigned
+                  </option>
+
+
+                  {participants
+                    .filter(
+                      (participant) =>
+                        participant.is_last_planner &&
+                        participant.attended,
+                    )
+                    .map(
+                      (
+                        participant,
+                      ) => (
+
+                        <option
+                          key={
+                            participant.id
+                          }
+                          value={
+                            participant.id
+                          }
+                        >
+                          {participant.display_name}
+                          {participant.trade_name
+                            ? ` · ${participant.trade_name}`
+                            : ''}
+                        </option>
+
+                      ),
+                    )}
 
                 </select>
 
