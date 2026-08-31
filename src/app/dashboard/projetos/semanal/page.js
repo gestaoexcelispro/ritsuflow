@@ -425,8 +425,11 @@ export default function WeeklyPlanningPage() {
           await supabase
             .from('projects')
             .select(
-              'id, name, organization_id',
+              'id, code, name, organization_id',
             )
+            .order('code', {
+              ascending: true,
+            })
             .order('name', {
               ascending: true,
             });
@@ -1742,7 +1745,9 @@ export default function WeeklyPlanningPage() {
                   key={project.id}
                   value={project.id}
                 >
-                  {project.name}
+                  {project.code
+                    ? `${project.code} - ${project.name}`
+                    : project.name}
                 </option>
               ),
             )}
