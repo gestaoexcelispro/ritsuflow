@@ -27,8 +27,11 @@ import { supabase } from '../../../../lib/supabase'
 // - Canonical Location Structure
 // - Durable Production Activities
 // - Session-specific Pull Planning Items
-// - Draggable sticky notes
-// - Persisted board positions
+// - Structured date-based pull timeline
+// - Location / area lanes
+// - Backward-calculated activity dates
+// - Zoom + weekend visibility
+// - Legacy board positions remain persisted for compatibility
 // - Backward predecessor creation
 // - Production handoffs
 // - Visual dependency arrows
@@ -50,7 +53,6 @@ import { supabase } from '../../../../lib/supabase'
 // NEXT PHASE
 // ------------------------------------------------------------
 // - Handoff editor
-// - Dependency visibility: Off | Selected | All
 // - Handoff types
 // - Validation workflow
 // - Forward validation
@@ -155,6 +157,223 @@ function formatDate(value) {
       day: '2-digit',
     },
   )
+}
+
+
+function parseDateOnly(value) {
+  if (!value) {
+    return null
+  }
+
+  const parts = String(value).split('-').map(Number)
+
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+    return null
+  }
+
+  return new Date(parts[0], parts[1] - 1, parts[2])
+}
+
+
+function toDateOnlyString(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+
+function isWeekendDate(date) {
+  const day = date.getDay()
+  return day === 0 || day === 6
+}
+
+
+function moveWorkingDays(dateValue, amount) {
+  const date = new Date(dateValue)
+
+  if (Number.isNaN(date.getTime()) || amount === 0) {
+    return date
+  }
+
+  const direction = amount > 0 ? 1 : -1
+  let remaining = Math.abs(amount)
+
+  while (remaining > 0) {
+    date.setDate(date.getDate() + direction)
+
+    if (!isWeekendDate(date)) {
+      remaining -= 1
+    }
+  }
+
+  return date
+}
+
+
+function normalizeToWorkingDay(dateValue, direction = -1) {
+  const date = new Date(dateValue)
+
+  while (isWeekendDate(date)) {
+    date.setDate(date.getDate() + direction)
+  }
+
+  return date
+}
+
+
+function enumerateTimelineDates(startValue, endValue, showWeekends) {
+  const start = parseDateOnly(startValue)
+  const end = parseDateOnly(endValue)
+
+  if (!start || !end || start > end) {
+    return []
+  }
+
+  const dates = []
+  const cursor = new Date(start)
+
+  while (cursor <= end) {
+    if (showWeekends || !isWeekendDate(cursor)) {
+      dates.push({
+        key: toDateOnlyString(cursor),
+        date: new Date(cursor),
+      })
+    }
+
+    cursor.setDate(cursor.getDate() + 1)
+  }
+
+  return dates
+}
+
+
+function calculateBackwardPullSchedule(items, handoffs, targetDateValue) {
+  const targetDate = parseDateOnly(targetDateValue)
+
+  if (!targetDate) {
+    return new Map()
+  }
+
+  const targetWorkingDate = normalizeToWorkingDay(targetDate, -1)
+  const itemByActivity = new Map()
+
+  items.forEach((item) => {
+    if (item.production_activity_id) {
+      itemByActivity.set(item.production_activity_id, item)
+    }
+  })
+
+  const successorsByActivity = new Map()
+
+  handoffs.forEach((handoff) => {
+    const predecessorId = handoff.predecessor_activity_id
+    const successorId = handoff.successor_activity_id
+
+    if (!itemByActivity.has(predecessorId) || !itemByActivity.has(successorId)) {
+      return
+    }
+
+    if (!successorsByActivity.has(predecessorId)) {
+      successorsByActivity.set(predecessorId, [])
+    }
+
+    successorsByActivity.get(predecessorId).push(successorId)
+  })
+
+  const schedule = new Map()
+  const visiting = new Set()
+
+  const calculate = (activityId) => {
+    if (schedule.has(activityId)) {
+      return schedule.get(activityId)
+    }
+
+    const item = itemByActivity.get(activityId)
+
+    if (!item) {
+      return null
+    }
+
+    if (visiting.has(activityId)) {
+      const fallback = {
+        start: targetWorkingDate,
+        finish: targetWorkingDate,
+        startKey: toDateOnlyString(targetWorkingDate),
+        finishKey: toDateOnlyString(targetWorkingDate),
+      }
+
+      schedule.set(activityId, fallback)
+      return fallback
+    }
+
+    visiting.add(activityId)
+
+    const successorIds = successorsByActivity.get(activityId) || []
+    let finish = new Date(targetWorkingDate)
+
+    if (successorIds.length > 0) {
+      const successorSchedules = successorIds
+        .map((successorId) => calculate(successorId))
+        .filter(Boolean)
+
+      if (successorSchedules.length > 0) {
+        const earliestSuccessorStart = successorSchedules
+          .map((entry) => entry.start)
+          .sort((a, b) => a - b)[0]
+
+        finish = moveWorkingDays(earliestSuccessorStart, -1)
+      }
+    }
+
+    const duration = Math.max(1, Number(item.duration_working_days || 1))
+    const start = moveWorkingDays(finish, -(duration - 1))
+
+    const result = {
+      start,
+      finish,
+      startKey: toDateOnlyString(start),
+      finishKey: toDateOnlyString(finish),
+    }
+
+    schedule.set(activityId, result)
+    visiting.delete(activityId)
+
+    return result
+  }
+
+  items.forEach((item) => {
+    if (item.production_activity_id) {
+      calculate(item.production_activity_id)
+    }
+  })
+
+  return schedule
+}
+
+
+function getContrastText(background) {
+  if (!background || typeof background !== 'string') {
+    return '#0f172a'
+  }
+
+  const hex = background.replace('#', '')
+
+  if (hex.length !== 6) {
+    return '#0f172a'
+  }
+
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+
+  return luminance < 0.58 ? '#ffffff' : '#0f172a'
 }
 
 
@@ -446,6 +665,22 @@ export default function PullPlanningPage() {
     selectedItemId,
     setSelectedItemId,
   ] = useState(null)
+
+
+  const [
+    dependencyView,
+    setDependencyView,
+  ] = useState('selected')
+
+  const [
+    showWeekends,
+    setShowWeekends,
+  ] = useState(false)
+
+  const [
+    timelineZoom,
+    setTimelineZoom,
+  ] = useState(1)
 
 
   // ==========================================================
@@ -807,6 +1042,145 @@ export default function PullPlanningPage() {
           selectedSession.status,
         )
       : true
+
+
+  const backwardSchedule =
+    useMemo(
+      () =>
+        calculateBackwardPullSchedule(
+          pullItems,
+          handoffs,
+          primaryMilestone?.target_date,
+        ),
+      [
+        pullItems,
+        handoffs,
+        primaryMilestone?.target_date,
+      ],
+    )
+
+
+  const timelineRange =
+    useMemo(
+      () => {
+        const scheduledDates = []
+
+        backwardSchedule.forEach((entry) => {
+          scheduledDates.push(entry.startKey, entry.finishKey)
+        })
+
+        const candidatesStart = [
+          selectedSession?.planning_horizon_start,
+          ...scheduledDates,
+        ].filter(Boolean).sort()
+
+        const candidatesEnd = [
+          selectedSession?.planning_horizon_end,
+          primaryMilestone?.target_date,
+          ...scheduledDates,
+        ].filter(Boolean).sort()
+
+        return {
+          start: candidatesStart[0] || primaryMilestone?.target_date || null,
+          end: candidatesEnd[candidatesEnd.length - 1] || primaryMilestone?.target_date || null,
+        }
+      },
+      [
+        backwardSchedule,
+        selectedSession?.planning_horizon_start,
+        selectedSession?.planning_horizon_end,
+        primaryMilestone?.target_date,
+      ],
+    )
+
+
+  const timelineDates =
+    useMemo(
+      () =>
+        enumerateTimelineDates(
+          timelineRange.start,
+          timelineRange.end,
+          showWeekends,
+        ),
+      [
+        timelineRange.start,
+        timelineRange.end,
+        showWeekends,
+      ],
+    )
+
+
+  const timelineDateIndex =
+    useMemo(
+      () =>
+        new Map(
+          timelineDates.map((entry, index) => [entry.key, index]),
+        ),
+      [timelineDates],
+    )
+
+
+  const timelineLanes =
+    useMemo(
+      () => {
+        const usedLocationIds = new Set(
+          productionActivities
+            .filter((activity) =>
+              pullItemByActivityId.has(activity.id),
+            )
+            .map((activity) => activity.location_id)
+            .filter(Boolean),
+        )
+
+        const lanes = locationOptions.filter((location) =>
+          usedLocationIds.has(location.id),
+        )
+
+        if (lanes.length > 0) {
+          return lanes
+        }
+
+        return [{
+          id: '__unassigned__',
+          name: 'Unassigned',
+          path: 'Unassigned',
+          depth: 0,
+        }]
+      },
+      [
+        productionActivities,
+        pullItemByActivityId,
+        locationOptions,
+      ],
+    )
+
+
+  const visibleHandoffs =
+    useMemo(
+      () => {
+        if (dependencyView === 'off') {
+          return []
+        }
+
+        if (dependencyView === 'all') {
+          return handoffs
+        }
+
+        if (!selectedItem) {
+          return []
+        }
+
+        return handoffs.filter((handoff) =>
+          handoff.predecessor_activity_id === selectedItem.production_activity_id ||
+          handoff.successor_activity_id === selectedItem.production_activity_id,
+        )
+      },
+      [
+        dependencyView,
+        handoffs,
+        selectedItem,
+      ],
+    )
 
 
   // ==========================================================
@@ -4085,1088 +4459,829 @@ export default function PullPlanningPage() {
 
 
           {/* ==================================================
-              BOARD
+              STRUCTURED PULL PLANNING TIMELINE
           ================================================== */}
 
           <section
             style={{
-              border:
-                '1px solid #cbd5e1',
-
-              borderRadius:
-                '12px',
-
-              background:
-                '#fff',
-
-              overflow:
-                'hidden',
+              border: '1px solid #cbd5e1',
+              borderRadius: '12px',
+              background: '#fff',
+              overflow: 'hidden',
             }}
           >
 
-            {/* BOARD TOOLBAR */}
-
             <div
               style={{
-                padding:
-                  '10px 14px',
-
-                display:
-                  'flex',
-
-                justifyContent:
-                  'space-between',
-
-                alignItems:
-                  'center',
-
-                gap:
-                  '10px',
-
-                borderBottom:
-                  '1px solid #e2e8f0',
-
-                background:
-                  '#f8fafc',
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                borderBottom: '1px solid #e2e8f0',
               }}
             >
-
-              <div>
-
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: '10px',
+                }}
+              >
                 <strong
                   style={{
-                    color:
-                      '#334155',
-
-                    fontSize:
-                      '0.82rem',
+                    color: '#0f172a',
+                    fontSize: '0.82rem',
                   }}
                 >
                   Collaborative Pull Board
                 </strong>
 
-
                 <span
                   style={{
-                    marginLeft:
-                      '10px',
-
-                    color:
-                      '#94a3b8',
-
-                    fontSize:
-                      '0.7rem',
+                    color: '#64748b',
+                    fontSize: '0.68rem',
                   }}
                 >
-                  Time flows left → right
+                  Plan backward from the target →
                 </span>
-
               </div>
-
 
               <div
                 style={{
-                  color:
-                    boardLocked
-                      ? '#b45309'
-                      : '#64748b',
-
-                  fontSize:
-                    '0.7rem',
-
-                  fontWeight:
-                    700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end',
                 }}
               >
-                {boardLocked
-                  ? 'Read-only session'
-                  : 'Choose a note and ask: What must happen before this?'}
-              </div>
+                <span
+                  style={{
+                    color: '#64748b',
+                    fontSize: '0.64rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '.04em',
+                  }}
+                >
+                  Dependency view
+                </span>
 
+                {['off', 'selected', 'all'].map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setDependencyView(mode)}
+                    style={{
+                      padding: '6px 10px',
+                      border: dependencyView === mode
+                        ? '1px solid #0f766e'
+                        : '1px solid #cbd5e1',
+                      borderRadius: '7px',
+                      background: dependencyView === mode
+                        ? '#ecfdf5'
+                        : '#fff',
+                      color: dependencyView === mode
+                        ? '#0f766e'
+                        : '#475569',
+                      fontSize: '0.64rem',
+                      fontWeight: 900,
+                      cursor: 'pointer',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {mode}
+                  </button>
+                ))}
+
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: '#475569',
+                    fontSize: '0.64rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    marginLeft: '4px',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={showWeekends}
+                    onChange={(event) => setShowWeekends(event.target.checked)}
+                  />
+                  Show weekends
+                </label>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginLeft: '4px',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setTimelineZoom((value) => Math.max(0.7, Number((value - 0.1).toFixed(1))))}
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '7px',
+                      background: '#fff',
+                      cursor: 'pointer',
+                      fontWeight: 900,
+                    }}
+                  >
+                    −
+                  </button>
+
+                  <span
+                    style={{
+                      minWidth: '42px',
+                      textAlign: 'center',
+                      color: '#475569',
+                      fontSize: '0.64rem',
+                      fontWeight: 900,
+                    }}
+                  >
+                    {Math.round(timelineZoom * 100)}%
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setTimelineZoom((value) => Math.min(1.5, Number((value + 0.1).toFixed(1))))}
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '7px',
+                      background: '#fff',
+                      cursor: 'pointer',
+                      fontWeight: 900,
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
             </div>
 
+            {timelineDates.length === 0 ? (
+              <div
+                style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  color: '#64748b',
+                }}
+              >
+                Define a session planning horizon and milestone target date to build the timeline.
+              </div>
+            ) : (
+              <div
+                style={{
+                  overflowX: 'auto',
+                  overflowY: 'hidden',
+                  background: '#f8fafc',
+                }}
+              >
+                {(() => {
+                  const laneLabelWidth = 178
+                  const dayWidth = 72 * timelineZoom
+                  const weekHeaderHeight = 38
+                  const dayHeaderHeight = 46
+                  const headerHeight = weekHeaderHeight + dayHeaderHeight
+                  const laneHeight = 152
+                  const activityHeight = 106
+                  const milestoneWidth = 170
+                  const milestoneGap = 34
+                  const dateGridWidth = timelineDates.length * dayWidth
+                  const canvasWidth = laneLabelWidth + dateGridWidth + milestoneGap + milestoneWidth + 28
+                  const canvasHeight = headerHeight + Math.max(1, timelineLanes.length) * laneHeight
+                  const milestoneX = laneLabelWidth + dateGridWidth + milestoneGap
+                  const milestoneY = headerHeight + Math.max(0, (Math.max(1, timelineLanes.length) * laneHeight - 126) / 2)
 
-            {/* BOARD CANVAS */}
+                  const laneIndexByLocation = new Map(
+                    timelineLanes.map((lane, index) => [lane.id, index]),
+                  )
+
+                  const itemGeometry = new Map()
+
+                  pullItems.forEach((item) => {
+                    const activity = productionActivityMap.get(item.production_activity_id)
+                    const schedule = backwardSchedule.get(item.production_activity_id)
+
+                    if (!activity || !schedule) {
+                      return
+                    }
+
+                    let laneIndex = laneIndexByLocation.get(activity.location_id)
+
+                    if (laneIndex === undefined) {
+                      laneIndex = 0
+                    }
+
+                    const startIndex = timelineDateIndex.get(schedule.startKey)
+                    const finishIndex = timelineDateIndex.get(schedule.finishKey)
+
+                    if (startIndex === undefined || finishIndex === undefined) {
+                      return
+                    }
+
+                    const x = laneLabelWidth + startIndex * dayWidth + 5
+                    const width = Math.max(112, (finishIndex - startIndex + 1) * dayWidth - 10)
+                    const y = headerHeight + laneIndex * laneHeight + 22
+
+                    itemGeometry.set(item.production_activity_id, {
+                      x,
+                      y,
+                      width,
+                      height: activityHeight,
+                      laneIndex,
+                    })
+                  })
+
+                  const weeks = []
+
+                  timelineDates.forEach((entry, index) => {
+                    const date = entry.date
+                    const monday = new Date(date)
+                    const day = monday.getDay()
+                    const offset = day === 0 ? -6 : 1 - day
+                    monday.setDate(monday.getDate() + offset)
+                    const weekKey = toDateOnlyString(monday)
+                    const last = weeks[weeks.length - 1]
+
+                    if (last && last.key === weekKey) {
+                      last.count += 1
+                      last.endDate = date
+                    } else {
+                      weeks.push({
+                        key: weekKey,
+                        startIndex: index,
+                        count: 1,
+                        startDate: date,
+                        endDate: date,
+                      })
+                    }
+                  })
+
+                  const rootItems = pullItems.filter((item) =>
+                    !handoffs.some((handoff) =>
+                      handoff.predecessor_activity_id === item.production_activity_id,
+                    ),
+                  )
+
+                  return (
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: `${canvasWidth}px`,
+                        minWidth: '100%',
+                        height: `${canvasHeight}px`,
+                        background: '#fff',
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          width: `${laneLabelWidth}px`,
+                          height: `${headerHeight}px`,
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          padding: '0 14px 13px',
+                          borderRight: '1px solid #cbd5e1',
+                          borderBottom: '1px solid #cbd5e1',
+                          background: '#f8fafc',
+                          color: '#475569',
+                          fontSize: '0.62rem',
+                          fontWeight: 900,
+                          letterSpacing: '.04em',
+                        }}
+                      >
+                        LOCATION / AREA
+                      </div>
+
+                      {weeks.map((week, weekIndex) => (
+                        <div
+                          key={week.key}
+                          style={{
+                            position: 'absolute',
+                            left: `${laneLabelWidth + week.startIndex * dayWidth}px`,
+                            top: 0,
+                            width: `${week.count * dayWidth}px`,
+                            height: `${weekHeaderHeight}px`,
+                            borderRight: '1px solid #cbd5e1',
+                            borderBottom: '1px solid #e2e8f0',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: weekIndex % 2 === 0 ? '#f8fafc' : '#f1f5f9',
+                            color: '#334155',
+                          }}
+                        >
+                          <strong
+                            style={{
+                              fontSize: '0.62rem',
+                              letterSpacing: '.03em',
+                            }}
+                          >
+                            WEEK {weekIndex + 1}
+                          </strong>
+                          <span
+                            style={{
+                              marginTop: '2px',
+                              fontSize: '0.56rem',
+                              color: '#64748b',
+                            }}
+                          >
+                            {week.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            {' – '}
+                            {week.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </div>
+                      ))}
+
+                      {timelineDates.map((entry, index) => {
+                        const weekend = isWeekendDate(entry.date)
+                        const x = laneLabelWidth + index * dayWidth
+
+                        return (
+                          <React.Fragment key={entry.key}>
+                            <div
+                              style={{
+                                position: 'absolute',
+                                left: `${x}px`,
+                                top: `${weekHeaderHeight}px`,
+                                width: `${dayWidth}px`,
+                                height: `${dayHeaderHeight}px`,
+                                borderRight: '1px solid #e2e8f0',
+                                borderBottom: '1px solid #cbd5e1',
+                                background: weekend ? '#f1f5f9' : '#fff',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <strong
+                                style={{
+                                  fontSize: '0.58rem',
+                                  color: '#475569',
+                                }}
+                              >
+                                {entry.date.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2).toUpperCase()}
+                              </strong>
+                              <span
+                                style={{
+                                  marginTop: '2px',
+                                  fontSize: '0.62rem',
+                                  color: '#64748b',
+                                }}
+                              >
+                                {entry.date.getDate()}
+                              </span>
+                            </div>
+
+                            <div
+                              style={{
+                                position: 'absolute',
+                                left: `${x}px`,
+                                top: `${headerHeight}px`,
+                                width: `${dayWidth}px`,
+                                height: `${canvasHeight - headerHeight}px`,
+                                borderRight: '1px solid #eef2f7',
+                                background: weekend ? '#f8fafc' : 'transparent',
+                                pointerEvents: 'none',
+                              }}
+                            />
+                          </React.Fragment>
+                        )
+                      })}
+
+                      {timelineLanes.map((lane, laneIndex) => (
+                        <React.Fragment key={lane.id}>
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: `${headerHeight + laneIndex * laneHeight}px`,
+                              width: `${laneLabelWidth}px`,
+                              height: `${laneHeight}px`,
+                              padding: '18px 14px',
+                              borderRight: '1px solid #cbd5e1',
+                              borderBottom: '1px solid #e2e8f0',
+                              background: laneIndex % 2 === 0 ? '#fbfdff' : '#f8fafc',
+                            }}
+                          >
+                            <strong
+                              style={{
+                                display: 'block',
+                                color: '#0f172a',
+                                fontSize: '0.78rem',
+                              }}
+                            >
+                              {lane.name || 'Unassigned'}
+                            </strong>
+                            <span
+                              title={lane.path || lane.name || ''}
+                              style={{
+                                display: 'block',
+                                marginTop: '5px',
+                                color: '#64748b',
+                                fontSize: '0.6rem',
+                                lineHeight: 1.35,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {lane.path || lane.name || 'Location not assigned'}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: `${laneLabelWidth}px`,
+                              top: `${headerHeight + laneIndex * laneHeight}px`,
+                              width: `${dateGridWidth}px`,
+                              height: `${laneHeight}px`,
+                              borderBottom: '1px solid #e2e8f0',
+                              background: laneIndex % 2 === 0
+                                ? 'rgba(248,250,252,.18)'
+                                : 'rgba(241,245,249,.22)',
+                              pointerEvents: 'none',
+                            }}
+                          />
+                        </React.Fragment>
+                      ))}
+
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: `${laneLabelWidth + dateGridWidth}px`,
+                          top: 0,
+                          width: `${milestoneGap + milestoneWidth + 28}px`,
+                          height: `${headerHeight}px`,
+                          borderLeft: '1px solid #cbd5e1',
+                          borderBottom: '1px solid #cbd5e1',
+                          background: '#f8fafc',
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          padding: '0 0 13px 18px',
+                          color: '#0f766e',
+                          fontSize: '0.62rem',
+                          fontWeight: 900,
+                          letterSpacing: '.04em',
+                        }}
+                      >
+                        TARGET
+                      </div>
+
+                      <svg
+                        width={canvasWidth}
+                        height={canvasHeight}
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          pointerEvents: 'none',
+                          zIndex: 2,
+                        }}
+                      >
+                        <defs>
+                          <marker
+                            id="pullTimelineArrow"
+                            viewBox="0 0 10 10"
+                            refX="9"
+                            refY="5"
+                            markerWidth="7"
+                            markerHeight="7"
+                            orient="auto-start-reverse"
+                          >
+                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+                          </marker>
+                          <marker
+                            id="pullMilestoneArrow"
+                            viewBox="0 0 10 10"
+                            refX="9"
+                            refY="5"
+                            markerWidth="7"
+                            markerHeight="7"
+                            orient="auto-start-reverse"
+                          >
+                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#0f766e" />
+                          </marker>
+                        </defs>
+
+                        {visibleHandoffs.map((handoff) => {
+                          const from = itemGeometry.get(handoff.predecessor_activity_id)
+                          const to = itemGeometry.get(handoff.successor_activity_id)
+
+                          if (!from || !to) {
+                            return null
+                          }
+
+                          const x1 = from.x + from.width
+                          const y1 = from.y + from.height / 2
+                          const x2 = to.x
+                          const y2 = to.y + to.height / 2
+                          const bend = Math.max(18, (x2 - x1) / 2)
+
+                          return (
+                            <path
+                              key={handoff.id}
+                              d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2 - 5} ${y2}`}
+                              fill="none"
+                              stroke="#64748b"
+                              strokeWidth="2"
+                              markerEnd="url(#pullTimelineArrow)"
+                            />
+                          )
+                        })}
+
+                        {rootItems.map((item) => {
+                          const from = itemGeometry.get(item.production_activity_id)
+
+                          if (!from) {
+                            return null
+                          }
+
+                          const x1 = from.x + from.width
+                          const y1 = from.y + from.height / 2
+                          const x2 = milestoneX
+                          const y2 = milestoneY + 63
+
+                          return (
+                            <path
+                              key={`milestone-${item.id}`}
+                              d={`M ${x1} ${y1} C ${x1 + 36} ${y1}, ${x2 - 38} ${y2}, ${x2 - 5} ${y2}`}
+                              fill="none"
+                              stroke="#0f766e"
+                              strokeWidth="2"
+                              strokeDasharray="5 5"
+                              markerEnd="url(#pullMilestoneArrow)"
+                            />
+                          )
+                        })}
+                      </svg>
+
+                      {pullItems.map((item) => {
+                        const activity = productionActivityMap.get(item.production_activity_id)
+                        const geometry = itemGeometry.get(item.production_activity_id)
+                        const schedule = backwardSchedule.get(item.production_activity_id)
+
+                        if (!activity || !geometry || !schedule) {
+                          return null
+                        }
+
+                        const workPackage = workPackageMap.get(activity.organization_work_package_id)
+                        const location = locationMap.get(activity.location_id)
+                        const color = workPackage?.color || '#dbeafe'
+                        const textColor = getContrastText(color)
+                        const selected = selectedItemId === item.id
+                        const predecessorCount = handoffs.filter((handoff) =>
+                          handoff.successor_activity_id === item.production_activity_id,
+                        ).length
+
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => setSelectedItemId(item.id)}
+                            style={{
+                              position: 'absolute',
+                              left: `${geometry.x}px`,
+                              top: `${geometry.y}px`,
+                              width: `${geometry.width}px`,
+                              minWidth: '112px',
+                              height: `${geometry.height}px`,
+                              padding: '9px 10px',
+                              border: selected
+                                ? '3px solid #0f172a'
+                                : '1px solid rgba(15,23,42,.28)',
+                              borderRadius: '7px',
+                              background: color,
+                              color: textColor,
+                              boxShadow: selected
+                                ? '0 8px 22px rgba(15,23,42,.18)'
+                                : '0 3px 10px rgba(15,23,42,.10)',
+                              cursor: 'pointer',
+                              zIndex: selected ? 6 : 4,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '8px',
+                              }}
+                            >
+                              <strong
+                                style={{
+                                  fontSize: '0.66rem',
+                                  letterSpacing: '.05em',
+                                }}
+                              >
+                                {String(workPackage?.code || activity.activity_code || 'ACT').toUpperCase().slice(0, 3)}
+                              </strong>
+                              <strong
+                                style={{
+                                  fontSize: '0.62rem',
+                                }}
+                              >
+                                {Math.max(1, Number(item.duration_working_days || 1))}d
+                              </strong>
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop: '5px',
+                                fontSize: '0.66rem',
+                                fontWeight: 900,
+                                lineHeight: 1.2,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                              title={item.description_snapshot}
+                            >
+                              {item.description_snapshot}
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop: '4px',
+                                fontSize: '0.56rem',
+                                opacity: 0.88,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                              title={location?.path || location?.name || ''}
+                            >
+                              {location?.name || 'Location not assigned'}
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop: '4px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: '6px',
+                                fontSize: '0.54rem',
+                                opacity: 0.9,
+                              }}
+                            >
+                              <span>
+                                {item.quantity_snapshot !== null && item.quantity_snapshot !== undefined
+                                  ? `${item.quantity_snapshot}${item.unit_snapshot ? ` ${item.unit_snapshot}` : ''}`
+                                  : `${formatDate(schedule.startKey)} → ${formatDate(schedule.finishKey)}`}
+                              </span>
+
+                              {predecessorCount > 0 && <span>← {predecessorCount}</span>}
+                            </div>
+
+                            {!boardLocked && (
+                              <button
+                                type="button"
+                                onClick={(event) => openPredecessorModal(event, item)}
+                                style={{
+                                  width: '100%',
+                                  marginTop: '6px',
+                                  padding: '5px 6px',
+                                  border: `1px solid ${textColor === '#ffffff' ? 'rgba(255,255,255,.65)' : 'rgba(15,23,42,.30)'}`,
+                                  borderRadius: '5px',
+                                  background: textColor === '#ffffff'
+                                    ? 'rgba(255,255,255,.14)'
+                                    : 'rgba(255,255,255,.38)',
+                                  color: textColor,
+                                  cursor: 'pointer',
+                                  fontSize: '0.54rem',
+                                  fontWeight: 900,
+                                }}
+                              >
+                                + What must happen before this?
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+
+                      {primaryMilestone && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${milestoneX}px`,
+                            top: `${milestoneY}px`,
+                            width: `${milestoneWidth}px`,
+                            minHeight: '126px',
+                            padding: '14px',
+                            border: '1.5px solid #0f766e',
+                            borderRadius: '9px',
+                            background: '#ecfdf5',
+                            color: '#065f46',
+                            boxShadow: '0 5px 14px rgba(15,118,110,.10)',
+                            zIndex: 5,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: '0.56rem',
+                              fontWeight: 900,
+                              letterSpacing: '.08em',
+                            }}
+                          >
+                            ◆ MILESTONE
+                          </div>
+                          <div
+                            style={{
+                              marginTop: '8px',
+                              fontSize: '0.84rem',
+                              fontWeight: 900,
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            {primaryMilestone.name}
+                          </div>
+                          <div
+                            style={{
+                              marginTop: '9px',
+                              fontSize: '0.68rem',
+                              fontWeight: 900,
+                            }}
+                          >
+                            {formatDate(primaryMilestone.target_date)}
+                          </div>
+                          <div
+                            style={{
+                              marginTop: '10px',
+                              paddingTop: '8px',
+                              borderTop: '1px solid #a7f3d0',
+                              fontSize: '0.56rem',
+                              color: '#047857',
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            Plan backward from this target condition.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
 
             <div
               style={{
-                overflow:
-                  'auto',
+                padding: '9px 14px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                flexWrap: 'wrap',
+                borderTop: '1px solid #e2e8f0',
+                background: '#f8fafc',
               }}
             >
-
               <div
-                ref={
-                  boardRef
-                }
-                onMouseDown={(
-                  event,
-                ) => {
-
-                  if (
-                    event.target ===
-                    boardRef.current
-                  ) {
-
-                    setSelectedItemId(
-                      null,
-                    )
-
-                  }
-
-                }}
                 style={{
-                  position:
-                    'relative',
-
-                  width:
-                    `${BOARD_WIDTH}px`,
-
-                  height:
-                    `${BOARD_HEIGHT}px`,
-
-                  backgroundColor:
-                    '#fbfcfd',
-
-                  backgroundImage:
-                    `
-                      linear-gradient(#edf2f7 1px, transparent 1px),
-                      linear-gradient(90deg, #edf2f7 1px, transparent 1px)
-                    `,
-
-                  backgroundSize:
-                    '40px 40px',
-
-                  userSelect:
-                    'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '18px',
+                  flexWrap: 'wrap',
+                  color: '#64748b',
+                  fontSize: '0.58rem',
+                  fontWeight: 800,
                 }}
               >
-
-                {/* TIME LABELS */}
-
-                <div
-                  style={{
-                    position:
-                      'absolute',
-
-                    left:
-                      '25px',
-
-                    top:
-                      '22px',
-
-                    color:
-                      '#94a3b8',
-
-                    fontSize:
-                      '0.64rem',
-
-                    fontWeight:
-                      900,
-
-                    letterSpacing:
-                      '.1em',
-                  }}
-                >
-                  EARLIER WORK
-                </div>
-
-
-                <div
-                  style={{
-                    position:
-                      'absolute',
-
-                    right:
-                      '42px',
-
-                    top:
-                      '22px',
-
-                    color:
-                      '#94a3b8',
-
-                    fontSize:
-                      '0.64rem',
-
-                    fontWeight:
-                      900,
-
-                    letterSpacing:
-                      '.1em',
-                  }}
-                >
-                  TARGET
-                </div>
-
-
-                {/* =================================================
-                    HANDOFF NETWORK
-                ================================================= */}
-
-                <svg
-                  width={
-                    BOARD_WIDTH
-                  }
-                  height={
-                    BOARD_HEIGHT
-                  }
-                  style={{
-                    position:
-                      'absolute',
-
-                    inset:
-                      0,
-
-                    zIndex:
-                      2,
-
-                    overflow:
-                      'visible',
-
-                    pointerEvents:
-                      'none',
-                  }}
-                >
-
-                  <defs>
-
-                    <marker
-                      id="pull-arrow"
-                      markerWidth="9"
-                      markerHeight="9"
-                      refX="8"
-                      refY="4.5"
-                      orient="auto"
-                      markerUnits="strokeWidth"
-                    >
-                      <path
-                        d="M0,0 L9,4.5 L0,9 z"
-                        fill="#48647c"
-                      />
-                    </marker>
-
-                  </defs>
-
-
-                  {handoffs.map(
-                    (
-                      handoff,
-                    ) => {
-
-                      const predecessorItem =
-                        pullItemByActivityId.get(
-                          handoff.predecessor_activity_id,
-                        )
-
-
-                      const successorItem =
-                        pullItemByActivityId.get(
-                          handoff.successor_activity_id,
-                        )
-
-
-                      if (
-                        !predecessorItem ||
-                        !successorItem
-                      ) {
-                        return null
-                      }
-
-
-                      const startX =
-                        Number(
-                          predecessorItem.board_x ||
-                          0,
-                        ) +
-                        NOTE_WIDTH
-
-
-                      const startY =
-                        Number(
-                          predecessorItem.board_y ||
-                          0,
-                        ) +
-                        NOTE_HEIGHT /
-                        2
-
-
-                      const endX =
-                        Number(
-                          successorItem.board_x ||
-                          0,
-                        )
-
-
-                      const endY =
-                        Number(
-                          successorItem.board_y ||
-                          0,
-                        ) +
-                        NOTE_HEIGHT /
-                        2
-
-
-                      const distance =
-                        Math.max(
-                          40,
-                          Math.abs(
-                            endX -
-                            startX,
-                          ) /
-                          2,
-                        )
-
-
-                      const path =
-                        `M ${startX} ${startY}
-                         C ${startX + distance} ${startY},
-                           ${endX - distance} ${endY},
-                           ${endX - 7} ${endY}`
-
-
-                      return (
-
-                        <g
-                          key={
-                            handoff.id
-                          }
-                        >
-
-                          <path
-                            d={
-                              path
-                            }
-                            fill="none"
-                            stroke="#48647c"
-                            strokeWidth="2"
-                            markerEnd="url(#pull-arrow)"
-                          />
-
-
-                          {handoff.validation_status ===
-                            'proposed' && (
-
-                            <circle
-                              cx={
-                                (
-                                  startX +
-                                  endX
-                                ) /
-                                2
-                              }
-                              cy={
-                                (
-                                  startY +
-                                  endY
-                                ) /
-                                2
-                              }
-                              r="4"
-                              fill="#f59e0b"
-                            />
-
-                          )}
-
-                        </g>
-
-                      )
-
-                    },
-                  )}
-
-
-                  {/* ROOT ACTIVITIES TO MILESTONE */}
-
-                  {pullItems
-                    .filter(
-                      (
-                        item,
-                      ) => {
-
-                        const hasSuccessor =
-                          handoffs.some(
-                            (
-                              handoff,
-                            ) =>
-                              handoff.predecessor_activity_id ===
-                              item.production_activity_id,
-                          )
-
-
-                        return (
-                          !hasSuccessor &&
-                          item.pull_planning_milestone_id ===
-                          primaryMilestone?.id
-                        )
-
-                      },
-                    )
-                    .map(
-                      (
-                        item,
-                      ) => {
-
-                        const startX =
-                          Number(
-                            item.board_x ||
-                            0,
-                          ) +
-                          NOTE_WIDTH
-
-
-                        const startY =
-                          Number(
-                            item.board_y ||
-                            0,
-                          ) +
-                          NOTE_HEIGHT /
-                          2
-
-
-                        const endX =
-                          MILESTONE_X
-
-
-                        const endY =
-                          MILESTONE_Y +
-                          65
-
-
-                        const distance =
-                          Math.max(
-                            40,
-                            Math.abs(
-                              endX -
-                              startX,
-                            ) /
-                            2,
-                          )
-
-
-                        return (
-
-                          <path
-                            key={`milestone-${item.id}`}
-                            d={
-                              `M ${startX} ${startY}
-                               C ${startX + distance} ${startY},
-                                 ${endX - distance} ${endY},
-                                 ${endX - 7} ${endY}`
-                            }
-                            fill="none"
-                            stroke="#0f766e"
-                            strokeWidth="2"
-                            strokeDasharray="5 4"
-                            markerEnd="url(#pull-arrow)"
-                          />
-
-                        )
-
-                      },
-                    )}
-
-                </svg>
-
-
-                {/* =================================================
-                    PRIMARY MILESTONE
-                ================================================= */}
-
-                {primaryMilestone && (
-
-                  <div
-                    style={{
-                      position:
-                        'absolute',
-
-                      left:
-                        `${MILESTONE_X}px`,
-
-                      top:
-                        `${MILESTONE_Y}px`,
-
-                      width:
-                        `${MILESTONE_WIDTH}px`,
-
-                      minHeight:
-                        '130px',
-
-                      padding:
-                        '17px',
-
-                      border:
-                        '2px solid #0f766e',
-
-                      borderRadius:
-                        '10px',
-
-                      background:
-                        '#ecfdf5',
-
-                      boxShadow:
-                        '0 10px 25px rgba(15,118,110,.13)',
-
-                      zIndex:
-                        4,
-
-                      boxSizing:
-                        'border-box',
-                    }}
-                  >
-
-                    <div
-                      style={{
-                        marginBottom:
-                          '8px',
-
-                        color:
-                          '#0f766e',
-
-                        fontSize:
-                          '0.61rem',
-
-                        fontWeight:
-                          900,
-
-                        letterSpacing:
-                          '0.11em',
-                      }}
-                    >
-                      MILESTONE
-                    </div>
-
-
-                    <strong
-                      style={{
-                        display:
-                          'block',
-
-                        color:
-                          '#064e3b',
-
-                        fontSize:
-                          '0.9rem',
-
-                        lineHeight:
-                          1.35,
-                      }}
-                    >
-                      {primaryMilestone.name}
-                    </strong>
-
-
-                    <div
-                      style={{
-                        marginTop:
-                          '9px',
-
-                        color:
-                          '#047857',
-
-                        fontSize:
-                          '0.74rem',
-
-                        fontWeight:
-                          900,
-                      }}
-                    >
-                      {formatDate(
-                        primaryMilestone.target_date,
-                      )}
-                    </div>
-
-
-                    <div
-                      style={{
-                        marginTop:
-                          '10px',
-
-                        paddingTop:
-                          '9px',
-
-                        borderTop:
-                          '1px solid #a7f3d0',
-
-                        color:
-                          '#64748b',
-
-                        fontSize:
-                          '0.66rem',
-                      }}
-                    >
-                      Plan backward from this target.
-                    </div>
-
-                  </div>
-
-                )}
-
-
-                {/* =================================================
-                    EMPTY STATE
-                ================================================= */}
-
-                {!loadingBoard &&
-                  pullItems.length ===
-                  0 && (
-
-                    <div
-                      style={{
-                        position:
-                          'absolute',
-
-                        left:
-                          '52%',
-
-                        top:
-                          '50%',
-
-                        transform:
-                          'translate(-60%,-50%)',
-
-                        textAlign:
-                          'center',
-
-                        color:
-                          '#94a3b8',
-
-                        zIndex:
-                          3,
-                      }}
-                    >
-
-                      <div
-                        style={{
-                          fontSize:
-                            '2rem',
-
-                          marginBottom:
-                            '8px',
-                        }}
-                      >
-                        ▧
-                      </div>
-
-
-                      <strong
-                        style={{
-                          display:
-                            'block',
-
-                          color:
-                            '#64748b',
-
-                          fontSize:
-                            '0.85rem',
-                        }}
-                      >
-                        Start at the milestone
-                      </strong>
-
-
-                      <p
-                        style={{
-                          margin:
-                            '6px 0 14px',
-
-                          fontSize:
-                            '0.72rem',
-                        }}
-                      >
-                        What must be completed immediately before the target?
-                      </p>
-
-
-                      {!boardLocked && (
-
-                        <button
-                          type="button"
-                          onClick={
-                            openMilestoneActivityModal
-                          }
-                          style={
-                            primaryButton
-                          }
-                        >
-                          + Add Activity Before Milestone
-                        </button>
-
-                      )}
-
-                    </div>
-
-                  )}
-
-
-                {/* =================================================
-                    STICKY NOTES
-                ================================================= */}
-
-                {pullItems.map(
-                  (
-                    item,
-                  ) => {
-
-                    const activity =
-                      productionActivityMap.get(
-                        item.production_activity_id,
-                      ) ||
-                      null
-
-
-                    const packageData =
-                      activity
-                        ? workPackageMap.get(
-                            activity.organization_work_package_id,
-                          )
-                        : null
-
-
-                    const location =
-                      activity
-                        ? locationMap.get(
-                            activity.location_id,
-                          )
-                        : null
-
-
-                    const color =
-                      packageData?.color ||
-                      '#facc15'
-
-
-                    const textColor =
-                      getContrastYIQ(
-                        color,
-                      )
-
-
-                    const selected =
-                      selectedItemId ===
-                      item.id
-
-
-                    const predecessorCount =
-                      handoffs.filter(
-                        (
-                          handoff,
-                        ) =>
-                          handoff.successor_activity_id ===
-                          item.production_activity_id,
-                      ).length
-
-
-                    return (
-
-                      <div
-                        key={
-                          item.id
-                        }
-                        onMouseDown={(
-                          event,
-                        ) =>
-                          startDrag(
-                            event,
-                            item,
-                          )
-                        }
-                        onClick={(
-                          event,
-                        ) => {
-
-                          event.stopPropagation()
-
-                          setSelectedItemId(
-                            item.id,
-                          )
-
-                        }}
-                        style={{
-                          position:
-                            'absolute',
-
-                          left:
-                            `${Number(item.board_x || 50)}px`,
-
-                          top:
-                            `${Number(item.board_y || 80)}px`,
-
-                          width:
-                            `${NOTE_WIDTH}px`,
-
-                          minHeight:
-                            `${NOTE_HEIGHT}px`,
-
-                          padding:
-                            '11px 12px',
-
-                          border:
-                            selected
-                              ? '3px solid #071c31'
-                              : '1px solid rgba(15,23,42,.18)',
-
-                          borderRadius:
-                            '4px',
-
-                          background:
-                            color,
-
-                          color:
-                            textColor,
-
-                          boxShadow:
-                            dragState?.itemId ===
-                            item.id
-                              ? '0 18px 35px rgba(15,23,42,.28)'
-                              : selected
-                                ? '0 10px 24px rgba(15,23,42,.22)'
-                                : '0 6px 15px rgba(15,23,42,.14)',
-
-                          transform:
-                            dragState?.itemId ===
-                            item.id
-                              ? 'rotate(1.5deg) scale(1.03)'
-                              : 'none',
-
-                          cursor:
-                            boardLocked
-                              ? 'default'
-                              : 'grab',
-
-                          zIndex:
-                            dragState?.itemId ===
-                            item.id
-                              ? 40
-                              : selected
-                                ? 12
-                                : 8,
-
-                          boxSizing:
-                            'border-box',
-                        }}
-                      >
-
-                        <div
-                          style={{
-                            display:
-                              'flex',
-
-                            justifyContent:
-                              'space-between',
-
-                            alignItems:
-                              'center',
-
-                            gap:
-                              '8px',
-                          }}
-                        >
-
-                          <strong
-                            style={{
-                              fontSize:
-                                '0.78rem',
-
-                              letterSpacing:
-                                '0.08em',
-                            }}
-                          >
-                            {packageData?.code ||
-                              activity?.activity_code ||
-                              'ACT'}
-                          </strong>
-
-
-                          <span
-                            style={{
-                              fontSize:
-                                '0.62rem',
-
-                              fontWeight:
-                                900,
-                            }}
-                          >
-                            {item.duration_working_days}d
-                          </span>
-
-                        </div>
-
-
-                        <div
-                          style={{
-                            marginTop:
-                              '7px',
-
-                            fontSize:
-                              '0.75rem',
-
-                            fontWeight:
-                              900,
-
-                            lineHeight:
-                              1.25,
-                          }}
-                        >
-                          {item.description_snapshot}
-                        </div>
-
-
-                        <div
-                          title={
-                            location?.path ||
-                            location?.name ||
-                            ''
-                          }
-                          style={{
-                            marginTop:
-                              '7px',
-
-                            fontSize:
-                              '0.6rem',
-
-                            lineHeight:
-                              1.3,
-
-                            opacity:
-                              0.88,
-
-                            overflow:
-                              'hidden',
-
-                            textOverflow:
-                              'ellipsis',
-
-                            whiteSpace:
-                              'nowrap',
-                          }}
-                        >
-                          {location?.path ||
-                            location?.name ||
-                            'Location not assigned'}
-                        </div>
-
-
-                        <div
-                          style={{
-                            marginTop:
-                              '5px',
-
-                            display:
-                              'flex',
-
-                            justifyContent:
-                              'space-between',
-
-                            gap:
-                              '5px',
-
-                            fontSize:
-                              '0.58rem',
-
-                            opacity:
-                              0.88,
-                          }}
-                        >
-
-                          <span>
-                            {item.quantity_snapshot !==
-                              null &&
-                            item.quantity_snapshot !==
-                              undefined
-                              ? `${item.quantity_snapshot}${item.unit_snapshot ? ` ${item.unit_snapshot}` : ''}`
-                              : ''}
-                          </span>
-
-
-                          {predecessorCount >
-                            0 && (
-
-                            <span>
-                              ← {predecessorCount}
-                            </span>
-
-                          )}
-
-                        </div>
-
-
-                        {!boardLocked && (
-
-                          <button
-                            type="button"
-                            data-no-drag="true"
-                            onMouseDown={(
-                              event,
-                            ) =>
-                              event.stopPropagation()
-                            }
-                            onClick={(
-                              event,
-                            ) =>
-                              openPredecessorModal(
-                                event,
-                                item,
-                              )
-                            }
-                            style={{
-                              width:
-                                '100%',
-
-                              marginTop:
-                                '9px',
-
-                              padding:
-                                '5px 6px',
-
-                              border:
-                                `1px solid ${
-                                  textColor ===
-                                  '#ffffff'
-                                    ? 'rgba(255,255,255,.65)'
-                                    : 'rgba(7,28,49,.35)'
-                                }`,
-
-                              borderRadius:
-                                '4px',
-
-                              background:
-                                textColor ===
-                                '#ffffff'
-                                  ? 'rgba(255,255,255,.14)'
-                                  : 'rgba(255,255,255,.35)',
-
-                              color:
-                                textColor,
-
-                              cursor:
-                                'pointer',
-
-                              fontSize:
-                                '0.58rem',
-
-                              fontWeight:
-                                900,
-                            }}
-                          >
-                            + What must happen before this?
-                          </button>
-
-                        )}
-
-                      </div>
-
-                    )
-
-                  },
-                )}
-
+                <span>→ Handoff / dependency</span>
+                <span style={{ color: '#0f766e' }}>┄→ Leads to milestone</span>
+                <span>Timeline calculated backward from milestone</span>
               </div>
 
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '14px',
+                  color: '#475569',
+                  fontSize: '0.6rem',
+                  fontWeight: 900,
+                }}
+              >
+                <span>Activities: {pullItems.length}</span>
+                <span>Handoffs: {handoffs.length}</span>
+                <span>Milestones: {selectedMilestones.length}</span>
+              </div>
             </div>
-
           </section>
-
 
           {/* ==================================================
               SELECTED ACTIVITY PANEL
