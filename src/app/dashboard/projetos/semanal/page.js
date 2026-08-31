@@ -1,309 +1,4219 @@
 'use client';
-import React, { useState, useEffect } from 'react';
-import { useLanguage } from '../../../../contexts/LanguageContext';
+
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
 import { supabase } from '../../../../lib/supabase';
 
-const CAUSAS_NAO_CUMPRIMENTO = [
-  'Projeto (Erro/Atraso)',
-  'Materiais (Falta/Defeito)',
-  'Mão de Obra (Falta/Baixa Produtividade)',
-  'Equipamentos (Quebra/Falta)',
-  'Espaço/Frente de Trabalho',
-  'Predecessora Atrasada',
-  'Condições Externas (Chuva/Clima)',
-  'Planejamento Irrealista',
-  'Outros'
+// ============================================================
+// TYPES
+// ============================================================
+
+type Project = {
+  id: string;
+  name: string;
+  organization_id: string;
+};
+
+type WeeklyPlanStatus =
+  | 'draft'
+  | 'committed'
+  | 'closed'
+  | 'cancelled';
+
+type ExecutionResult =
+  | 'pending'
+  | 'completed'
+  | 'not_completed'
+  | 'not_applicable';
+
+type WeeklyPlan = {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  lookahead_plan_id: string | null;
+  week_start_date: string;
+  week_end_date: string;
+  week_number: number;
+  year_number: number;
+  name: string | null;
+  status: WeeklyPlanStatus;
+  ppc_target: number;
+  committed_at: string | null;
+  closed_at: string | null;
+  notes: string | null;
+};
+
+type WeeklyPlanItem = {
+  id: string;
+  weekly_plan_id: string;
+  organization_id: string;
+  project_id: string;
+
+  lookahead_work_item_id: string | null;
+  master_plan_package_id: string | null;
+
+  source_type: 'lookahead' | 'manual' | 'unplanned';
+
+  package_code: string | null;
+  activity_description: string;
+
+  location_name: string | null;
+  location_path: string | null;
+
+  planned_start_date: string | null;
+  planned_finish_date: string | null;
+
+  sequence_number: number | null;
+
+  responsible_party: string | null;
+  responsible_user_id: string | null;
+
+  planned_quantity: number | null;
+  actual_quantity: number | null;
+  unit: string | null;
+
+  commitment_status:
+    | 'draft'
+    | 'committed'
+    | 'removed'
+    | 'cancelled';
+
+  execution_result: ExecutionResult;
+
+  variance_reason: string | null;
+  variance_notes: string | null;
+
+  is_unplanned_work: boolean;
+  notes: string | null;
+};
+
+type WeeklyPerformance = {
+  weekly_plan_id: string;
+  total_commitments: number;
+  completed_commitments: number;
+  missed_commitments: number;
+  pending_commitments: number;
+  unplanned_work_items: number;
+  ppc_percent: number | null;
+  ppc_target_met: boolean | null;
+  ppc_is_final: boolean;
+};
+
+type WeeklyTrend = {
+  weekly_plan_id: string;
+  previous_week_ppc: number | null;
+  ppc_change_vs_previous_week: number | null;
+  rolling_4_week_ppc: number | null;
+};
+
+type VariancePareto = {
+  variance_reason: string;
+  variance_count: number;
+  variance_percent: number;
+  cumulative_variance_percent: number;
+};
+
+type LookaheadCandidate = {
+  id: string;
+  project_id: string;
+  lookahead_plan_id: string;
+
+  master_plan_package_id: string | null;
+
+  package_code: string | null;
+  service_code: string | null;
+  service_name: string | null;
+
+  lookahead_description: string | null;
+
+  location_name: string | null;
+  location_path: string | null;
+
+  lookahead_start_date: string | null;
+  lookahead_finish_date: string | null;
+
+  readiness_status: string;
+  committed_to_weekly: boolean;
+};
+
+type MissedCommitmentForm = {
+  itemId: string;
+  varianceReason: string;
+  varianceNotes: string;
+  actualQuantity: string;
+};
+
+type UnplannedForm = {
+  activityDescription: string;
+  locationName: string;
+  responsibleParty: string;
+  plannedQuantity: string;
+  actualQuantity: string;
+  unit: string;
+  notes: string;
+};
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+const VARIANCE_REASONS = [
+  { value: 'labor', label: 'Labor' },
+  { value: 'material', label: 'Material' },
+  { value: 'equipment', label: 'Equipment' },
+  { value: 'design_information', label: 'Design / Information' },
+  { value: 'predecessor', label: 'Predecessor' },
+  { value: 'workspace_access', label: 'Workspace / Access' },
+  { value: 'weather', label: 'Weather' },
+  { value: 'subcontractor', label: 'Subcontractor' },
+  { value: 'client_owner', label: 'Client / Owner' },
+  { value: 'planning', label: 'Planning' },
+  { value: 'quality_rework', label: 'Quality / Rework' },
+  { value: 'safety', label: 'Safety' },
+  { value: 'other', label: 'Other' },
 ];
 
-export default function PlanejamentoSemanalPage() {
-  const { lang } = useLanguage();
-  
-  // Estados Gerais
-  const [projetosLista, setProjetosLista] = useState([]);
-  const [projetoSelecionado, setProjetoSelecionado] = useState('');
-  const [zonasColeta, setZonasColeta] = useState([]);
+const EMPTY_UNPLANNED_FORM: UnplannedForm = {
+  activityDescription: '',
+  locationName: '',
+  responsibleParty: '',
+  plannedQuantity: '',
+  actualQuantity: '',
+  unit: '',
+  notes: '',
+};
 
-  // Estados do Semanal
-  const [semanaAtual, setSemanaAtual] = useState(1);
-  const [metaPpc, setMetaPpc] = useState(85); // 85% padrão
+// ============================================================
+// DATE HELPERS
+// ============================================================
 
-  // Linhas da Planilha Semanal
-  const [tarefas, setTarefas] = useState([
-    {
-      id: `t_${Date.now()}_1`,
-      dataPlanejamento: new Date().toISOString().split('T')[0],
-      local: '',
-      numSemana: 1,
-      responsavel: '',
-      atividade: '',
-      concluida: '', // SIM, NAO
-      unidade: '',
-      qtdProgramada: '',
-      qtdExecutada: '',
-      causaNaoCumprimento: '',
-      observacoes: ''
-    }
-  ]);
+function dateToIso(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
 
-  // Busca Projetos
-  useEffect(() => {
-    const fetchProjetos = async () => {
-      const { data } = await supabase.from('projetos').select('id, nome_projeto').order('id', { ascending: false });
-      if (data) setProjetosLista(data);
-    };
-    fetchProjetos();
-  }, []);
+  return `${year}-${month}-${day}`;
+}
 
-  // Busca Zonas para autocompletar "Local"
-  useEffect(() => {
-    const fetchZonasDoProjeto = async () => {
-      if (!projetoSelecionado) { setZonasColeta([]); return; }
-      const { data } = await supabase.from('setorizacao_obras').select('pavimento, fase').eq('projeto_id', projetoSelecionado);
-      if (data) {
-        const unicas = [...new Set(data.map(d => `${d.pavimento || ''} ${d.fase || ''}`.trim()))].filter(Boolean);
-        setZonasColeta(unicas);
-      }
-    };
-    fetchZonasDoProjeto();
-  }, [projetoSelecionado]);
+function parseLocalDate(value: string) {
+  const [year, month, day] = value
+    .split('-')
+    .map(Number);
 
-  // Funções de manipulação da tabela
-  const adicionarTarefa = () => {
-    setTarefas([...tarefas, {
-      id: `t_${Date.now()}`,
-      dataPlanejamento: new Date().toISOString().split('T')[0],
-      local: '',
-      numSemana: semanaAtual,
-      responsavel: '',
-      atividade: '',
-      concluida: '',
-      unidade: '',
-      qtdProgramada: '',
-      qtdExecutada: '',
-      causaNaoCumprimento: '',
-      observacoes: ''
-    }]);
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+function addDays(value: string, days: number) {
+  const date = parseLocalDate(value);
+  date.setDate(date.getDate() + days);
+
+  return dateToIso(date);
+}
+
+function getMonday(value: Date) {
+  const date = new Date(
+    value.getFullYear(),
+    value.getMonth(),
+    value.getDate(),
+    12,
+    0,
+    0,
+  );
+
+  const day = date.getDay();
+  const difference = day === 0 ? -6 : 1 - day;
+
+  date.setDate(date.getDate() + difference);
+
+  return date;
+}
+
+function getIsoWeekInfo(value: string) {
+  const local = parseLocalDate(value);
+
+  const date = new Date(
+    Date.UTC(
+      local.getFullYear(),
+      local.getMonth(),
+      local.getDate(),
+    ),
+  );
+
+  const day = date.getUTCDay() || 7;
+
+  date.setUTCDate(
+    date.getUTCDate() + 4 - day,
+  );
+
+  const yearStart = new Date(
+    Date.UTC(date.getUTCFullYear(), 0, 1),
+  );
+
+  const week = Math.ceil(
+    ((date.getTime() - yearStart.getTime()) /
+      86400000 +
+      1) /
+      7,
+  );
+
+  return {
+    week,
+    year: date.getUTCFullYear(),
   };
+}
 
-  const atualizarTarefa = (id, campo, valor) => {
-    setTarefas(prev => prev.map(t => t.id === id ? { ...t, [campo]: valor } : t));
-  };
+function formatDate(value: string | null) {
+  if (!value) return '—';
 
-  const removerTarefa = (id) => {
-    if(window.confirm('Excluir esta tarefa?')) setTarefas(tarefas.filter(t => t.id !== id));
-  };
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(parseLocalDate(value));
+}
 
-  // --- CÁLCULOS DOS INDICADORES DE PPC ---
-  const tarefasDaSemana = tarefas.filter(t => parseInt(t.numSemana) === parseInt(semanaAtual) && t.atividade.trim() !== '');
-  const totalProgramadas = tarefasDaSemana.length;
-  const totalConcluidas = tarefasDaSemana.filter(t => t.concluida === 'SIM').length;
-  const ppcSemana = totalProgramadas > 0 ? (totalConcluidas / totalProgramadas) * 100 : 0;
+function formatShortDate(value: string | null) {
+  if (!value) return '—';
 
-  // PPC Acumulado (Todas as semanas válidas)
-  const tarefasValidasTotais = tarefas.filter(t => t.atividade.trim() !== '');
-  const concluidasTotais = tarefasValidasTotais.filter(t => t.concluida === 'SIM').length;
-  const ppcAcumulado = tarefasValidasTotais.length > 0 ? (concluidasTotais / tarefasValidasTotais.length) * 100 : 0;
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+  }).format(parseLocalDate(value));
+}
 
-  let globalIdCounter = 1;
+function numberOrNull(value: string) {
+  if (!value.trim()) return null;
+
+  const normalized = value.replace(',', '.');
+  const parsed = Number(normalized);
+
+  return Number.isFinite(parsed)
+    ? parsed
+    : null;
+}
+
+// ============================================================
+// LABEL HELPERS
+// ============================================================
+
+function varianceLabel(value: string | null) {
+  if (!value) return '—';
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', height: 'calc(100vh - 100px)', display: 'flex', flexDirection: 'column' }}>
-      
-      <datalist id="lista-locais">
-        {zonasColeta.map((zona, idx) => <option key={idx} value={zona} />)}
-      </datalist>
+    VARIANCE_REASONS.find(
+      (reason) => reason.value === value,
+    )?.label ?? value
+  );
+}
 
-      <datalist id="lista-causas">
-        {CAUSAS_NAO_CUMPRIMENTO.map((causa, idx) => <option key={idx} value={causa} />)}
-      </datalist>
+function planStatusLabel(status: WeeklyPlanStatus) {
+  switch (status) {
+    case 'draft':
+      return 'Draft';
 
-      {/* CABEÇALHO */}
-      <div style={{ marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '15px' }}>
+    case 'committed':
+      return 'Committed';
+
+    case 'closed':
+      return 'Closed';
+
+    case 'cancelled':
+      return 'Cancelled';
+
+    default:
+      return status;
+  }
+}
+
+// ============================================================
+// COMPONENT
+// ============================================================
+
+export default function WeeklyPlanningPage() {
+  // ----------------------------------------------------------
+  // GENERAL
+  // ----------------------------------------------------------
+
+  const initialMonday = useMemo(
+    () => dateToIso(getMonday(new Date())),
+    [],
+  );
+
+  const [projects, setProjects] =
+    useState<Project[]>([]);
+
+  const [selectedProjectId, setSelectedProjectId] =
+    useState('');
+
+  const [weekStartDate, setWeekStartDate] =
+    useState(initialMonday);
+
+  const [weeklyPlan, setWeeklyPlan] =
+    useState<WeeklyPlan | null>(null);
+
+  const [items, setItems] =
+    useState<WeeklyPlanItem[]>([]);
+
+  const [performance, setPerformance] =
+    useState<WeeklyPerformance | null>(null);
+
+  const [trend, setTrend] =
+    useState<WeeklyTrend | null>(null);
+
+  const [pareto, setPareto] =
+    useState<VariancePareto[]>([]);
+
+  const [lookaheadCandidates, setLookaheadCandidates] =
+    useState<LookaheadCandidate[]>([]);
+
+  const [selectedCandidateIds, setSelectedCandidateIds] =
+    useState<string[]>([]);
+
+  const [showLookaheadPanel, setShowLookaheadPanel] =
+    useState(false);
+
+  const [showUnplannedPanel, setShowUnplannedPanel] =
+    useState(false);
+
+  const [unplannedForm, setUnplannedForm] =
+    useState<UnplannedForm>(EMPTY_UNPLANNED_FORM);
+
+  const [
+    missedCommitment,
+    setMissedCommitment,
+  ] = useState<MissedCommitmentForm | null>(
+    null,
+  );
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [actionLoading, setActionLoading] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState('');
+
+  const [errorMessage, setErrorMessage] =
+    useState('');
+
+  // ----------------------------------------------------------
+  // DERIVED DATA
+  // ----------------------------------------------------------
+
+  const selectedProject =
+    projects.find(
+      (project) =>
+        project.id === selectedProjectId,
+    ) ?? null;
+
+  const weekEndDate =
+    addDays(weekStartDate, 4);
+
+  const weekInfo =
+    getIsoWeekInfo(weekStartDate);
+
+  const isDraft =
+    weeklyPlan?.status === 'draft';
+
+  const isCommitted =
+    weeklyPlan?.status === 'committed';
+
+  const isClosed =
+    weeklyPlan?.status === 'closed';
+
+  const formalItems = items.filter(
+    (item) => !item.is_unplanned_work,
+  );
+
+  const unplannedItems = items.filter(
+    (item) => item.is_unplanned_work,
+  );
+
+  // ----------------------------------------------------------
+  // MESSAGES
+  // ----------------------------------------------------------
+
+  const clearMessages = () => {
+    setMessage('');
+    setErrorMessage('');
+  };
+
+  const showError = (error: unknown) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error
+    ) {
+      setErrorMessage(
+        String(
+          (error as { message?: unknown }).message ??
+            'Unexpected error.',
+        ),
+      );
+
+      return;
+    }
+
+    setErrorMessage(
+      'Unexpected error.',
+    );
+  };
+
+  // ==========================================================
+  // PROJECTS
+  // ==========================================================
+
+  const loadProjects = useCallback(
+    async () => {
+      const { data, error } =
+        await supabase
+          .from('projects')
+          .select(
+            'id, name, organization_id',
+          )
+          .order('name', {
+            ascending: true,
+          });
+
+      if (error) {
+        showError(error);
+        return;
+      }
+
+      setProjects(
+        (data ?? []) as Project[],
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void loadProjects();
+  }, [loadProjects]);
+
+  // ==========================================================
+  // WEEKLY PLAN DATA
+  // ==========================================================
+
+  const loadWeeklyPlan = useCallback(
+    async () => {
+      if (!selectedProjectId) {
+        setWeeklyPlan(null);
+        setItems([]);
+        setPerformance(null);
+        setTrend(null);
+        setPareto([]);
+        setLookaheadCandidates([]);
+        return;
+      }
+
+      setLoading(true);
+      clearMessages();
+
+      try {
+        const { data: planData, error: planError } =
+          await supabase
+            .from('weekly_plans')
+            .select('*')
+            .eq(
+              'project_id',
+              selectedProjectId,
+            )
+            .eq(
+              'week_number',
+              weekInfo.week,
+            )
+            .eq(
+              'year_number',
+              weekInfo.year,
+            )
+            .neq(
+              'status',
+              'cancelled',
+            )
+            .maybeSingle();
+
+        if (planError) {
+          throw planError;
+        }
+
+        if (!planData) {
+          setWeeklyPlan(null);
+          setItems([]);
+          setPerformance(null);
+          setTrend(null);
+          setPareto([]);
+          return;
+        }
+
+        const plan =
+          planData as WeeklyPlan;
+
+        setWeeklyPlan(plan);
+
+        const [
+          itemsResult,
+          performanceResult,
+          trendResult,
+          paretoResult,
+        ] = await Promise.all([
+          supabase
+            .from('weekly_plan_items')
+            .select('*')
+            .eq(
+              'weekly_plan_id',
+              plan.id,
+            )
+            .order(
+              'sequence_number',
+              {
+                ascending: true,
+              },
+            )
+            .order(
+              'created_at',
+              {
+                ascending: true,
+              },
+            ),
+
+          supabase
+            .from(
+              'weekly_plan_performance',
+            )
+            .select('*')
+            .eq(
+              'weekly_plan_id',
+              plan.id,
+            )
+            .maybeSingle(),
+
+          supabase
+            .from('weekly_ppc_trend')
+            .select('*')
+            .eq(
+              'weekly_plan_id',
+              plan.id,
+            )
+            .maybeSingle(),
+
+          supabase
+            .from(
+              'weekly_variance_pareto',
+            )
+            .select('*')
+            .eq(
+              'weekly_plan_id',
+              plan.id,
+            )
+            .order(
+              'variance_count',
+              {
+                ascending: false,
+              },
+            ),
+        ]);
+
+        if (itemsResult.error) {
+          throw itemsResult.error;
+        }
+
+        if (performanceResult.error) {
+          throw performanceResult.error;
+        }
+
+        if (trendResult.error) {
+          throw trendResult.error;
+        }
+
+        if (paretoResult.error) {
+          throw paretoResult.error;
+        }
+
+        setItems(
+          (itemsResult.data ??
+            []) as WeeklyPlanItem[],
+        );
+
+        setPerformance(
+          (performanceResult.data ??
+            null) as WeeklyPerformance | null,
+        );
+
+        setTrend(
+          (trendResult.data ??
+            null) as WeeklyTrend | null,
+        );
+
+        setPareto(
+          (paretoResult.data ??
+            []) as VariancePareto[],
+        );
+      } catch (error) {
+        showError(error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      selectedProjectId,
+      weekInfo.week,
+      weekInfo.year,
+    ],
+  );
+
+  useEffect(() => {
+    void loadWeeklyPlan();
+  }, [loadWeeklyPlan]);
+
+  // ==========================================================
+  // LOOKAHEAD CANDIDATES
+  // ==========================================================
+
+  const loadLookaheadCandidates =
+    useCallback(async () => {
+      if (!selectedProjectId) {
+        setLookaheadCandidates([]);
+        return;
+      }
+
+      clearMessages();
+
+      const { data, error } =
+        await supabase
+          .from('lookahead_work_items')
+          .select(`
+            id,
+            project_id,
+            lookahead_plan_id,
+            master_plan_package_id,
+            package_code,
+            service_code,
+            service_name,
+            lookahead_description,
+            location_name,
+            location_path,
+            lookahead_start_date,
+            lookahead_finish_date,
+            readiness_status,
+            committed_to_weekly
+          `)
+          .eq(
+            'project_id',
+            selectedProjectId,
+          )
+          .eq(
+            'readiness_status',
+            'ready',
+          )
+          .eq(
+            'committed_to_weekly',
+            false,
+          )
+          .lte(
+            'lookahead_start_date',
+            weekEndDate,
+          )
+          .gte(
+            'lookahead_finish_date',
+            weekStartDate,
+          )
+          .order(
+            'lookahead_start_date',
+            {
+              ascending: true,
+            },
+          );
+
+      if (error) {
+        showError(error);
+        return;
+      }
+
+      setLookaheadCandidates(
+        (data ??
+          []) as LookaheadCandidate[],
+      );
+    }, [
+      selectedProjectId,
+      weekStartDate,
+      weekEndDate,
+    ]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      void loadLookaheadCandidates();
+    }
+  }, [
+    selectedProjectId,
+    loadLookaheadCandidates,
+  ]);
+
+  // ==========================================================
+  // CREATE WEEKLY PLAN
+  // ==========================================================
+
+  const createWeeklyPlan =
+    async (): Promise<WeeklyPlan | null> => {
+      if (!selectedProject) {
+        setErrorMessage(
+          'Select a project first.',
+        );
+        return null;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        const { data, error } =
+          await supabase
+            .from('weekly_plans')
+            .insert({
+              organization_id:
+                selectedProject.organization_id,
+
+              project_id:
+                selectedProject.id,
+
+              week_start_date:
+                weekStartDate,
+
+              week_end_date:
+                weekEndDate,
+
+              week_number:
+                weekInfo.week,
+
+              year_number:
+                weekInfo.year,
+
+              name:
+                `Week ${weekInfo.week} · ${weekInfo.year}`,
+
+              status: 'draft',
+
+              ppc_target: 85,
+            })
+            .select('*')
+            .single();
+
+        if (error) {
+          throw error;
+        }
+
+        const plan =
+          data as WeeklyPlan;
+
+        setWeeklyPlan(plan);
+
+        setMessage(
+          'Weekly Plan created.',
+        );
+
+        return plan;
+      } catch (error) {
+        showError(error);
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    };
+
+  // ==========================================================
+  // ADD FROM LOOKAHEAD
+  // ==========================================================
+
+  const toggleCandidate = (
+    id: string,
+  ) => {
+    setSelectedCandidateIds(
+      (previous) =>
+        previous.includes(id)
+          ? previous.filter(
+              (itemId) =>
+                itemId !== id,
+            )
+          : [...previous, id],
+    );
+  };
+
+  const addSelectedFromLookahead =
+    async () => {
+      if (
+        selectedCandidateIds.length === 0
+      ) {
+        setErrorMessage(
+          'Select at least one ready Lookahead activity.',
+        );
+        return;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        let plan = weeklyPlan;
+
+        if (!plan) {
+          plan =
+            await createWeeklyPlan();
+        }
+
+        if (!plan) {
+          return;
+        }
+
+        if (plan.status !== 'draft') {
+          throw new Error(
+            'Only Draft Weekly Plans can receive planned work from Lookahead.',
+          );
+        }
+
+        const selected =
+          lookaheadCandidates.filter(
+            (candidate) =>
+              selectedCandidateIds.includes(
+                candidate.id,
+              ),
+          );
+
+        const currentMaxSequence =
+          items.reduce(
+            (max, item) =>
+              Math.max(
+                max,
+                item.sequence_number ??
+                  0,
+              ),
+            0,
+          );
+
+        const rows = selected.map(
+          (candidate, index) => ({
+            weekly_plan_id: plan!.id,
+
+            organization_id:
+              selectedProject!.organization_id,
+
+            project_id:
+              selectedProject!.id,
+
+            lookahead_work_item_id:
+              candidate.id,
+
+            master_plan_package_id:
+              candidate.master_plan_package_id,
+
+            source_type:
+              'lookahead',
+
+            package_code:
+              candidate.package_code,
+
+            activity_description:
+              candidate.lookahead_description ||
+              candidate.service_name ||
+              candidate.service_code ||
+              candidate.package_code ||
+              'Lookahead Activity',
+
+            location_name:
+              candidate.location_name,
+
+            location_path:
+              candidate.location_path,
+
+            planned_start_date:
+              candidate.lookahead_start_date,
+
+            planned_finish_date:
+              candidate.lookahead_finish_date,
+
+            sequence_number:
+              currentMaxSequence +
+              index +
+              1,
+
+            is_unplanned_work: false,
+
+            commitment_status:
+              'draft',
+
+            execution_result:
+              'pending',
+          }),
+        );
+
+        const { error } =
+          await supabase
+            .from('weekly_plan_items')
+            .insert(rows);
+
+        if (error) {
+          throw error;
+        }
+
+        setSelectedCandidateIds([]);
+        setShowLookaheadPanel(false);
+
+        setMessage(
+          `${rows.length} Lookahead ${
+            rows.length === 1
+              ? 'activity'
+              : 'activities'
+          } added to the Weekly Plan.`,
+        );
+
+        await loadWeeklyPlan();
+        await loadLookaheadCandidates();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
+
+  // ==========================================================
+  // UPDATE DRAFT ITEM
+  // ==========================================================
+
+  const updateDraftItem = async (
+    itemId: string,
+    field:
+      | 'responsible_party'
+      | 'planned_quantity'
+      | 'unit'
+      | 'notes',
+    value: string,
+  ) => {
+    if (!isDraft) return;
+
+    const dbValue =
+      field === 'planned_quantity'
+        ? numberOrNull(value)
+        : value.trim() || null;
+
+    setItems((previous) =>
+      previous.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              [field]: dbValue,
+            }
+          : item,
+      ),
+    );
+
+    const { error } =
+      await supabase
+        .from('weekly_plan_items')
+        .update({
+          [field]: dbValue,
+        })
+        .eq('id', itemId);
+
+    if (error) {
+      showError(error);
+      await loadWeeklyPlan();
+    }
+  };
+
+  // ==========================================================
+  // DELETE DRAFT ITEM
+  // ==========================================================
+
+  const deleteDraftItem = async (
+    item: WeeklyPlanItem,
+  ) => {
+    if (!isDraft) return;
+
+    const confirmed =
+      window.confirm(
+        `Remove "${item.activity_description}" from this Weekly Plan?`,
+      );
+
+    if (!confirmed) return;
+
+    clearMessages();
+
+    const { error } =
+      await supabase
+        .from('weekly_plan_items')
+        .delete()
+        .eq('id', item.id);
+
+    if (error) {
+      showError(error);
+      return;
+    }
+
+    setMessage(
+      'Activity removed from the Weekly Plan.',
+    );
+
+    await loadWeeklyPlan();
+    await loadLookaheadCandidates();
+  };
+
+  // ==========================================================
+  // PPC TARGET
+  // ==========================================================
+
+  const updatePpcTarget = async (
+    value: number,
+  ) => {
+    if (!weeklyPlan || !isDraft) {
+      return;
+    }
+
+    const target = Math.min(
+      100,
+      Math.max(0, value),
+    );
+
+    setWeeklyPlan({
+      ...weeklyPlan,
+      ppc_target: target,
+    });
+
+    const { error } =
+      await supabase
+        .from('weekly_plans')
+        .update({
+          ppc_target: target,
+        })
+        .eq(
+          'id',
+          weeklyPlan.id,
+        );
+
+    if (error) {
+      showError(error);
+      await loadWeeklyPlan();
+    }
+  };
+
+  // ==========================================================
+  // COMMIT WEEK
+  // ==========================================================
+
+  const commitWeek = async () => {
+    if (!weeklyPlan) return;
+
+    if (formalItems.length === 0) {
+      setErrorMessage(
+        'Add at least one ready Lookahead activity before committing the week.',
+      );
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        'Commit this Weekly Plan? The commitment baseline will be frozen and used for PPC.',
+      );
+
+    if (!confirmed) return;
+
+    clearMessages();
+    setActionLoading(true);
+
+    try {
+      const { error } =
+        await supabase.rpc(
+          'commit_weekly_plan',
+          {
+            target_weekly_plan_id:
+              weeklyPlan.id,
+          },
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage(
+        'Weekly Plan committed. The PPC baseline is now frozen.',
+      );
+
+      await loadWeeklyPlan();
+      await loadLookaheadCandidates();
+    } catch (error) {
+      showError(error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ==========================================================
+  // EXECUTION
+  // ==========================================================
+
+  const markCompleted = async (
+    item: WeeklyPlanItem,
+  ) => {
+    if (!isCommitted) return;
+
+    clearMessages();
+    setActionLoading(true);
+
+    try {
+      const { error } =
+        await supabase
+          .from('weekly_plan_items')
+          .update({
+            execution_result:
+              'completed',
+
+            completed_at:
+              new Date().toISOString(),
+
+            variance_reason: null,
+            variance_notes: null,
+            variance_recorded_at: null,
+            variance_recorded_by: null,
+          })
+          .eq('id', item.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage(
+        `"${item.activity_description}" marked Completed.`,
+      );
+
+      await loadWeeklyPlan();
+    } catch (error) {
+      showError(error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openMissedModal = (
+    item: WeeklyPlanItem,
+  ) => {
+    setMissedCommitment({
+      itemId: item.id,
+
+      varianceReason:
+        item.variance_reason ?? '',
+
+      varianceNotes:
+        item.variance_notes ?? '',
+
+      actualQuantity:
+        item.actual_quantity !== null
+          ? String(
+              item.actual_quantity,
+            )
+          : '',
+    });
+  };
+
+  const saveMissedCommitment =
+    async () => {
+      if (!missedCommitment) return;
+
+      if (
+        !missedCommitment.varianceReason
+      ) {
+        setErrorMessage(
+          'Reason for Variance is required for a missed commitment.',
+        );
+        return;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        const { error } =
+          await supabase
+            .from('weekly_plan_items')
+            .update({
+              execution_result:
+                'not_completed',
+
+              actual_quantity:
+                numberOrNull(
+                  missedCommitment.actualQuantity,
+                ),
+
+              completed_at: null,
+
+              variance_reason:
+                missedCommitment.varianceReason,
+
+              variance_notes:
+                missedCommitment.varianceNotes.trim() ||
+                null,
+
+              variance_recorded_at:
+                new Date().toISOString(),
+            })
+            .eq(
+              'id',
+              missedCommitment.itemId,
+            );
+
+        if (error) {
+          throw error;
+        }
+
+        setMissedCommitment(null);
+
+        setMessage(
+          'Missed commitment recorded with its Reason for Variance.',
+        );
+
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
+
+  // ==========================================================
+  // ACTUAL QUANTITY
+  // ==========================================================
+
+  const updateActualQuantity =
+    async (
+      itemId: string,
+      value: string,
+    ) => {
+      if (!isCommitted) return;
+
+      const actual =
+        numberOrNull(value);
+
+      setItems((previous) =>
+        previous.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                actual_quantity:
+                  actual,
+              }
+            : item,
+        ),
+      );
+
+      const { error } =
+        await supabase
+          .from('weekly_plan_items')
+          .update({
+            actual_quantity:
+              actual,
+          })
+          .eq('id', itemId);
+
+      if (error) {
+        showError(error);
+        await loadWeeklyPlan();
+      }
+    };
+
+  // ==========================================================
+  // ADD UNPLANNED WORK
+  // ==========================================================
+
+  const addUnplannedWork = async () => {
+    if (!weeklyPlan || !isCommitted) {
+      return;
+    }
+
+    if (
+      !unplannedForm.activityDescription.trim()
+    ) {
+      setErrorMessage(
+        'Activity description is required.',
+      );
+      return;
+    }
+
+    clearMessages();
+    setActionLoading(true);
+
+    try {
+      const maxSequence =
+        items.reduce(
+          (max, item) =>
+            Math.max(
+              max,
+              item.sequence_number ??
+                0,
+            ),
+          0,
+        );
+
+      const { error } =
+        await supabase
+          .from('weekly_plan_items')
+          .insert({
+            weekly_plan_id:
+              weeklyPlan.id,
+
+            organization_id:
+              weeklyPlan.organization_id,
+
+            project_id:
+              weeklyPlan.project_id,
+
+            source_type:
+              'unplanned',
+
+            activity_description:
+              unplannedForm.activityDescription.trim(),
+
+            location_name:
+              unplannedForm.locationName.trim() ||
+              null,
+
+            responsible_party:
+              unplannedForm.responsibleParty.trim() ||
+              null,
+
+            planned_quantity:
+              numberOrNull(
+                unplannedForm.plannedQuantity,
+              ),
+
+            actual_quantity:
+              numberOrNull(
+                unplannedForm.actualQuantity,
+              ),
+
+            unit:
+              unplannedForm.unit.trim() ||
+              null,
+
+            notes:
+              unplannedForm.notes.trim() ||
+              null,
+
+            sequence_number:
+              maxSequence + 1,
+
+            is_unplanned_work: true,
+
+            commitment_status:
+              'draft',
+
+            execution_result:
+              'pending',
+          });
+
+      if (error) {
+        throw error;
+      }
+
+      setUnplannedForm(
+        EMPTY_UNPLANNED_FORM,
+      );
+
+      setShowUnplannedPanel(false);
+
+      setMessage(
+        'Unplanned Work added. It is visible but excluded from PPC.',
+      );
+
+      await loadWeeklyPlan();
+    } catch (error) {
+      showError(error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ==========================================================
+  // CLOSE WEEK
+  // ==========================================================
+
+  const closeWeek = async () => {
+    if (!weeklyPlan) return;
+
+    const confirmed =
+      window.confirm(
+        'Close this Weekly Plan? PPC will become final and the plan will become historical.',
+      );
+
+    if (!confirmed) return;
+
+    clearMessages();
+    setActionLoading(true);
+
+    try {
+      const { error } =
+        await supabase.rpc(
+          'close_weekly_plan',
+          {
+            target_weekly_plan_id:
+              weeklyPlan.id,
+          },
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage(
+        'Weekly Plan closed. PPC is now final.',
+      );
+
+      await loadWeeklyPlan();
+    } catch (error) {
+      showError(error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ==========================================================
+  // WEEK NAVIGATION
+  // ==========================================================
+
+  const moveWeek = (
+    difference: number,
+  ) => {
+    setWeekStartDate(
+      addDays(
+        weekStartDate,
+        difference * 7,
+      ),
+    );
+
+    setShowLookaheadPanel(false);
+    setShowUnplannedPanel(false);
+    setSelectedCandidateIds([]);
+    clearMessages();
+  };
+
+  const handleWeekDateChange = (
+    value: string,
+  ) => {
+    if (!value) return;
+
+    const monday =
+      dateToIso(
+        getMonday(
+          parseLocalDate(value),
+        ),
+      );
+
+    setWeekStartDate(monday);
+
+    setShowLookaheadPanel(false);
+    setShowUnplannedPanel(false);
+    setSelectedCandidateIds([]);
+    clearMessages();
+  };
+
+  // ==========================================================
+  // RENDER HELPERS
+  // ==========================================================
+
+  const ppc =
+    performance?.ppc_percent ?? null;
+
+  const ppcTarget =
+    weeklyPlan?.ppc_target ?? 85;
+
+  const ppcTargetMet =
+    performance?.ppc_target_met ??
+    null;
+
+  const canClose =
+    isCommitted &&
+    (performance?.total_commitments ??
+      0) > 0 &&
+    (performance?.pending_commitments ??
+      0) === 0;
+
+  // ==========================================================
+  // PAGE
+  // ==========================================================
+
+  return (
+    <div
+      style={{
+        minHeight:
+          'calc(100vh - 100px)',
+        padding: '24px',
+        background: '#f8fafc',
+        color: '#0f172a',
+        fontFamily:
+          'Inter, Arial, sans-serif',
+      }}
+    >
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent:
+            'space-between',
+          alignItems: 'flex-start',
+          gap: '20px',
+          flexWrap: 'wrap',
+          marginBottom: '22px',
+        }}
+      >
         <div>
-          <h1 style={{ color: '#2A4365', margin: 0, fontStyle: 'italic', fontSize: '1.5rem', marginBottom: '10px' }}>
-            PLANEJAMENTO SEMANAL (CURTO PRAZO)
-          </h1>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              <select
-                value={projetoSelecionado}
-                onChange={(e) => setProjetoSelecionado(e.target.value)}
-                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e0', minWidth: '300px', fontSize: '0.9rem', outline: 'none' }}
-              >
-                <option value="">-- Selecione uma Obra --</option>
-                {projetosLista.map(p => (
-                  <option key={p.id} value={p.id}>#{p.id} - {p.nome_projeto}</option>
-                ))}
-              </select>
-            </div>
-            
-            {projetoSelecionado && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f7fafc', padding: '5px 15px', borderRadius: '6px', border: '1px solid #cbd5e0' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#4a5568' }}>Exibindo Semana:</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  value={semanaAtual} 
-                  onChange={(e) => setSemanaAtual(e.target.value)} 
-                  style={{ width: '60px', padding: '4px', borderRadius: '4px', border: '1px solid #cbd5e0', textAlign: 'center' }} 
-                />
-              </div>
-            )}
+          <div
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 800,
+              letterSpacing:
+                '0.08em',
+              color: '#64748b',
+              textTransform:
+                'uppercase',
+              marginBottom: '6px',
+            }}
+          >
+            Planning
           </div>
+
+          <h1
+            style={{
+              margin: 0,
+              fontSize: '1.8rem',
+              color: '#0f2745',
+            }}
+          >
+            Weekly Planning
+          </h1>
+
+          <p
+            style={{
+              margin:
+                '7px 0 0 0',
+              color: '#64748b',
+              fontSize: '0.9rem',
+            }}
+          >
+            Convert ready Lookahead work
+            into reliable weekly
+            commitments and measure PPC.
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '10px',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+          }}
+        >
+          <select
+            value={
+              selectedProjectId
+            }
+            onChange={(event) =>
+              setSelectedProjectId(
+                event.target.value,
+              )
+            }
+            style={styles.select}
+          >
+            <option value="">
+              Select Project
+            </option>
+
+            {projects.map(
+              (project) => (
+                <option
+                  key={project.id}
+                  value={project.id}
+                >
+                  {project.name}
+                </option>
+              ),
+            )}
+          </select>
+
+          <button
+            type="button"
+            onClick={() =>
+              void loadWeeklyPlan()
+            }
+            disabled={
+              !selectedProjectId ||
+              loading
+            }
+            style={styles.secondaryButton}
+          >
+            Refresh
+          </button>
         </div>
       </div>
 
-      {!projetoSelecionado ? (
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f7fafc', borderRadius: '8px', border: '2px dashed #cbd5e0' }}>
-          <div style={{ textAlign: 'center', color: '#718096' }}>
-            <span style={{ fontSize: '3rem', display: 'block', marginBottom: '10px' }}>🏗️</span>
-            <h2>Nenhuma Obra Selecionada</h2>
-            <p>Selecione um projeto no menu acima para gerenciar as metas da semana.</p>
+      {/* ======================================================
+          FEEDBACK
+      ====================================================== */}
+
+      {message && (
+        <div style={styles.successBox}>
+          {message}
+        </div>
+      )}
+
+      {errorMessage && (
+        <div style={styles.errorBox}>
+          {errorMessage}
+        </div>
+      )}
+
+      {/* ======================================================
+          EMPTY PROJECT
+      ====================================================== */}
+
+      {!selectedProjectId ? (
+        <div style={styles.emptyState}>
+          <div
+            style={{
+              fontSize: '2.5rem',
+              marginBottom: '10px',
+            }}
+          >
+            📅
           </div>
+
+          <h2
+            style={{
+              margin:
+                '0 0 8px 0',
+              color: '#0f2745',
+            }}
+          >
+            Select a Project
+          </h2>
+
+          <p
+            style={{
+              margin: 0,
+              color: '#64748b',
+            }}
+          >
+            Choose a project to create,
+            commit and evaluate its
+            Weekly Plan.
+          </p>
         </div>
       ) : (
         <>
-          {/* DASHBOARD DE MÉTRICAS (PPC) */}
-          <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
-            {/* Bloco 1: Quantidades */}
-            <div style={{ display: 'flex', gap: '15px', flex: 1, minWidth: '250px' }}>
-              <div style={{ flex: 1, backgroundColor: 'white', padding: '15px', borderRadius: '8px', border: '1px solid #cbd5e0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#718096', display: 'block', marginBottom: '5px' }}>PROGRAMADAS (SEM. {semanaAtual})</span>
-                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#2a4365' }}>{totalProgramadas}</span>
+          {/* ==================================================
+              WEEK CONTROL
+          ================================================== */}
+
+          <div style={styles.card}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent:
+                  'space-between',
+                gap: '16px',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    moveWeek(-1)
+                  }
+                  style={
+                    styles.iconButton
+                  }
+                >
+                  ←
+                </button>
+
+                <div>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: '#0f2745',
+                    }}
+                  >
+                    Week{' '}
+                    {weekInfo.week} ·{' '}
+                    {weekInfo.year}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize:
+                        '0.82rem',
+                      color: '#64748b',
+                      marginTop:
+                        '3px',
+                    }}
+                  >
+                    {formatDate(
+                      weekStartDate,
+                    )}{' '}
+                    –{' '}
+                    {formatDate(
+                      weekEndDate,
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    moveWeek(1)
+                  }
+                  style={
+                    styles.iconButton
+                  }
+                >
+                  →
+                </button>
+
+                <input
+                  type="date"
+                  value={
+                    weekStartDate
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    handleWeekDateChange(
+                      event.target.value,
+                    )
+                  }
+                  style={styles.input}
+                />
               </div>
-              <div style={{ flex: 1, backgroundColor: 'white', padding: '15px', borderRadius: '8px', border: '1px solid #cbd5e0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#718096', display: 'block', marginBottom: '5px' }}>CONCLUÍDAS (SEM. {semanaAtual})</span>
-                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#38a169' }}>{totalConcluidas}</span>
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                }}
+              >
+                {weeklyPlan ? (
+                  <span
+                    style={{
+                      ...styles.statusBadge,
+
+                      ...(isDraft
+                        ? styles.draftBadge
+                        : isCommitted
+                          ? styles.committedBadge
+                          : isClosed
+                            ? styles.closedBadge
+                            : styles.cancelledBadge),
+                    }}
+                  >
+                    {planStatusLabel(
+                      weeklyPlan.status,
+                    )}
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      ...styles.statusBadge,
+                      background:
+                        '#f1f5f9',
+                      color: '#64748b',
+                    }}
+                  >
+                    No Weekly Plan
+                  </span>
+                )}
+
+                {!weeklyPlan && (
+                  <button
+                    type="button"
+                    disabled={
+                      actionLoading
+                    }
+                    onClick={() =>
+                      void createWeeklyPlan()
+                    }
+                    style={
+                      styles.primaryButton
+                    }
+                  >
+                    Create Weekly Plan
+                  </button>
+                )}
+
+                {isDraft && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowLookaheadPanel(
+                          true,
+                        );
+                        void loadLookaheadCandidates();
+                      }}
+                      style={
+                        styles.primaryButton
+                      }
+                    >
+                      + Add from Lookahead
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        formalItems.length ===
+                          0 ||
+                        actionLoading
+                      }
+                      onClick={() =>
+                        void commitWeek()
+                      }
+                      style={
+                        styles.commitButton
+                      }
+                    >
+                      Commit Week
+                    </button>
+                  </>
+                )}
+
+                {isCommitted && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowUnplannedPanel(
+                          true,
+                        )
+                      }
+                      style={
+                        styles.secondaryButton
+                      }
+                    >
+                      + Add Unplanned Work
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        !canClose ||
+                        actionLoading
+                      }
+                      onClick={() =>
+                        void closeWeek()
+                      }
+                      style={
+                        styles.closeButton
+                      }
+                    >
+                      Close Week
+                    </button>
+                  </>
+                )}
               </div>
             </div>
+          </div>
 
-            {/* Bloco 2: PPC */}
-            <div style={{ display: 'flex', gap: '15px', flex: 2, minWidth: '400px' }}>
-              <div style={{ flex: 1, backgroundColor: ppcSemana >= metaPpc ? '#f0fff4' : '#fff5f5', padding: '15px', borderRadius: '8px', border: `1px solid ${ppcSemana >= metaPpc ? '#9ae6b4' : '#feb2b2'}`, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: ppcSemana >= metaPpc ? '#22543d' : '#742a2a', display: 'block', marginBottom: '5px' }}>PPC DA SEMANA</span>
-                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: ppcSemana >= metaPpc ? '#38a169' : '#e53e3e' }}>{ppcSemana.toFixed(2)}%</span>
+          {/* ==================================================
+              METRICS
+          ================================================== */}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: '12px',
+              marginBottom: '18px',
+            }}
+          >
+            <MetricCard
+              label="PPC"
+              value={
+                ppc === null
+                  ? '—'
+                  : `${ppc.toFixed(
+                      1,
+                    )}%`
+              }
+              accent={
+                ppcTargetMet === true
+                  ? 'success'
+                  : ppcTargetMet ===
+                      false
+                    ? 'danger'
+                    : 'neutral'
+              }
+              footer={
+                isClosed
+                  ? 'Final PPC'
+                  : isCommitted
+                    ? 'Live PPC'
+                    : 'Available after commitment'
+              }
+            />
+
+            <MetricCard
+              label="Committed"
+              value={String(
+                performance?.total_commitments ??
+                  0,
+              )}
+            />
+
+            <MetricCard
+              label="Completed"
+              value={String(
+                performance?.completed_commitments ??
+                  0,
+              )}
+              accent="success"
+            />
+
+            <MetricCard
+              label="Missed"
+              value={String(
+                performance?.missed_commitments ??
+                  0,
+              )}
+              accent="danger"
+            />
+
+            <MetricCard
+              label="Pending"
+              value={String(
+                performance?.pending_commitments ??
+                  0,
+              )}
+            />
+
+            <MetricCard
+              label="Unplanned"
+              value={String(
+                performance?.unplanned_work_items ??
+                  unplannedItems.length,
+              )}
+              footer="Excluded from PPC"
+            />
+          </div>
+
+          {/* ==================================================
+              SECONDARY METRICS
+          ================================================== */}
+
+          {weeklyPlan && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '12px',
+                marginBottom:
+                  '18px',
+              }}
+            >
+              <div style={styles.card}>
+                <div
+                  style={
+                    styles.smallLabel
+                  }
+                >
+                  PPC Target
+                </div>
+
+                {isDraft ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems:
+                        'center',
+                      gap: '8px',
+                      marginTop:
+                        '8px',
+                    }}
+                  >
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={
+                        weeklyPlan.ppc_target
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        void updatePpcTarget(
+                          Number(
+                            event.target
+                              .value,
+                          ),
+                        )
+                      }
+                      style={{
+                        ...styles.input,
+                        width: '85px',
+                      }}
+                    />
+
+                    <strong>%</strong>
+                  </div>
+                ) : (
+                  <div
+                    style={
+                      styles.secondaryMetricValue
+                    }
+                  >
+                    {ppcTarget.toFixed(
+                      1,
+                    )}
+                    %
+                  </div>
+                )}
               </div>
-              <div style={{ flex: 1, backgroundColor: 'white', padding: '15px', borderRadius: '8px', border: '1px solid #cbd5e0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#718096', display: 'block', marginBottom: '5px' }}>PPC ACUMULADO</span>
-                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#2b6cb0' }}>{ppcAcumulado.toFixed(2)}%</span>
+
+              <div style={styles.card}>
+                <div
+                  style={
+                    styles.smallLabel
+                  }
+                >
+                  Previous Week PPC
+                </div>
+
+                <div
+                  style={
+                    styles.secondaryMetricValue
+                  }
+                >
+                  {trend?.previous_week_ppc ===
+                  null ||
+                  trend?.previous_week_ppc ===
+                    undefined
+                    ? '—'
+                    : `${Number(
+                        trend.previous_week_ppc,
+                      ).toFixed(
+                        1,
+                      )}%`}
+                </div>
               </div>
-              <div style={{ flex: 1, backgroundColor: 'white', padding: '15px', borderRadius: '8px', border: '1px solid #cbd5e0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#718096', display: 'block', marginBottom: '5px' }}>META PPC (%)</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <input type="number" value={metaPpc} onChange={(e) => setMetaPpc(e.target.value)} style={{ width: '60px', padding: '4px', borderRadius: '4px', border: '1px solid #cbd5e0', fontWeight: 'bold', color: '#2b6cb0' }} />
-                  <span style={{ fontWeight: 'bold', color: '#4a5568' }}>%</span>
+
+              <div style={styles.card}>
+                <div
+                  style={
+                    styles.smallLabel
+                  }
+                >
+                  Change vs Previous
+                </div>
+
+                <div
+                  style={
+                    styles.secondaryMetricValue
+                  }
+                >
+                  {trend?.ppc_change_vs_previous_week ===
+                  null ||
+                  trend?.ppc_change_vs_previous_week ===
+                    undefined
+                    ? '—'
+                    : `${Number(
+                        trend.ppc_change_vs_previous_week,
+                      ) >= 0
+                        ? '+'
+                        : ''}${Number(
+                        trend.ppc_change_vs_previous_week,
+                      ).toFixed(
+                        1,
+                      )} pp`}
+                </div>
+              </div>
+
+              <div style={styles.card}>
+                <div
+                  style={
+                    styles.smallLabel
+                  }
+                >
+                  Rolling 4-Week PPC
+                </div>
+
+                <div
+                  style={
+                    styles.secondaryMetricValue
+                  }
+                >
+                  {trend?.rolling_4_week_ppc ===
+                  null ||
+                  trend?.rolling_4_week_ppc ===
+                    undefined
+                    ? '—'
+                    : `${Number(
+                        trend.rolling_4_week_ppc,
+                      ).toFixed(
+                        1,
+                      )}%`}
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* TABELA DE PLANEJAMENTO SEMANAL */}
-          <div style={{ flex: 1, overflow: 'auto', backgroundColor: 'white', border: '1px solid #cbd5e0', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap', width: '100%', minWidth: '1600px' }}>
-              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                <tr>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '40px' }}>ID</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '130px' }}>DATA DO<br/>PLANEJAMENTO</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', minWidth: '150px' }}>LOCAL</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '90px' }}>Nº SEMANA</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '180px' }}>RESPONSÁVEL</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', minWidth: '350px' }}>ATIVIDADE</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '100px' }}>CONCLUÍDA?</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '80px' }}>UNID.</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '120px' }}>QTD.<br/>PROGRAMADA</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '120px' }}>QTD.<br/>EXECUTADA</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', width: '100px' }}>% FÍSICO</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', borderRight: '1px solid #2a4365', minWidth: '250px' }}>CAUSA DO NÃO<br/>CUMPRIMENTO</th>
-                  <th style={{ backgroundColor: '#1a365d', color: 'white', padding: '12px 8px', minWidth: '250px' }}>OBSERVAÇÕES</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tarefas.filter(t => t.numSemana == semanaAtual).map((tarefa) => {
-                  const idNum = globalIdCounter++;
-                  
-                  // Cálculo do % Físico
-                  let percentualFisico = 0;
-                  const qP = parseFloat(tarefa.qtdProgramada?.replace(',', '.') || 0);
-                  const qE = parseFloat(tarefa.qtdExecutada?.replace(',', '.') || 0);
-                  if (qP > 0) percentualFisico = (qE / qP) * 100;
-                  
-                  // Estilo da Célula Concluída
-                  let concluidaStyle = { backgroundColor: 'transparent', color: '#2d3748' };
-                  if (tarefa.concluida === 'SIM') concluidaStyle = { backgroundColor: '#38a169', color: 'white', fontWeight: 'bold' };
-                  if (tarefa.concluida === 'NÃO') concluidaStyle = { backgroundColor: '#e53e3e', color: 'white', fontWeight: 'bold' };
+          {/* ==================================================
+              NO WEEKLY PLAN
+          ================================================== */}
 
-                  return (
-                    <tr key={tarefa.id} style={{ borderBottom: '1px dotted #cbd5e0', backgroundColor: tarefa.concluida === 'SIM' ? '#f0fff4' : 'white' }}>
-                      <td style={{ padding: '8px', textAlign: 'center', borderRight: '1px solid #e2e8f0', color: '#4a5568', fontWeight: '500' }}>{idNum}</td>
-                      <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>
-                        <input type="date" value={tarefa.dataPlanejamento} onChange={(e) => atualizarTarefa(tarefa.id, 'dataPlanejamento', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.8rem', textAlign: 'center' }} />
-                      </td>
-                      <td style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>
-                        <input type="text" value={tarefa.local} onChange={(e) => atualizarTarefa(tarefa.id, 'local', e.target.value)} list="lista-locais" placeholder="Ex: PV2 ZONA 1" style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem' }} />
-                      </td>
-                      <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>
-                        <input type="number" value={tarefa.numSemana} onChange={(e) => atualizarTarefa(tarefa.id, 'numSemana', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem', textAlign: 'center' }} />
-                      </td>
-                      <td style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>
-                        <input type="text" value={tarefa.responsavel} onChange={(e) => atualizarTarefa(tarefa.id, 'responsavel', e.target.value)} placeholder="Engenheiro/Mestre" style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem' }} />
-                      </td>
-                      <td style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>
-                        <input type="text" value={tarefa.atividade} onChange={(e) => atualizarTarefa(tarefa.id, 'atividade', e.target.value)} placeholder="Descreva a atividade..." style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem', fontWeight: 'bold', color: '#2a4365' }} />
-                      </td>
-                      
-                      {/* STATUS CONCLUÍDA */}
-                      <td style={{ padding: '2px', borderRight: '1px solid #e2e8f0', backgroundColor: concluidaStyle.backgroundColor }}>
-                        <select
-                          value={tarefa.concluida}
-                          onChange={(e) => atualizarTarefa(tarefa.id, 'concluida', e.target.value)}
-                          style={{ width: '100%', height: '100%', padding: '6px', backgroundColor: 'transparent', color: concluidaStyle.color, border: 'none', outline: 'none', fontSize: '0.8rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: 'pointer' }}
-                        >
-                          <option value=""></option>
-                          <option value="SIM">SIM</option>
-                          <option value="NÃO">NÃO</option>
-                        </select>
-                      </td>
+          {!weeklyPlan && !loading && (
+            <div style={styles.emptyState}>
+              <h2
+                style={{
+                  margin:
+                    '0 0 8px 0',
+                  color: '#0f2745',
+                }}
+              >
+                No Weekly Plan for Week{' '}
+                {weekInfo.week}
+              </h2>
 
-                      <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>
-                        <input type="text" value={tarefa.unidade} onChange={(e) => atualizarTarefa(tarefa.id, 'unidade', e.target.value)} placeholder="M² / UN" style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem', textAlign: 'center' }} />
-                      </td>
-                      <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>
-                        <input type="text" value={tarefa.qtdProgramada} onChange={(e) => atualizarTarefa(tarefa.id, 'qtdProgramada', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem', textAlign: 'center' }} />
-                      </td>
-                      <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>
-                        <input type="text" value={tarefa.qtdExecutada} onChange={(e) => atualizarTarefa(tarefa.id, 'qtdExecutada', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem', textAlign: 'center' }} />
-                      </td>
-                      <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0', textAlign: 'center', backgroundColor: percentualFisico < 100 ? '#fed7d7' : 'transparent', fontWeight: 'bold', color: percentualFisico < 100 ? '#c53030' : '#2d3748' }}>
-                        {percentualFisico.toFixed(2)}%
-                      </td>
-                      
-                      <td style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>
-                        <input type="text" value={tarefa.causaNaoCumprimento} onChange={(e) => atualizarTarefa(tarefa.id, 'causaNaoCumprimento', e.target.value)} list="lista-causas" placeholder="Se NÃO, por quê?" disabled={tarefa.concluida === 'SIM'} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem', opacity: tarefa.concluida === 'SIM' ? 0.3 : 1 }} />
-                      </td>
-                      <td style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <input type="text" value={tarefa.observacoes} onChange={(e) => atualizarTarefa(tarefa.id, 'observacoes', e.target.value)} placeholder="..." style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: '0.85rem' }} />
-                        <button onClick={() => removerTarefa(tarefa.id)} title="Excluir Tarefa" style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>✖</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-                
-                <tr>
-                  <td colSpan={13} style={{ padding: '15px', backgroundColor: '#f7fafc', textAlign: 'left', borderTop: '1px solid #cbd5e0' }}>
-                    <button 
-                      onClick={adicionarTarefa} 
-                      style={{ backgroundColor: '#2a4365', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+              <p
+                style={{
+                  margin:
+                    '0 0 18px 0',
+                  color: '#64748b',
+                }}
+              >
+                Create the plan, then add
+                activities that have passed
+                Lookahead readiness.
+              </p>
+
+              <button
+                type="button"
+                disabled={
+                  actionLoading
+                }
+                onClick={() =>
+                  void createWeeklyPlan()
+                }
+                style={
+                  styles.primaryButton
+                }
+              >
+                Create Weekly Plan
+              </button>
+            </div>
+          )}
+
+          {/* ==================================================
+              WEEKLY PLAN TABLE
+          ================================================== */}
+
+          {weeklyPlan && (
+            <div style={styles.card}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent:
+                    'space-between',
+                  alignItems:
+                    'center',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                  marginBottom:
+                    '14px',
+                }}
+              >
+                <div>
+                  <h2
+                    style={{
+                      margin: 0,
+                      fontSize:
+                        '1.05rem',
+                      color: '#0f2745',
+                    }}
+                  >
+                    Weekly Commitments
+                  </h2>
+
+                  <div
+                    style={{
+                      color: '#64748b',
+                      fontSize:
+                        '0.82rem',
+                      marginTop:
+                        '4px',
+                    }}
+                  >
+                    Ready work becomes a
+                    commitment only when
+                    the week is committed.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    fontSize:
+                      '0.8rem',
+                    color: '#64748b',
+                  }}
+                >
+                  {items.length}{' '}
+                  {items.length === 1
+                    ? 'item'
+                    : 'items'}
+                </div>
+              </div>
+
+              {items.length === 0 ? (
+                <div
+                  style={
+                    styles.tableEmpty
+                  }
+                >
+                  No activities have been
+                  added to this Weekly Plan.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    overflowX:
+                      'auto',
+                    border:
+                      '1px solid #e2e8f0',
+                    borderRadius:
+                      '8px',
+                  }}
+                >
+                  <table
+                    style={{
+                      width: '100%',
+                      minWidth:
+                        '1450px',
+                      borderCollapse:
+                        'collapse',
+                      background:
+                        '#ffffff',
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <TableHeader>
+                          Type
+                        </TableHeader>
+
+                        <TableHeader>
+                          Package
+                        </TableHeader>
+
+                        <TableHeader>
+                          Activity
+                        </TableHeader>
+
+                        <TableHeader>
+                          Location
+                        </TableHeader>
+
+                        <TableHeader>
+                          Dates
+                        </TableHeader>
+
+                        <TableHeader>
+                          Responsible
+                        </TableHeader>
+
+                        <TableHeader>
+                          Planned Qty.
+                        </TableHeader>
+
+                        <TableHeader>
+                          Actual Qty.
+                        </TableHeader>
+
+                        <TableHeader>
+                          Unit
+                        </TableHeader>
+
+                        <TableHeader>
+                          Commitment
+                        </TableHeader>
+
+                        <TableHeader>
+                          Result
+                        </TableHeader>
+
+                        <TableHeader>
+                          Variance
+                        </TableHeader>
+
+                        <TableHeader>
+                          Actions
+                        </TableHeader>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {items.map(
+                        (item) => {
+                          const quantityAchievement =
+                            item.planned_quantity &&
+                            item.actual_quantity !==
+                              null
+                              ? (Number(
+                                  item.actual_quantity,
+                                ) /
+                                  Number(
+                                    item.planned_quantity,
+                                  )) *
+                                100
+                              : null;
+
+                          return (
+                            <tr
+                              key={
+                                item.id
+                              }
+                              style={{
+                                background:
+                                  item.is_unplanned_work
+                                    ? '#fffbeb'
+                                    : item.execution_result ===
+                                        'completed'
+                                      ? '#f0fdf4'
+                                      : item.execution_result ===
+                                          'not_completed'
+                                        ? '#fef2f2'
+                                        : '#ffffff',
+
+                                borderBottom:
+                                  '1px solid #e2e8f0',
+                              }}
+                            >
+                              <TableCell>
+                                <span
+                                  style={{
+                                    ...styles.miniBadge,
+
+                                    background:
+                                      item.is_unplanned_work
+                                        ? '#fef3c7'
+                                        : '#e0f2fe',
+
+                                    color:
+                                      item.is_unplanned_work
+                                        ? '#92400e'
+                                        : '#075985',
+                                  }}
+                                >
+                                  {item.is_unplanned_work
+                                    ? 'Unplanned'
+                                    : 'Lookahead'}
+                                </span>
+                              </TableCell>
+
+                              <TableCell>
+                                <strong>
+                                  {item.package_code ||
+                                    '—'}
+                                </strong>
+                              </TableCell>
+
+                              <TableCell>
+                                <div
+                                  style={{
+                                    fontWeight:
+                                      700,
+                                    color:
+                                      '#0f2745',
+                                    maxWidth:
+                                      '320px',
+                                    whiteSpace:
+                                      'normal',
+                                  }}
+                                >
+                                  {
+                                    item.activity_description
+                                  }
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                <div
+                                  style={{
+                                    maxWidth:
+                                      '220px',
+                                    whiteSpace:
+                                      'normal',
+                                  }}
+                                >
+                                  {item.location_path ||
+                                    item.location_name ||
+                                    '—'}
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                <div>
+                                  {formatShortDate(
+                                    item.planned_start_date,
+                                  )}
+                                </div>
+
+                                <div
+                                  style={{
+                                    fontSize:
+                                      '0.75rem',
+                                    color:
+                                      '#64748b',
+                                    marginTop:
+                                      '2px',
+                                  }}
+                                >
+                                  to{' '}
+                                  {formatShortDate(
+                                    item.planned_finish_date,
+                                  )}
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                {isDraft ? (
+                                  <input
+                                    defaultValue={
+                                      item.responsible_party ??
+                                      ''
+                                    }
+                                    onBlur={(
+                                      event,
+                                    ) =>
+                                      void updateDraftItem(
+                                        item.id,
+                                        'responsible_party',
+                                        event
+                                          .target
+                                          .value,
+                                      )
+                                    }
+                                    placeholder="Responsible"
+                                    style={
+                                      styles.tableInput
+                                    }
+                                  />
+                                ) : (
+                                  item.responsible_party ||
+                                  '—'
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                {isDraft ? (
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min={0}
+                                    defaultValue={
+                                      item.planned_quantity ??
+                                      ''
+                                    }
+                                    onBlur={(
+                                      event,
+                                    ) =>
+                                      void updateDraftItem(
+                                        item.id,
+                                        'planned_quantity',
+                                        event
+                                          .target
+                                          .value,
+                                      )
+                                    }
+                                    style={
+                                      styles.tableNumberInput
+                                    }
+                                  />
+                                ) : (
+                                  item.planned_quantity ??
+                                  '—'
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                {isCommitted ? (
+                                  <div>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min={0}
+                                      value={
+                                        item.actual_quantity ??
+                                        ''
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        setItems(
+                                          (
+                                            previous,
+                                          ) =>
+                                            previous.map(
+                                              (
+                                                current,
+                                              ) =>
+                                                current.id ===
+                                                item.id
+                                                  ? {
+                                                      ...current,
+                                                      actual_quantity:
+                                                        numberOrNull(
+                                                          event
+                                                            .target
+                                                            .value,
+                                                        ),
+                                                    }
+                                                  : current,
+                                            ),
+                                        )
+                                      }
+                                      onBlur={(
+                                        event,
+                                      ) =>
+                                        void updateActualQuantity(
+                                          item.id,
+                                          event
+                                            .target
+                                            .value,
+                                        )
+                                      }
+                                      style={
+                                        styles.tableNumberInput
+                                      }
+                                    />
+
+                                    {quantityAchievement !==
+                                      null && (
+                                      <div
+                                        style={{
+                                          fontSize:
+                                            '0.72rem',
+                                          color:
+                                            '#64748b',
+                                          marginTop:
+                                            '4px',
+                                        }}
+                                      >
+                                        {quantityAchievement.toFixed(
+                                          1,
+                                        )}
+                                        %
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  item.actual_quantity ??
+                                  '—'
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                {isDraft ? (
+                                  <input
+                                    defaultValue={
+                                      item.unit ??
+                                      ''
+                                    }
+                                    onBlur={(
+                                      event,
+                                    ) =>
+                                      void updateDraftItem(
+                                        item.id,
+                                        'unit',
+                                        event
+                                          .target
+                                          .value,
+                                      )
+                                    }
+                                    placeholder="m²"
+                                    style={{
+                                      ...styles.tableInput,
+                                      width:
+                                        '70px',
+                                    }}
+                                  />
+                                ) : (
+                                  item.unit ||
+                                  '—'
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                <span
+                                  style={{
+                                    ...styles.miniBadge,
+
+                                    background:
+                                      item.commitment_status ===
+                                      'committed'
+                                        ? '#dbeafe'
+                                        : '#f1f5f9',
+
+                                    color:
+                                      item.commitment_status ===
+                                      'committed'
+                                        ? '#1d4ed8'
+                                        : '#475569',
+                                  }}
+                                >
+                                  {
+                                    item.commitment_status
+                                  }
+                                </span>
+                              </TableCell>
+
+                              <TableCell>
+                                <ExecutionBadge
+                                  result={
+                                    item.execution_result
+                                  }
+                                />
+                              </TableCell>
+
+                              <TableCell>
+                                <div
+                                  style={{
+                                    maxWidth:
+                                      '190px',
+                                    whiteSpace:
+                                      'normal',
+                                  }}
+                                >
+                                  {varianceLabel(
+                                    item.variance_reason,
+                                  )}
+
+                                  {item.variance_notes && (
+                                    <div
+                                      style={{
+                                        marginTop:
+                                          '4px',
+                                        fontSize:
+                                          '0.75rem',
+                                        color:
+                                          '#64748b',
+                                      }}
+                                    >
+                                      {
+                                        item.variance_notes
+                                      }
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                <div
+                                  style={{
+                                    display:
+                                      'flex',
+                                    gap: '6px',
+                                    flexWrap:
+                                      'wrap',
+                                  }}
+                                >
+                                  {isDraft &&
+                                    !item.is_unplanned_work && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void deleteDraftItem(
+                                            item,
+                                          )
+                                        }
+                                        style={
+                                          styles.smallDangerButton
+                                        }
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+
+                                  {isCommitted &&
+                                    !item.is_unplanned_work &&
+                                    item.execution_result ===
+                                      'pending' && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            actionLoading
+                                          }
+                                          onClick={() =>
+                                            void markCompleted(
+                                              item,
+                                            )
+                                          }
+                                          style={
+                                            styles.smallSuccessButton
+                                          }
+                                        >
+                                          Completed
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            actionLoading
+                                          }
+                                          onClick={() =>
+                                            openMissedModal(
+                                              item,
+                                            )
+                                          }
+                                          style={
+                                            styles.smallDangerButton
+                                          }
+                                        >
+                                          Missed
+                                        </button>
+                                      </>
+                                    )}
+
+                                  {!isDraft &&
+                                    !isCommitted && (
+                                      <span
+                                        style={{
+                                          color:
+                                            '#94a3b8',
+                                          fontSize:
+                                            '0.78rem',
+                                        }}
+                                      >
+                                        Locked
+                                      </span>
+                                    )}
+                                </div>
+                              </TableCell>
+                            </tr>
+                          );
+                        },
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ==================================================
+              VARIANCE PARETO
+          ================================================== */}
+
+          {weeklyPlan &&
+            pareto.length > 0 && (
+              <div
+                style={{
+                  ...styles.card,
+                  marginTop: '18px',
+                }}
+              >
+                <h2
+                  style={{
+                    margin:
+                      '0 0 5px 0',
+                    fontSize:
+                      '1.05rem',
+                    color: '#0f2745',
+                  }}
+                >
+                  Reasons for Variance
+                </h2>
+
+                <p
+                  style={{
+                    margin:
+                      '0 0 15px 0',
+                    fontSize:
+                      '0.82rem',
+                    color: '#64748b',
+                  }}
+                >
+                  Pareto analysis of missed
+                  formal commitments.
+                </p>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: '9px',
+                  }}
+                >
+                  {pareto.map(
+                    (row) => (
+                      <div
+                        key={
+                          row.variance_reason
+                        }
+                        style={{
+                          display:
+                            'grid',
+                          gridTemplateColumns:
+                            'minmax(180px, 1fr) 90px 90px 100px',
+                          gap: '12px',
+                          alignItems:
+                            'center',
+                          padding:
+                            '10px 12px',
+                          border:
+                            '1px solid #e2e8f0',
+                          borderRadius:
+                            '7px',
+                        }}
+                      >
+                        <strong>
+                          {varianceLabel(
+                            row.variance_reason,
+                          )}
+                        </strong>
+
+                        <span>
+                          {
+                            row.variance_count
+                          }{' '}
+                          occurrences
+                        </span>
+
+                        <span>
+                          {Number(
+                            row.variance_percent,
+                          ).toFixed(
+                            1,
+                          )}
+                          %
+                        </span>
+
+                        <span>
+                          {Number(
+                            row.cumulative_variance_percent,
+                          ).toFixed(
+                            1,
+                          )}
+                          % cumulative
+                        </span>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            )}
+
+          {/* ==================================================
+              LOOKAHEAD PANEL
+          ================================================== */}
+
+          {showLookaheadPanel &&
+            isDraft && (
+              <ModalOverlay>
+                <div
+                  style={
+                    styles.modalLarge
+                  }
+                >
+                  <div
+                    style={
+                      styles.modalHeader
+                    }
+                  >
+                    <div>
+                      <h2
+                        style={{
+                          margin: 0,
+                          color:
+                            '#0f2745',
+                        }}
+                      >
+                        Add from Lookahead
+                      </h2>
+
+                      <p
+                        style={{
+                          margin:
+                            '5px 0 0 0',
+                          color:
+                            '#64748b',
+                          fontSize:
+                            '0.85rem',
+                        }}
+                      >
+                        Only Ready activities
+                        within the selected
+                        week are eligible.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowLookaheadPanel(
+                          false,
+                        )
+                      }
+                      style={
+                        styles.closeModalButton
+                      }
                     >
-                      + Adicionar Tarefa na Semana {semanaAtual}
+                      ×
                     </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  </div>
+
+                  {lookaheadCandidates.length ===
+                  0 ? (
+                    <div
+                      style={
+                        styles.tableEmpty
+                      }
+                    >
+                      No Ready Lookahead
+                      activities are available
+                      for this week.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display:
+                          'grid',
+                        gap: '8px',
+                        maxHeight:
+                          '460px',
+                        overflowY:
+                          'auto',
+                      }}
+                    >
+                      {lookaheadCandidates.map(
+                        (
+                          candidate,
+                        ) => {
+                          const selected =
+                            selectedCandidateIds.includes(
+                              candidate.id,
+                            );
+
+                          return (
+                            <label
+                              key={
+                                candidate.id
+                              }
+                              style={{
+                                display:
+                                  'grid',
+                                gridTemplateColumns:
+                                  '26px 90px minmax(240px, 1fr) 220px 150px',
+                                gap: '10px',
+                                alignItems:
+                                  'center',
+                                padding:
+                                  '12px',
+                                border:
+                                  selected
+                                    ? '1px solid #3b82f6'
+                                    : '1px solid #e2e8f0',
+                                borderRadius:
+                                  '8px',
+                                background:
+                                  selected
+                                    ? '#eff6ff'
+                                    : '#ffffff',
+                                cursor:
+                                  'pointer',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={
+                                  selected
+                                }
+                                onChange={() =>
+                                  toggleCandidate(
+                                    candidate.id,
+                                  )
+                                }
+                              />
+
+                              <strong>
+                                {candidate.package_code ||
+                                  candidate.service_code ||
+                                  '—'}
+                              </strong>
+
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight:
+                                      700,
+                                  }}
+                                >
+                                  {candidate.lookahead_description ||
+                                    candidate.service_name ||
+                                    'Lookahead Activity'}
+                                </div>
+
+                                <div
+                                  style={{
+                                    fontSize:
+                                      '0.75rem',
+                                    color:
+                                      '#16a34a',
+                                    marginTop:
+                                      '3px',
+                                  }}
+                                >
+                                  Ready
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  fontSize:
+                                    '0.82rem',
+                                  color:
+                                    '#475569',
+                                }}
+                              >
+                                {candidate.location_path ||
+                                  candidate.location_name ||
+                                  '—'}
+                              </div>
+
+                              <div
+                                style={{
+                                  fontSize:
+                                    '0.8rem',
+                                  color:
+                                    '#64748b',
+                                }}
+                              >
+                                {formatShortDate(
+                                  candidate.lookahead_start_date,
+                                )}{' '}
+                                –{' '}
+                                {formatShortDate(
+                                  candidate.lookahead_finish_date,
+                                )}
+                              </div>
+                            </label>
+                          );
+                        },
+                      )}
+                    </div>
+                  )}
+
+                  <div
+                    style={
+                      styles.modalFooter
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowLookaheadPanel(
+                          false,
+                        )
+                      }
+                      style={
+                        styles.secondaryButton
+                      }
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        selectedCandidateIds.length ===
+                          0 ||
+                        actionLoading
+                      }
+                      onClick={() =>
+                        void addSelectedFromLookahead()
+                      }
+                      style={
+                        styles.primaryButton
+                      }
+                    >
+                      Add Selected (
+                      {
+                        selectedCandidateIds.length
+                      }
+                      )
+                    </button>
+                  </div>
+                </div>
+              </ModalOverlay>
+            )}
+
+          {/* ==================================================
+              UNPLANNED WORK PANEL
+          ================================================== */}
+
+          {showUnplannedPanel &&
+            isCommitted && (
+              <ModalOverlay>
+                <div style={styles.modal}>
+                  <div
+                    style={
+                      styles.modalHeader
+                    }
+                  >
+                    <div>
+                      <h2
+                        style={{
+                          margin: 0,
+                          color:
+                            '#0f2745',
+                        }}
+                      >
+                        Add Unplanned Work
+                      </h2>
+
+                      <p
+                        style={{
+                          margin:
+                            '5px 0 0 0',
+                          color:
+                            '#64748b',
+                          fontSize:
+                            '0.85rem',
+                        }}
+                      >
+                        This work occurred
+                        after the weekly
+                        commitment freeze and
+                        will not affect PPC.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowUnplannedPanel(
+                          false,
+                        )
+                      }
+                      style={
+                        styles.closeModalButton
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <FormField
+                    label="Activity"
+                  >
+                    <input
+                      value={
+                        unplannedForm.activityDescription
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setUnplannedForm(
+                          (
+                            previous,
+                          ) => ({
+                            ...previous,
+                            activityDescription:
+                              event
+                                .target
+                                .value,
+                          }),
+                        )
+                      }
+                      style={
+                        styles.input
+                      }
+                      placeholder="Describe the unplanned activity"
+                    />
+                  </FormField>
+
+                  <FormField
+                    label="Location"
+                  >
+                    <input
+                      value={
+                        unplannedForm.locationName
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setUnplannedForm(
+                          (
+                            previous,
+                          ) => ({
+                            ...previous,
+                            locationName:
+                              event
+                                .target
+                                .value,
+                          }),
+                        )
+                      }
+                      style={
+                        styles.input
+                      }
+                    />
+                  </FormField>
+
+                  <FormField
+                    label="Responsible"
+                  >
+                    <input
+                      value={
+                        unplannedForm.responsibleParty
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setUnplannedForm(
+                          (
+                            previous,
+                          ) => ({
+                            ...previous,
+                            responsibleParty:
+                              event
+                                .target
+                                .value,
+                          }),
+                        )
+                      }
+                      style={
+                        styles.input
+                      }
+                    />
+                  </FormField>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        '1fr 1fr 1fr',
+                      gap: '10px',
+                    }}
+                  >
+                    <FormField
+                      label="Planned Qty."
+                    >
+                      <input
+                        type="number"
+                        step="any"
+                        min={0}
+                        value={
+                          unplannedForm.plannedQuantity
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setUnplannedForm(
+                            (
+                              previous,
+                            ) => ({
+                              ...previous,
+                              plannedQuantity:
+                                event
+                                  .target
+                                  .value,
+                            }),
+                          )
+                        }
+                        style={
+                          styles.input
+                        }
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="Actual Qty."
+                    >
+                      <input
+                        type="number"
+                        step="any"
+                        min={0}
+                        value={
+                          unplannedForm.actualQuantity
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setUnplannedForm(
+                            (
+                              previous,
+                            ) => ({
+                              ...previous,
+                              actualQuantity:
+                                event
+                                  .target
+                                  .value,
+                            }),
+                          )
+                        }
+                        style={
+                          styles.input
+                        }
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="Unit"
+                    >
+                      <input
+                        value={
+                          unplannedForm.unit
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setUnplannedForm(
+                            (
+                              previous,
+                            ) => ({
+                              ...previous,
+                              unit:
+                                event
+                                  .target
+                                  .value,
+                            }),
+                          )
+                        }
+                        style={
+                          styles.input
+                        }
+                        placeholder="m²"
+                      />
+                    </FormField>
+                  </div>
+
+                  <FormField
+                    label="Notes"
+                  >
+                    <textarea
+                      value={
+                        unplannedForm.notes
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setUnplannedForm(
+                          (
+                            previous,
+                          ) => ({
+                            ...previous,
+                            notes:
+                              event
+                                .target
+                                .value,
+                          }),
+                        )
+                      }
+                      rows={3}
+                      style={{
+                        ...styles.input,
+                        resize:
+                          'vertical',
+                      }}
+                    />
+                  </FormField>
+
+                  <div
+                    style={
+                      styles.modalFooter
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowUnplannedPanel(
+                          false,
+                        )
+                      }
+                      style={
+                        styles.secondaryButton
+                      }
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        actionLoading
+                      }
+                      onClick={() =>
+                        void addUnplannedWork()
+                      }
+                      style={
+                        styles.primaryButton
+                      }
+                    >
+                      Add Unplanned Work
+                    </button>
+                  </div>
+                </div>
+              </ModalOverlay>
+            )}
+
+          {/* ==================================================
+              MISSED COMMITMENT MODAL
+          ================================================== */}
+
+          {missedCommitment && (
+            <ModalOverlay>
+              <div style={styles.modal}>
+                <div
+                  style={
+                    styles.modalHeader
+                  }
+                >
+                  <div>
+                    <h2
+                      style={{
+                        margin: 0,
+                        color:
+                          '#0f2745',
+                      }}
+                    >
+                      Missed Commitment
+                    </h2>
+
+                    <p
+                      style={{
+                        margin:
+                          '5px 0 0 0',
+                        color:
+                          '#64748b',
+                        fontSize:
+                          '0.85rem',
+                      }}
+                    >
+                      Capture why the
+                      commitment was not
+                      completed.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMissedCommitment(
+                        null,
+                      )
+                    }
+                    style={
+                      styles.closeModalButton
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <FormField
+                  label="Reason for Variance"
+                >
+                  <select
+                    value={
+                      missedCommitment.varianceReason
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setMissedCommitment(
+                        {
+                          ...missedCommitment,
+                          varianceReason:
+                            event
+                              .target
+                              .value,
+                        },
+                      )
+                    }
+                    style={
+                      styles.select
+                    }
+                  >
+                    <option value="">
+                      Select reason
+                    </option>
+
+                    {VARIANCE_REASONS.map(
+                      (reason) => (
+                        <option
+                          key={
+                            reason.value
+                          }
+                          value={
+                            reason.value
+                          }
+                        >
+                          {
+                            reason.label
+                          }
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </FormField>
+
+                <FormField
+                  label="Actual Quantity"
+                >
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={
+                      missedCommitment.actualQuantity
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setMissedCommitment(
+                        {
+                          ...missedCommitment,
+                          actualQuantity:
+                            event
+                              .target
+                              .value,
+                        },
+                      )
+                    }
+                    style={
+                      styles.input
+                    }
+                  />
+                </FormField>
+
+                <FormField
+                  label="Variance Notes"
+                >
+                  <textarea
+                    rows={4}
+                    value={
+                      missedCommitment.varianceNotes
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setMissedCommitment(
+                        {
+                          ...missedCommitment,
+                          varianceNotes:
+                            event
+                              .target
+                              .value,
+                        },
+                      )
+                    }
+                    style={{
+                      ...styles.input,
+                      resize:
+                        'vertical',
+                    }}
+                    placeholder="Describe what prevented completion."
+                  />
+                </FormField>
+
+                <div
+                  style={
+                    styles.modalFooter
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMissedCommitment(
+                        null,
+                      )
+                    }
+                    style={
+                      styles.secondaryButton
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      actionLoading
+                    }
+                    onClick={() =>
+                      void saveMissedCommitment()
+                    }
+                    style={
+                      styles.dangerButton
+                    }
+                  >
+                    Record Missed Commitment
+                  </button>
+                </div>
+              </div>
+            </ModalOverlay>
+          )}
         </>
+      )}
+
+      {loading && (
+        <div
+          style={{
+            marginTop: '12px',
+            color: '#64748b',
+            fontSize: '0.85rem',
+          }}
+        >
+          Loading Weekly Planning...
+        </div>
       )}
     </div>
   );
 }
+
+// ============================================================
+// SMALL COMPONENTS
+// ============================================================
+
+function MetricCard({
+  label,
+  value,
+  footer,
+  accent = 'neutral',
+}: {
+  label: string;
+  value: string;
+  footer?: string;
+  accent?:
+    | 'neutral'
+    | 'success'
+    | 'danger';
+}) {
+  const accentStyle =
+    accent === 'success'
+      ? {
+          background: '#f0fdf4',
+          borderColor: '#bbf7d0',
+          color: '#166534',
+        }
+      : accent === 'danger'
+        ? {
+            background: '#fef2f2',
+            borderColor: '#fecaca',
+            color: '#991b1b',
+          }
+        : {
+            background: '#ffffff',
+            borderColor: '#e2e8f0',
+            color: '#0f2745',
+          };
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${accentStyle.borderColor}`,
+        background:
+          accentStyle.background,
+        borderRadius: '10px',
+        padding: '15px',
+      }}
+    >
+      <div style={styles.smallLabel}>
+        {label}
+      </div>
+
+      <div
+        style={{
+          fontSize: '1.65rem',
+          fontWeight: 900,
+          color:
+            accentStyle.color,
+          marginTop: '7px',
+        }}
+      >
+        {value}
+      </div>
+
+      {footer && (
+        <div
+          style={{
+            fontSize: '0.72rem',
+            color: '#64748b',
+            marginTop: '5px',
+          }}
+        >
+          {footer}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExecutionBadge({
+  result,
+}: {
+  result: ExecutionResult;
+}) {
+  let background = '#f1f5f9';
+  let color = '#475569';
+  let label = 'Pending';
+
+  if (result === 'completed') {
+    background = '#dcfce7';
+    color = '#166534';
+    label = 'Completed';
+  }
+
+  if (result === 'not_completed') {
+    background = '#fee2e2';
+    color = '#991b1b';
+    label = 'Missed';
+  }
+
+  if (result === 'not_applicable') {
+    background = '#e2e8f0';
+    color = '#475569';
+    label = 'N/A';
+  }
+
+  return (
+    <span
+      style={{
+        ...styles.miniBadge,
+        background,
+        color,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function TableHeader({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <th
+      style={{
+        background: '#0f2745',
+        color: '#ffffff',
+        padding: '11px 10px',
+        textAlign: 'left',
+        fontSize: '0.75rem',
+        letterSpacing:
+          '0.02em',
+        borderRight:
+          '1px solid #27476d',
+        position: 'sticky',
+        top: 0,
+        zIndex: 2,
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function TableCell({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <td
+      style={{
+        padding: '10px',
+        fontSize: '0.82rem',
+        borderRight:
+          '1px solid #e2e8f0',
+        verticalAlign: 'middle',
+      }}
+    >
+      {children}
+    </td>
+  );
+}
+
+function ModalOverlay({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background:
+          'rgba(15, 23, 42, 0.50)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        zIndex: 9999,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label
+      style={{
+        display: 'grid',
+        gap: '6px',
+        marginBottom: '13px',
+      }}
+    >
+      <span
+        style={{
+          fontSize: '0.8rem',
+          fontWeight: 800,
+          color: '#334155',
+        }}
+      >
+        {label}
+      </span>
+
+      {children}
+    </label>
+  );
+}
+
+// ============================================================
+// STYLES
+// ============================================================
+
+const styles: Record<
+  string,
+  React.CSSProperties
+> = {
+  card: {
+    background: '#ffffff',
+    border:
+      '1px solid #e2e8f0',
+    borderRadius: '10px',
+    padding: '16px',
+    boxShadow:
+      '0 1px 2px rgba(15, 23, 42, 0.04)',
+    marginBottom: '18px',
+  },
+
+  emptyState: {
+    background: '#ffffff',
+    border:
+      '1px dashed #cbd5e1',
+    borderRadius: '12px',
+    minHeight: '300px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column',
+    textAlign: 'center',
+    padding: '30px',
+  },
+
+  tableEmpty: {
+    padding: '28px',
+    textAlign: 'center',
+    color: '#64748b',
+    background: '#f8fafc',
+    borderRadius: '8px',
+  },
+
+  input: {
+    border:
+      '1px solid #cbd5e1',
+    borderRadius: '7px',
+    padding: '9px 10px',
+    fontSize: '0.85rem',
+    outline: 'none',
+    background: '#ffffff',
+    color: '#0f172a',
+  },
+
+  select: {
+    border:
+      '1px solid #cbd5e1',
+    borderRadius: '7px',
+    padding: '9px 10px',
+    minWidth: '220px',
+    fontSize: '0.85rem',
+    outline: 'none',
+    background: '#ffffff',
+    color: '#0f172a',
+  },
+
+  tableInput: {
+    border:
+      '1px solid #cbd5e1',
+    borderRadius: '5px',
+    padding: '6px 7px',
+    fontSize: '0.78rem',
+    width: '140px',
+  },
+
+  tableNumberInput: {
+    border:
+      '1px solid #cbd5e1',
+    borderRadius: '5px',
+    padding: '6px 7px',
+    fontSize: '0.78rem',
+    width: '90px',
+  },
+
+  primaryButton: {
+    border: 'none',
+    borderRadius: '7px',
+    background: '#1d4ed8',
+    color: '#ffffff',
+    padding: '9px 14px',
+    fontWeight: 800,
+    fontSize: '0.82rem',
+    cursor: 'pointer',
+  },
+
+  secondaryButton: {
+    border:
+      '1px solid #cbd5e1',
+    borderRadius: '7px',
+    background: '#ffffff',
+    color: '#334155',
+    padding: '9px 14px',
+    fontWeight: 700,
+    fontSize: '0.82rem',
+    cursor: 'pointer',
+  },
+
+  commitButton: {
+    border: 'none',
+    borderRadius: '7px',
+    background: '#0f766e',
+    color: '#ffffff',
+    padding: '9px 14px',
+    fontWeight: 800,
+    fontSize: '0.82rem',
+    cursor: 'pointer',
+  },
+
+  closeButton: {
+    border: 'none',
+    borderRadius: '7px',
+    background: '#0f2745',
+    color: '#ffffff',
+    padding: '9px 14px',
+    fontWeight: 800,
+    fontSize: '0.82rem',
+    cursor: 'pointer',
+  },
+
+  dangerButton: {
+    border: 'none',
+    borderRadius: '7px',
+    background: '#b91c1c',
+    color: '#ffffff',
+    padding: '9px 14px',
+    fontWeight: 800,
+    fontSize: '0.82rem',
+    cursor: 'pointer',
+  },
+
+  iconButton: {
+    width: '36px',
+    height: '36px',
+    border:
+      '1px solid #cbd5e1',
+    borderRadius: '7px',
+    background: '#ffffff',
+    color: '#334155',
+    cursor: 'pointer',
+    fontWeight: 900,
+  },
+
+  smallSuccessButton: {
+    border:
+      '1px solid #86efac',
+    background: '#f0fdf4',
+    color: '#166534',
+    borderRadius: '5px',
+    padding: '5px 7px',
+    fontSize: '0.72rem',
+    fontWeight: 800,
+    cursor: 'pointer',
+  },
+
+  smallDangerButton: {
+    border:
+      '1px solid #fecaca',
+    background: '#fef2f2',
+    color: '#991b1b',
+    borderRadius: '5px',
+    padding: '5px 7px',
+    fontSize: '0.72rem',
+    fontWeight: 800,
+    cursor: 'pointer',
+  },
+
+  smallLabel: {
+    fontSize: '0.72rem',
+    fontWeight: 800,
+    letterSpacing: '0.05em',
+    color: '#64748b',
+    textTransform: 'uppercase',
+  },
+
+  secondaryMetricValue: {
+    marginTop: '8px',
+    fontSize: '1.35rem',
+    fontWeight: 900,
+    color: '#0f2745',
+  },
+
+  statusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    minHeight: '32px',
+    padding: '0 11px',
+    borderRadius: '999px',
+    fontSize: '0.75rem',
+    fontWeight: 800,
+  },
+
+  draftBadge: {
+    background: '#fef3c7',
+    color: '#92400e',
+  },
+
+  committedBadge: {
+    background: '#dbeafe',
+    color: '#1d4ed8',
+  },
+
+  closedBadge: {
+    background: '#dcfce7',
+    color: '#166534',
+  },
+
+  cancelledBadge: {
+    background: '#f1f5f9',
+    color: '#64748b',
+  },
+
+  miniBadge: {
+    display: 'inline-block',
+    padding: '4px 7px',
+    borderRadius: '999px',
+    fontSize: '0.7rem',
+    fontWeight: 800,
+    textTransform: 'capitalize',
+  },
+
+  successBox: {
+    background: '#f0fdf4',
+    border:
+      '1px solid #bbf7d0',
+    color: '#166534',
+    borderRadius: '8px',
+    padding: '10px 12px',
+    marginBottom: '14px',
+    fontSize: '0.84rem',
+  },
+
+  errorBox: {
+    background: '#fef2f2',
+    border:
+      '1px solid #fecaca',
+    color: '#991b1b',
+    borderRadius: '8px',
+    padding: '10px 12px',
+    marginBottom: '14px',
+    fontSize: '0.84rem',
+  },
+
+  modal: {
+    width: '100%',
+    maxWidth: '560px',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    background: '#ffffff',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow:
+      '0 24px 60px rgba(15, 23, 42, 0.25)',
+  },
+
+  modalLarge: {
+    width: '100%',
+    maxWidth: '1050px',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    background: '#ffffff',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow:
+      '0 24px 60px rgba(15, 23, 42, 0.25)',
+  },
+
+  modalHeader: {
+    display: 'flex',
+    justifyContent:
+      'space-between',
+    gap: '15px',
+    alignItems: 'flex-start',
+    marginBottom: '18px',
+  },
+
+  modalFooter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    marginTop: '18px',
+    paddingTop: '14px',
+    borderTop:
+      '1px solid #e2e8f0',
+  },
+
+  closeModalButton: {
+    border: 'none',
+    background: 'transparent',
+    color: '#64748b',
+    fontSize: '1.6rem',
+    cursor: 'pointer',
+    lineHeight: 1,
+  },
+};
