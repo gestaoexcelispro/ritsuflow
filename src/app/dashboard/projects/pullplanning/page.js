@@ -609,19 +609,6 @@ export default function PullPlanningPage() {
     setErrorMessage,
   ] = useState('')
 
-  const [
-    accessDiagnostic,
-    setAccessDiagnostic,
-  ] = useState({
-    userId: '',
-    email: '',
-    projectCount: null,
-    membershipCount: null,
-    memberships: [],
-    projectError: '',
-    membershipError: '',
-  })
-
 
   // ==========================================================
   // DRAG STATE
@@ -825,272 +812,245 @@ export default function PullPlanningPage() {
   // ==========================================================
   // LOAD PROJECTS
   // ==========================================================
-  //
-  // IMPORTANT:
-  // - Uses the same direct public.projects query pattern as
-  //   the working Master Plan.
-  // - Keeps organization_id in the original SELECT because
-  //   Pull Planning requires organization context.
-  // - If RLS returns zero rows, a small frontend diagnostic
-  //   records the authenticated user and visible membership
-  //   context. This is diagnostic only; it does not bypass RLS.
-  // ==========================================================
 
-  useEffect(() => {
-    let mounted = true
+  useEffect(
+    () => {
 
-    const loadProjects = async () => {
-      setLoadingProjects(true)
-      setErrorMessage('')
+      let mounted =
+        true
 
-      setAccessDiagnostic({
-        userId: '',
-        email: '',
-        projectCount: null,
-        membershipCount: null,
-        memberships: [],
-        projectError: '',
-        membershipError: '',
-      })
 
-      try {
-        // ----------------------------------------------------
-        // 1. AUTHENTICATED BROWSER IDENTITY
-        // ----------------------------------------------------
+      const loadProjects =
+        async () => {
 
-        const {
-          data: userResult,
-          error: userError,
-        } = await supabase.auth.getUser()
-
-        if (userError) {
-          throw userError
-        }
-
-        const currentUser =
-          userResult?.user || null
-
-        if (!currentUser) {
-          throw new Error(
-            'Your authenticated session could not be found.',
+          setLoadingProjects(
+            true,
           )
-        }
-
-        const diagnostic = {
-          userId: currentUser.id || '',
-          email: currentUser.email || '',
-          projectCount: null,
-          membershipCount: null,
-          memberships: [],
-          projectError: '',
-          membershipError: '',
-        }
-
-
-        // ----------------------------------------------------
-        // 2. LOAD PROJECTS
-        //
-        // This intentionally mirrors the proven Master Plan
-        // access pattern and relies on existing project RLS.
-        // ----------------------------------------------------
-
-        const {
-          data: projectData,
-          error: projectError,
-        } = await supabase
-          .from('projects')
-          .select(`
-            id,
-            organization_id,
-            code,
-            name,
-            client_name,
-            status,
-            city,
-            state_region,
-            country_code,
-            cover_image_path,
-            created_at
-          `)
-          .neq('status', 'archived')
-          .order('created_at', {
-            ascending: false,
-          })
-
-        if (projectError) {
-          diagnostic.projectError =
-            projectError.message || String(projectError)
-
-          if (mounted) {
-            setAccessDiagnostic(diagnostic)
-          }
-
-          throw projectError
-        }
-
-        const loadedProjects =
-          projectData || []
-
-        diagnostic.projectCount =
-          loadedProjects.length
-
-
-        // ----------------------------------------------------
-        // 3. DIAGNOSTIC MEMBERSHIP CHECK
-        //
-        // This query does NOT grant access and does NOT replace
-        // project RLS. It only helps us compare the browser's
-        // auth.uid() with the organization membership visible
-        // to that same authenticated session.
-        // ----------------------------------------------------
-
-        const {
-          data: membershipData,
-          error: membershipError,
-        } = await supabase
-          .from('organization_members')
-          .select(`
-            organization_id,
-            user_id,
-            role,
-            status,
-            project_access_mode
-          `)
-          .eq('user_id', currentUser.id)
-
-        if (membershipError) {
-          diagnostic.membershipError =
-            membershipError.message ||
-            String(membershipError)
-        } else {
-          diagnostic.memberships =
-            membershipData || []
-
-          diagnostic.membershipCount =
-            diagnostic.memberships.length
-        }
-
-        if (!mounted) {
-          return
-        }
-
-        setAccessDiagnostic(diagnostic)
-        setProjects(loadedProjects)
-
-
-        // ----------------------------------------------------
-        // 4. RESTORE PROJECT FROM URL
-        // ----------------------------------------------------
-
-        const params =
-          new URLSearchParams(
-            window.location.search,
-          )
-
-        const projectFromUrl =
-          params.get('projectId')
-
-        if (
-          projectFromUrl &&
-          loadedProjects.some(
-            (project) =>
-              project.id === projectFromUrl,
-          )
-        ) {
-          setProjectId(
-            projectFromUrl,
-          )
-        }
-
-
-        // ----------------------------------------------------
-        // 5. PROJECT COVER IMAGES
-        // ----------------------------------------------------
-
-        const coverEntries =
-          await Promise.all(
-            loadedProjects.map(
-              async (project) => {
-                if (
-                  !project.cover_image_path
-                ) {
-                  return [
-                    project.id,
-                    '',
-                  ]
-                }
-
-                const {
-                  data: signedData,
-                  error: signedError,
-                } = await supabase
-                  .storage
-                  .from(
-                    'project-covers',
-                  )
-                  .createSignedUrl(
-                    project.cover_image_path,
-                    60 * 60,
-                  )
-
-                if (signedError) {
-                  console.warn(
-                    'Pull Planning - project cover:',
-                    signedError,
-                  )
-
-                  return [
-                    project.id,
-                    '',
-                  ]
-                }
-
-                return [
-                  project.id,
-                  signedData?.signedUrl || '',
-                ]
-              },
-            ),
-          )
-
-        if (!mounted) {
-          return
-        }
-
-        setProjectCoverUrls(
-          Object.fromEntries(
-            coverEntries,
-          ),
-        )
-
-      } catch (error) {
-        console.error(
-          'Pull Planning - projects:',
-          error,
-        )
-
-        if (mounted) {
-          setProjects([])
 
           setErrorMessage(
-            error?.message ||
-              'Projects could not be loaded.',
+            '',
           )
+
+
+          try {
+
+            const {
+              data,
+              error,
+            } =
+              await supabase
+                .from(
+                  'projects',
+                )
+                .select(`
+                  id,
+                  organization_id,
+                  code,
+                  name,
+                  client_name,
+                  status,
+                  city,
+                  state_region,
+                  country_code,
+                  cover_image_path,
+                  created_at
+                `)
+                .neq(
+                  'status',
+                  'archived',
+                )
+                .order(
+                  'created_at',
+                  {
+                    ascending:
+                      false,
+                  },
+                )
+
+
+            if (
+              error
+            ) {
+              throw error
+            }
+
+
+            const loadedProjects =
+              data || []
+
+
+            if (
+              !mounted
+            ) {
+              return
+            }
+
+
+            setProjects(
+              loadedProjects,
+            )
+
+
+            const params =
+              new URLSearchParams(
+                window.location.search,
+              )
+
+
+            const projectFromUrl =
+              params.get(
+                'projectId',
+              )
+
+
+            if (
+              projectFromUrl &&
+              loadedProjects.some(
+                (project) =>
+                  project.id ===
+                  projectFromUrl,
+              )
+            ) {
+
+              setProjectId(
+                projectFromUrl,
+              )
+
+            }
+
+
+            const coverEntries =
+              await Promise.all(
+                loadedProjects.map(
+                  async (
+                    project,
+                  ) => {
+
+                    if (
+                      !project.cover_image_path
+                    ) {
+                      return [
+                        project.id,
+                        '',
+                      ]
+                    }
+
+
+                    const {
+                      data:
+                        signedData,
+                      error:
+                        signedError,
+                    } =
+                      await supabase
+                        .storage
+                        .from(
+                          'project-covers',
+                        )
+                        .createSignedUrl(
+                          project.cover_image_path,
+                          3600,
+                        )
+
+
+                    if (
+                      signedError
+                    ) {
+
+                      console.warn(
+                        'Pull Planning - project cover:',
+                        signedError,
+                      )
+
+
+                      return [
+                        project.id,
+                        '',
+                      ]
+
+                    }
+
+
+                    return [
+                      project.id,
+                      signedData?.signedUrl ||
+                        '',
+                    ]
+
+                  },
+                ),
+              )
+
+
+            if (
+              !mounted
+            ) {
+              return
+            }
+
+
+            setProjectCoverUrls(
+              Object.fromEntries(
+                coverEntries,
+              ),
+            )
+
+          } catch (
+            error
+          ) {
+
+            console.error(
+              'Pull Planning - projects:',
+              error,
+            )
+
+
+            if (
+              mounted
+            ) {
+
+              setProjects(
+                [],
+              )
+
+
+              setErrorMessage(
+                error?.message ||
+                'Projects could not be loaded.',
+              )
+
+            }
+
+          } finally {
+
+            if (
+              mounted
+            ) {
+
+              setLoadingProjects(
+                false,
+              )
+
+            }
+
+          }
+
         }
 
-      } finally {
-        if (mounted) {
-          setLoadingProjects(false)
-        }
+
+      loadProjects()
+
+
+      return () => {
+
+        mounted =
+          false
+
       }
-    }
 
-    loadProjects()
-
-    return () => {
-      mounted = false
-    }
-  }, [])
+    },
+    [],
+  )
 
 
   // ==========================================================
@@ -3444,137 +3404,7 @@ export default function PullPlanningPage() {
                 '#64748b',
             }}
           >
-            <strong
-              style={{
-                display:
-                  'block',
-
-                marginBottom:
-                  '10px',
-
-                color:
-                  '#334155',
-              }}
-            >
-              No projects are available.
-            </strong>
-
-            <div
-              style={{
-                fontSize:
-                  '0.74rem',
-
-                lineHeight:
-                  1.7,
-              }}
-            >
-              <div>
-                <strong>Authenticated user:</strong>{' '}
-                {accessDiagnostic.email ||
-                  'Unknown'}
-              </div>
-
-              <div>
-                <strong>User ID:</strong>{' '}
-                <code>
-                  {accessDiagnostic.userId ||
-                    'Unavailable'}
-                </code>
-              </div>
-
-              <div>
-                <strong>Projects returned by RLS:</strong>{' '}
-                {accessDiagnostic.projectCount ===
-                null
-                  ? 'Not checked'
-                  : accessDiagnostic.projectCount}
-              </div>
-
-              <div>
-                <strong>Visible organization memberships:</strong>{' '}
-                {accessDiagnostic.membershipCount ===
-                null
-                  ? 'Not checked'
-                  : accessDiagnostic.membershipCount}
-              </div>
-
-              {accessDiagnostic.memberships.map(
-                (
-                  membership,
-                  index,
-                ) => (
-                  <div
-                    key={`${membership.organization_id}-${index}`}
-                    style={{
-                      marginTop:
-                        '7px',
-
-                      padding:
-                        '8px 10px',
-
-                      border:
-                        '1px solid #e2e8f0',
-
-                      borderRadius:
-                        '6px',
-
-                      background:
-                        '#f8fafc',
-                    }}
-                  >
-                    Organization:{' '}
-                    <code>
-                      {membership.organization_id}
-                    </code>
-                    {' · '}
-                    Role:{' '}
-                    <strong>
-                      {membership.role}
-                    </strong>
-                    {' · '}
-                    Status:{' '}
-                    <strong>
-                      {membership.status}
-                    </strong>
-                    {' · '}
-                    Access:{' '}
-                    <strong>
-                      {membership.project_access_mode}
-                    </strong>
-                  </div>
-                ),
-              )}
-
-              {accessDiagnostic.membershipError && (
-                <div
-                  style={{
-                    marginTop:
-                      '8px',
-
-                    color:
-                      '#b45309',
-                  }}
-                >
-                  Membership diagnostic:{' '}
-                  {accessDiagnostic.membershipError}
-                </div>
-              )}
-
-              {accessDiagnostic.projectError && (
-                <div
-                  style={{
-                    marginTop:
-                      '8px',
-
-                    color:
-                      '#be123c',
-                  }}
-                >
-                  Project query:{' '}
-                  {accessDiagnostic.projectError}
-                </div>
-              )}
-            </div>
+            No projects are available.
           </div>
 
         ) : (
