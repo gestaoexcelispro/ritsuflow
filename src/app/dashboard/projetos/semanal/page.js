@@ -1787,57 +1787,15 @@ export default function WeeklyPlanningPage() {
         style={{
           display: 'flex',
           justifyContent:
-            'space-between',
+            'flex-end',
           alignItems:
             'center',
           gap: '14px',
           flexWrap: 'wrap',
           marginBottom:
-            '12px',
+            '10px',
         }}
       >
-        <div>
-          <div
-            style={{
-              fontSize:
-                '0.75rem',
-              fontWeight: 800,
-              letterSpacing:
-                '0.08em',
-              color: '#64748b',
-              textTransform:
-                'uppercase',
-              marginBottom:
-                '3px',
-            }}
-          >
-            Planning
-          </div>
-
-          <h1
-            style={{
-              margin: 0,
-              fontSize:
-                '1.65rem',
-              color: '#0f2745',
-            }}
-          >
-            Weekly Planning
-          </h1>
-
-          <p
-            style={{
-              margin:
-                '4px 0 0 0',
-              color: '#64748b',
-              fontSize:
-                '0.82rem',
-            }}
-          >
-            Create reliable weekly commitments from Work Packages that have passed Make Ready.
-          </p>
-        </div>
-
         <div
           style={{
             display: 'flex',
