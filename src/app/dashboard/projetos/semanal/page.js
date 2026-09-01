@@ -1259,6 +1259,59 @@ export default function WeeklyPlanningPage() {
     };
 
   // ==========================================================
+  // CANCEL WEEK
+  // ==========================================================
+
+  const cancelWeek =
+    async () => {
+      if (
+        !weeklyPlan ||
+        !isDraft
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          'Cancel this Draft Weekly Plan? The week will not move forward and its draft activities will be cancelled. This action cannot be used after commitment.',
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        const {
+          error,
+        } =
+          await supabase.rpc(
+            'cancel_weekly_plan',
+            {
+              target_weekly_plan_id:
+                weeklyPlan.id,
+            },
+          );
+
+        if (error) {
+          throw error;
+        }
+
+        setMessage(
+          'Draft Weekly Plan cancelled. You can create a new Weekly Plan for this week.',
+        );
+
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
+
+  // ==========================================================
   // COMMIT WEEK
   // ==========================================================
 
@@ -2003,6 +2056,22 @@ export default function WeeklyPlanningPage() {
                     style={styles.primaryButton}
                   >
                     + Add Activity
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      actionLoading
+                    }
+                    onClick={cancelWeek}
+                    style={{
+                      ...styles.secondaryButton,
+                      borderColor: '#fecaca',
+                      color: '#b91c1c',
+                      background: '#ffffff',
+                    }}
+                  >
+                    Cancel Week
                   </button>
 
                   <button
