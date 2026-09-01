@@ -966,10 +966,6 @@ export default function DashboardLayout({
       }
     >
 
-      {/* =====================================================
-          MOBILE OVERLAY
-      ===================================================== */}
-
       {isMobileOpen && (
 
         <button
@@ -986,10 +982,6 @@ export default function DashboardLayout({
       )}
 
 
-      {/* =====================================================
-          SIDEBAR
-      ===================================================== */}
-
       <aside
         className={
           sidebarClassName
@@ -999,10 +991,6 @@ export default function DashboardLayout({
             'visible',
         }}
       >
-
-        {/* ===================================================
-            SIDEBAR SPACER
-        =================================================== */}
 
         <div
           style={{
@@ -1016,10 +1004,6 @@ export default function DashboardLayout({
           }}
         />
 
-
-        {/* ===================================================
-            NAVIGATION
-        =================================================== */}
 
         <nav
           className={
@@ -1066,10 +1050,6 @@ export default function DashboardLayout({
                       'visible',
                   }}
                 >
-
-                  {/* =========================================
-                      GROUP HEADER
-                  ========================================= */}
 
                   <button
                     type="button"
@@ -1207,10 +1187,6 @@ export default function DashboardLayout({
                   </button>
 
 
-                  {/* =========================================
-                      GROUP ITEMS
-                  ========================================= */}
-
                   {(
                     isGroupExpanded ||
                     isCollapsed
@@ -1318,10 +1294,6 @@ export default function DashboardLayout({
                                 }}
                               >
 
-                                {/* =============================
-                                    ICON CONTAINER
-                                ============================= */}
-
                                 <span
                                   className={
                                     styles.navigationIcon
@@ -1389,10 +1361,6 @@ export default function DashboardLayout({
                                 </span>
 
 
-                                {/* =============================
-                                    PAGE LABEL
-                                ============================= */}
-
                                 {!isCollapsed && (
 
                                   <span
@@ -1413,10 +1381,6 @@ export default function DashboardLayout({
 
                               </Link>
 
-
-                              {/* =============================
-                                  TOOLTIP
-                              ============================= */}
 
                               {tooltipVisible && (
 
@@ -1554,10 +1518,6 @@ export default function DashboardLayout({
         </nav>
 
 
-        {/* ===================================================
-            SIDEBAR FOOTER
-        =================================================== */}
-
         <div
           className={
             styles.sidebarFooter
@@ -1619,19 +1579,11 @@ export default function DashboardLayout({
       </aside>
 
 
-      {/* =====================================================
-          WORKSPACE
-      ===================================================== */}
-
       <div
         className={
           styles.workspace
         }
       >
-
-        {/* ===================================================
-            TOPBAR
-        =================================================== */}
 
         <header
           className={
@@ -1657,12 +1609,11 @@ export default function DashboardLayout({
               minWidth:
                 0,
 
+              flexShrink:
+                0,
+
             }}
           >
-
-            {/* ===============================================
-                MENU
-            =============================================== */}
 
             <button
               type="button"
@@ -1677,10 +1628,6 @@ export default function DashboardLayout({
               ☰
             </button>
 
-
-            {/* ===============================================
-                RITSUFLOW LOGO
-            =============================================== */}
 
             <Link
               href="/"
@@ -1764,10 +1711,6 @@ export default function DashboardLayout({
 
             </Link>
 
-
-            {/* ===============================================
-                PAGE IDENTITY
-            =============================================== */}
 
             <div
               className={
@@ -1859,17 +1802,41 @@ export default function DashboardLayout({
 
 
           <div
+            id="dashboard-topbar-actions"
             className={
               styles.topbarRight
             }
+            style={{
+
+              display:
+                'flex',
+
+              alignItems:
+                'center',
+
+              justifyContent:
+                'flex-end',
+
+              gap:
+                '8px',
+
+              flex:
+                '1 1 auto',
+
+              minWidth:
+                0,
+
+              marginLeft:
+                '20px',
+
+              overflow:
+                'visible',
+
+            }}
           />
 
         </header>
 
-
-        {/* ===================================================
-            CONTENT
-        =================================================== */}
 
         <main
           className={
