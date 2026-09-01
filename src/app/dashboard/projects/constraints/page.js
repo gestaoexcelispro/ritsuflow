@@ -1439,7 +1439,8 @@ export default function ConstraintLogPage() {
                 id,
                 priority,
                 impact,
-                resolved_at
+                resolved_at,
+                sheet_readiness_assessment_id
               `)
               .in(
                 'id',
@@ -3287,8 +3288,81 @@ export default function ConstraintLogPage() {
         if (!note) {
 
           setHistoryError(
-            'Resolution Note is required.'
+            'Resolution is required.'
           );
+
+          return;
+        }
+
+
+        // The UI intentionally keeps constraint resolution simple.
+        // If the constraint is still Open, the required internal
+        // Open -> In Progress transition is recorded automatically
+        // before the resolution is saved.
+        if (managedConstraint.status === 'open') {
+
+          setSavingAction(true);
+          setHistoryError('');
+
+          try {
+
+            const { error: startError } =
+              await supabase.rpc(
+                'start_constraint_action_with_history',
+                {
+                  target_constraint_id:
+                    managedConstraint.id,
+
+                  target_comment:
+                    'Resolution workflow started automatically.',
+
+                  target_performed_by:
+                    performedBy,
+                }
+              );
+
+            if (startError) {
+              throw startError;
+            }
+
+            const { error: resolveError } =
+              await supabase.rpc(
+                'resolve_constraint_with_history',
+                {
+                  target_constraint_id:
+                    managedConstraint.id,
+
+                  target_resolution_note:
+                    note,
+
+                  target_performed_by:
+                    performedBy,
+                }
+              );
+
+            if (resolveError) {
+              throw resolveError;
+            }
+
+            setManagementNote('');
+            setActiveManagementPanel(null);
+
+            await refreshManagedConstraint(
+              managedConstraint.id
+            );
+
+          } catch (error) {
+
+            setHistoryError(
+              error.message ||
+              'Constraint could not be resolved.'
+            );
+
+          } finally {
+
+            setSavingAction(false);
+
+          }
 
           return;
         }
@@ -5701,33 +5775,10 @@ export default function ConstraintLogPage() {
                             active={
                               managedConstraint
                                 .status ===
-                              'open'
-                            }
-                          />
-
-                          <span style={lifecycleArrowStyle}>
-                            →
-                          </span>
-
-                          <LifecycleStage
-                            label="In Progress"
-                            active={
+                              'open' ||
                               managedConstraint
                                 .status ===
                               'in_progress'
-                            }
-                          />
-
-                          <span style={lifecycleArrowStyle}>
-                            ↔
-                          </span>
-
-                          <LifecycleStage
-                            label="Waiting"
-                            active={
-                              managedConstraint
-                                .status ===
-                              'waiting'
                             }
                           />
 
@@ -5749,7 +5800,7 @@ export default function ConstraintLogPage() {
                           </span>
 
                           <LifecycleStage
-                            label="Cleared"
+                            label="Released"
                             active={
                               managedConstraint
                                 .status ===
@@ -5757,47 +5808,50 @@ export default function ConstraintLogPage() {
                             }
                           />
 
+                          {managedConstraint
+                            .status ===
+                            'waiting' && (
+                            <>
+                              <span style={lifecycleArrowStyle}>
+                                ·
+                              </span>
+
+                              <LifecycleStage
+                                label="Waiting"
+                                active
+                              />
+                            </>
+                          )}
+
                         </div>
 
 
                         <div style={lifecycleButtonsGridStyle}>
 
-                          {managedConstraint
+                          {(managedConstraint
                             .status ===
-                            'open' && (
-                            <LifecycleButton
-                              label="Start"
-                              description="Begin active management"
-                              onClick={() =>
-                                toggleManagementPanel(
-                                  'start'
-                                )
-                              }
-                            />
-                          )}
-
-
-                          {managedConstraint
-                            .status ===
-                            'in_progress' && (
+                            'open' ||
+                            managedConstraint
+                              .status ===
+                            'in_progress') && (
                             <>
+                              <LifecycleButton
+                                label="Resolve Constraint"
+                                description="Record how the constraint was solved"
+                                emphasis
+                                onClick={() =>
+                                  toggleManagementPanel(
+                                    'resolve'
+                                  )
+                                }
+                              />
+
                               <LifecycleButton
                                 label="Set Waiting"
                                 description="Temporarily blocked"
                                 onClick={() =>
                                   toggleManagementPanel(
                                     'waiting'
-                                  )
-                                }
-                              />
-
-                              <LifecycleButton
-                                label="Resolve"
-                                description="Problem solved"
-                                emphasis
-                                onClick={() =>
-                                  toggleManagementPanel(
-                                    'resolve'
                                   )
                                 }
                               />
@@ -5820,8 +5874,8 @@ export default function ConstraintLogPage() {
                               />
 
                               <LifecycleButton
-                                label="Resolve"
-                                description="Problem solved"
+                                label="Resolve Constraint"
+                                description="Record how the constraint was solved"
                                 emphasis
                                 onClick={() =>
                                   toggleManagementPanel(
@@ -5838,8 +5892,8 @@ export default function ConstraintLogPage() {
                             'resolved' && (
                             <>
                               <LifecycleButton
-                                label="Verify & Clear"
-                                description="Release readiness"
+                                label="Verify & Release"
+                                description="Confirm the solution and release readiness"
                                 emphasis
                                 onClick={() =>
                                   toggleManagementPanel(
@@ -5884,36 +5938,6 @@ export default function ConstraintLogPage() {
                           )}
 
                         </div>
-
-
-                        {activeManagementPanel ===
-                          'start' && (
-                          <LifecycleActionPanel
-                            title="Start Constraint Resolution"
-                            description="Move this constraint from Open to In Progress."
-                            label="Optional Comment"
-                            value={
-                              managementNote
-                            }
-                            setValue={
-                              setManagementNote
-                            }
-                            saving={
-                              savingAction
-                            }
-                            confirmLabel="Start"
-                            onCancel={() =>
-                              setActiveManagementPanel(
-                                null
-                              )
-                            }
-                            onConfirm={() =>
-                              executeLifecycleAction(
-                                'start'
-                              )
-                            }
-                          />
-                        )}
 
 
                         {activeManagementPanel ===
@@ -5980,8 +6004,8 @@ export default function ConstraintLogPage() {
                           'resolve' && (
                           <LifecycleActionPanel
                             title="Resolve Constraint"
-                            description="The underlying problem has been solved. Verification is still required."
-                            label="Resolution Note *"
+                            description="Briefly record what was done to remove this constraint. It will remain blocked until verification."
+                            label="Resolution *"
                             value={
                               managementNote
                             }
@@ -5991,7 +6015,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingAction
                             }
-                            confirmLabel="Mark Resolved"
+                            confirmLabel="Save Resolution"
                             positive
                             onCancel={() =>
                               setActiveManagementPanel(
@@ -6010,8 +6034,8 @@ export default function ConstraintLogPage() {
                         {activeManagementPanel ===
                           'clear' && (
                           <LifecycleActionPanel
-                            title="Verify & Clear"
-                            description="Confirm the resolution and release the readiness condition."
+                            title="Verify & Release"
+                            description="Confirm that the solution is effective and release this readiness condition."
                             label="Verification Note *"
                             value={
                               managementNote
@@ -6022,7 +6046,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingAction
                             }
-                            confirmLabel="Verify & Clear"
+                            confirmLabel="Verify & Release"
                             positive
                             onCancel={() =>
                               setActiveManagementPanel(
