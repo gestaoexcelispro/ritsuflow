@@ -1,4 +1,4 @@
-  'use client';
+'use client';
 
 import React, {
   useCallback,
@@ -754,7 +754,10 @@ export default function WeeklyPlanningPage() {
   const loadWorkPackages =
     useCallback(
       async () => {
-        if (!selectedProjectId) {
+        if (
+          !selectedProjectId ||
+          !weeklyPlan?.lookahead_plan_id
+        ) {
           setWorkPackages([]);
           return;
         }
@@ -771,6 +774,10 @@ export default function WeeklyPlanningPage() {
             .eq(
               'project_id',
               selectedProjectId,
+            )
+            .eq(
+              'lookahead_plan_id',
+              weeklyPlan.lookahead_plan_id,
             )
             .order(
               'package_code',
@@ -791,6 +798,7 @@ export default function WeeklyPlanningPage() {
       },
       [
         selectedProjectId,
+        weeklyPlan?.lookahead_plan_id,
         showError,
       ],
     );
@@ -817,6 +825,28 @@ export default function WeeklyPlanningPage() {
 
       try {
         const {
+          data: activeLookaheadPlanId,
+          error: activeLookaheadError,
+        } =
+          await supabase.rpc(
+            'get_active_lookahead_plan',
+            {
+              target_project_id:
+                selectedProject.id,
+            },
+          );
+
+        if (activeLookaheadError) {
+          throw activeLookaheadError;
+        }
+
+        if (!activeLookaheadPlanId) {
+          throw new Error(
+            'This project does not have an active Lookahead Plan.',
+          );
+        }
+
+        const {
           data,
           error,
         } =
@@ -830,6 +860,9 @@ export default function WeeklyPlanningPage() {
 
               project_id:
                 selectedProject.id,
+
+              lookahead_plan_id:
+                activeLookaheadPlanId,
 
               week_start_date:
                 weekStartDate,
@@ -1756,11 +1789,11 @@ export default function WeeklyPlanningPage() {
           justifyContent:
             'space-between',
           alignItems:
-            'flex-start',
-          gap: '20px',
+            'center',
+          gap: '14px',
           flexWrap: 'wrap',
           marginBottom:
-            '22px',
+            '12px',
         }}
       >
         <div>
@@ -1775,7 +1808,7 @@ export default function WeeklyPlanningPage() {
               textTransform:
                 'uppercase',
               marginBottom:
-                '6px',
+                '3px',
             }}
           >
             Planning
@@ -1785,7 +1818,7 @@ export default function WeeklyPlanningPage() {
             style={{
               margin: 0,
               fontSize:
-                '1.8rem',
+                '1.65rem',
               color: '#0f2745',
             }}
           >
@@ -1795,10 +1828,10 @@ export default function WeeklyPlanningPage() {
           <p
             style={{
               margin:
-                '7px 0 0 0',
+                '4px 0 0 0',
               color: '#64748b',
               fontSize:
-                '0.9rem',
+                '0.82rem',
             }}
           >
             Create reliable weekly commitments from Work Packages that have passed Make Ready.
@@ -1926,9 +1959,13 @@ export default function WeeklyPlanningPage() {
           {/* WEEK CONTROL */}
 
           <div
-            style={
-              styles.card
-            }
+            style={{
+              ...styles.card,
+              padding:
+                '14px 16px',
+              marginBottom:
+                '14px',
+            }}
           >
             <div
               style={{
@@ -2023,9 +2060,11 @@ export default function WeeklyPlanningPage() {
                       event.target.value,
                     )
                   }
-                  style={
-                    styles.input
-                  }
+                  style={{
+                    ...styles.input,
+                    width:
+                      '170px',
+                  }}
                 />
               </div>
 
