@@ -1437,6 +1437,8 @@ export default function ConstraintLogPage() {
               .from('constraints')
               .select(`
                 id,
+                status,
+                blocking,
                 priority,
                 impact,
                 resolved_at,
@@ -1482,6 +1484,17 @@ export default function ConstraintLogPage() {
 
                 return {
                   ...constraint,
+
+                  // The constraints table is the lifecycle source of truth.
+                  // Do not rely on the overview view for live status after an RPC.
+                  status:
+                    meta.status ||
+                    constraint.status,
+
+                  blocking:
+                    typeof meta.blocking === 'boolean'
+                      ? meta.blocking
+                      : constraint.blocking,
 
                   priority:
                     meta.priority ||
@@ -2008,6 +2021,8 @@ export default function ConstraintLogPage() {
             .from('constraints')
             .select(`
               id,
+              status,
+              blocking,
               priority,
               impact,
               resolved_at,
@@ -2029,6 +2044,18 @@ export default function ConstraintLogPage() {
 
         const mergedConstraint = {
           ...data,
+
+          // The base constraints row is authoritative for lifecycle state.
+          // This makes status changes visible immediately after lifecycle RPCs.
+          status:
+            constraintMeta
+              ?.status ||
+            data.status,
+
+          blocking:
+            typeof constraintMeta?.blocking === 'boolean'
+              ? constraintMeta.blocking
+              : data.blocking,
 
           priority:
             constraintMeta
