@@ -7,6 +7,8 @@ import React, {
   useState,
 } from 'react';
 
+import { createPortal } from 'react-dom';
+
 import { supabase } from '../../../../lib/supabase';
 
 // ============================================================
@@ -327,6 +329,23 @@ export default function WeeklyPlanningPage() {
       ),
     [],
   );
+
+  // ----------------------------------------------------------
+  // DASHBOARD HEADER PORTAL
+  // ----------------------------------------------------------
+
+  const [
+    headerActionsTarget,
+    setHeaderActionsTarget,
+  ] = useState(null);
+
+  useEffect(() => {
+    setHeaderActionsTarget(
+      document.getElementById(
+        'dashboard-topbar-actions',
+      ),
+    );
+  }, []);
 
   // ----------------------------------------------------------
   // GENERAL STATE
@@ -1781,20 +1800,20 @@ export default function WeeklyPlanningPage() {
           'Inter, Arial, sans-serif',
       }}
     >
-      {/* WEEKLY PLANNING TOOLBAR */}
+      {/* WEEKLY PLANNING CONTROLS IN THE REAL DASHBOARD HEADER */}
 
-      <div
-        style={{
-          ...styles.card,
-          padding: '12px 16px',
-          marginBottom: '14px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '12px',
-          flexWrap: 'wrap',
-        }}
-      >
+      {headerActionsTarget &&
+        createPortal(
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '8px',
+              flexWrap: 'wrap',
+              width: '100%',
+            }}
+          >
         <div
           style={{
             display: 'flex',
@@ -2028,7 +2047,9 @@ export default function WeeklyPlanningPage() {
             </>
           )}
         </div>
-      </div>
+          </div>,
+          headerActionsTarget,
+        )}
 
       {/* FEEDBACK */}
 
