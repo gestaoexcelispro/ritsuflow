@@ -319,8 +319,23 @@ function normalizeReadinessStatus(
 
 
 function readinessStyle(
-  status
+  status,
+  readinessSource = null
 ) {
+  if (
+    status === 'clear' &&
+    readinessSource === 'constraint_cleared'
+  ) {
+    return {
+      background:
+        '#dbeafe',
+      color:
+        '#1d4ed8',
+      border:
+        '#93c5fd',
+    };
+  }
+
   switch (status) {
 
     case 'clear':
@@ -1371,6 +1386,7 @@ export default function LookaheadPage() {
                 sheet_row_id,
                 category,
                 status,
+                readiness_source,
                 created_at,
                 updated_at
               `)
@@ -1416,6 +1432,10 @@ export default function LookaheadPage() {
                   normalizeReadinessStatus(
                     assessment.status
                   ),
+
+                readiness_source:
+                  assessment.readiness_source ||
+                  null,
               };
 
             }
@@ -3611,6 +3631,11 @@ Continue?`
 
             status:
               nextStatus,
+
+            readiness_source:
+              nextStatus === 'clear'
+                ? 'direct'
+                : null,
           },
         })
       );
@@ -3652,6 +3677,11 @@ Continue?`
                 status:
                   nextStatus,
 
+                readiness_source:
+                  nextStatus === 'clear'
+                    ? 'direct'
+                    : null,
+
                 updated_at:
                   new Date()
                     .toISOString(),
@@ -3667,6 +3697,7 @@ Continue?`
               sheet_row_id,
               category,
               status,
+              readiness_source,
               created_at,
               updated_at
             `)
@@ -3718,6 +3749,10 @@ Continue?`
 
               status:
                 normalizedSavedStatus,
+
+              readiness_source:
+                savedAssessment.readiness_source ||
+                null,
             },
           })
         );
@@ -3730,11 +3765,9 @@ Continue?`
         //   No  = constrained
         //   Yes = clear
         //
-        // When the saved status is "constrained", SQL 108
+        // When the saved status is "constrained", the database
         // creates or reuses exactly one central Constraint
         // through constraints.sheet_readiness_assessment_id.
-        //
-        // The database unique index prevents duplicates.
         //
         // IMPORTANT:
         // Changing No -> Yes does NOT delete or automatically
@@ -3835,10 +3868,6 @@ Continue?`
         );
 
 
-        // If the assessment itself was not saved, restore the
-        // previous UI state. If it was saved successfully, keep
-        // the saved status visible even if a later integration
-        // step encountered a problem.
         if (
           !assessmentSaved
         ) {
@@ -6291,12 +6320,6 @@ Continue?`
                                 );
 
 
-                              const style =
-                                readinessStyle(
-                                  status
-                                );
-
-
                               const savingKey =
                                 `${row.id}___${column.key}`;
 
@@ -6305,6 +6328,14 @@ Continue?`
                                 readiness[
                                   savingKey
                                 ] || null;
+
+
+                              const style =
+                                readinessStyle(
+                                  status,
+                                  assessment?.readiness_source ||
+                                    null
+                                );
 
 
                               const linkedConstraint =
@@ -6349,34 +6380,52 @@ Continue?`
 
                                     <button
                                       type="button"
-                                      title={`Managed in Constraint Log · ${linkedConstraint.status}. Click to open the Constraint Log.`}
+
+                                      title={
+                                        assessment?.readiness_source ===
+                                        'constraint_cleared'
+                                          ? `Ready after Constraint Log verification · ${linkedConstraint.status}. Click to open the Constraint Log.`
+                                          : `Managed in Constraint Log · ${linkedConstraint.status}. Click to open the Constraint Log.`
+                                      }
+
                                       onClick={() => {
 
                                         window.location.href =
                                           `/dashboard/projects/constraints?projectId=${selectedProjectId}&constraintId=${linkedConstraint.id}`;
 
                                       }}
+
                                       style={{
                                         width:
                                           '100%',
+
                                         minWidth:
                                           0,
+
                                         height:
                                           '28px',
+
                                         padding:
                                           '0 4px',
+
                                         border:
                                           `1px solid ${style.border}`,
+
                                         borderRadius:
                                           '4px',
+
                                         background:
                                           style.background,
+
                                         color:
                                           style.color,
+
                                         fontSize:
                                           '9px',
+
                                         fontWeight:
                                           800,
+
                                         cursor:
                                           'pointer',
                                       }}
@@ -6392,7 +6441,11 @@ Continue?`
 
                                     <select
                                       value={status}
-                                      disabled={saving}
+
+                                      disabled={
+                                        saving
+                                      }
+
                                       onChange={(event) =>
                                         handleGroupedReadinessChange(
                                           row,
@@ -6400,28 +6453,40 @@ Continue?`
                                           event.target.value
                                         )
                                       }
+
                                       title="Selecting No creates a governed Constraint Log record."
+
                                       style={{
                                         width:
                                           '100%',
+
                                         minWidth:
                                           0,
+
                                         height:
                                           '28px',
+
                                         padding:
                                           '0 4px',
+
                                         border:
                                           `1px solid ${style.border}`,
+
                                         borderRadius:
                                           '4px',
+
                                         background:
                                           style.background,
+
                                         color:
                                           style.color,
+
                                         fontSize:
                                           '9px',
+
                                         fontWeight:
                                           700,
+
                                         cursor:
                                           saving
                                             ? 'not-allowed'
@@ -6442,6 +6507,7 @@ Continue?`
 
                             }
                           )}
+
 
                         </tr>
 
@@ -6487,7 +6553,11 @@ Continue?`
               </strong>
 
               <span>
-                🟢 Yes - Cleared
+                🟢 Yes - Ready Directly
+              </span>
+
+              <span>
+                🔵 Yes - Ready After Constraint Cleared
               </span>
 
               <span>
@@ -7273,7 +7343,10 @@ Continue?`
 
                         <td style={bodyCellStyle}>
 
-                          Lookahead / Koskela
+                          {row.row_type ===
+                          'manual'
+                            ? 'Lookahead'
+                            : 'Master Plan'}
 
                         </td>
 
