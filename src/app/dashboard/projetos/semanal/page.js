@@ -1781,37 +1781,119 @@ export default function WeeklyPlanningPage() {
           'Inter, Arial, sans-serif',
       }}
     >
-      {/* HEADER */}
+      {/* WEEKLY PLANNING TOOLBAR */}
 
       <div
         style={{
+          ...styles.card,
+          padding: '12px 16px',
+          marginBottom: '14px',
           display: 'flex',
-          justifyContent:
-            'flex-end',
-          alignItems:
-            'center',
-          gap: '14px',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
           flexWrap: 'wrap',
-          marginBottom:
-            '10px',
         }}
       >
         <div
           style={{
             display: 'flex',
             gap: '10px',
+            alignItems: 'center',
             flexWrap: 'wrap',
-            alignItems:
-              'center',
+            flex: '1 1 auto',
+          }}
+        >
+          {selectedProjectId && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  moveWeek(-1)
+                }
+                style={styles.iconButton}
+                aria-label="Previous week"
+              >
+                ←
+              </button>
+
+              <div
+                style={{
+                  minWidth: '185px',
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 800,
+                    color: '#0f2745',
+                    lineHeight: 1.15,
+                  }}
+                >
+                  Week{' '}
+                  {weekInfo.week}{' '}
+                  ·{' '}
+                  {weekInfo.year}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: '0.78rem',
+                    color: '#64748b',
+                    marginTop: '3px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {formatDate(
+                    weekStartDate,
+                  )}{' '}
+                  –{' '}
+                  {formatDate(
+                    weekEndDate,
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  moveWeek(1)
+                }
+                style={styles.iconButton}
+                aria-label="Next week"
+              >
+                →
+              </button>
+
+              <input
+                type="date"
+                value={weekStartDate}
+                onChange={(event) =>
+                  handleWeekDateChange(
+                    event.target.value,
+                  )
+                }
+                style={{
+                  ...styles.input,
+                  width: '165px',
+                }}
+                aria-label="Select week"
+              />
+            </>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '10px',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
           }}
         >
           <select
-            value={
-              selectedProjectId
-            }
-            onChange={(
-              event,
-            ) =>
+            value={selectedProjectId}
+            onChange={(event) =>
               setSelectedProjectId(
                 event.target.value,
               )
@@ -1838,19 +1920,113 @@ export default function WeeklyPlanningPage() {
 
           <button
             type="button"
-            onClick={
-              loadWeeklyPlan
-            }
+            onClick={loadWeeklyPlan}
             disabled={
               !selectedProjectId ||
               loading
             }
-            style={
-              styles.secondaryButton
-            }
+            style={styles.secondaryButton}
           >
             Refresh
           </button>
+
+          {selectedProjectId && (
+            <>
+              {weeklyPlan ? (
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    ...(isDraft
+                      ? styles.draftBadge
+                      : isCommitted
+                        ? styles.committedBadge
+                        : isClosed
+                          ? styles.closedBadge
+                          : styles.cancelledBadge),
+                  }}
+                >
+                  {planStatusLabel(
+                    weeklyPlan.status,
+                  )}
+                </span>
+              ) : (
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    background: '#f1f5f9',
+                    color: '#64748b',
+                  }}
+                >
+                  No Weekly Plan
+                </span>
+              )}
+
+              {!weeklyPlan && (
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={async () => {
+                    setActionLoading(true);
+                    await createWeeklyPlan();
+                    setActionLoading(false);
+                  }}
+                  style={styles.primaryButton}
+                >
+                  Create Weekly Plan
+                </button>
+              )}
+
+              {isDraft && (
+                <>
+                  <button
+                    type="button"
+                    onClick={openActivityModal}
+                    style={styles.primaryButton}
+                  >
+                    + Add Activity
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      formalItems.length === 0 ||
+                      actionLoading
+                    }
+                    onClick={commitWeek}
+                    style={styles.commitButton}
+                  >
+                    Commit Week
+                  </button>
+                </>
+              )}
+
+              {isCommitted && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowUnplannedPanel(true)
+                    }
+                    style={styles.secondaryButton}
+                  >
+                    + Add Unplanned Work
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      !canClose ||
+                      actionLoading
+                    }
+                    onClick={closeWeek}
+                    style={styles.closeButton}
+                  >
+                    Close Week
+                  </button>
+                </>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -1914,255 +2090,6 @@ export default function WeeklyPlanningPage() {
         </div>
       ) : (
         <>
-          {/* WEEK CONTROL */}
-
-          <div
-            style={{
-              ...styles.card,
-              padding:
-                '14px 16px',
-              marginBottom:
-                '14px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent:
-                  'space-between',
-                gap: '16px',
-                flexWrap:
-                  'wrap',
-                alignItems:
-                  'center',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '10px',
-                  alignItems:
-                    'center',
-                  flexWrap:
-                    'wrap',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    moveWeek(-1)
-                  }
-                  style={
-                    styles.iconButton
-                  }
-                >
-                  ←
-                </button>
-
-                <div>
-                  <div
-                    style={{
-                      fontWeight:
-                        800,
-                      color:
-                        '#0f2745',
-                    }}
-                  >
-                    Week{' '}
-                    {weekInfo.week}{' '}
-                    ·{' '}
-                    {weekInfo.year}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize:
-                        '0.82rem',
-                      color:
-                        '#64748b',
-                      marginTop:
-                        '3px',
-                    }}
-                  >
-                    {formatDate(
-                      weekStartDate,
-                    )}{' '}
-                    –{' '}
-                    {formatDate(
-                      weekEndDate,
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    moveWeek(1)
-                  }
-                  style={
-                    styles.iconButton
-                  }
-                >
-                  →
-                </button>
-
-                <input
-                  type="date"
-                  value={
-                    weekStartDate
-                  }
-                  onChange={(
-                    event,
-                  ) =>
-                    handleWeekDateChange(
-                      event.target.value,
-                    )
-                  }
-                  style={{
-                    ...styles.input,
-                    width:
-                      '170px',
-                  }}
-                />
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '10px',
-                  flexWrap:
-                    'wrap',
-                  alignItems:
-                    'center',
-                }}
-              >
-                {weeklyPlan ? (
-                  <span
-                    style={{
-                      ...styles.statusBadge,
-
-                      ...(isDraft
-                        ? styles.draftBadge
-                        : isCommitted
-                          ? styles.committedBadge
-                          : isClosed
-                            ? styles.closedBadge
-                            : styles.cancelledBadge),
-                    }}
-                  >
-                    {planStatusLabel(
-                      weeklyPlan.status,
-                    )}
-                  </span>
-                ) : (
-                  <span
-                    style={{
-                      ...styles.statusBadge,
-                      background:
-                        '#f1f5f9',
-                      color:
-                        '#64748b',
-                    }}
-                  >
-                    No Weekly Plan
-                  </span>
-                )}
-
-                {!weeklyPlan && (
-                  <button
-                    type="button"
-                    disabled={
-                      actionLoading
-                    }
-                    onClick={async () => {
-                      setActionLoading(
-                        true,
-                      );
-
-                      await createWeeklyPlan();
-
-                      setActionLoading(
-                        false,
-                      );
-                    }}
-                    style={
-                      styles.primaryButton
-                    }
-                  >
-                    Create Weekly Plan
-                  </button>
-                )}
-
-                {isDraft && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={
-                        openActivityModal
-                      }
-                      style={
-                        styles.primaryButton
-                      }
-                    >
-                      + Add Activity
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={
-                        formalItems.length ===
-                          0 ||
-                        actionLoading
-                      }
-                      onClick={
-                        commitWeek
-                      }
-                      style={
-                        styles.commitButton
-                      }
-                    >
-                      Commit Week
-                    </button>
-                  </>
-                )}
-
-                {isCommitted && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowUnplannedPanel(
-                          true,
-                        )
-                      }
-                      style={
-                        styles.secondaryButton
-                      }
-                    >
-                      + Add Unplanned Work
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={
-                        !canClose ||
-                        actionLoading
-                      }
-                      onClick={
-                        closeWeek
-                      }
-                      style={
-                        styles.closeButton
-                      }
-                    >
-                      Close Week
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
           {/* METRICS */}
 
           <div
