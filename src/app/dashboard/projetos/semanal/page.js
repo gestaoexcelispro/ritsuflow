@@ -1,4 +1,4 @@
-'use client';
+  'use client';
 
 import React, {
   useCallback,
@@ -1229,7 +1229,7 @@ export default function WeeklyPlanningPage() {
 
       const confirmed =
         window.confirm(
-          'Commit this Weekly Plan? The commitment baseline will be frozen and used for PPC.',
+          'Commit this Weekly Plan? RitsuFlow will revalidate Make Ready before freezing the commitment baseline used for PPC.',
         );
 
       if (!confirmed) {
@@ -1244,7 +1244,7 @@ export default function WeeklyPlanningPage() {
           error,
         } =
           await supabase.rpc(
-            'commit_weekly_plan',
+            'commit_weekly_plan_with_make_ready',
             {
               target_weekly_plan_id:
                 weeklyPlan.id,
@@ -1256,7 +1256,7 @@ export default function WeeklyPlanningPage() {
         }
 
         setMessage(
-          'Weekly Plan committed. The PPC baseline is now frozen.',
+          'Weekly Plan committed. Make Ready was validated and the PPC baseline is now frozen.',
         );
 
         await loadWeeklyPlan();
