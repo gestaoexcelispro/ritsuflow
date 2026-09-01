@@ -3295,81 +3295,11 @@ export default function ConstraintLogPage() {
         }
 
 
-        // The UI intentionally keeps constraint resolution simple.
-        // If the constraint is still Open, the required internal
-        // Open -> In Progress transition is recorded automatically
-        // before the resolution is saved.
-        if (managedConstraint.status === 'open') {
-
-          setSavingAction(true);
-          setHistoryError('');
-
-          try {
-
-            const { error: startError } =
-              await supabase.rpc(
-                'start_constraint_action_with_history',
-                {
-                  target_constraint_id:
-                    managedConstraint.id,
-
-                  target_comment:
-                    'Resolution workflow started automatically.',
-
-                  target_performed_by:
-                    performedBy,
-                }
-              );
-
-            if (startError) {
-              throw startError;
-            }
-
-            const { error: resolveError } =
-              await supabase.rpc(
-                'resolve_constraint_with_history',
-                {
-                  target_constraint_id:
-                    managedConstraint.id,
-
-                  target_resolution_note:
-                    note,
-
-                  target_performed_by:
-                    performedBy,
-                }
-              );
-
-            if (resolveError) {
-              throw resolveError;
-            }
-
-            setManagementNote('');
-            setActiveManagementPanel(null);
-
-            await refreshManagedConstraint(
-              managedConstraint.id
-            );
-
-          } catch (error) {
-
-            setHistoryError(
-              error.message ||
-              'Constraint could not be resolved.'
-            );
-
-          } finally {
-
-            setSavingAction(false);
-
-          }
-
-          return;
-        }
-
-
+        // Simplified atomic resolution workflow.
+        // SQL 126 accepts Open, In Progress or Waiting and
+        // records the true previous status directly to Resolved.
         functionName =
-          'resolve_constraint_with_history';
+          'resolve_constraint_directly_with_history';
 
         parameters = {
           target_constraint_id:
