@@ -4,1234 +4,660 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 
+import { createPortal } from 'react-dom';
+
 import { supabase } from '../../../../lib/supabase';
-
-
-// ============================================================
-// RitsuFlow™
-// CONSTRAINT MANAGEMENT — CENTERED MODAL WORKSPACE
-// ============================================================
-
 
 // ============================================================
 // CONSTANTS
 // ============================================================
 
-const ACTIVE_CONSTRAINT_STATUSES = [
-  'open',
-  'in_progress',
-  'waiting',
-  'resolved',
+const VARIANCE_REASONS = [
+  { value: 'labor', label: 'Labor' },
+  { value: 'material', label: 'Material' },
+  { value: 'equipment', label: 'Equipment' },
+  { value: 'design_information', label: 'Design / Information' },
+  { value: 'predecessor', label: 'Predecessor' },
+  { value: 'workspace_access', label: 'Workspace / Access' },
+  { value: 'weather', label: 'Weather' },
+  { value: 'subcontractor', label: 'Subcontractor' },
+  { value: 'client_owner', label: 'Client / Owner' },
+  { value: 'planning', label: 'Planning' },
+  { value: 'quality_rework', label: 'Quality / Rework' },
+  { value: 'safety', label: 'Safety' },
+  { value: 'other', label: 'Other' },
 ];
 
-
-const TERMINAL_CONSTRAINT_STATUSES = [
-  'cleared',
-  'cancelled',
-];
-
-
-const DRAWER_TABS = [
+const MAKE_READY_CATEGORIES = [
   {
-    value: 'details',
-    label: 'Details',
-  },
-  {
-    value: 'forecast',
-    label: 'Forecast',
-  },
-  {
-    value: 'actions',
-    label: 'Action Plan',
-  },
-  {
-    value: 'work',
-    label: 'Affected Work',
-  },
-  {
-    value: 'history',
-    label: 'History',
-  },
-];
-
-
-const STATUS_OPTIONS = [
-  {
-    value: '',
-    label: 'All Statuses',
-  },
-  {
-    value: 'open',
-    label: 'Open',
-  },
-  {
-    value: 'in_progress',
-    label: 'In Progress',
-  },
-  {
-    value: 'waiting',
-    label: 'Waiting',
-  },
-  {
-    value: 'resolved',
-    label: 'Resolved',
-  },
-  {
-    value: 'cleared',
-    label: 'Cleared',
-  },
-  {
-    value: 'cancelled',
-    label: 'Cancelled',
-  },
-];
-
-
-const CATEGORY_OPTIONS = [
-  {
-    value: 'projects_information',
+    key: 'projects_information_status',
+    sourceKey: 'projects_information_source',
+    category: 'projects_information',
     label: 'Projects / Information',
   },
   {
-    value: 'materials',
+    key: 'materials_status',
+    sourceKey: 'materials_source',
+    category: 'materials',
     label: 'Materials',
   },
   {
-    value: 'labor',
+    key: 'labor_status',
+    sourceKey: 'labor_source',
+    category: 'labor',
     label: 'Labor',
   },
   {
-    value: 'equipment',
+    key: 'equipment_status',
+    sourceKey: 'equipment_source',
+    category: 'equipment',
     label: 'Equipment',
   },
   {
-    value: 'space',
+    key: 'space_status',
+    sourceKey: 'space_source',
+    category: 'space',
     label: 'Space',
   },
   {
-    value: 'predecessor',
+    key: 'predecessor_status',
+    sourceKey: 'predecessor_source',
+    category: 'predecessor',
     label: 'Predecessor',
   },
   {
-    value: 'external_conditions',
+    key: 'external_conditions_status',
+    sourceKey: 'external_conditions_source',
+    category: 'external_conditions',
     label: 'External Conditions',
   },
 ];
 
-
-const PRIORITY_OPTIONS = [
-  {
-    value: 'low',
-    label: 'Low',
-  },
-  {
-    value: 'normal',
-    label: 'Normal',
-  },
-  {
-    value: 'high',
-    label: 'High',
-  },
-  {
-    value: 'critical',
-    label: 'Critical',
-  },
-];
-
-
-const IMPACT_OPTIONS = [
-  {
-    value: 'none',
-    label: 'None',
-  },
-  {
-    value: 'low',
-    label: 'Low',
-  },
-  {
-    value: 'moderate',
-    label: 'Moderate',
-  },
-  {
-    value: 'high',
-    label: 'High',
-  },
-  {
-    value: 'critical',
-    label: 'Critical',
-  },
-];
-
-
-const RESPONSE_APPROACH_OPTIONS = [
-  {
-    value: 'eliminate_cause',
-    label: 'Eliminate Cause',
-  },
-  {
-    value: 'reduce_impact',
-    label: 'Reduce Impact',
-  },
-  {
-    value: 'alternative_solution',
-    label: 'Alternative Solution',
-  },
-  {
-    value: 'transfer_responsibility',
-    label: 'Transfer Responsibility',
-  },
-  {
-    value: 'accept_impact',
-    label: 'Accept Impact',
-  },
-  {
-    value: 'escalate',
-    label: 'Escalate',
-  },
-];
-
-
-const EXPECTED_IMPACT_OPTIONS = [
-  {
-    value: 'protect_required_by',
-    label: 'Protect Required By Date',
-  },
-  {
-    value: 'reduce_delay',
-    label: 'Reduce Schedule Exposure',
-  },
-  {
-    value: 'no_schedule_effect',
-    label: 'No Schedule Effect',
-  },
-  {
-    value: 'other',
-    label: 'Other',
-  },
-];
-
-
-const EFFECTIVENESS_OPTIONS = [
-  {
-    value: 'effective',
-    label: 'Effective',
-  },
-  {
-    value: 'partially_effective',
-    label: 'Partially Effective',
-  },
-  {
-    value: 'ineffective',
-    label: 'Ineffective',
-  },
-];
-
-
-const CATEGORY_LABELS =
-  Object.fromEntries(
-    CATEGORY_OPTIONS.map(
-      (item) => [
-        item.value,
-        item.label,
-      ]
-    )
-  );
-
-
-const ACTION_TYPE_LABELS = {
-  created:
-    'Constraint Created',
-
-  assigned:
-    'Assigned',
-
-  responsible_changed:
-    'Responsible Changed',
-
-  action_updated:
-    'Constraint Details Updated',
-
-  status_changed:
-    'Status Changed',
-
-  target_date_changed:
-    'Forecast Updated',
-
-  comment_added:
-    'Comment Added',
-
-  resolved:
-    'Resolution Reported',
-
-  verified:
-    'Resolution Verified',
-
-  cleared:
-    'Constraint Cleared',
-
-  cancelled:
-    'Constraint Cancelled',
-
-  action_plan_added:
-    'Recovery Action Added',
-
-  action_plan_completed:
-    'Recovery Action Completed',
-
-  action_effectiveness_evaluated:
-    'Recovery Effectiveness Evaluated',
-
-  priority_auto_escalated:
-    'Priority Auto-Escalated',
-
-  priority_auto_escalation_removed:
-    'Automatic Critical Escalation Removed',
+const EMPTY_ACTIVITY_FORM = {
+  activityDescription: '',
+  lookaheadSheetRowId: '',
+  locationName: '',
+  responsibleParty: '',
+  plannedQuantity: '',
+  unit: '',
+  notes: '',
 };
 
+const EMPTY_UNPLANNED_FORM = {
+  activityDescription: '',
+  locationName: '',
+  responsibleParty: '',
+  plannedQuantity: '',
+  actualQuantity: '',
+  unit: '',
+  notes: '',
+};
 
 // ============================================================
-// HELPERS
+// DATE HELPERS
 // ============================================================
 
-function normalizeText(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase();
+function dateToIso(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 }
 
+function parseLocalDate(value) {
+  const [year, month, day] = value.split('-').map(Number);
 
-function formatLabel(value) {
-  if (!value) {
-    return '—';
-  }
-
-  if (CATEGORY_LABELS[value]) {
-    return CATEGORY_LABELS[value];
-  }
-
-  return String(value)
-    .replace(/_/g, ' ')
-    .replace(
-      /\b\w/g,
-      (character) =>
-        character.toUpperCase()
-    );
+  return new Date(
+    year,
+    month - 1,
+    day,
+    12,
+    0,
+    0,
+  );
 }
 
+function addDays(value, days) {
+  const date = parseLocalDate(value);
+
+  date.setDate(
+    date.getDate() + days,
+  );
+
+  return dateToIso(date);
+}
+
+function getMonday(value) {
+  const date = new Date(
+    value.getFullYear(),
+    value.getMonth(),
+    value.getDate(),
+    12,
+    0,
+    0,
+  );
+
+  const day = date.getDay();
+
+  const difference =
+    day === 0
+      ? -6
+      : 1 - day;
+
+  date.setDate(
+    date.getDate() + difference,
+  );
+
+  return date;
+}
+
+function getIsoWeekInfo(value) {
+  const local = parseLocalDate(value);
+
+  const date = new Date(
+    Date.UTC(
+      local.getFullYear(),
+      local.getMonth(),
+      local.getDate(),
+    ),
+  );
+
+  const day = date.getUTCDay() || 7;
+
+  date.setUTCDate(
+    date.getUTCDate() + 4 - day,
+  );
+
+  const yearStart = new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      0,
+      1,
+    ),
+  );
+
+  const week = Math.ceil(
+    (
+      (
+        date.getTime() -
+        yearStart.getTime()
+      ) /
+        86400000 +
+      1
+    ) / 7,
+  );
+
+  return {
+    week,
+    year: date.getUTCFullYear(),
+  };
+}
 
 function formatDate(value) {
-  if (!value) {
-    return '—';
-  }
-
-  const date =
-    new Date(
-      `${value}T00:00:00`
-    );
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return value;
-  }
+  if (!value) return '—';
 
   return new Intl.DateTimeFormat(
     'en-US',
     {
       month: 'short',
-      day: '2-digit',
+      day: 'numeric',
       year: 'numeric',
-    }
-  ).format(date);
+    },
+  ).format(
+    parseLocalDate(value),
+  );
 }
 
-
-function formatDateTime(value) {
-  if (!value) {
-    return '—';
-  }
-
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return value;
-  }
+function formatShortDate(value) {
+  if (!value) return '—';
 
   return new Intl.DateTimeFormat(
     'en-US',
     {
       month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }
-  ).format(date);
+      day: 'numeric',
+    },
+  ).format(
+    parseLocalDate(value),
+  );
 }
 
-
-function getConstraintReference(
-  constraintId
-) {
-  if (!constraintId) {
-    return 'CON-UNKNOWN';
+function numberOrNull(value) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null;
   }
 
-  const compact =
-    String(constraintId)
-      .replace(/-/g, '')
-      .slice(0, 6)
-      .toUpperCase();
+  const text = String(value).trim();
 
-  return `CON-${compact}`;
+  if (!text) {
+    return null;
+  }
+
+  const normalized = text.replace(',', '.');
+
+  const parsed = Number(normalized);
+
+  return Number.isFinite(parsed)
+    ? parsed
+    : null;
 }
 
+// ============================================================
+// LABEL HELPERS
+// ============================================================
 
-function getSourceLabel(
-  constraint
-) {
-  if (
-    constraint
-      ?.sheet_readiness_assessment_id
-  ) {
-    return 'Lookahead / Koskela';
+function varianceLabel(value) {
+  if (!value) {
+    return '—';
   }
 
-  if (
-    constraint
-      ?.readiness_assessment_id
-  ) {
-    return 'Lookahead';
-  }
-
-  if (
-    constraint
-      ?.lookahead_work_item_id
-  ) {
-    return 'Lookahead';
-  }
-
-  if (
-    constraint
-      ?.master_plan_package_id
-  ) {
-    return 'Master Plan';
-  }
-
-  return 'Manual / Project';
+  return (
+    VARIANCE_REASONS.find(
+      (reason) =>
+        reason.value === value,
+    )?.label || value
+  );
 }
 
-
-function getStatusLabel(status) {
+function planStatusLabel(status) {
   switch (status) {
-    case 'open':
-      return 'Open';
+    case 'draft':
+      return 'Draft';
 
-    case 'in_progress':
-      return 'In Progress';
+    case 'committed':
+      return 'Committed';
 
-    case 'waiting':
-      return 'Waiting';
-
-    case 'resolved':
-      return 'Resolved';
-
-    case 'cleared':
-      return 'Cleared';
+    case 'closed':
+      return 'Closed';
 
     case 'cancelled':
       return 'Cancelled';
 
-    case 'completed':
-      return 'Completed';
+    default:
+      return status;
+  }
+}
+
+function makeReadyStatusLabel(
+  status,
+  source,
+) {
+  if (
+    status === 'clear' &&
+    source === 'constraint_cleared'
+  ) {
+    return 'Yes 🔒';
+  }
+
+  switch (status) {
+    case 'clear':
+      return 'Yes';
+
+    case 'not_applicable':
+      return 'N/A';
+
+    case 'constrained':
+      return 'No 🔒';
+
+    case 'not_assessed':
+      return 'Not Assessed';
 
     default:
-      return formatLabel(status);
+      return status || 'Not Assessed';
   }
 }
 
-
-function getActionTypeLabel(
-  actionType
+function makeReadyStatusStyle(
+  status,
+  source,
 ) {
-  if (!actionType) {
-    return 'History Entry';
+  if (
+    status === 'clear' &&
+    source === 'constraint_cleared'
+  ) {
+    return {
+      background: '#dbeafe',
+      color: '#1d4ed8',
+      border: '1px solid #bfdbfe',
+    };
   }
 
-  return (
-    ACTION_TYPE_LABELS[
-      actionType
-    ] ||
-    formatLabel(actionType)
-  );
+  if (status === 'clear') {
+    return {
+      background: '#dcfce7',
+      color: '#166534',
+      border: '1px solid #bbf7d0',
+    };
+  }
+
+  if (status === 'constrained') {
+    return {
+      background: '#fee2e2',
+      color: '#991b1b',
+      border: '1px solid #fecaca',
+    };
+  }
+
+  return {
+    background: '#f1f5f9',
+    color: '#64748b',
+    border: '1px solid #e2e8f0',
+  };
 }
 
+function constraintLifecycleLabel(
+  constraint,
+) {
+  if (!constraint) {
+    return 'Constraint Blocking';
+  }
 
-function getStatusStyle(status) {
-  switch (status) {
-    case 'open':
-      return {
-        background: '#fee2e2',
-        border: '#fca5a5',
-        color: '#991b1b',
-      };
+  switch (constraint.status) {
+    case 'resolved':
+      return 'Resolved — Awaiting Verification';
 
     case 'in_progress':
-      return {
-        background: '#dbeafe',
-        border: '#93c5fd',
-        color: '#1d4ed8',
-      };
+      return 'Active Constraint — In Progress';
 
     case 'waiting':
-      return {
-        background: '#fef3c7',
-        border: '#fcd34d',
-        color: '#92400e',
-      };
+      return 'Active Constraint — Waiting';
 
-    case 'resolved':
-      return {
-        background: '#ede9fe',
-        border: '#c4b5fd',
-        color: '#6d28d9',
-      };
-
-    case 'cleared':
-    case 'completed':
-      return {
-        background: '#dcfce7',
-        border: '#86efac',
-        color: '#166534',
-      };
-
-    case 'cancelled':
-      return {
-        background: '#f1f5f9',
-        border: '#cbd5e1',
-        color: '#64748b',
-      };
+    case 'open':
+      return 'Active Constraint';
 
     default:
-      return {
-        background: '#f8fafc',
-        border: '#cbd5e1',
-        color: '#475569',
-      };
+      return 'Constraint Blocking';
   }
 }
-
-
-function getPriorityStyle(
-  priority
-) {
-  switch (
-    normalizeText(priority)
-  ) {
-    case 'critical':
-      return {
-        background: '#fee2e2',
-        border: '#ef4444',
-        color: '#991b1b',
-      };
-
-    case 'high':
-      return {
-        background: '#fff7ed',
-        border: '#fdba74',
-        color: '#c2410c',
-      };
-
-    case 'normal':
-    case 'medium':
-      return {
-        background: '#fefce8',
-        border: '#fde047',
-        color: '#854d0e',
-      };
-
-    case 'low':
-      return {
-        background: '#f0fdf4',
-        border: '#86efac',
-        color: '#166534',
-      };
-
-    default:
-      return {
-        background: '#f8fafc',
-        border: '#cbd5e1',
-        color: '#475569',
-      };
-  }
-}
-
-
-function getImpactStyle(
-  impact
-) {
-  switch (
-    normalizeText(impact)
-  ) {
-    case 'critical':
-      return {
-        background: '#fee2e2',
-        border: '#ef4444',
-        color: '#991b1b',
-      };
-
-    case 'high':
-      return {
-        background: '#fff7ed',
-        border: '#fdba74',
-        color: '#c2410c',
-      };
-
-    case 'moderate':
-      return {
-        background: '#fefce8',
-        border: '#fde047',
-        color: '#854d0e',
-      };
-
-    case 'low':
-      return {
-        background: '#f0fdf4',
-        border: '#86efac',
-        color: '#166534',
-      };
-
-    case 'none':
-      return {
-        background: '#f8fafc',
-        border: '#cbd5e1',
-        color: '#64748b',
-      };
-
-    default:
-      return {
-        background: '#f8fafc',
-        border: '#cbd5e1',
-        color: '#475569',
-      };
-  }
-}
-
-
-function formatResolvedDate(
-  value
-) {
-  if (!value) {
-    return '—';
-  }
-
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return '—';
-  }
-
-  return new Intl.DateTimeFormat(
-    'en-US',
-    {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-    }
-  ).format(date);
-}
-
-
-function extractConstraintId(
-  value
-) {
-  if (!value) {
-    return null;
-  }
-
-  if (
-    typeof value ===
-    'string'
-  ) {
-    return value;
-  }
-
-  if (
-    Array.isArray(value)
-  ) {
-    return extractConstraintId(
-      value[0]
-    );
-  }
-
-  if (
-    typeof value ===
-    'object'
-  ) {
-    return (
-      value.id ||
-      value.constraint_id ||
-      value.created_constraint_id ||
-      null
-    );
-  }
-
-  return null;
-}
-
-
-function getEffectivenessStyle(
-  effectiveness
-) {
-  switch (effectiveness) {
-    case 'effective':
-      return {
-        background: '#dcfce7',
-        border: '#86efac',
-        color: '#166534',
-      };
-
-    case 'partially_effective':
-      return {
-        background: '#fef3c7',
-        border: '#fcd34d',
-        color: '#92400e',
-      };
-
-    case 'ineffective':
-      return {
-        background: '#fee2e2',
-        border: '#fca5a5',
-        color: '#991b1b',
-      };
-
-    default:
-      return {
-        background: '#f1f5f9',
-        border: '#cbd5e1',
-        color: '#64748b',
-      };
-  }
-}
-
-
-function dateDifferenceDays(
-  fromDate,
-  toDate
-) {
-  if (
-    !fromDate ||
-    !toDate
-  ) {
-    return null;
-  }
-
-  const start =
-    new Date(
-      `${fromDate}T00:00:00`
-    );
-
-  const finish =
-    new Date(
-      `${toDate}T00:00:00`
-    );
-
-  if (
-    Number.isNaN(
-      start.getTime()
-    ) ||
-    Number.isNaN(
-      finish.getTime()
-    )
-  ) {
-    return null;
-  }
-
-  return Math.round(
-    (
-      finish.getTime() -
-      start.getTime()
-    ) /
-    86400000
-  );
-}
-
-
-function getExposureLabel(
-  days
-) {
-  if (
-    days === null ||
-    days === undefined
-  ) {
-    return '—';
-  }
-
-  if (days > 0) {
-    return `+${days} day${days === 1 ? '' : 's'}`;
-  }
-
-  if (days === 0) {
-    return 'On required date';
-  }
-
-  return `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} early`;
-}
-
-
-function getOutlookLabel(value) {
-  switch (value) {
-    case 'cleared':
-      return 'Cleared';
-
-    case 'awaiting_verification':
-      return 'Awaiting Verification';
-
-    case 'awaiting_verification_exposed':
-      return 'Awaiting Verification · Exposed';
-
-    case 'recovery_possible':
-      return 'Recovery Possible';
-
-    case 'schedule_exposed':
-      return 'Schedule Exposed';
-
-    case 'action_plan_active':
-      return 'Action Plan Active';
-
-    case 'protected':
-      return 'Protected';
-
-    default:
-      return formatLabel(value);
-  }
-}
-
-
-async function getPerformedBy() {
-  try {
-    const {
-      data,
-    } =
-      await supabase.auth
-        .getUser();
-
-    const user =
-      data?.user;
-
-    if (!user) {
-      return null;
-    }
-
-    return (
-      user.user_metadata
-        ?.full_name ||
-      user.user_metadata
-        ?.name ||
-      user.email ||
-      null
-    );
-
-  } catch (error) {
-    console.error(
-      'Constraint actor:',
-      error
-    );
-
-    return null;
-  }
-}
-
-
-// ============================================================
-// FORM BUILDERS
-// ============================================================
-
-function createInitialConstraintForm() {
-  return {
-    category:
-      'projects_information',
-
-    title:
-      '',
-
-    description:
-      '',
-
-    action_required:
-      '',
-
-    responsible_party:
-      '',
-
-    required_by_date:
-      '',
-
-    priority:
-      'normal',
-
-    impact:
-      'moderate',
-
-    blocking:
-      true,
-  };
-}
-
-
-function createManagementForm(
-  constraint
-) {
-  return {
-    responsible_party:
-      constraint
-        ?.responsible_party ||
-      '',
-
-    action_required:
-      constraint
-        ?.action_required ||
-      '',
-
-    priority:
-      constraint
-        ?.priority ||
-      constraint
-        ?.base_priority ||
-      constraint
-        ?.legacy_priority ||
-      'normal',
-
-    impact:
-      constraint
-        ?.impact ||
-      'moderate',
-
-    description:
-      constraint
-        ?.description ||
-      '',
-
-    blocking:
-      Boolean(
-        constraint
-          ?.blocking
-      ),
-
-    comment:
-      '',
-  };
-}
-
-
-function createRecoveryActionForm() {
-  return {
-    response_approach:
-      'alternative_solution',
-
-    action_title:
-      '',
-
-    action_description:
-      '',
-
-    responsible_party:
-      '',
-
-    due_date:
-      '',
-
-    expected_impact:
-      'protect_required_by',
-  };
-}
-
 
 // ============================================================
 // PAGE
 // ============================================================
 
-export default function ConstraintLogPage() {
+export default function WeeklyPlanningPage() {
+  const initialMonday = useMemo(
+    () =>
+      dateToIso(
+        getMonday(new Date()),
+      ),
+    [],
+  );
 
-  // ==========================================================
-  // DATA
-  // ==========================================================
+  // ----------------------------------------------------------
+  // DASHBOARD HEADER PORTAL
+  // ----------------------------------------------------------
+
+  const [
+    headerActionsTarget,
+    setHeaderActionsTarget,
+  ] = useState(null);
+
+  useEffect(() => {
+    setHeaderActionsTarget(
+      document.getElementById(
+        'dashboard-topbar-actions',
+      ),
+    );
+  }, []);
+
+  // ----------------------------------------------------------
+  // GENERAL STATE
+  // ----------------------------------------------------------
 
   const [
     projects,
     setProjects,
   ] = useState([]);
 
-
   const [
     selectedProjectId,
     setSelectedProjectId,
   ] = useState('');
 
+  const [
+    weekStartDate,
+    setWeekStartDate,
+  ] = useState(
+    initialMonday,
+  );
 
   const [
-    constraints,
-    setConstraints,
+    weeklyPlan,
+    setWeeklyPlan,
+  ] = useState(null);
+
+  const [
+    items,
+    setItems,
   ] = useState([]);
 
+  const [
+    performance,
+    setPerformance,
+  ] = useState(null);
 
   const [
-    affectedWork,
-    setAffectedWork,
+    trend,
+    setTrend,
+  ] = useState(null);
+
+  const [
+    pareto,
+    setPareto,
   ] = useState([]);
 
+  const [
+    workPackages,
+    setWorkPackages,
+  ] = useState([]);
 
   const [
-    lookaheadItems,
-    setLookaheadItems,
-  ] = useState({});
-
+    constraintLifecycle,
+    setConstraintLifecycle,
+  ] = useState([]);
 
   const [
-    masterPlanPackages,
-    setMasterPlanPackages,
-  ] = useState({});
+    showActivityPanel,
+    setShowActivityPanel,
+  ] = useState(false);
 
+  const [
+    activityForm,
+    setActivityForm,
+  ] = useState(
+    EMPTY_ACTIVITY_FORM,
+  );
+
+  const [
+    showUnplannedPanel,
+    setShowUnplannedPanel,
+  ] = useState(false);
+
+  const [
+    unplannedForm,
+    setUnplannedForm,
+  ] = useState(
+    EMPTY_UNPLANNED_FORM,
+  );
+
+  const [
+    missedCommitment,
+    setMissedCommitment,
+  ] = useState(null);
+
+  const [
+    editResult,
+    setEditResult,
+  ] = useState(null);
 
   const [
     loading,
     setLoading,
   ] = useState(false);
 
+  const [
+    actionLoading,
+    setActionLoading,
+  ] = useState(false);
+
+  const [
+    message,
+    setMessage,
+  ] = useState('');
 
   const [
     errorMessage,
     setErrorMessage,
   ] = useState('');
 
+  // ----------------------------------------------------------
+  // DERIVED DATA
+  // ----------------------------------------------------------
 
-  const [
-    successMessage,
-    setSuccessMessage,
-  ] = useState('');
+  const selectedProject =
+    projects.find(
+      (project) =>
+        project.id ===
+        selectedProjectId,
+    ) || null;
 
+  const selectedWorkPackage =
+    workPackages.find(
+      (workPackage) =>
+        workPackage.sheet_row_id ===
+        activityForm.lookaheadSheetRowId,
+    ) || null;
 
-  // ==========================================================
-  // FILTERS
-  // ==========================================================
-
-  const [
-    statusFilter,
-    setStatusFilter,
-  ] = useState('');
-
-
-  const [
-    categoryFilter,
-    setCategoryFilter,
-  ] = useState('');
-
-
-  const [
-    priorityFilter,
-    setPriorityFilter,
-  ] = useState('');
-
-
-  const [
-    impactFilter,
-    setImpactFilter,
-  ] = useState('');
-
-
-  const [
-    responsibleFilter,
-    setResponsibleFilter,
-  ] = useState('');
-
-
-  // ==========================================================
-  // CREATE
-  // ==========================================================
-
-  const [
-    showCreateModal,
-    setShowCreateModal,
-  ] = useState(false);
-
-
-  const [
-    creatingConstraint,
-    setCreatingConstraint,
-  ] = useState(false);
-
-
-  const [
-    createForm,
-    setCreateForm,
-  ] = useState(
-    createInitialConstraintForm()
+  const weekEndDate = addDays(
+    weekStartDate,
+    4,
   );
 
-
-  // ==========================================================
-  // DRAWER
-  // ==========================================================
-
-  const [
-    managedConstraint,
-    setManagedConstraint,
-  ] = useState(null);
-
-
-  const [
-    drawerTab,
-    setDrawerTab,
-  ] = useState(
-    'details'
+  const weekInfo = getIsoWeekInfo(
+    weekStartDate,
   );
 
+  const isDraft =
+    weeklyPlan?.status === 'draft';
 
-  const [
-    managementForm,
-    setManagementForm,
-  ] = useState(
-    createManagementForm()
-  );
+  const isCommitted =
+    weeklyPlan?.status === 'committed';
 
+  const isClosed =
+    weeklyPlan?.status === 'closed';
 
-  const [
-    savingDetails,
-    setSavingDetails,
-  ] = useState(false);
+  const formalItems =
+    items.filter(
+      (item) =>
+        !item.is_unplanned_work,
+    );
 
+  const unplannedItems =
+    items.filter(
+      (item) =>
+        item.is_unplanned_work,
+    );
 
-  const [
-    activeManagementPanel,
-    setActiveManagementPanel,
-  ] = useState(null);
+  const selectedPackageReady =
+    selectedWorkPackage?.readiness_is_clear ===
+    true;
 
+  const getConstraintForCategory =
+    useCallback(
+      (category) => {
+        if (!selectedWorkPackage) {
+          return null;
+        }
 
-  const [
-    managementNote,
-    setManagementNote,
-  ] = useState('');
+        const matches =
+          constraintLifecycle.filter(
+            (constraint) =>
+              constraint.koskela_sheet_row_id ===
+                selectedWorkPackage.sheet_row_id &&
+              constraint.koskela_category ===
+                category.category,
+          );
 
+        if (matches.length === 0) {
+          return null;
+        }
 
-  const [
-    forecastDate,
-    setForecastDate,
-  ] = useState('');
+        const lifecyclePriority = {
+          open: 1,
+          in_progress: 2,
+          waiting: 3,
+          resolved: 4,
+          cleared: 5,
+          cancelled: 6,
+        };
 
+        return [...matches].sort(
+          (a, b) =>
+            (lifecyclePriority[a.status] || 99) -
+              (lifecyclePriority[b.status] || 99) ||
+            String(b.updated_at || '').localeCompare(
+              String(a.updated_at || ''),
+            ),
+        )[0];
+      },
+      [
+        constraintLifecycle,
+        selectedWorkPackage,
+      ],
+    );
 
-  const [
-    savingAction,
-    setSavingAction,
-  ] = useState(false);
+  const blockingCategories =
+    selectedWorkPackage
+      ? MAKE_READY_CATEGORIES.filter(
+          (category) => {
+            const status =
+              selectedWorkPackage[
+                category.key
+              ];
 
+            return ![
+              'clear',
+              'not_applicable',
+            ].includes(status);
+          },
+        )
+      : [];
 
-  // ==========================================================
-  // HISTORY
-  // ==========================================================
+  // ----------------------------------------------------------
+  // FEEDBACK
+  // ----------------------------------------------------------
 
-  const [
-    constraintHistory,
-    setConstraintHistory,
-  ] = useState([]);
+  const clearMessages = useCallback(() => {
+    setMessage('');
+    setErrorMessage('');
+  }, []);
 
+  const showError = useCallback((error) => {
+    console.error(error);
 
-  const [
-    loadingHistory,
-    setLoadingHistory,
-  ] = useState(false);
+    if (
+      error &&
+      typeof error === 'object' &&
+      error.message
+    ) {
+      setErrorMessage(
+        String(error.message),
+      );
 
+      return;
+    }
 
-  const [
-    historyError,
-    setHistoryError,
-  ] = useState('');
-
-
-  // ==========================================================
-  // RECOVERY ACTIONS
-  // ==========================================================
-
-  const [
-    recoveryActions,
-    setRecoveryActions,
-  ] = useState([]);
-
-
-  const [
-    loadingRecoveryActions,
-    setLoadingRecoveryActions,
-  ] = useState(false);
-
-
-  const [
-    recoveryActionForm,
-    setRecoveryActionForm,
-  ] = useState(
-    createRecoveryActionForm()
-  );
-
-
-  const [
-    savingRecoveryAction,
-    setSavingRecoveryAction,
-  ] = useState(false);
-
-
-  const [
-    selectedRecoveryActionId,
-    setSelectedRecoveryActionId,
-  ] = useState(null);
-
-
-  const [
-    recoveryActionNote,
-    setRecoveryActionNote,
-  ] = useState('');
-
-
-  const [
-    effectivenessValue,
-    setEffectivenessValue,
-  ] = useState(
-    'effective'
-  );
-
-
-  const [
-    recoveryActionPanel,
-    setRecoveryActionPanel,
-  ] = useState(null);
-
-
-  // ==========================================================
-  // DEEP-LINK GOVERNANCE
-  //
-  // Lookahead locked Koskela cells navigate here with:
-  // ?projectId=<project>&constraintId=<constraint>
-  //
-  // The ref prevents lifecycle refreshes from repeatedly
-  // reopening the same constraint modal.
-  // ==========================================================
-
-  const autoOpenedConstraintIdRef =
-    useRef(null);
-
+    setErrorMessage(
+      'Unexpected error.',
+    );
+  }, []);
 
   // ==========================================================
   // LOAD PROJECTS
@@ -1240,754 +666,234 @@ export default function ConstraintLogPage() {
   const loadProjects =
     useCallback(
       async () => {
+        clearMessages();
 
-        setErrorMessage('');
-
-        try {
-
-          const {
-            data,
-            error,
-          } =
-            await supabase
-              .from('projects')
-              .select(`
-                id,
-                organization_id,
-                code,
-                name,
-                status,
-                created_at
-              `)
-              .neq(
-                'status',
-                'archived'
-              )
-              .order(
-                'created_at',
-                {
-                  ascending:
-                    false,
-                }
-              );
-
-
-          if (error) {
-            throw error;
-          }
-
-
-          const rows =
-            data || [];
-
-
-          setProjects(rows);
-
-
-          const params =
-            new URLSearchParams(
-              window.location.search
-            );
-
-
-          const requested =
-            params.get(
-              'projectId'
-            );
-
-
-          if (
-            requested &&
-            rows.some(
-              (project) =>
-                project.id ===
-                requested
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from('projects')
+            .select(
+              'id, code, name, organization_id',
             )
-          ) {
-            setSelectedProjectId(
-              requested
-            );
+            .order('code', {
+              ascending: true,
+            })
+            .order('name', {
+              ascending: true,
+            });
 
-            return;
-          }
-
-
-          if (
-            rows.length ===
-            1
-          ) {
-            setSelectedProjectId(
-              rows[0].id
-            );
-          }
-
-        } catch (error) {
-
-          console.error(
-            'Projects:',
-            error
-          );
-
-
-          setErrorMessage(
-            error.message ||
-            'Projects could not be loaded.'
-          );
-
+        if (error) {
+          showError(error);
+          return;
         }
 
+        setProjects(
+          data || [],
+        );
       },
-      []
+      [
+        clearMessages,
+        showError,
+      ],
     );
 
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
 
   // ==========================================================
-  // LOAD CONSTRAINTS
+  // LOAD WEEKLY PLAN
   // ==========================================================
 
-  const loadConstraintLog =
+  const loadWeeklyPlan =
     useCallback(
-      async (
-        projectId
-      ) => {
-
-        if (!projectId) {
-
-          setConstraints([]);
-          setAffectedWork([]);
-          setLookaheadItems({});
-          setMasterPlanPackages({});
+      async () => {
+        if (!selectedProjectId) {
+          setWeeklyPlan(null);
+          setItems([]);
+          setPerformance(null);
+          setTrend(null);
+          setPareto([]);
 
           return;
         }
 
-
         setLoading(true);
-        setErrorMessage('');
-
+        clearMessages();
 
         try {
-
           const {
-            data:
-              constraintData,
-
-            error:
-              constraintError,
+            data: planData,
+            error: planError,
           } =
             await supabase
-              .from(
-                'constraint_management_overview'
-              )
+              .from('weekly_plans')
               .select('*')
               .eq(
                 'project_id',
-                projectId
+                selectedProjectId,
               )
-              .order(
-                'created_at',
-                {
-                  ascending:
-                    false,
-                }
-              );
+              .eq(
+                'week_number',
+                weekInfo.week,
+              )
+              .eq(
+                'year_number',
+                weekInfo.year,
+              )
+              .neq(
+                'status',
+                'cancelled',
+              )
+              .maybeSingle();
 
-
-          if (
-            constraintError
-          ) {
-            throw constraintError;
+          if (planError) {
+            throw planError;
           }
 
-
-          const overviewConstraints =
-            constraintData ||
-            [];
-
-
-          if (
-            overviewConstraints.length ===
-            0
-          ) {
-
-            setConstraints([]);
-            setAffectedWork([]);
-            setLookaheadItems({});
-            setMasterPlanPackages({});
+          if (!planData) {
+            setWeeklyPlan(null);
+            setItems([]);
+            setPerformance(null);
+            setTrend(null);
+            setPareto([]);
 
             return;
           }
 
-
-          const overviewConstraintIds =
-            overviewConstraints.map(
-              (constraint) =>
-                constraint.id
-            );
-
-
-          const {
-            data:
-              constraintMetaData,
-
-            error:
-              constraintMetaError,
-          } =
-            await supabase
-              .from('constraints')
-              .select(`
-                id,
-                status,
-                blocking,
-                priority,
-                impact,
-                resolved_at,
-                sheet_readiness_assessment_id
-              `)
-              .in(
-                'id',
-                overviewConstraintIds
-              );
-
-
-          if (
-            constraintMetaError
-          ) {
-            throw constraintMetaError;
-          }
-
-
-          const constraintMetaMap =
-            Object.fromEntries(
-              (
-                constraintMetaData ||
-                []
-              ).map(
-                (item) => [
-                  item.id,
-                  item,
-                ]
-              )
-            );
-
-
-          const loadedConstraints =
-            overviewConstraints.map(
-              (constraint) => {
-
-                const meta =
-                  constraintMetaMap[
-                    constraint.id
-                  ] ||
-                  {};
-
-
-                return {
-                  ...constraint,
-
-                  // The constraints table is the lifecycle source of truth.
-                  // Do not rely on the overview view for live status after an RPC.
-                  status:
-                    meta.status ||
-                    constraint.status,
-
-                  blocking:
-                    typeof meta.blocking === 'boolean'
-                      ? meta.blocking
-                      : constraint.blocking,
-
-                  priority:
-                    meta.priority ||
-                    constraint.priority ||
-                    constraint.base_priority ||
-                    'normal',
-
-                  impact:
-                    meta.impact ||
-                    constraint.impact ||
-                    'moderate',
-
-                  resolved_at:
-                    meta.resolved_at ||
-                    constraint.resolved_at ||
-                    null,
-
-                  sheet_readiness_assessment_id:
-                    meta.sheet_readiness_assessment_id ||
-                    constraint.sheet_readiness_assessment_id ||
-                    null,
-                };
-
-              }
-            );
-
-
-          setConstraints(
-            loadedConstraints
+          setWeeklyPlan(
+            planData,
           );
 
-
-          if (
-            loadedConstraints.length ===
-            0
-          ) {
-
-            setAffectedWork([]);
-            setLookaheadItems({});
-            setMasterPlanPackages({});
-
-            return;
-          }
-
-
-          const constraintIds =
-            loadedConstraints.map(
-              (constraint) =>
-                constraint.id
-            );
-
-
-          const {
-            data:
-              affectedData,
-
-            error:
-              affectedError,
-          } =
-            await supabase
-              .from(
-                'constraint_affected_work'
-              )
-              .select(`
-                id,
-                constraint_id,
-                lookahead_work_item_id,
-                master_plan_package_id,
-                created_at
-              `)
-              .in(
-                'constraint_id',
-                constraintIds
-              );
-
-
-          if (
-            affectedError
-          ) {
-            throw affectedError;
-          }
-
-
-          const loadedAffected =
-            affectedData ||
-            [];
-
-
-          setAffectedWork(
-            loadedAffected
-          );
-
-
-          const lookaheadIds =
-            Array.from(
-              new Set([
-                ...loadedAffected
-                  .map(
-                    (item) =>
-                      item
-                        .lookahead_work_item_id
-                  )
-                  .filter(Boolean),
-
-                ...loadedConstraints
-                  .map(
-                    (constraint) =>
-                      constraint
-                        .lookahead_work_item_id
-                  )
-                  .filter(Boolean),
-              ])
-            );
-
-
-          let lookaheadMap =
-            {};
-
-
-          if (
-            lookaheadIds.length >
-            0
-          ) {
-
-            const {
-              data,
-              error,
-            } =
-              await supabase
+          const [
+            itemsResult,
+            performanceResult,
+            trendResult,
+            paretoResult,
+          ] =
+            await Promise.all([
+              supabase
                 .from(
-                  'lookahead_work_items'
+                  'weekly_plan_items',
                 )
-                .select(`
-                  id,
-                  project_id,
-                  master_plan_package_id,
-                  package_code,
-                  service_name,
-                  service_code,
-                  location_name,
-                  location_path,
-                  lookahead_description,
-                  lookahead_start_date,
-                  lookahead_finish_date
-                `)
-                .in(
-                  'id',
-                  lookaheadIds
-                );
-
-
-            if (error) {
-              throw error;
-            }
-
-
-            lookaheadMap =
-              Object.fromEntries(
-                (data || []).map(
-                  (item) => [
-                    item.id,
-                    item,
-                  ]
+                .select('*')
+                .eq(
+                  'weekly_plan_id',
+                  planData.id,
                 )
-              );
-          }
+                .order(
+                  'sequence_number',
+                  {
+                    ascending: true,
+                    nullsFirst: false,
+                  },
+                ),
 
-
-          setLookaheadItems(
-            lookaheadMap
-          );
-
-
-          const masterIds =
-            Array.from(
-              new Set([
-                ...loadedAffected
-                  .map(
-                    (item) =>
-                      item
-                        .master_plan_package_id
-                  )
-                  .filter(Boolean),
-
-                ...loadedConstraints
-                  .map(
-                    (constraint) =>
-                      constraint
-                        .master_plan_package_id
-                  )
-                  .filter(Boolean),
-
-                ...Object
-                  .values(
-                    lookaheadMap
-                  )
-                  .map(
-                    (item) =>
-                      item
-                        .master_plan_package_id
-                  )
-                  .filter(Boolean),
-              ])
-            );
-
-
-          let masterMap =
-            {};
-
-
-          if (
-            masterIds.length >
-            0
-          ) {
-
-            const {
-              data,
-              error,
-            } =
-              await supabase
+              supabase
                 .from(
-                  'master_plan_packages'
+                  'weekly_plan_performance',
                 )
-                .select(`
-                  id,
-                  project_id,
-                  package_code,
-                  service_name,
-                  service_code,
-                  location_name,
-                  location_path,
-                  scheduled_start_date,
-                  scheduled_finish_date
-                `)
-                .in(
-                  'id',
-                  masterIds
-                );
-
-
-            if (error) {
-              throw error;
-            }
-
-
-            masterMap =
-              Object.fromEntries(
-                (data || []).map(
-                  (item) => [
-                    item.id,
-                    item,
-                  ]
+                .select('*')
+                .eq(
+                  'weekly_plan_id',
+                  planData.id,
                 )
-              );
+                .maybeSingle(),
+
+              supabase
+                .from(
+                  'weekly_ppc_trend',
+                )
+                .select('*')
+                .eq(
+                  'weekly_plan_id',
+                  planData.id,
+                )
+                .maybeSingle(),
+
+              supabase
+                .from(
+                  'weekly_variance_pareto',
+                )
+                .select('*')
+                .eq(
+                  'weekly_plan_id',
+                  planData.id,
+                )
+                .order(
+                  'variance_count',
+                  {
+                    ascending: false,
+                  },
+                ),
+            ]);
+
+          if (itemsResult.error) {
+            throw itemsResult.error;
           }
 
+          if (performanceResult.error) {
+            throw performanceResult.error;
+          }
 
-          setMasterPlanPackages(
-            masterMap
+          if (trendResult.error) {
+            throw trendResult.error;
+          }
+
+          if (paretoResult.error) {
+            throw paretoResult.error;
+          }
+
+          setItems(
+            itemsResult.data || [],
           );
 
+          setPerformance(
+            performanceResult.data || null,
+          );
+
+          setTrend(
+            trendResult.data || null,
+          );
+
+          setPareto(
+            paretoResult.data || [],
+          );
         } catch (error) {
-
-          console.error(
-            'Constraint Log:',
-            error
-          );
-
-
-          setErrorMessage(
-            error.message ||
-            'Constraint Log could not be loaded.'
-          );
-
+          showError(error);
         } finally {
-
           setLoading(false);
-
         }
-
       },
-      []
+      [
+        selectedProjectId,
+        weekInfo.week,
+        weekInfo.year,
+        clearMessages,
+        showError,
+      ],
     );
 
+  useEffect(() => {
+    loadWeeklyPlan();
+  }, [loadWeeklyPlan]);
 
   // ==========================================================
-  // HISTORY
+  // LOAD LOOKAHEAD WORK PACKAGE READINESS
   // ==========================================================
 
-  const loadConstraintHistory =
+  const loadWorkPackages =
     useCallback(
-      async (
-        constraintId
-      ) => {
-
-        if (!constraintId) {
-          return;
-        }
-
-
-        setLoadingHistory(true);
-
-
-        try {
-
-          const {
-            data,
-            error,
-          } =
-            await supabase
-              .from(
-                'constraint_logs'
-              )
-              .select(`
-                id,
-                constraint_id,
-                status_from,
-                status_to,
-                previous_target_resolution_date,
-                new_target_resolution_date,
-                comment,
-                action_type,
-                performed_by,
-                performed_by_user_id,
-                created_at
-              `)
-              .eq(
-                'constraint_id',
-                constraintId
-              )
-              .order(
-                'created_at',
-                {
-                  ascending:
-                    false,
-                }
-              );
-
-
-          if (error) {
-            throw error;
-          }
-
-
-          setConstraintHistory(
-            data || []
-          );
-
-        } catch (error) {
-
-          console.error(
-            'Constraint History:',
-            error
-          );
-
-
-          setHistoryError(
-            error.message ||
-            'Action History could not be loaded.'
-          );
-
-        } finally {
-
-          setLoadingHistory(false);
-
-        }
-
-      },
-      []
-    );
-
-
-  // ==========================================================
-  // RECOVERY ACTIONS
-  // ==========================================================
-
-  const loadRecoveryActions =
-    useCallback(
-      async (
-        constraintId
-      ) => {
-
-        if (!constraintId) {
-          setRecoveryActions([]);
-          return;
-        }
-
-
-        setLoadingRecoveryActions(
-          true
-        );
-
-
-        try {
-
-          const {
-            data,
-            error,
-          } =
-            await supabase
-              .from(
-                'constraint_actions'
-              )
-              .select(`
-                id,
-                constraint_id,
-                project_id,
-                response_approach,
-                action_title,
-                action_description,
-                responsible_party,
-                due_date,
-                status,
-                expected_impact,
-                effectiveness,
-                effectiveness_notes,
-                completed_at,
-                cancelled_at,
-                created_by,
-                created_by_user_id,
-                created_at,
-                updated_at
-              `)
-              .eq(
-                'constraint_id',
-                constraintId
-              )
-              .order(
-                'created_at',
-                {
-                  ascending:
-                    true,
-                }
-              );
-
-
-          if (error) {
-            throw error;
-          }
-
-
-          setRecoveryActions(
-            data || []
-          );
-
-        } catch (error) {
-
-          console.error(
-            'Recovery Actions:',
-            error
-          );
-
-
-          setHistoryError(
-            error.message ||
-            'Action Plan could not be loaded.'
-          );
-
-        } finally {
-
-          setLoadingRecoveryActions(
-            false
-          );
-
-        }
-
-      },
-      []
-    );
-
-
-  // ==========================================================
-  // REFRESH SELECTED CONSTRAINT
-  // ==========================================================
-
-  const refreshManagedConstraint =
-    useCallback(
-      async (
-        constraintId
-      ) => {
-
+      async () => {
         if (
-          !constraintId ||
-          !selectedProjectId
+          !selectedProjectId ||
+          !weeklyPlan?.lookahead_plan_id
         ) {
+          setWorkPackages([]);
           return;
         }
-
-
-        await loadConstraintLog(
-          selectedProjectId
-        );
-
 
         const {
           data,
@@ -1995,9219 +901,5092 @@ export default function ConstraintLogPage() {
         } =
           await supabase
             .from(
-              'constraint_management_overview'
+              'weekly_lookahead_package_readiness',
             )
             .select('*')
             .eq(
-              'id',
-              constraintId
+              'project_id',
+              selectedProjectId,
             )
-            .single();
+            .eq(
+              'lookahead_plan_id',
+              weeklyPlan.lookahead_plan_id,
+            )
+            .order(
+              'package_code',
+              {
+                ascending: true,
+              },
+            );
 
+        if (error) {
+          showError(error);
+          setWorkPackages([]);
+          return;
+        }
+
+        setWorkPackages(
+          (data || []).filter(
+            (workPackage) =>
+              workPackage.package_code !== 'BUF',
+          ),
+        );
+      },
+      [
+        selectedProjectId,
+        weeklyPlan?.lookahead_plan_id,
+        showError,
+      ],
+    );
+
+  useEffect(() => {
+    loadWorkPackages();
+  }, [loadWorkPackages]);
+
+  // ==========================================================
+  // LOAD CONSTRAINT LIFECYCLE FOR MAKE READY EXPLANATION
+  // ==========================================================
+
+  const loadConstraintLifecycle =
+    useCallback(
+      async () => {
+        if (
+          !selectedProjectId ||
+          !weeklyPlan?.lookahead_plan_id
+        ) {
+          setConstraintLifecycle([]);
+          return;
+        }
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              'constraint_management_overview',
+            )
+            .select(
+              'id,status,current_outlook,blocking,sheet_readiness_assessment_id,koskela_sheet_row_id,koskela_lookahead_plan_id,koskela_category,koskela_package_code,resolved_at,verified_at,cleared_at,updated_at',
+            )
+            .eq(
+              'project_id',
+              selectedProjectId,
+            )
+            .eq(
+              'koskela_lookahead_plan_id',
+              weeklyPlan.lookahead_plan_id,
+            );
+
+        if (error) {
+          console.error(error);
+          setConstraintLifecycle([]);
+          return;
+        }
+
+        setConstraintLifecycle(
+          data || [],
+        );
+      },
+      [
+        selectedProjectId,
+        weeklyPlan?.lookahead_plan_id,
+      ],
+    );
+
+  useEffect(() => {
+    loadConstraintLifecycle();
+  }, [loadConstraintLifecycle]);
+
+  // ==========================================================
+  // CREATE WEEKLY PLAN
+  // ==========================================================
+
+  const createWeeklyPlan =
+    async () => {
+      if (!selectedProject) {
+        setErrorMessage(
+          'Select a project first.',
+        );
+
+        return null;
+      }
+
+      clearMessages();
+
+      try {
+        const {
+          data: activeLookaheadPlanId,
+          error: activeLookaheadError,
+        } =
+          await supabase.rpc(
+            'get_active_lookahead_plan',
+            {
+              target_project_id:
+                selectedProject.id,
+            },
+          );
+
+        if (activeLookaheadError) {
+          throw activeLookaheadError;
+        }
+
+        if (!activeLookaheadPlanId) {
+          throw new Error(
+            'This project does not have an active Lookahead Plan.',
+          );
+        }
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              'weekly_plans',
+            )
+            .insert({
+              organization_id:
+                selectedProject.organization_id,
+
+              project_id:
+                selectedProject.id,
+
+              lookahead_plan_id:
+                activeLookaheadPlanId,
+
+              week_start_date:
+                weekStartDate,
+
+              week_end_date:
+                weekEndDate,
+
+              week_number:
+                weekInfo.week,
+
+              year_number:
+                weekInfo.year,
+
+              name:
+                `Week ${weekInfo.week} · ${weekInfo.year}`,
+
+              status: 'draft',
+
+              ppc_target: 85,
+            })
+            .select('*')
+            .single();
 
         if (error) {
           throw error;
         }
 
+        setWeeklyPlan(data);
+
+        setMessage(
+          'Weekly Plan created.',
+        );
+
+        return data;
+      } catch (error) {
+        showError(error);
+        return null;
+      }
+    };
+
+  // ==========================================================
+  // ADD WEEKLY ACTIVITY
+  // ==========================================================
+
+  const openActivityModal =
+    async () => {
+      clearMessages();
+
+      setActivityForm(
+        EMPTY_ACTIVITY_FORM,
+      );
+
+      await loadWorkPackages();
+
+      setShowActivityPanel(
+        true,
+      );
+    };
+
+  const addWeeklyActivity =
+    async () => {
+      if (!weeklyPlan) {
+        return;
+      }
+
+      if (!isDraft) {
+        setErrorMessage(
+          'Activities can only be added while the Weekly Plan is Draft.',
+        );
+
+        return;
+      }
+
+      if (
+        !activityForm.activityDescription.trim()
+      ) {
+        setErrorMessage(
+          'Activity description is required.',
+        );
+
+        return;
+      }
+
+      if (
+        !activityForm.lookaheadSheetRowId
+      ) {
+        setErrorMessage(
+          'Select a Work Package.',
+        );
+
+        return;
+      }
+
+      if (!selectedWorkPackage) {
+        setErrorMessage(
+          'The selected Work Package could not be found.',
+        );
+
+        return;
+      }
+
+      if (!selectedPackageReady) {
+        setErrorMessage(
+          `Work Package ${selectedWorkPackage.package_code} is not Make Ready and cannot move to Weekly Planning.`,
+        );
+
+        return;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        const maxSequence =
+          items.reduce(
+            (max, item) =>
+              Math.max(
+                max,
+                item.sequence_number || 0,
+              ),
+            0,
+          );
 
         const {
-          data:
-            constraintMeta,
-
-          error:
-            constraintMetaError,
+          error,
         } =
           await supabase
-            .from('constraints')
-            .select(`
-              id,
-              status,
-              blocking,
-              priority,
-              impact,
-              resolved_at,
-              sheet_readiness_assessment_id
-            `)
-            .eq(
-              'id',
-              constraintId
+            .from(
+              'weekly_plan_items',
             )
-            .single();
+            .insert({
+              weekly_plan_id:
+                weeklyPlan.id,
 
+              organization_id:
+                weeklyPlan.organization_id,
 
-        if (
-          constraintMetaError
-        ) {
-          throw constraintMetaError;
+              project_id:
+                weeklyPlan.project_id,
+
+              lookahead_sheet_row_id:
+                selectedWorkPackage.sheet_row_id,
+
+              source_type:
+                'manual',
+
+              package_code:
+                selectedWorkPackage.package_code,
+
+              activity_description:
+                activityForm.activityDescription.trim(),
+
+              location_name:
+                activityForm.locationName.trim() ||
+                null,
+
+              location_path:
+                activityForm.locationName.trim() ||
+                null,
+
+              planned_start_date:
+                weekStartDate,
+
+              planned_finish_date:
+                weekEndDate,
+
+              responsible_party:
+                activityForm.responsibleParty.trim() ||
+                null,
+
+              planned_quantity:
+                numberOrNull(
+                  activityForm.plannedQuantity,
+                ),
+
+              unit:
+                activityForm.unit.trim() ||
+                null,
+
+              notes:
+                activityForm.notes.trim() ||
+                null,
+
+              sequence_number:
+                maxSequence + 1,
+
+              is_unplanned_work:
+                false,
+
+              commitment_status:
+                'draft',
+
+              execution_result:
+                'pending',
+            });
+
+        if (error) {
+          throw error;
         }
 
-
-        const mergedConstraint = {
-          ...data,
-
-          // The base constraints row is authoritative for lifecycle state.
-          // This makes status changes visible immediately after lifecycle RPCs.
-          status:
-            constraintMeta
-              ?.status ||
-            data.status,
-
-          blocking:
-            typeof constraintMeta?.blocking === 'boolean'
-              ? constraintMeta.blocking
-              : data.blocking,
-
-          priority:
-            constraintMeta
-              ?.priority ||
-            data.priority ||
-            data.base_priority ||
-            'normal',
-
-          impact:
-            constraintMeta
-              ?.impact ||
-            data.impact ||
-            'moderate',
-
-          resolved_at:
-            constraintMeta
-              ?.resolved_at ||
-            data.resolved_at ||
-            null,
-
-          sheet_readiness_assessment_id:
-            constraintMeta
-              ?.sheet_readiness_assessment_id ||
-            data.sheet_readiness_assessment_id ||
-            null,
-        };
-
-
-        setManagedConstraint(
-          mergedConstraint
+        setActivityForm(
+          EMPTY_ACTIVITY_FORM,
         );
 
-
-        setManagementForm(
-          createManagementForm(
-            mergedConstraint
-          )
+        setShowActivityPanel(
+          false,
         );
 
-
-        setForecastDate(
-          mergedConstraint
-            .target_resolution_date ||
-          mergedConstraint
-            .required_by_date ||
-          ''
+        setMessage(
+          'Weekly Activity added.',
         );
 
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
 
-        await Promise.all([
-          loadConstraintHistory(
-            constraintId
+  // ==========================================================
+  // UPDATE DRAFT ITEM
+  // ==========================================================
+
+  const updateDraftItem =
+    async (
+      itemId,
+      field,
+      value,
+    ) => {
+      if (!isDraft) {
+        return;
+      }
+
+      const dbValue =
+        field ===
+        'planned_quantity'
+          ? numberOrNull(value)
+          : String(
+              value || '',
+            ).trim() || null;
+
+      setItems(
+        (previous) =>
+          previous.map(
+            (item) =>
+              item.id === itemId
+                ? {
+                    ...item,
+                    [field]:
+                      dbValue,
+                  }
+                : item,
           ),
-
-          loadRecoveryActions(
-            constraintId
-          ),
-        ]);
-
-      },
-      [
-        selectedProjectId,
-        loadConstraintLog,
-        loadConstraintHistory,
-        loadRecoveryActions,
-      ]
-    );
-
-
-  // ==========================================================
-  // EFFECTS
-  // ==========================================================
-
-  useEffect(
-    () => {
-
-      const publishHeaderState =
-        () => {
-
-          window.dispatchEvent(
-            new CustomEvent(
-              'ritsuflow:constraint-header-state',
-              {
-                detail: {
-                  projects,
-                  selectedProjectId,
-                  loading,
-                },
-              }
-            )
-          );
-
-        };
-
-
-      publishHeaderState();
-
-    },
-    [
-      projects,
-      selectedProjectId,
-      loading,
-    ]
-  );
-
-
-  useEffect(
-    () => {
-
-      function handleHeaderProjectChange(
-        event
-      ) {
-
-        handleProjectChange(
-          event.detail?.projectId ||
-          ''
-        );
-
-      }
-
-
-      function handleHeaderRefresh() {
-
-        if (
-          selectedProjectId
-        ) {
-          loadConstraintLog(
-            selectedProjectId
-          );
-        }
-
-      }
-
-
-      function handleHeaderAddConstraint() {
-
-        if (
-          selectedProjectId
-        ) {
-          openCreateModal();
-        }
-
-      }
-
-
-      window.addEventListener(
-        'ritsuflow:constraint-project-change',
-        handleHeaderProjectChange
       );
-
-      window.addEventListener(
-        'ritsuflow:constraint-refresh',
-        handleHeaderRefresh
-      );
-
-      window.addEventListener(
-        'ritsuflow:constraint-add',
-        handleHeaderAddConstraint
-      );
-
-
-      return () => {
-
-        window.removeEventListener(
-          'ritsuflow:constraint-project-change',
-          handleHeaderProjectChange
-        );
-
-        window.removeEventListener(
-          'ritsuflow:constraint-refresh',
-          handleHeaderRefresh
-        );
-
-        window.removeEventListener(
-          'ritsuflow:constraint-add',
-          handleHeaderAddConstraint
-        );
-
-      };
-
-    },
-    [
-      selectedProjectId,
-      loadConstraintLog,
-    ]
-  );
-
-
-  useEffect(
-    () => {
-      loadProjects();
-    },
-    [
-      loadProjects,
-    ]
-  );
-
-
-  useEffect(
-    () => {
-      loadConstraintLog(
-        selectedProjectId
-      );
-    },
-    [
-      selectedProjectId,
-      loadConstraintLog,
-    ]
-  );
-
-
-  // ==========================================================
-  // OPEN DEEP-LINKED CONSTRAINT
-  // ==========================================================
-
-  useEffect(
-    () => {
-
-      if (
-        !selectedProjectId ||
-        loading ||
-        constraints.length === 0
-      ) {
-        return;
-      }
-
-
-      const params =
-        new URLSearchParams(
-          window.location.search
-        );
-
-
-      const requestedConstraintId =
-        params.get(
-          'constraintId'
-        );
-
-
-      if (
-        !requestedConstraintId ||
-        autoOpenedConstraintIdRef.current ===
-          requestedConstraintId
-      ) {
-        return;
-      }
-
-
-      const requestedConstraint =
-        constraints.find(
-          (constraint) =>
-            constraint.id ===
-            requestedConstraintId
-        );
-
-
-      if (!requestedConstraint) {
-        return;
-      }
-
-
-      autoOpenedConstraintIdRef.current =
-        requestedConstraintId;
-
-
-      openManagementDrawer(
-        requestedConstraint
-      );
-
-    },
-    [
-      selectedProjectId,
-      loading,
-      constraints,
-    ]
-  );
-
-
-  // ==========================================================
-  // PROJECT CHANGE
-  // ==========================================================
-
-  function handleProjectChange(
-    projectId
-  ) {
-
-    autoOpenedConstraintIdRef.current =
-      null;
-
-
-    setSelectedProjectId(
-      projectId
-    );
-
-    setStatusFilter('');
-    setCategoryFilter('');
-    setPriorityFilter('');
-    setImpactFilter('');
-    setResponsibleFilter('');
-    setSuccessMessage('');
-    setErrorMessage('');
-
-    closeManagementDrawer();
-
-
-    if (projectId) {
-
-      window.history
-        .replaceState(
-          {},
-          '',
-          `/dashboard/projects/constraints?projectId=${projectId}`
-        );
-
-    } else {
-
-      window.history
-        .replaceState(
-          {},
-          '',
-          '/dashboard/projects/constraints'
-        );
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // CREATE CONSTRAINT
-  // ==========================================================
-
-  function openCreateModal() {
-
-    setCreateForm(
-      createInitialConstraintForm()
-    );
-
-    setShowCreateModal(true);
-
-  }
-
-
-  async function createConstraint(
-    event
-  ) {
-
-    event.preventDefault();
-
-
-    if (
-      creatingConstraint
-    ) {
-      return;
-    }
-
-
-    const title =
-      String(
-        createForm.title ||
-        ''
-      ).trim();
-
-
-    const responsible =
-      String(
-        createForm
-          .responsible_party ||
-        ''
-      ).trim();
-
-
-    const action =
-      String(
-        createForm
-          .action_required ||
-        ''
-      ).trim();
-
-
-    if (
-      !title ||
-      !responsible ||
-      !action ||
-      !createForm
-        .required_by_date
-    ) {
-
-      setErrorMessage(
-        'Title, Responsible Party, Required Action and Required By Date are required.'
-      );
-
-      return;
-    }
-
-
-    setCreatingConstraint(true);
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
 
       const {
-        data:
-          createdConstraintData,
-
         error,
       } =
-        await supabase.rpc(
-          'create_manual_constraint_with_history',
-          {
-            target_project_id:
-              selectedProjectId,
-
-            target_category:
-              createForm.category,
-
-            target_title:
-              title,
-
-            target_description:
-              createForm.description ||
-              null,
-
-            target_action_required:
-              action,
-
-            target_responsible_party:
-              responsible,
-
-            target_required_by_date:
-              createForm
-                .required_by_date,
-
-            target_priority:
-              createForm.priority,
-
-            target_blocking:
-              Boolean(
-                createForm.blocking
-              ),
-
-            target_performed_by:
-              performedBy,
-          }
-        );
-
+        await supabase
+          .from(
+            'weekly_plan_items',
+          )
+          .update({
+            [field]:
+              dbValue,
+          })
+          .eq(
+            'id',
+            itemId,
+          );
 
       if (error) {
-        throw error;
+        showError(error);
+        await loadWeeklyPlan();
+      }
+    };
+
+  // ==========================================================
+  // REMOVE DRAFT ITEM
+  // ==========================================================
+
+  const deleteDraftItem =
+    async (item) => {
+      if (!isDraft) {
+        return;
       }
 
-
-      const createdConstraintId =
-        extractConstraintId(
-          createdConstraintData
+      const confirmed =
+        window.confirm(
+          `Remove "${item.activity_description}" from this Weekly Plan?`,
         );
 
+      if (!confirmed) {
+        return;
+      }
 
+      clearMessages();
+
+      const {
+        error,
+      } =
+        await supabase
+          .from(
+            'weekly_plan_items',
+          )
+          .delete()
+          .eq(
+            'id',
+            item.id,
+          );
+
+      if (error) {
+        showError(error);
+        return;
+      }
+
+      setMessage(
+        'Activity removed from the Weekly Plan.',
+      );
+
+      await loadWeeklyPlan();
+    };
+
+  // ==========================================================
+  // PPC TARGET
+  // ==========================================================
+
+  const updatePpcTarget =
+    async (value) => {
       if (
-        createdConstraintId
+        !weeklyPlan ||
+        !isDraft
       ) {
+        return;
+      }
 
+      const target =
+        Math.min(
+          100,
+          Math.max(
+            0,
+            Number(value) || 0,
+          ),
+        );
+
+      setWeeklyPlan(
+        (previous) => ({
+          ...previous,
+          ppc_target:
+            target,
+        }),
+      );
+
+      const {
+        error,
+      } =
+        await supabase
+          .from(
+            'weekly_plans',
+          )
+          .update({
+            ppc_target:
+              target,
+          })
+          .eq(
+            'id',
+            weeklyPlan.id,
+          );
+
+      if (error) {
+        showError(error);
+        await loadWeeklyPlan();
+      }
+    };
+
+  // ==========================================================
+  // CANCEL WEEK
+  // ==========================================================
+
+  const cancelWeek =
+    async () => {
+      if (
+        !weeklyPlan ||
+        !isDraft
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          'Cancel this Draft Weekly Plan? The week will not move forward and its draft activities will be cancelled. This action cannot be used after commitment.',
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
         const {
-          error:
-            impactError,
+          error,
         } =
           await supabase.rpc(
-            'set_constraint_impact_with_history',
+            'cancel_weekly_plan',
             {
-              target_constraint_id:
-                createdConstraintId,
-
-              target_impact:
-                createForm.impact,
-
-              target_comment:
-                'Impact defined during constraint creation.',
-
-              target_performed_by:
-                performedBy,
-            }
+              target_weekly_plan_id:
+                weeklyPlan.id,
+            },
           );
 
-
-        if (
-          impactError
-        ) {
-          throw impactError;
+        if (error) {
+          throw error;
         }
 
-      }
-
-
-      setShowCreateModal(false);
-
-
-      await loadConstraintLog(
-        selectedProjectId
-      );
-
-    } catch (error) {
-
-      console.error(
-        'Create Constraint:',
-        error
-      );
-
-
-      setErrorMessage(
-        error.message ||
-        'Constraint could not be created.'
-      );
-
-    } finally {
-
-      setCreatingConstraint(false);
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // DRAWER
-  // ==========================================================
-
-  async function openManagementDrawer(
-    constraint
-  ) {
-
-    setManagedConstraint(
-      constraint
-    );
-
-
-    setDrawerTab(
-      'details'
-    );
-
-
-    setManagementForm(
-      createManagementForm(
-        constraint
-      )
-    );
-
-
-    setForecastDate(
-      constraint
-        .target_resolution_date ||
-      constraint
-        .required_by_date ||
-      ''
-    );
-
-
-    setManagementNote('');
-
-    setActiveManagementPanel(
-      null
-    );
-
-    setHistoryError('');
-
-    setRecoveryActionForm(
-      createRecoveryActionForm()
-    );
-
-    setRecoveryActionPanel(
-      null
-    );
-
-    setSelectedRecoveryActionId(
-      null
-    );
-
-    setRecoveryActionNote('');
-
-    setEffectivenessValue(
-      'effective'
-    );
-
-
-    await Promise.all([
-      loadConstraintHistory(
-        constraint.id
-      ),
-
-      loadRecoveryActions(
-        constraint.id
-      ),
-    ]);
-
-  }
-
-
-  function closeManagementDrawer() {
-
-    setManagedConstraint(null);
-
-    setDrawerTab(
-      'details'
-    );
-
-    setManagementForm(
-      createManagementForm()
-    );
-
-    setActiveManagementPanel(
-      null
-    );
-
-    setManagementNote('');
-
-    setForecastDate('');
-
-    setConstraintHistory([]);
-
-    setRecoveryActions([]);
-
-    setRecoveryActionForm(
-      createRecoveryActionForm()
-    );
-
-    setRecoveryActionPanel(
-      null
-    );
-
-    setSelectedRecoveryActionId(
-      null
-    );
-
-    setRecoveryActionNote('');
-
-    setEffectivenessValue(
-      'effective'
-    );
-
-    setHistoryError('');
-
-  }
-
-
-  function selectDrawerTab(
-    tab
-  ) {
-
-    setDrawerTab(
-      tab
-    );
-
-    setActiveManagementPanel(
-      null
-    );
-
-    setManagementNote('');
-
-    setRecoveryActionPanel(
-      null
-    );
-
-    setSelectedRecoveryActionId(
-      null
-    );
-
-    setRecoveryActionNote('');
-
-    setHistoryError('');
-
-  }
-
-
-  function toggleManagementPanel(
-    panel
-  ) {
-
-    setHistoryError('');
-
-    setManagementNote('');
-
-
-    if (managedConstraint) {
-
-      setForecastDate(
-        managedConstraint
-          .target_resolution_date ||
-        managedConstraint
-          .required_by_date ||
-        ''
-      );
-
-    }
-
-
-    setActiveManagementPanel(
-      (current) =>
-        current === panel
-          ? null
-          : panel
-    );
-
-  }
-
-
-  // ==========================================================
-  // SAVE DETAILS
-  // ==========================================================
-
-  async function saveManagementDetails() {
-
-    if (
-      !managedConstraint ||
-      savingDetails
-    ) {
-      return;
-    }
-
-
-    const responsible =
-      String(
-        managementForm
-          .responsible_party ||
-        ''
-      ).trim();
-
-
-    const requiredAction =
-      String(
-        managementForm
-          .action_required ||
-        ''
-      ).trim();
-
-
-    if (
-      !responsible ||
-      !requiredAction
-    ) {
-
-      setHistoryError(
-        'Responsible Party and Required Action are required.'
-      );
-
-      return;
-    }
-
-
-    setSavingDetails(true);
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'update_constraint_details_with_history',
-          {
-            target_constraint_id:
-              managedConstraint.id,
-
-            target_responsible_party:
-              responsible,
-
-            target_action_required:
-              requiredAction,
-
-            target_priority:
-              managementForm.priority,
-
-            target_description:
-              managementForm.description ||
-              null,
-
-            target_blocking:
-              Boolean(
-                managementForm.blocking
-              ),
-
-            target_comment:
-              managementForm.comment ||
-              null,
-
-            target_performed_by:
-              performedBy,
-          }
+        setMessage(
+          'Draft Weekly Plan cancelled. You can create a new Weekly Plan for this week.',
         );
 
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
 
-      if (error) {
-        throw error;
+  // ==========================================================
+  // COMMIT WEEK
+  // ==========================================================
+
+  const commitWeek =
+    async () => {
+      if (!weeklyPlan) {
+        return;
       }
 
+      if (
+        formalItems.length ===
+        0
+      ) {
+        setErrorMessage(
+          'Add at least one Make Ready activity before committing the week.',
+        );
+
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          'Commit this Weekly Plan? RitsuFlow will revalidate Make Ready before freezing the commitment baseline used for PPC.',
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        const {
+          error,
+        } =
+          await supabase.rpc(
+            'commit_weekly_plan_with_make_ready',
+            {
+              target_weekly_plan_id:
+                weeklyPlan.id,
+            },
+          );
+
+        if (error) {
+          throw error;
+        }
+
+        setMessage(
+          'Weekly Plan committed. Make Ready was validated and the PPC baseline is now frozen.',
+        );
+
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
+
+  // ==========================================================
+  // MARK COMPLETED
+  // ==========================================================
+
+  const markCompleted =
+    async (item) => {
+      if (!isCommitted) {
+        return;
+      }
+
+      const plannedQuantity =
+        numberOrNull(
+          item.planned_quantity,
+        );
+
+      const actualQuantity =
+        numberOrNull(
+          item.actual_quantity,
+        );
 
       if (
-        managementForm.impact !==
+        plannedQuantity !== null &&
         (
-          managedConstraint.impact ||
-          'moderate'
+          actualQuantity === null ||
+          actualQuantity < plannedQuantity
         )
       ) {
-
-        const {
-          error:
-            impactError,
-        } =
-          await supabase.rpc(
-            'set_constraint_impact_with_history',
-            {
-              target_constraint_id:
-                managedConstraint.id,
-
-              target_impact:
-                managementForm.impact,
-
-              target_comment:
-                managementForm.comment ||
-                'Constraint impact updated.',
-
-              target_performed_by:
-                performedBy,
-            }
-          );
-
-
-        if (
-          impactError
-        ) {
-          throw impactError;
-        }
-
-      }
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      console.error(
-        'Save Details:',
-        error
-      );
-
-
-      setHistoryError(
-        error.message ||
-        'Constraint details could not be saved.'
-      );
-
-    } finally {
-
-      setSavingDetails(false);
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // COMMENT
-  // ==========================================================
-
-  async function addManagementComment() {
-
-    const note =
-      String(
-        managementNote ||
-        ''
-      ).trim();
-
-
-    if (!note) {
-
-      setHistoryError(
-        'Comment is required.'
-      );
-
-      return;
-    }
-
-
-    setSavingAction(true);
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'add_constraint_comment_with_history',
-          {
-            target_constraint_id:
-              managedConstraint.id,
-
-            target_comment:
-              note,
-
-            target_performed_by:
-              performedBy,
-          }
+        setErrorMessage(
+          'This commitment cannot be marked Completed because Actual Qty. is lower than Planned Qty. Mark it as Missed and record the Reason for Variance.',
         );
 
-
-      if (error) {
-        throw error;
-      }
-
-
-      setManagementNote('');
-
-      setActiveManagementPanel(
-        null
-      );
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      setHistoryError(
-        error.message ||
-        'Comment could not be added.'
-      );
-
-    } finally {
-
-      setSavingAction(false);
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // UPDATE FORECAST
-  // ==========================================================
-
-  async function updateForecast() {
-
-    const reason =
-      String(
-        managementNote ||
-        ''
-      ).trim();
-
-
-    if (!forecastDate) {
-
-      setHistoryError(
-        'New Planned Resolution Date is required.'
-      );
-
-      return;
-    }
-
-
-    if (!reason) {
-
-      setHistoryError(
-        'Reason for Date Change is required.'
-      );
-
-      return;
-    }
-
-
-    setSavingAction(true);
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'update_constraint_forecast_with_history',
-          {
-            target_constraint_id:
-              managedConstraint.id,
-
-            target_new_resolution_date:
-              forecastDate,
-
-            target_reason:
-              reason,
-
-            target_performed_by:
-              performedBy,
-          }
-        );
-
-
-      if (error) {
-        throw error;
-      }
-
-
-      setManagementNote('');
-
-      setActiveManagementPanel(
-        null
-      );
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      setHistoryError(
-        error.message ||
-        'Forecast could not be updated.'
-      );
-
-    } finally {
-
-      setSavingAction(false);
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // REOPEN
-  // ==========================================================
-
-  async function reopenConstraint() {
-
-    if (
-      !managedConstraint ||
-      savingAction
-    ) {
-      return;
-    }
-
-
-    const reason =
-      String(
-        managementNote ||
-        ''
-      ).trim();
-
-
-    if (!forecastDate) {
-
-      setHistoryError(
-        'New Planned Resolution Date is required.'
-      );
-
-      return;
-    }
-
-
-    if (!reason) {
-
-      setHistoryError(
-        'Reason for Reopening and Date Change is required.'
-      );
-
-      return;
-    }
-
-
-    setSavingAction(true);
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'reopen_constraint_with_history',
-          {
-            target_constraint_id:
-              managedConstraint.id,
-
-            target_new_resolution_date:
-              forecastDate,
-
-            target_reason:
-              reason,
-
-            target_performed_by:
-              performedBy,
-          }
-        );
-
-
-      if (error) {
-        throw error;
-      }
-
-
-      setManagementNote('');
-
-      setActiveManagementPanel(
-        null
-      );
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      console.error(
-        'Reopen Constraint:',
-        error
-      );
-
-
-      setHistoryError(
-        error.message ||
-        'Constraint could not be reopened.'
-      );
-
-    } finally {
-
-      setSavingAction(false);
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // LIFECYCLE
-  // ==========================================================
-
-  async function executeLifecycleAction(
-    action
-  ) {
-
-    const note =
-      String(
-        managementNote ||
-        ''
-      ).trim();
-
-
-    let functionName =
-      null;
-
-
-    let parameters =
-      null;
-
-
-    const performedBy =
-      await getPerformedBy();
-
-
-    switch (action) {
-
-      case 'start':
-
-        functionName =
-          'start_constraint_action_with_history';
-
-        parameters = {
-          target_constraint_id:
-            managedConstraint.id,
-
-          target_comment:
-            note || null,
-
-          target_performed_by:
-            performedBy,
-        };
-
-        break;
-
-
-      case 'waiting':
-
-        if (!note) {
-
-          setHistoryError(
-            'Reason for Waiting is required.'
-          );
-
-          return;
-        }
-
-
-        functionName =
-          'set_constraint_waiting_with_history';
-
-        parameters = {
-          target_constraint_id:
-            managedConstraint.id,
-
-          target_reason:
-            note,
-
-          target_performed_by:
-            performedBy,
-        };
-
-        break;
-
-
-      case 'resume':
-
-        functionName =
-          'resume_constraint_action_with_history';
-
-        parameters = {
-          target_constraint_id:
-            managedConstraint.id,
-
-          target_comment:
-            note || null,
-
-          target_performed_by:
-            performedBy,
-        };
-
-        break;
-
-
-      case 'resolve':
-
-        if (!note) {
-
-          setHistoryError(
-            'Resolution is required.'
-          );
-
-          return;
-        }
-
-
-        // Simplified atomic resolution workflow.
-        // SQL 126 accepts Open, In Progress or Waiting and
-        // records the true previous status directly to Resolved.
-        functionName =
-          'resolve_constraint_directly_with_history';
-
-        parameters = {
-          target_constraint_id:
-            managedConstraint.id,
-
-          target_resolution_note:
-            note,
-
-          target_performed_by:
-            performedBy,
-        };
-
-        break;
-
-
-      case 'clear':
-
-        if (!note) {
-
-          setHistoryError(
-            'Verification Note is required.'
-          );
-
-          return;
-        }
-
-
-        functionName =
-          'verify_and_clear_constraint_with_history';
-
-        parameters = {
-          target_constraint_id:
-            managedConstraint.id,
-
-          target_verification_note:
-            note,
-
-          target_performed_by:
-            performedBy,
-        };
-
-        break;
-
-
-      case 'cancel':
-
-        if (!note) {
-
-          setHistoryError(
-            'Cancellation Reason is required.'
-          );
-
-          return;
-        }
-
-
-        functionName =
-          'cancel_constraint_with_history';
-
-        parameters = {
-          target_constraint_id:
-            managedConstraint.id,
-
-          target_reason:
-            note,
-
-          target_performed_by:
-            performedBy,
-        };
-
-        break;
-
-
-      default:
         return;
-    }
-
-
-    setSavingAction(true);
-    setHistoryError('');
-
-
-    try {
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          functionName,
-          parameters
-        );
-
-
-      if (error) {
-        throw error;
       }
 
-
-      setManagementNote('');
-
-      setActiveManagementPanel(
-        null
-      );
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      setHistoryError(
-        error.message ||
-        'Constraint status could not be changed.'
-      );
-
-    } finally {
-
-      setSavingAction(false);
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // RECOVERY ACTION — CREATE
-  // ==========================================================
-
-  async function createRecoveryAction() {
-
-    if (
-      !managedConstraint ||
-      savingRecoveryAction
-    ) {
-      return;
-    }
-
-
-    const title =
-      String(
-        recoveryActionForm
-          .action_title ||
-        ''
-      ).trim();
-
-
-    const responsible =
-      String(
-        recoveryActionForm
-          .responsible_party ||
-        ''
-      ).trim();
-
-
-    if (!title) {
-
-      setHistoryError(
-        'Recovery Action is required.'
-      );
-
-      return;
-    }
-
-
-    if (!responsible) {
-
-      setHistoryError(
-        'Recovery Action Responsible Party is required.'
-      );
-
-      return;
-    }
-
-
-    if (
-      !recoveryActionForm
-        .due_date
-    ) {
-
-      setHistoryError(
-        'Recovery Action Due Date is required.'
-      );
-
-      return;
-    }
-
-
-    setSavingRecoveryAction(
-      true
-    );
-
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'create_constraint_action_with_history',
-          {
-            target_constraint_id:
-              managedConstraint.id,
-
-            target_response_approach:
-              recoveryActionForm
-                .response_approach,
-
-            target_action_title:
-              title,
-
-            target_action_description:
-              recoveryActionForm
-                .action_description ||
-              null,
-
-            target_responsible_party:
-              responsible,
-
-            target_due_date:
-              recoveryActionForm
-                .due_date,
-
-            target_expected_impact:
-              recoveryActionForm
-                .expected_impact,
-
-            target_performed_by:
-              performedBy,
-          }
-        );
-
-
-      if (error) {
-        throw error;
-      }
-
-
-      setRecoveryActionForm(
-        createRecoveryActionForm()
-      );
-
-
-      setRecoveryActionPanel(
-        null
-      );
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      setHistoryError(
-        error.message ||
-        'Recovery Action could not be created.'
-      );
-
-    } finally {
-
-      setSavingRecoveryAction(
-        false
-      );
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // RECOVERY ACTION — START
-  // ==========================================================
-
-  async function startRecoveryAction(
-    actionId
-  ) {
-
-    setSavingRecoveryAction(
-      true
-    );
-
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'start_constraint_action_plan_item_with_history',
-          {
-            target_action_id:
-              actionId,
-
-            target_comment:
-              recoveryActionNote ||
-              null,
-
-            target_performed_by:
-              performedBy,
-          }
-        );
-
-
-      if (error) {
-        throw error;
-      }
-
-
-      closeRecoveryActionPanel();
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      setHistoryError(
-        error.message ||
-        'Recovery Action could not be started.'
-      );
-
-    } finally {
-
-      setSavingRecoveryAction(
-        false
-      );
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // RECOVERY ACTION — COMPLETE
-  // ==========================================================
-
-  async function completeRecoveryAction(
-    actionId
-  ) {
-
-    const note =
-      String(
-        recoveryActionNote ||
-        ''
-      ).trim();
-
-
-    if (!note) {
-
-      setHistoryError(
-        'Completion Note is required.'
-      );
-
-      return;
-    }
-
-
-    setSavingRecoveryAction(
-      true
-    );
-
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'complete_constraint_action_with_history',
-          {
-            target_action_id:
-              actionId,
-
-            target_completion_note:
-              note,
-
-            target_performed_by:
-              performedBy,
-          }
-        );
-
-
-      if (error) {
-        throw error;
-      }
-
-
-      closeRecoveryActionPanel();
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      setHistoryError(
-        error.message ||
-        'Recovery Action could not be completed.'
-      );
-
-    } finally {
-
-      setSavingRecoveryAction(
-        false
-      );
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // RECOVERY ACTION — EFFECTIVENESS
-  // ==========================================================
-
-  async function evaluateRecoveryAction(
-    actionId
-  ) {
-
-    const note =
-      String(
-        recoveryActionNote ||
-        ''
-      ).trim();
-
-
-    if (!note) {
-
-      setHistoryError(
-        'Effectiveness Notes are required.'
-      );
-
-      return;
-    }
-
-
-    setSavingRecoveryAction(
-      true
-    );
-
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'evaluate_constraint_action_effectiveness_with_history',
-          {
-            target_action_id:
-              actionId,
-
-            target_effectiveness:
-              effectivenessValue,
-
-            target_notes:
-              note,
-
-            target_performed_by:
-              performedBy,
-          }
-        );
-
-
-      if (error) {
-        throw error;
-      }
-
-
-      closeRecoveryActionPanel();
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      setHistoryError(
-        error.message ||
-        'Effectiveness could not be evaluated.'
-      );
-
-    } finally {
-
-      setSavingRecoveryAction(
-        false
-      );
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // RECOVERY ACTION — CANCEL
-  // ==========================================================
-
-  async function cancelRecoveryAction(
-    actionId
-  ) {
-
-    const reason =
-      String(
-        recoveryActionNote ||
-        ''
-      ).trim();
-
-
-    if (!reason) {
-
-      setHistoryError(
-        'Cancellation Reason is required.'
-      );
-
-      return;
-    }
-
-
-    setSavingRecoveryAction(
-      true
-    );
-
-    setHistoryError('');
-
-
-    try {
-
-      const performedBy =
-        await getPerformedBy();
-
-
-      const {
-        error,
-      } =
-        await supabase.rpc(
-          'cancel_constraint_action_with_history',
-          {
-            target_action_id:
-              actionId,
-
-            target_reason:
-              reason,
-
-            target_performed_by:
-              performedBy,
-          }
-        );
-
-
-      if (error) {
-        throw error;
-      }
-
-
-      closeRecoveryActionPanel();
-
-
-      await refreshManagedConstraint(
-        managedConstraint.id
-      );
-
-    } catch (error) {
-
-      setHistoryError(
-        error.message ||
-        'Recovery Action could not be cancelled.'
-      );
-
-    } finally {
-
-      setSavingRecoveryAction(
-        false
-      );
-
-    }
-
-  }
-
-
-  function openRecoveryActionPanel(
-    actionId,
-    panel
-  ) {
-
-    setSelectedRecoveryActionId(
-      actionId
-    );
-
-    setRecoveryActionPanel(
-      panel
-    );
-
-    setRecoveryActionNote('');
-
-    setEffectivenessValue(
-      'effective'
-    );
-
-    setHistoryError('');
-
-  }
-
-
-  function closeRecoveryActionPanel() {
-
-    setSelectedRecoveryActionId(
-      null
-    );
-
-    setRecoveryActionPanel(
-      null
-    );
-
-    setRecoveryActionNote('');
-
-    setEffectivenessValue(
-      'effective'
-    );
-
-  }
-
-
-  // ==========================================================
-  // AFFECTED WORK
-  // ==========================================================
-
-  const affectedWorkByConstraint =
-    useMemo(
-      () => {
-
-        const map =
-          {};
-
-
-        affectedWork.forEach(
-          (relationship) => {
-
-            if (
-              !map[
-                relationship
-                  .constraint_id
-              ]
-            ) {
-              map[
-                relationship
-                  .constraint_id
-              ] =
-                [];
-            }
-
-
-            map[
-              relationship
-                .constraint_id
-            ].push(
-              relationship
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        const {
+          error,
+        } =
+          await supabase
+            .from(
+              'weekly_plan_items',
+            )
+            .update({
+              execution_result:
+                'completed',
+
+              completed_at:
+                new Date().toISOString(),
+
+              variance_reason:
+                null,
+
+              variance_notes:
+                null,
+            })
+            .eq(
+              'id',
+              item.id,
             );
 
-          }
-        );
-
-
-        return map;
-
-      },
-      [
-        affectedWork,
-      ]
-    );
-
-
-  const getConstraintAffectedWork =
-    useCallback(
-      (
-        constraint
-      ) => {
-
-        const relationships =
-          affectedWorkByConstraint[
-            constraint.id
-          ] || [];
-
-
-        const candidates =
-          [];
-
-
-        relationships.forEach(
-          (relationship) => {
-
-            if (
-              relationship
-                .lookahead_work_item_id
-            ) {
-
-              const item =
-                lookaheadItems[
-                  relationship
-                    .lookahead_work_item_id
-                ];
-
-
-              if (item) {
-
-                candidates.push({
-                  key:
-                    `lookahead-${item.id}`,
-
-                  type:
-                    'Lookahead',
-
-                  packageCode:
-                    item.package_code ||
-                    '—',
-
-                  serviceName:
-                    item.service_name ||
-                    '',
-
-                  location:
-                    item.location_path ||
-                    item.location_name ||
-                    'Unassigned Location',
-
-                  startDate:
-                    item
-                      .lookahead_start_date,
-
-                  finishDate:
-                    item
-                      .lookahead_finish_date,
-                });
-
-              }
-
-            }
-
-
-            if (
-              relationship
-                .master_plan_package_id
-            ) {
-
-              const item =
-                masterPlanPackages[
-                  relationship
-                    .master_plan_package_id
-                ];
-
-
-              if (item) {
-
-                candidates.push({
-                  key:
-                    `master-${item.id}`,
-
-                  type:
-                    'Master Plan',
-
-                  packageCode:
-                    item.package_code ||
-                    '—',
-
-                  serviceName:
-                    item.service_name ||
-                    '',
-
-                  location:
-                    item.location_path ||
-                    item.location_name ||
-                    'Unassigned Location',
-
-                  startDate:
-                    item
-                      .scheduled_start_date,
-
-                  finishDate:
-                    item
-                      .scheduled_finish_date,
-                });
-
-              }
-
-            }
-
-          }
-        );
-
-
-        // --------------------------------------------------
-        // GROUPED LOOKAHEAD / KOSKELA TRACEABILITY
-        //
-        // SQL 120 exposes the exact grouped sheet row directly
-        // through constraint_management_overview. Koskela
-        // constraints do not require constraint_affected_work
-        // records to identify their governing Work Package.
-        // --------------------------------------------------
-
-        if (
-          constraint
-            ?.sheet_readiness_assessment_id &&
-          constraint
-            ?.koskela_package_code
-        ) {
-
-          candidates.push({
-            key:
-              `koskela-${constraint.sheet_readiness_assessment_id}`,
-
-            type:
-              'Lookahead / Koskela',
-
-            packageCode:
-              constraint.koskela_package_code ||
-              '—',
-
-            serviceName:
-              constraint.koskela_package_description ||
-              '',
-
-            location:
-              `Readiness · ${formatLabel(
-                constraint.koskela_category ||
-                constraint.category
-              )}`,
-
-            startDate:
-              null,
-
-            finishDate:
-              null,
-          });
-
+        if (error) {
+          throw error;
         }
 
+        setMessage(
+          `"${item.activity_description}" marked Completed.`,
+        );
 
-        const unique =
-          new Map();
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
 
+  // ==========================================================
+  // MISSED COMMITMENT
+  // ==========================================================
 
-        candidates.forEach(
-          (item) => {
+  const openMissedModal =
+    (item) => {
+      setMissedCommitment({
+        itemId: item.id,
 
-            const key =
-              `${normalizeText(
-                item.packageCode
-              )}|${normalizeText(
-                item.location
-              )}`;
+        varianceReason:
+          item.variance_reason || '',
 
+        varianceNotes:
+          item.variance_notes || '',
 
-            const existing =
-              unique.get(key);
-
-
-            if (
-              !existing ||
-              (
-                existing.type ===
-                  'Master Plan' &&
-                item.type ===
-                  'Lookahead'
+        actualQuantity:
+          item.actual_quantity !==
+            null &&
+          item.actual_quantity !==
+            undefined
+            ? String(
+                item.actual_quantity,
               )
-            ) {
+            : '',
+      });
+    };
 
-              unique.set(
-                key,
-                item
-              );
+  const saveMissedCommitment =
+    async () => {
+      if (!missedCommitment) {
+        return;
+      }
 
-            }
-
-          }
+      if (
+        !missedCommitment.varianceReason
+      ) {
+        setErrorMessage(
+          'Reason for Variance is required for a missed commitment.',
         );
 
+        return;
+      }
 
-        return Array.from(
-          unique.values()
-        );
+      clearMessages();
+      setActionLoading(true);
 
-      },
-      [
-        affectedWorkByConstraint,
-        lookaheadItems,
-        masterPlanPackages,
-      ]
-    );
-
-
-  const managedAffectedWork =
-    useMemo(
-      () =>
-        managedConstraint
-          ? getConstraintAffectedWork(
-              managedConstraint
+      try {
+        const {
+          error,
+        } =
+          await supabase
+            .from(
+              'weekly_plan_items',
             )
-          : [],
-      [
-        managedConstraint,
-        getConstraintAffectedWork,
-      ]
-    );
+            .update({
+              execution_result:
+                'not_completed',
 
+              actual_quantity:
+                numberOrNull(
+                  missedCommitment.actualQuantity,
+                ),
 
-  // ==========================================================
-  // SUMMARY
-  // ==========================================================
+              completed_at:
+                null,
 
-  const summary =
-    useMemo(
-      () => {
+              variance_reason:
+                missedCommitment.varianceReason,
 
-        return {
+              variance_notes:
+                missedCommitment.varianceNotes.trim() ||
+                null,
+            })
+            .eq(
+              'id',
+              missedCommitment.itemId,
+            );
 
-          active:
-            constraints.filter(
-              (constraint) =>
-                ACTIVE_CONSTRAINT_STATUSES.includes(
-                  constraint.status
-                )
-            ).length,
+        if (error) {
+          throw error;
+        }
 
+        setMissedCommitment(
+          null,
+        );
 
-          highImpact:
-            constraints.filter(
-              (constraint) =>
-                [
-                  'high',
-                  'critical',
-                ].includes(
-                  normalizeText(
-                    constraint.impact
-                  )
-                )
-            ).length,
+        setMessage(
+          'Missed commitment recorded with its Reason for Variance.',
+        );
 
-
-          resolved:
-            constraints.filter(
-              (constraint) =>
-                constraint.status ===
-                'resolved'
-            ).length,
-
-
-          cleared:
-            constraints.filter(
-              (constraint) =>
-                constraint.status ===
-                'cleared'
-            ).length,
-
-        };
-
-      },
-      [
-        constraints,
-      ]
-    );
-
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
 
   // ==========================================================
-  // FILTER OPTIONS
+  // EDIT EXECUTION RESULT
   // ==========================================================
 
-  const categoryOptions =
-    useMemo(
-      () =>
-        Array.from(
-          new Set(
-            constraints
-              .map(
-                (constraint) =>
-                  constraint.category
+  const openEditResultModal =
+    (item) => {
+      if (
+        !isCommitted ||
+        item.is_unplanned_work ||
+        ![
+          'completed',
+          'not_completed',
+        ].includes(
+          item.execution_result,
+        )
+      ) {
+        return;
+      }
+
+      setEditResult({
+        itemId: item.id,
+
+        activityDescription:
+          item.activity_description || '',
+
+        packageCode:
+          item.package_code || '',
+
+        plannedQuantity:
+          item.planned_quantity !== null &&
+          item.planned_quantity !== undefined
+            ? String(
+                item.planned_quantity,
               )
-              .filter(Boolean)
+            : '',
+
+        unit:
+          item.unit || '',
+
+        result:
+          item.execution_result,
+
+        completedAt:
+          item.completed_at || null,
+
+        actualQuantity:
+          item.actual_quantity !== null &&
+          item.actual_quantity !== undefined
+            ? String(
+                item.actual_quantity,
+              )
+            : '',
+
+        varianceReason:
+          item.variance_reason || '',
+
+        varianceNotes:
+          item.variance_notes || '',
+      });
+    };
+
+  const saveEditedResult =
+    async () => {
+      if (!editResult) {
+        return;
+      }
+
+      const plannedQuantity =
+        numberOrNull(
+          editResult.plannedQuantity,
+        );
+
+      const actualQuantity =
+        numberOrNull(
+          editResult.actualQuantity,
+        );
+
+      if (
+        editResult.result ===
+          'completed' &&
+        plannedQuantity !== null &&
+        (
+          actualQuantity === null ||
+          actualQuantity < plannedQuantity
+        )
+      ) {
+        setErrorMessage(
+          'Completed is not allowed while Actual Qty. is lower than Planned Qty. Select Missed and record the Reason for Variance.',
+        );
+
+        return;
+      }
+
+      if (
+        editResult.result ===
+          'not_completed' &&
+        !editResult.varianceReason
+      ) {
+        setErrorMessage(
+          'Reason for Variance is required for a missed commitment.',
+        );
+
+        return;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        const isCompleted =
+          editResult.result ===
+          'completed';
+
+        const {
+          error,
+        } =
+          await supabase
+            .from(
+              'weekly_plan_items',
+            )
+            .update({
+              execution_result:
+                editResult.result,
+
+              actual_quantity:
+                actualQuantity,
+
+              completed_at:
+                isCompleted
+                  ? editResult.completedAt ||
+                    new Date().toISOString()
+                  : null,
+
+              variance_reason:
+                isCompleted
+                  ? null
+                  : editResult.varianceReason,
+
+              variance_notes:
+                isCompleted
+                  ? null
+                  : editResult.varianceNotes.trim() ||
+                    null,
+            })
+            .eq(
+              'id',
+              editResult.itemId,
+            );
+
+        if (error) {
+          throw error;
+        }
+
+        const editedActivity =
+          editResult.activityDescription;
+
+        setEditResult(null);
+
+        setMessage(
+          `Execution result for "${editedActivity}" updated. PPC and Reasons for Variance were recalculated.`,
+        );
+
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
+
+  // ==========================================================
+  // ACTUAL QUANTITY
+  // ==========================================================
+
+  const updateActualQuantity =
+    async (
+      itemId,
+      value,
+    ) => {
+      if (!isCommitted) {
+        return;
+      }
+
+      const actual =
+        numberOrNull(value);
+
+      setItems(
+        (previous) =>
+          previous.map(
+            (item) =>
+              item.id === itemId
+                ? {
+                    ...item,
+                    actual_quantity:
+                      actual,
+                  }
+                : item,
+          ),
+      );
+
+      const {
+        error,
+      } =
+        await supabase
+          .from(
+            'weekly_plan_items',
           )
-        ),
-      [
-        constraints,
-      ]
-    );
+          .update({
+            actual_quantity:
+              actual,
+          })
+          .eq(
+            'id',
+            itemId,
+          );
 
-
-  const responsibleOptions =
-    useMemo(
-      () =>
-        Array.from(
-          new Set(
-            constraints
-              .map(
-                (constraint) =>
-                  constraint
-                    .responsible_party
-              )
-              .filter(Boolean)
-          )
-        ),
-      [
-        constraints,
-      ]
-    );
-
+      if (error) {
+        showError(error);
+        await loadWeeklyPlan();
+      }
+    };
 
   // ==========================================================
-  // FILTERED CONSTRAINTS
+  // UNPLANNED WORK
   // ==========================================================
 
-  const filteredConstraints =
-    useMemo(
-      () => {
+  const addUnplannedWork =
+    async () => {
+      if (
+        !weeklyPlan ||
+        !isCommitted
+      ) {
+        return;
+      }
 
-        return constraints.filter(
-          (constraint) => {
-
-            if (
-              statusFilter &&
-              constraint.status !==
-              statusFilter
-            ) {
-              return false;
-            }
-
-
-            if (
-              categoryFilter &&
-              constraint.category !==
-              categoryFilter
-            ) {
-              return false;
-            }
-
-
-            if (
-              priorityFilter &&
-              normalizeText(
-                constraint.priority ||
-                constraint.base_priority
-              ) !==
-              priorityFilter
-            ) {
-              return false;
-            }
-
-
-            if (
-              impactFilter &&
-              normalizeText(
-                constraint.impact
-              ) !==
-              impactFilter
-            ) {
-              return false;
-            }
-
-
-            if (
-              responsibleFilter &&
-              constraint
-                .responsible_party !==
-              responsibleFilter
-            ) {
-              return false;
-            }
-
-
-            return true;
-
-          }
+      if (
+        !unplannedForm.activityDescription.trim()
+      ) {
+        setErrorMessage(
+          'Activity description is required.',
         );
 
-      },
-      [
-        constraints,
-        statusFilter,
-        categoryFilter,
-        priorityFilter,
-        impactFilter,
-        responsibleFilter,
-        getConstraintAffectedWork,
-      ]
-    );
+        return;
+      }
 
+      clearMessages();
+      setActionLoading(true);
 
-  // ==========================================================
-  // FORECAST PREVIEW
-  // ==========================================================
+      try {
+        const maxSequence =
+          items.reduce(
+            (max, item) =>
+              Math.max(
+                max,
+                item.sequence_number || 0,
+              ),
+            0,
+          );
 
-  const forecastPreview =
-    useMemo(
-      () => {
+        const {
+          error,
+        } =
+          await supabase
+            .from(
+              'weekly_plan_items',
+            )
+            .insert({
+              weekly_plan_id:
+                weeklyPlan.id,
 
-        if (
-          !managedConstraint ||
-          !forecastDate
-        ) {
-          return null;
+              organization_id:
+                weeklyPlan.organization_id,
+
+              project_id:
+                weeklyPlan.project_id,
+
+              source_type:
+                'unplanned',
+
+              activity_description:
+                unplannedForm.activityDescription.trim(),
+
+              location_name:
+                unplannedForm.locationName.trim() ||
+                null,
+
+              responsible_party:
+                unplannedForm.responsibleParty.trim() ||
+                null,
+
+              planned_quantity:
+                numberOrNull(
+                  unplannedForm.plannedQuantity,
+                ),
+
+              actual_quantity:
+                numberOrNull(
+                  unplannedForm.actualQuantity,
+                ),
+
+              unit:
+                unplannedForm.unit.trim() ||
+                null,
+
+              notes:
+                unplannedForm.notes.trim() ||
+                null,
+
+              sequence_number:
+                maxSequence + 1,
+
+              is_unplanned_work:
+                true,
+
+              commitment_status:
+                'draft',
+
+              execution_result:
+                'pending',
+            });
+
+        if (error) {
+          throw error;
         }
 
+        setUnplannedForm(
+          EMPTY_UNPLANNED_FORM,
+        );
 
-        const variance =
-          dateDifferenceDays(
-            managedConstraint
-              .required_by_date,
-            forecastDate
+        setShowUnplannedPanel(
+          false,
+        );
+
+        setMessage(
+          'Unplanned Work added. It is visible but excluded from PPC.',
+        );
+
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
+
+  // ==========================================================
+  // CLOSE WEEK
+  // ==========================================================
+
+  const closeWeek =
+    async () => {
+      if (!weeklyPlan) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          'Close this Weekly Plan? PPC will become final and the plan will become historical.',
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      clearMessages();
+      setActionLoading(true);
+
+      try {
+        const {
+          error,
+        } =
+          await supabase.rpc(
+            'close_weekly_plan',
+            {
+              target_weekly_plan_id:
+                weeklyPlan.id,
+            },
           );
 
-
-        if (
-          variance === null
-        ) {
-          return null;
+        if (error) {
+          throw error;
         }
 
+        setMessage(
+          'Weekly Plan closed. PPC is now final.',
+        );
 
-        return {
-          variance,
+        await loadWeeklyPlan();
+      } catch (error) {
+        showError(error);
+      } finally {
+        setActionLoading(false);
+      }
+    };
 
-          delayed:
-            variance > 0,
+  // ==========================================================
+  // WEEK NAVIGATION
+  // ==========================================================
 
-          label:
-            getExposureLabel(
-              variance
-            ),
-        };
+  const moveWeek =
+    (difference) => {
+      setWeekStartDate(
+        addDays(
+          weekStartDate,
+          difference * 7,
+        ),
+      );
 
-      },
-      [
-        managedConstraint,
-        forecastDate,
-      ]
-    );
+      setShowActivityPanel(
+        false,
+      );
 
+      setShowUnplannedPanel(
+        false,
+      );
 
-  const reopenValidation =
-    useMemo(
-      () => {
+      setActivityForm(
+        EMPTY_ACTIVITY_FORM,
+      );
 
-        const hasDate =
-          Boolean(
-            forecastDate
-          );
+      clearMessages();
+    };
 
+  const handleWeekDateChange =
+    (value) => {
+      if (!value) {
+        return;
+      }
 
-        const hasReason =
-          Boolean(
-            String(
-              managementNote ||
-              ''
-            ).trim()
-          );
+      const monday =
+        dateToIso(
+          getMonday(
+            parseLocalDate(value),
+          ),
+        );
 
+      setWeekStartDate(
+        monday,
+      );
 
-        return {
-          hasDate,
-          hasReason,
+      setShowActivityPanel(
+        false,
+      );
 
-          canSubmit:
-            hasDate &&
-            hasReason,
-        };
+      setShowUnplannedPanel(
+        false,
+      );
 
-      },
-      [
-        forecastDate,
-        managementNote,
-      ]
-    );
+      setActivityForm(
+        EMPTY_ACTIVITY_FORM,
+      );
 
+      clearMessages();
+    };
 
-  const actionPlanSummary =
-    useMemo(
-      () => {
+  // ==========================================================
+  // DISPLAY VALUES
+  // ==========================================================
 
-        const open =
-          recoveryActions.filter(
-            (action) =>
-              action.status ===
-              'open'
-          ).length;
+  const ppc =
+    performance?.ppc_percent ??
+    null;
 
+  const ppcTarget =
+    weeklyPlan?.ppc_target ??
+    85;
 
-        const inProgress =
-          recoveryActions.filter(
-            (action) =>
-              action.status ===
-              'in_progress'
-          ).length;
+  const ppcTargetMet =
+    performance?.ppc_target_met ??
+    null;
 
-
-        const completed =
-          recoveryActions.filter(
-            (action) =>
-              action.status ===
-              'completed'
-          ).length;
-
-
-        const effective =
-          recoveryActions.filter(
-            (action) =>
-              action.effectiveness ===
-              'effective'
-          ).length;
-
-
-        const protectionActions =
-          recoveryActions.filter(
-            (action) =>
-              [
-                'open',
-                'in_progress',
-              ].includes(
-                action.status
-              ) &&
-              action.expected_impact ===
-              'protect_required_by'
-          ).length;
-
-
-        const active =
-          open +
-          inProgress;
-
-
-        const activeDates =
-          recoveryActions
-            .filter(
-              (action) =>
-                [
-                  'open',
-                  'in_progress',
-                ].includes(
-                  action.status
-                )
-            )
-            .map(
-              (action) =>
-                action.due_date
-            )
-            .filter(Boolean)
-            .sort();
-
-
-        return {
-          total:
-            recoveryActions.length,
-
-          active,
-
-          completed,
-
-          effective,
-
-          protectionActions,
-
-          nextDue:
-            activeDates[0] ||
-            null,
-        };
-
-      },
-      [
-        recoveryActions,
-      ]
-    );
-
+  const canClose =
+    isCommitted &&
+    (
+      performance?.total_commitments ||
+      0
+    ) > 0 &&
+    (
+      performance?.pending_commitments ||
+      0
+    ) === 0;
 
   // ==========================================================
   // RENDER
   // ==========================================================
 
   return (
-    <div style={pageStyle}>
+    <div
+      style={{
+        minHeight:
+          'calc(100vh - 100px)',
+        padding: '24px',
+        background: '#f8fafc',
+        color: '#0f172a',
+        fontFamily:
+          'Inter, Arial, sans-serif',
+      }}
+    >
+      {/* WEEKLY PLANNING CONTROLS IN THE REAL DASHBOARD HEADER */}
 
-      {errorMessage && (
-        <MessageBox type="error">
-          {errorMessage}
-        </MessageBox>
-      )}
-
-
-      {successMessage && (
-        <MessageBox type="success">
-          {successMessage}
-        </MessageBox>
-      )}
-
-
-      {selectedProjectId && (
-        <>
-
-          {/* ==================================================
-              CONSTRAINT OVERVIEW
-          ================================================== */}
-
-          <SectionCard
-            title="Constraint Overview"
-            subtitle="Current readiness, schedule exposure and resolution status."
+      {headerActionsTarget &&
+        createPortal(
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '8px',
+              flexWrap: 'wrap',
+              width: '100%',
+            }}
           >
-
-            <div style={summaryGridStyle}>
-
-              <SummaryCard
-                label="Active Constraints"
-                value={summary.active}
-                description="Still requiring management"
-              />
-
-              <SummaryCard
-                label="High / Critical Impact"
-                value={summary.highImpact}
-                description="Potentially significant production effect"
-                alert={
-                  summary.highImpact >
-                  0
+        <div
+          style={{
+            display: 'flex',
+            gap: '10px',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            flex: '1 1 auto',
+          }}
+        >
+          {selectedProjectId && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  moveWeek(-1)
                 }
-              />
-
-              <SummaryCard
-                label="Resolved"
-                value={summary.resolved}
-                description="Awaiting verification"
-              />
-
-              <SummaryCard
-                label="Cleared"
-                value={summary.cleared}
-                description="Verified and released"
-                positive
-              />
-
-            </div>
-
-          </SectionCard>
-
-
-          {/* ==================================================
-              CONSTRAINT WORKSPACE
-          ================================================== */}
-
-          <div style={splitWorkspaceStyle}>
-
-            {/* ================================================
-                CONSTRAINT REGISTER
-            ================================================ */}
-
-            <div style={registerPanelStyle}>
-
-              <div style={registerHeaderStyle}>
-
-                <div style={registerHeaderTopStyle}>
-
-                  <div>
-
-                    <div style={sectionHeadingStyle}>
-                      Constraint Register
-                    </div>
-
-                    <div style={sectionSupportingTextStyle}>
-                      Review and manage project constraints.
-                    </div>
-
-                  </div>
-
-
-                  <div style={registerCountStyle}>
-                    {filteredConstraints.length}{' '}
-                    shown
-                  </div>
-
-                </div>
-
-
-                <div style={registerFiltersStyle}>
-
-                  <FilterField label="Status">
-                    <select
-                      value={statusFilter}
-                      onChange={(
-                        event
-                      ) =>
-                        setStatusFilter(
-                          event.target.value
-                        )
-                      }
-                      style={registerFilterInputStyle}
-                    >
-                      {STATUS_OPTIONS.map(
-                        (option) => (
-                          <option
-                            key={
-                              option.value ||
-                              'all'
-                            }
-                            value={
-                              option.value
-                            }
-                          >
-                            {option.label}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </FilterField>
-
-
-                  <FilterField label="Category">
-                    <select
-                      value={
-                        categoryFilter
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setCategoryFilter(
-                          event.target.value
-                        )
-                      }
-                      style={registerFilterInputStyle}
-                    >
-                      <option value="">
-                        All Categories
-                      </option>
-
-                      {categoryOptions.map(
-                        (category) => (
-                          <option
-                            key={category}
-                            value={category}
-                          >
-                            {formatLabel(
-                              category
-                            )}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </FilterField>
-
-
-                  <FilterField label="Priority">
-                    <select
-                      value={
-                        priorityFilter
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setPriorityFilter(
-                          event.target.value
-                        )
-                      }
-                      style={registerFilterInputStyle}
-                    >
-
-                      <option value="">
-                        All Priorities
-                      </option>
-
-                      {PRIORITY_OPTIONS.map(
-                        (priority) => (
-                          <option
-                            key={
-                              priority.value
-                            }
-                            value={
-                              priority.value
-                            }
-                          >
-                            {priority.label}
-                          </option>
-                        )
-                      )}
-
-                    </select>
-                  </FilterField>
-
-
-                  <FilterField label="Impact">
-                    <select
-                      value={
-                        impactFilter
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setImpactFilter(
-                          event.target.value
-                        )
-                      }
-                      style={registerFilterInputStyle}
-                    >
-
-                      <option value="">
-                        All Impact
-                      </option>
-
-                      {IMPACT_OPTIONS.map(
-                        (impact) => (
-                          <option
-                            key={
-                              impact.value
-                            }
-                            value={
-                              impact.value
-                            }
-                          >
-                            {impact.label}
-                          </option>
-                        )
-                      )}
-
-                    </select>
-                  </FilterField>
-
-
-                  <FilterField label="Responsible">
-                    <select
-                      value={
-                        responsibleFilter
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setResponsibleFilter(
-                          event.target.value
-                        )
-                      }
-                      style={registerFilterInputStyle}
-                    >
-
-                      <option value="">
-                        All Responsible
-                      </option>
-
-                      {responsibleOptions.map(
-                        (responsible) => (
-                          <option
-                            key={responsible}
-                            value={responsible}
-                          >
-                            {responsible}
-                          </option>
-                        )
-                      )}
-
-                    </select>
-                  </FilterField>
-
-                </div>
-
-              </div>
-
-
-              <div style={tableContainerStyle}>
-
-                {loading ? (
-                  <div style={emptyStyle}>
-                    Loading Constraint Log...
-                  </div>
-                ) : filteredConstraints.length ===
-                  0 ? (
-                  <div style={emptyStyle}>
-                    No constraints found.
-                  </div>
-                ) : (
-                  <table style={tableStyle}>
-
-                    <thead>
-                      <tr>
-                        {[
-                          'REFERENCE',
-                          'PACKAGE / LOCATION',
-                          'STATUS',
-                          'PRIORITY',
-                          'IMPACT',
-                          'PLANNED RESOLUTION',
-                          'ACTUAL RESOLUTION',
-                          'RESPONSIBLE',
-                          '',
-                        ].map(
-                          (header) => (
-                            <th
-                              key={
-                                header ||
-                                'action'
-                              }
-                              style={
-                                headerCellStyle
-                              }
-                            >
-                              {header}
-                            </th>
-                          )
-                        )}
-                      </tr>
-                    </thead>
-
-
-                    <tbody>
-
-                      {filteredConstraints.map(
-                        (constraint) => {
-
-                          const affected =
-                            getConstraintAffectedWork(
-                              constraint
-                            );
-
-
-                          const isSelected =
-                            managedConstraint
-                              ?.id ===
-                            constraint.id;
-
-
-                          return (
-                            <tr
-                              key={
-                                constraint.id
-                              }
-                              onClick={() =>
-                                openManagementDrawer(
-                                  constraint
-                                )
-                              }
-                              style={{
-                                cursor:
-                                  'pointer',
-
-                                background:
-                                  isSelected
-                                    ? '#eff6ff'
-                                    : '#ffffff',
-                              }}
-                            >
-
-                              <td style={leftCellStyle}>
-
-                                <strong>
-                                  {getConstraintReference(
-                                    constraint.id
-                                  )}
-                                </strong>
-
-
-                                <div style={constraintTitleStyle}>
-                                  {constraint.title}
-                                </div>
-
-
-                                <div style={inlineBadgesStyle}>
-
-                                  {constraint.blocking && (
-                                    <span style={blockingInlineStyle}>
-                                      BLOCKING
-                                    </span>
-                                  )}
-
-
-                                  <span style={sourceInlineStyle}>
-                                    {getSourceLabel(
-                                      constraint
-                                    )}
-                                  </span>
-
-                                </div>
-
-                              </td>
-
-
-                              <td style={leftCellStyle}>
-
-                                <strong>
-                                  {affected[0]
-                                    ?.packageCode ||
-                                    'Project-level'}
-                                </strong>
-
-                                <div style={secondaryTextStyle}>
-                                  {affected[0]
-                                    ?.location ||
-                                    'Project-level'}
-                                </div>
-
-                              </td>
-
-
-                              <td style={bodyCellStyle}>
-
-                                <StatusBadge
-                                  label={
-                                    getStatusLabel(
-                                      constraint.status
-                                    )
-                                  }
-                                  style={
-                                    getStatusStyle(
-                                      constraint.status
-                                    )
-                                  }
-                                />
-
-                              </td>
-
-
-                              <td style={bodyCellStyle}>
-
-                                <StatusBadge
-                                  label={
-                                    formatLabel(
-                                      constraint.priority ||
-                                      constraint.base_priority
-                                    )
-                                  }
-                                  style={
-                                    getPriorityStyle(
-                                      constraint.priority ||
-                                      constraint.base_priority
-                                    )
-                                  }
-                                />
-
-                              </td>
-
-
-                              <td style={bodyCellStyle}>
-
-                                <StatusBadge
-                                  label={
-                                    formatLabel(
-                                      constraint.impact ||
-                                      'moderate'
-                                    )
-                                  }
-                                  style={
-                                    getImpactStyle(
-                                      constraint.impact ||
-                                      'moderate'
-                                    )
-                                  }
-                                />
-
-                              </td>
-
-
-                              <td style={bodyCellStyle}>
-
-                                <strong>
-                                  {formatDate(
-                                    constraint
-                                      .target_resolution_date ||
-                                    constraint
-                                      .required_by_date
-                                  )}
-                                </strong>
-
-                              </td>
-
-
-                              <td style={bodyCellStyle}>
-
-                                <strong>
-                                  {formatResolvedDate(
-                                    constraint
-                                      .resolved_at
-                                  )}
-                                </strong>
-
-                              </td>
-
-
-                              <td style={leftCellStyle}>
-                                {constraint
-                                  .responsible_party ||
-                                  '—'}
-                              </td>
-
-
-                              <td style={bodyCellStyle}>
-
-                                <button
-                                  type="button"
-                                  onClick={(
-                                    event
-                                  ) => {
-
-                                    event.stopPropagation();
-
-                                    openManagementDrawer(
-                                      constraint
-                                    );
-
-                                  }}
-                                  style={
-                                    manageButtonStyle
-                                  }
-                                >
-                                  Manage
-                                </button>
-
-                              </td>
-
-                            </tr>
-                          );
-
-                        }
-                      )}
-
-                    </tbody>
-
-                  </table>
-                )}
-
-              </div>
-
-            </div>
-
-
-            {/* ================================================
-                CENTERED CONSTRAINT MANAGEMENT MODAL
-            ================================================ */}
-
-            {managedConstraint && (
-
-              <div style={managementModalOverlayStyle}>
-
-                <aside
-                  style={drawerStyle}
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="Constraint Management"
+                style={styles.iconButton}
+                aria-label="Previous week"
+              >
+                ←
+              </button>
+
+              <div
+                style={{
+                  minWidth: '185px',
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 800,
+                    color: '#0f2745',
+                    lineHeight: 1.15,
+                  }}
                 >
-
-                <div style={drawerHeaderStyle}>
-
-                  <div>
-
-                    <div style={drawerEyebrowStyle}>
-                      CONSTRAINT MANAGEMENT
-                    </div>
-
-
-                    <div style={drawerTitleRowStyle}>
-
-                      <h2 style={drawerTitleStyle}>
-                        {getConstraintReference(
-                          managedConstraint.id
-                        )}
-                      </h2>
-
-
-                      <StatusBadge
-                        label={
-                          getStatusLabel(
-                            managedConstraint.status
-                          )
-                        }
-                        style={
-                          getStatusStyle(
-                            managedConstraint.status
-                          )
-                        }
-                      />
-
-                    </div>
-
-
-                    <div style={drawerConstraintTitleStyle}>
-                      {managedConstraint.title}
-                    </div>
-
-
-                    <div style={drawerPriorityRowStyle}>
-
-                      <div>
-                        <span style={drawerMetaLabelStyle}>
-                          Priority
-                        </span>
-
-                        <StatusBadge
-                          label={
-                            formatLabel(
-                              managedConstraint
-                                .priority ||
-                              managedConstraint
-                                .base_priority
-                            )
-                          }
-                          style={
-                            getPriorityStyle(
-                              managedConstraint
-                                .priority ||
-                              managedConstraint
-                                .base_priority
-                            )
-                          }
-                        />
-                      </div>
-
-
-                      <div>
-                        <span style={drawerMetaLabelStyle}>
-                          Impact
-                        </span>
-
-                        <StatusBadge
-                          label={
-                            formatLabel(
-                              managedConstraint
-                                .impact ||
-                              'moderate'
-                            )
-                          }
-                          style={
-                            getImpactStyle(
-                              managedConstraint
-                                .impact ||
-                              'moderate'
-                            )
-                          }
-                        />
-                      </div>
-
-
-                      {managedConstraint.blocking && (
-                        <span style={blockingPillStyle}>
-                          BLOCKING
-                        </span>
-                      )}
-
-                    </div>
-
-                  </div>
-
-
-                  <button
-                    type="button"
-                    onClick={
-                      closeManagementDrawer
-                    }
-                    style={
-                      closeButtonStyle
-                    }
-                  >
-                    ×
-                  </button>
-
+                  Week{' '}
+                  {weekInfo.week}{' '}
+                  ·{' '}
+                  {weekInfo.year}
                 </div>
 
-
-                <div style={drawerSummaryStyle}>
-
-                  <DrawerMetric
-                    label="Planned Resolution"
-                    value={
-                      formatDate(
-                        managedConstraint
-                          .target_resolution_date ||
-                        managedConstraint
-                          .required_by_date
-                      )
-                    }
-                  />
-
-
-                  <DrawerMetric
-                    label="Actual Resolution"
-                    value={
-                      formatResolvedDate(
-                        managedConstraint
-                          .resolved_at
-                      )
-                    }
-                  />
-
-
-                  <DrawerMetric
-                    label="Recovery Actions"
-                    value={
-                      managedConstraint
-                        .total_recovery_actions ??
-                      0
-                    }
-                  />
-
+                <div
+                  style={{
+                    fontSize: '0.78rem',
+                    color: '#64748b',
+                    marginTop: '3px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {formatDate(
+                    weekStartDate,
+                  )}{' '}
+                  –{' '}
+                  {formatDate(
+                    weekEndDate,
+                  )}
                 </div>
-
-
-                <div style={drawerTabsStyle}>
-
-                  {DRAWER_TABS.map(
-                    (tab) => (
-                      <button
-                        key={
-                          tab.value
-                        }
-                        type="button"
-                        onClick={() =>
-                          selectDrawerTab(
-                            tab.value
-                          )
-                        }
-                        style={{
-                          ...drawerTabStyle,
-
-                          borderBottom:
-                            drawerTab ===
-                              tab.value
-                              ? '2px solid #2563eb'
-                              : '2px solid transparent',
-
-                          color:
-                            drawerTab ===
-                              tab.value
-                              ? '#1d4ed8'
-                              : '#64748b',
-
-                          background:
-                            drawerTab ===
-                              tab.value
-                              ? '#eff6ff'
-                              : '#ffffff',
-                        }}
-                      >
-                        {tab.label}
-                      </button>
-                    )
-                  )}
-
-                </div>
-
-
-                <div style={drawerBodyStyle}>
-
-                  {historyError && (
-                    <MessageBox type="error">
-                      {historyError}
-                    </MessageBox>
-                  )}
-
-
-                  {/* DETAILS */}
-
-                  {drawerTab ===
-                    'details' && (
-                    <>
-
-                      <DrawerSection
-                        title="Constraint Details"
-                        subtitle="Operational ownership and required response."
-                      >
-
-                        <ModalField
-                          label="Responsible Party"
-                        >
-                          <input
-                            disabled={
-                              TERMINAL_CONSTRAINT_STATUSES.includes(
-                                managedConstraint.status
-                              )
-                            }
-                            value={
-                              managementForm
-                                .responsible_party
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              setManagementForm(
-                                (
-                                  current
-                                ) => ({
-                                  ...current,
-
-                                  responsible_party:
-                                    event
-                                      .target
-                                      .value,
-                                })
-                              )
-                            }
-                            style={
-                              modalInputStyle
-                            }
-                          />
-                        </ModalField>
-
-
-                        <ModalField
-                          label="Priority"
-                        >
-                          <select
-                            disabled={
-                              TERMINAL_CONSTRAINT_STATUSES.includes(
-                                managedConstraint.status
-                              )
-                            }
-                            value={
-                              managementForm
-                                .priority
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              setManagementForm(
-                                (
-                                  current
-                                ) => ({
-                                  ...current,
-
-                                  priority:
-                                    event
-                                      .target
-                                      .value,
-                                })
-                              )
-                            }
-                            style={
-                              modalInputStyle
-                            }
-                          >
-                            {PRIORITY_OPTIONS.map(
-                              (
-                                option
-                              ) => (
-                                <option
-                                  key={
-                                    option.value
-                                  }
-                                  value={
-                                    option.value
-                                  }
-                                >
-                                  {option.label}
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </ModalField>
-
-
-                        <ModalField
-                          label="Impact"
-                        >
-                          <select
-                            disabled={
-                              TERMINAL_CONSTRAINT_STATUSES.includes(
-                                managedConstraint.status
-                              )
-                            }
-                            value={
-                              managementForm
-                                .impact
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              setManagementForm(
-                                (
-                                  current
-                                ) => ({
-                                  ...current,
-
-                                  impact:
-                                    event
-                                      .target
-                                      .value,
-                                })
-                              )
-                            }
-                            style={
-                              modalInputStyle
-                            }
-                          >
-                            {IMPACT_OPTIONS.map(
-                              (
-                                option
-                              ) => (
-                                <option
-                                  key={
-                                    option.value
-                                  }
-                                  value={
-                                    option.value
-                                  }
-                                >
-                                  {option.label}
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </ModalField>
-
-
-                        <ModalField
-                          label="Required Action"
-                        >
-                          <textarea
-                            disabled={
-                              TERMINAL_CONSTRAINT_STATUSES.includes(
-                                managedConstraint.status
-                              )
-                            }
-                            value={
-                              managementForm
-                                .action_required
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              setManagementForm(
-                                (
-                                  current
-                                ) => ({
-                                  ...current,
-
-                                  action_required:
-                                    event
-                                      .target
-                                      .value,
-                                })
-                              )
-                            }
-                            style={
-                              modalTextareaStyle
-                            }
-                          />
-                        </ModalField>
-
-
-                        <ModalField
-                          label="Description"
-                        >
-                          <textarea
-                            disabled={
-                              TERMINAL_CONSTRAINT_STATUSES.includes(
-                                managedConstraint.status
-                              )
-                            }
-                            value={
-                              managementForm
-                                .description
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              setManagementForm(
-                                (
-                                  current
-                                ) => ({
-                                  ...current,
-
-                                  description:
-                                    event
-                                      .target
-                                      .value,
-                                })
-                              )
-                            }
-                            style={
-                              modalTextareaStyle
-                            }
-                          />
-                        </ModalField>
-
-
-                        {!TERMINAL_CONSTRAINT_STATUSES.includes(
-                          managedConstraint.status
-                        ) && (
-                          <>
-
-                            <label style={checkboxStyle}>
-
-                              <input
-                                type="checkbox"
-                                checked={
-                                  managementForm
-                                    .blocking
-                                }
-                                onChange={(
-                                  event
-                                ) =>
-                                  setManagementForm(
-                                    (
-                                      current
-                                    ) => ({
-                                      ...current,
-
-                                      blocking:
-                                        event
-                                          .target
-                                          .checked,
-                                    })
-                                  )
-                                }
-                              />
-
-                              Blocking Constraint
-
-                            </label>
-
-
-                            <ModalField
-                              label="Reason / Comment for Changes"
-                            >
-                              <textarea
-                                value={
-                                  managementForm
-                                    .comment
-                                }
-                                onChange={(
-                                  event
-                                ) =>
-                                  setManagementForm(
-                                    (
-                                      current
-                                    ) => ({
-                                      ...current,
-
-                                      comment:
-                                        event
-                                          .target
-                                          .value,
-                                    })
-                                  )
-                                }
-                                style={
-                                  smallTextareaStyle
-                                }
-                              />
-                            </ModalField>
-
-
-                            <div style={rightActionsStyle}>
-
-                              <button
-                                type="button"
-                                disabled={
-                                  savingDetails
-                                }
-                                onClick={
-                                  saveManagementDetails
-                                }
-                                style={
-                                  primaryButtonStyle
-                                }
-                              >
-                                {savingDetails
-                                  ? 'Saving...'
-                                  : 'Save Details'}
-                              </button>
-
-                            </div>
-
-                          </>
-                        )}
-
-                      </DrawerSection>
-
-
-                      <DrawerSection
-                        title="Status Management"
-                        subtitle={`Current Status: ${getStatusLabel(
-                          managedConstraint.status
-                        )}`}
-                      >
-
-                        <div style={lifecycleFlowStyle}>
-
-                          <LifecycleStage
-                            label="Open"
-                            active={
-                              managedConstraint
-                                .status ===
-                              'open' ||
-                              managedConstraint
-                                .status ===
-                              'in_progress'
-                            }
-                          />
-
-                          <span style={lifecycleArrowStyle}>
-                            →
-                          </span>
-
-                          <LifecycleStage
-                            label="Resolved"
-                            active={
-                              managedConstraint
-                                .status ===
-                              'resolved'
-                            }
-                          />
-
-                          <span style={lifecycleArrowStyle}>
-                            →
-                          </span>
-
-                          <LifecycleStage
-                            label="Released"
-                            active={
-                              managedConstraint
-                                .status ===
-                              'cleared'
-                            }
-                          />
-
-                          {managedConstraint
-                            .status ===
-                            'waiting' && (
-                            <>
-                              <span style={lifecycleArrowStyle}>
-                                ·
-                              </span>
-
-                              <LifecycleStage
-                                label="Waiting"
-                                active
-                              />
-                            </>
-                          )}
-
-                        </div>
-
-
-                        <div style={lifecycleButtonsGridStyle}>
-
-                          {(managedConstraint
-                            .status ===
-                            'open' ||
-                            managedConstraint
-                              .status ===
-                            'in_progress') && (
-                            <>
-                              <LifecycleButton
-                                label="Resolve Constraint"
-                                description="Record how the constraint was solved"
-                                emphasis
-                                onClick={() =>
-                                  toggleManagementPanel(
-                                    'resolve'
-                                  )
-                                }
-                              />
-
-                              <LifecycleButton
-                                label="Set Waiting"
-                                description="Temporarily blocked"
-                                onClick={() =>
-                                  toggleManagementPanel(
-                                    'waiting'
-                                  )
-                                }
-                              />
-                            </>
-                          )}
-
-
-                          {managedConstraint
-                            .status ===
-                            'waiting' && (
-                            <>
-                              <LifecycleButton
-                                label="Resume"
-                                description="Continue management"
-                                onClick={() =>
-                                  toggleManagementPanel(
-                                    'resume'
-                                  )
-                                }
-                              />
-
-                              <LifecycleButton
-                                label="Resolve Constraint"
-                                description="Record how the constraint was solved"
-                                emphasis
-                                onClick={() =>
-                                  toggleManagementPanel(
-                                    'resolve'
-                                  )
-                                }
-                              />
-                            </>
-                          )}
-
-
-                          {managedConstraint
-                            .status ===
-                            'resolved' && (
-                            <>
-                              <LifecycleButton
-                                label="Verify & Release"
-                                description="Confirm the solution and release readiness"
-                                emphasis
-                                onClick={() =>
-                                  toggleManagementPanel(
-                                    'clear'
-                                  )
-                                }
-                              />
-
-                              <LifecycleButton
-                                label="Reopen"
-                                description="Problem remains"
-                                warning
-                                onClick={() => {
-
-                                  setDrawerTab(
-                                    'forecast'
-                                  );
-
-                                  toggleManagementPanel(
-                                    'reopen'
-                                  );
-
-                                }}
-                              />
-                            </>
-                          )}
-
-
-                          {ACTIVE_CONSTRAINT_STATUSES.includes(
-                            managedConstraint.status
-                          ) && (
-                            <LifecycleButton
-                              label="Cancel"
-                              description="No longer applicable"
-                              danger
-                              onClick={() =>
-                                toggleManagementPanel(
-                                  'cancel'
-                                )
-                              }
-                            />
-                          )}
-
-                        </div>
-
-
-                        {activeManagementPanel ===
-                          'waiting' && (
-                          <LifecycleActionPanel
-                            title="Set Waiting"
-                            description="Explain what is temporarily preventing resolution."
-                            label="Reason for Waiting *"
-                            value={
-                              managementNote
-                            }
-                            setValue={
-                              setManagementNote
-                            }
-                            saving={
-                              savingAction
-                            }
-                            confirmLabel="Set Waiting"
-                            onCancel={() =>
-                              setActiveManagementPanel(
-                                null
-                              )
-                            }
-                            onConfirm={() =>
-                              executeLifecycleAction(
-                                'waiting'
-                              )
-                            }
-                          />
-                        )}
-
-
-                        {activeManagementPanel ===
-                          'resume' && (
-                          <LifecycleActionPanel
-                            title="Resume Constraint"
-                            description="Return the constraint to active management."
-                            label="Optional Comment"
-                            value={
-                              managementNote
-                            }
-                            setValue={
-                              setManagementNote
-                            }
-                            saving={
-                              savingAction
-                            }
-                            confirmLabel="Resume"
-                            onCancel={() =>
-                              setActiveManagementPanel(
-                                null
-                              )
-                            }
-                            onConfirm={() =>
-                              executeLifecycleAction(
-                                'resume'
-                              )
-                            }
-                          />
-                        )}
-
-
-                        {activeManagementPanel ===
-                          'resolve' && (
-                          <LifecycleActionPanel
-                            title="Resolve Constraint"
-                            description="Briefly record what was done to remove this constraint. It will remain blocked until verification."
-                            label="Resolution *"
-                            value={
-                              managementNote
-                            }
-                            setValue={
-                              setManagementNote
-                            }
-                            saving={
-                              savingAction
-                            }
-                            confirmLabel="Save Resolution"
-                            positive
-                            onCancel={() =>
-                              setActiveManagementPanel(
-                                null
-                              )
-                            }
-                            onConfirm={() =>
-                              executeLifecycleAction(
-                                'resolve'
-                              )
-                            }
-                          />
-                        )}
-
-
-                        {activeManagementPanel ===
-                          'clear' && (
-                          <LifecycleActionPanel
-                            title="Verify & Release"
-                            description="Confirm that the solution is effective and release this readiness condition."
-                            label="Verification Note *"
-                            value={
-                              managementNote
-                            }
-                            setValue={
-                              setManagementNote
-                            }
-                            saving={
-                              savingAction
-                            }
-                            confirmLabel="Verify & Release"
-                            positive
-                            onCancel={() =>
-                              setActiveManagementPanel(
-                                null
-                              )
-                            }
-                            onConfirm={() =>
-                              executeLifecycleAction(
-                                'clear'
-                              )
-                            }
-                          />
-                        )}
-
-
-                        {activeManagementPanel ===
-                          'cancel' && (
-                          <LifecycleActionPanel
-                            title="Cancel Constraint"
-                            description="Use when the constraint is no longer applicable."
-                            label="Cancellation Reason *"
-                            value={
-                              managementNote
-                            }
-                            setValue={
-                              setManagementNote
-                            }
-                            saving={
-                              savingAction
-                            }
-                            confirmLabel="Cancel Constraint"
-                            danger
-                            onCancel={() =>
-                              setActiveManagementPanel(
-                                null
-                              )
-                            }
-                            onConfirm={() =>
-                              executeLifecycleAction(
-                                'cancel'
-                              )
-                            }
-                          />
-                        )}
-
-                      </DrawerSection>
-
-
-                      <DrawerSection
-                        title="Management Update"
-                        subtitle="Record progress without changing status."
-                      >
-
-                        <textarea
-                          value={
-                            activeManagementPanel ===
-                              'comment'
-                              ? managementNote
-                              : ''
-                          }
-                          placeholder="Add a progress update..."
-                          onFocus={() => {
-
-                            setActiveManagementPanel(
-                              'comment'
-                            );
-
-                          }}
-                          onChange={(
-                            event
-                          ) => {
-
-                            setActiveManagementPanel(
-                              'comment'
-                            );
-
-                            setManagementNote(
-                              event.target.value
-                            );
-
-                          }}
-                          style={
-                            smallTextareaStyle
-                          }
-                        />
-
-
-                        <div style={rightActionsStyle}>
-
-                          <button
-                            type="button"
-                            disabled={
-                              activeManagementPanel !==
-                                'comment' ||
-                              savingAction
-                            }
-                            onClick={
-                              addManagementComment
-                            }
-                            style={
-                              secondaryActionButtonStyle
-                            }
-                          >
-                            Add Comment
-                          </button>
-
-                        </div>
-
-                      </DrawerSection>
-
-                    </>
-                  )}
-
-
-                  {/* FORECAST */}
-
-                  {drawerTab ===
-                    'forecast' && (
-                    <DrawerSection
-                      title="Resolution Forecast"
-                      subtitle="Forecast versus the date required to protect the plan."
-                    >
-
-                      <div style={forecastStackStyle}>
-
-                        <ForecastCard
-                          label="Required By"
-                          value={
-                            formatDate(
-                              managedConstraint
-                                .required_by_date
-                            )
-                          }
-                          description="Date required by production"
-                        />
-
-
-                        <ForecastCard
-                          label="Planned Resolution"
-                          value={
-                            formatDate(
-                              managedConstraint
-                                .target_resolution_date ||
-                              managedConstraint
-                                .required_by_date
-                            )
-                          }
-                          description="Current expected resolution"
-                        />
-
-
-                        <ForecastCard
-                          label="Forecast Variance"
-                          value={
-                            getExposureLabel(
-                              managedConstraint
-                                .schedule_exposure_days
-                            )
-                          }
-                          description={
-                            managedConstraint
-                              .schedule_exposure_status ===
-                              'exposed'
-                              ? 'Current forecast is later than Required By'
-                              : 'Current forecast is on or before Required By'
-                          }
-                          alert={
-                            managedConstraint
-                              .schedule_exposure_status ===
-                            'exposed'
-                          }
-                        />
-
-
-                        <ForecastCard
-                          label="Current Outlook"
-                          value={
-                            getOutlookLabel(
-                              managedConstraint
-                                .current_outlook
-                            )
-                          }
-                          description="Current management position"
-                          alert={
-                            managedConstraint
-                              .schedule_exposure_status ===
-                            'exposed'
-                          }
-                        />
-
-                      </div>
-
-
-                      {[
-                        'open',
-                        'in_progress',
-                        'waiting',
-                      ].includes(
-                        managedConstraint.status
-                      ) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            toggleManagementPanel(
-                              'forecast'
-                            )
-                          }
-                          style={
-                            forecastButtonStyle
-                          }
-                        >
-                          Update Forecast
-                        </button>
-                      )}
-
-
-                      {activeManagementPanel ===
-                        'forecast' && (
-                        <ActionPanel
-                          title="Update Planned Resolution"
-                          description="A reason is mandatory whenever the Planned Resolution Date changes."
-                        >
-
-                          <ForecastDateFields
-                            requiredBy={
-                              managedConstraint
-                                .required_by_date
-                            }
-                            date={
-                              forecastDate
-                            }
-                            setDate={
-                              setForecastDate
-                            }
-                            preview={
-                              forecastPreview
-                            }
-                          />
-
-
-                          <ModalField
-                            label="Reason for Date Change *"
-                          >
-                            <textarea
-                              value={
-                                managementNote
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setManagementNote(
-                                  event.target.value
-                                )
-                              }
-                              placeholder="Explain why the forecast is changing."
-                              style={
-                                smallTextareaStyle
-                              }
-                            />
-                          </ModalField>
-
-
-                          <div style={warningBoxStyle}>
-                            Required By remains unchanged. Previous date, new date and reason will be retained in Action History.
-                          </div>
-
-
-                          <ActionButtons
-                            saving={
-                              savingAction
-                            }
-                            confirmLabel="Confirm Forecast Update"
-                            onCancel={() =>
-                              setActiveManagementPanel(
-                                null
-                              )
-                            }
-                            onConfirm={
-                              updateForecast
-                            }
-                          />
-
-                        </ActionPanel>
-                      )}
-
-
-                      {managedConstraint
-                        .status ===
-                        'resolved' && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            toggleManagementPanel(
-                              'reopen'
-                            )
-                          }
-                          style={
-                            reopenButtonStyle
-                          }
-                        >
-                          Reopen Constraint
-                        </button>
-                      )}
-
-
-                      {activeManagementPanel ===
-                        'reopen' && (
-                        <ActionPanel
-                          title="Reopen Constraint"
-                          description="Use this when the previously reported resolution was unsuccessful."
-                        >
-
-                          <div style={reopenNoticeStyle}>
-                            Status will change from <strong>Resolved</strong> to <strong>In Progress</strong>. Required By remains unchanged.
-                          </div>
-
-
-                          <ForecastDateFields
-                            requiredBy={
-                              managedConstraint
-                                .required_by_date
-                            }
-                            date={
-                              forecastDate
-                            }
-                            setDate={(
-                              value
-                            ) => {
-
-                              setForecastDate(
-                                value
-                              );
-
-                              if (value) {
-                                setHistoryError('');
-                              }
-
-                            }}
-                            preview={
-                              forecastPreview
-                            }
-                          />
-
-
-                          <ModalField
-                            label="Reason for Reopening and Date Change *"
-                          >
-                            <textarea
-                              value={
-                                managementNote
-                              }
-                              onChange={(
-                                event
-                              ) => {
-
-                                const value =
-                                  event
-                                    .target
-                                    .value;
-
-
-                                setManagementNote(
-                                  value
-                                );
-
-
-                                if (
-                                  value.trim()
-                                ) {
-                                  setHistoryError('');
-                                }
-
-                              }}
-                              placeholder="Example: Supplier did not deliver on the previously confirmed date."
-                              style={
-                                smallTextareaStyle
-                              }
-                            />
-
-
-                            {!reopenValidation
-                              .hasReason && (
-                              <div style={inlineValidationStyle}>
-                                A reason is required.
-                              </div>
-                            )}
-
-                          </ModalField>
-
-
-                          <div style={reopenTransitionStyle}>
-
-                            <div>
-                              <div style={metaLabelStyle}>
-                                Current Status
-                              </div>
-
-                              <strong>
-                                Resolved
-                              </strong>
-                            </div>
-
-
-                            <div style={reopenArrowStyle}>
-                              →
-                            </div>
-
-
-                            <div>
-                              <div style={metaLabelStyle}>
-                                New Status
-                              </div>
-
-                              <strong
-                                style={{
-                                  color:
-                                    '#1d4ed8',
-                                }}
-                              >
-                                In Progress
-                              </strong>
-                            </div>
-
-                          </div>
-
-
-                          <div style={rightActionsStyle}>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-
-                                setActiveManagementPanel(
-                                  null
-                                );
-
-                                setManagementNote('');
-
-                                setHistoryError('');
-
-                              }}
-                              style={
-                                secondaryButtonStyle
-                              }
-                            >
-                              Cancel
-                            </button>
-
-
-                            <button
-                              type="button"
-                              disabled={
-                                savingAction ||
-                                !reopenValidation
-                                  .canSubmit
-                              }
-                              onClick={
-                                reopenConstraint
-                              }
-                              style={{
-                                ...warningPrimaryButtonStyle,
-
-                                opacity:
-                                  savingAction ||
-                                  !reopenValidation
-                                    .canSubmit
-                                    ? 0.45
-                                    : 1,
-
-                                cursor:
-                                  savingAction ||
-                                  !reopenValidation
-                                    .canSubmit
-                                    ? 'not-allowed'
-                                    : 'pointer',
-                              }}
-                            >
-                              {savingAction
-                                ? 'Reopening...'
-                                : 'Confirm Reopen'}
-                            </button>
-
-                          </div>
-
-                        </ActionPanel>
-                      )}
-
-                    </DrawerSection>
-                  )}
-
-
-                  {/* ACTION PLAN */}
-
-                  {drawerTab ===
-                    'actions' && (
-                    <DrawerSection
-                      title="Recovery Action Plan"
-                      subtitle="Management responses designed to eliminate or reduce the constraint's effect."
-                    >
-
-                      <div style={actionSummaryGridStyle}>
-
-                        <MiniSummary
-                          label="Total"
-                          value={
-                            actionPlanSummary
-                              .total
-                          }
-                        />
-
-                        <MiniSummary
-                          label="Active"
-                          value={
-                            actionPlanSummary
-                              .active
-                          }
-                        />
-
-                        <MiniSummary
-                          label="Completed"
-                          value={
-                            actionPlanSummary
-                              .completed
-                          }
-                        />
-
-                        <MiniSummary
-                          label="Effective"
-                          value={
-                            actionPlanSummary
-                              .effective
-                          }
-                        />
-
-                        <MiniSummary
-                          label="Plan Protection"
-                          value={
-                            actionPlanSummary
-                              .protectionActions
-                          }
-                        />
-
-                        <MiniSummary
-                          label="Next Due"
-                          value={
-                            formatDate(
-                              actionPlanSummary
-                                .nextDue
-                            )
-                          }
-                        />
-
-                      </div>
-
-
-                      {!TERMINAL_CONSTRAINT_STATUSES.includes(
-                        managedConstraint.status
-                      ) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-
-                            setRecoveryActionForm(
-                              createRecoveryActionForm()
-                            );
-
-                            setRecoveryActionPanel(
-                              recoveryActionPanel ===
-                                'create'
-                                ? null
-                                : 'create'
-                            );
-
-                            setSelectedRecoveryActionId(
-                              null
-                            );
-
-                            setHistoryError('');
-
-                          }}
-                          style={
-                            addRecoveryButtonStyle
-                          }
-                        >
-                          + Add Recovery Action
-                        </button>
-                      )}
-
-
-                      {recoveryActionPanel ===
-                        'create' && (
-                        <ActionPanel
-                          title="New Recovery Action"
-                          description="Define a specific action intended to protect or recover the production plan."
-                        >
-
-                          <ModalField
-                            label="Response Approach"
-                          >
-                            <select
-                              value={
-                                recoveryActionForm
-                                  .response_approach
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setRecoveryActionForm(
-                                  (
-                                    current
-                                  ) => ({
-                                    ...current,
-
-                                    response_approach:
-                                      event
-                                        .target
-                                        .value,
-                                  })
-                                )
-                              }
-                              style={
-                                modalInputStyle
-                              }
-                            >
-                              {RESPONSE_APPROACH_OPTIONS.map(
-                                (
-                                  option
-                                ) => (
-                                  <option
-                                    key={
-                                      option.value
-                                    }
-                                    value={
-                                      option.value
-                                    }
-                                  >
-                                    {option.label}
-                                  </option>
-                                )
-                              )}
-                            </select>
-                          </ModalField>
-
-
-                          <ModalField
-                            label="Recovery Action *"
-                          >
-                            <input
-                              value={
-                                recoveryActionForm
-                                  .action_title
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setRecoveryActionForm(
-                                  (
-                                    current
-                                  ) => ({
-                                    ...current,
-
-                                    action_title:
-                                      event
-                                        .target
-                                        .value,
-                                  })
-                                )
-                              }
-                              placeholder="Example: Purchase from alternate supplier."
-                              style={
-                                modalInputStyle
-                              }
-                            />
-                          </ModalField>
-
-
-                          <ModalField
-                            label="Action Description"
-                          >
-                            <textarea
-                              value={
-                                recoveryActionForm
-                                  .action_description
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setRecoveryActionForm(
-                                  (
-                                    current
-                                  ) => ({
-                                    ...current,
-
-                                    action_description:
-                                      event
-                                        .target
-                                        .value,
-                                  })
-                                )
-                              }
-                              style={
-                                smallTextareaStyle
-                              }
-                            />
-                          </ModalField>
-
-
-                          <ModalField
-                            label="Responsible Party *"
-                          >
-                            <input
-                              value={
-                                recoveryActionForm
-                                  .responsible_party
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setRecoveryActionForm(
-                                  (
-                                    current
-                                  ) => ({
-                                    ...current,
-
-                                    responsible_party:
-                                      event
-                                        .target
-                                        .value,
-                                  })
-                                )
-                              }
-                              placeholder="Example: Procurement"
-                              style={
-                                modalInputStyle
-                              }
-                            />
-                          </ModalField>
-
-
-                          <ModalField
-                            label="Action Due Date *"
-                          >
-                            <input
-                              type="date"
-                              value={
-                                recoveryActionForm
-                                  .due_date
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setRecoveryActionForm(
-                                  (
-                                    current
-                                  ) => ({
-                                    ...current,
-
-                                    due_date:
-                                      event
-                                        .target
-                                        .value,
-                                  })
-                                )
-                              }
-                              style={
-                                modalInputStyle
-                              }
-                            />
-                          </ModalField>
-
-
-                          <ModalField
-                            label="Expected Impact"
-                          >
-                            <select
-                              value={
-                                recoveryActionForm
-                                  .expected_impact
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setRecoveryActionForm(
-                                  (
-                                    current
-                                  ) => ({
-                                    ...current,
-
-                                    expected_impact:
-                                      event
-                                        .target
-                                        .value,
-                                  })
-                                )
-                              }
-                              style={
-                                modalInputStyle
-                              }
-                            >
-                              {EXPECTED_IMPACT_OPTIONS.map(
-                                (
-                                  option
-                                ) => (
-                                  <option
-                                    key={
-                                      option.value
-                                    }
-                                    value={
-                                      option.value
-                                    }
-                                  >
-                                    {option.label}
-                                  </option>
-                                )
-                              )}
-                            </select>
-                          </ModalField>
-
-
-                          <ActionButtons
-                            saving={
-                              savingRecoveryAction
-                            }
-                            confirmLabel="Add Recovery Action"
-                            onCancel={() =>
-                              setRecoveryActionPanel(
-                                null
-                              )
-                            }
-                            onConfirm={
-                              createRecoveryAction
-                            }
-                          />
-
-                        </ActionPanel>
-                      )}
-
-
-                      {loadingRecoveryActions ? (
-                        <div style={emptyInnerStyle}>
-                          Loading Action Plan...
-                        </div>
-                      ) : recoveryActions.length ===
-                        0 ? (
-                        <div style={actionPlanEmptyStyle}>
-
-                          <strong>
-                            No recovery actions yet.
-                          </strong>
-
-                          <div style={emptyDescriptionStyle}>
-                            Create an Action Plan when management can eliminate, reduce or recover the constraint's effect.
-                          </div>
-
-                        </div>
-                      ) : (
-                        <div style={recoveryActionListStyle}>
-
-                          {recoveryActions.map(
-                            (action) => (
-                              <RecoveryActionCard
-                                key={
-                                  action.id
-                                }
-                                action={
-                                  action
-                                }
-                                selected={
-                                  selectedRecoveryActionId ===
-                                  action.id
-                                }
-                                activePanel={
-                                  recoveryActionPanel
-                                }
-                                note={
-                                  recoveryActionNote
-                                }
-                                setNote={
-                                  setRecoveryActionNote
-                                }
-                                effectiveness={
-                                  effectivenessValue
-                                }
-                                setEffectiveness={
-                                  setEffectivenessValue
-                                }
-                                saving={
-                                  savingRecoveryAction
-                                }
-                                onOpenPanel={
-                                  openRecoveryActionPanel
-                                }
-                                onClosePanel={
-                                  closeRecoveryActionPanel
-                                }
-                                onStart={
-                                  startRecoveryAction
-                                }
-                                onComplete={
-                                  completeRecoveryAction
-                                }
-                                onEvaluate={
-                                  evaluateRecoveryAction
-                                }
-                                onCancel={
-                                  cancelRecoveryAction
-                                }
-                              />
-                            )
-                          )}
-
-                        </div>
-                      )}
-
-                    </DrawerSection>
-                  )}
-
-
-                  {/* AFFECTED WORK */}
-
-                  {drawerTab ===
-                    'work' && (
-                    <DrawerSection
-                      title="Affected Work"
-                      subtitle={`${managedAffectedWork.length} linked work item${managedAffectedWork.length === 1 ? '' : 's'}`}
-                    >
-
-                      {managedAffectedWork.length ===
-                        0 ? (
-                        <div style={emptyInnerStyle}>
-                          This is currently a project-level constraint.
-                        </div>
-                      ) : (
-                        managedAffectedWork.map(
-                          (item) => (
-                            <div
-                              key={
-                                item.key
-                              }
-                              style={
-                                affectedCardStyle
-                              }
-                            >
-
-                              <div style={affectedHeaderStyle}>
-
-                                <strong>
-                                  {item.packageCode}
-
-                                  {item.serviceName
-                                    ? ` · ${item.serviceName}`
-                                    : ''}
-                                </strong>
-
-
-                                <span style={sourceBadgeStyle}>
-                                  {item.type}
-                                </span>
-
-                              </div>
-
-
-                              <div style={affectedLocationStyle}>
-                                {item.location}
-                              </div>
-
-
-                              {(item.startDate ||
-                                item.finishDate) && (
-                                <div style={affectedDateStyle}>
-                                  {formatDate(
-                                    item.startDate
-                                  )}
-
-                                  {' → '}
-
-                                  {formatDate(
-                                    item.finishDate
-                                  )}
-                                </div>
-                              )}
-
-                            </div>
-                          )
-                        )
-                      )}
-
-                    </DrawerSection>
-                  )}
-
-
-                  {/* HISTORY */}
-
-                  {drawerTab ===
-                    'history' && (
-                    <DrawerSection
-                      title="Action History"
-                      subtitle="Read-only audit trail of constraint decisions, forecast changes and recovery actions."
-                    >
-
-                      {loadingHistory ? (
-                        <div style={emptyInnerStyle}>
-                          Loading Action History...
-                        </div>
-                      ) : constraintHistory.length ===
-                        0 ? (
-                        <div style={emptyInnerStyle}>
-                          No Action History recorded yet.
-                        </div>
-                      ) : (
-                        constraintHistory.map(
-                          (entry) => (
-                            <HistoryEntry
-                              key={
-                                entry.id
-                              }
-                              entry={
-                                entry
-                              }
-                            />
-                          )
-                        )
-                      )}
-
-                    </DrawerSection>
-                  )}
-
-                </div>
-
-
-                <div style={drawerFooterStyle}>
-
-                  <div style={footerMetaStyle}>
-                    {getConstraintReference(
-                      managedConstraint.id
-                    )}
-
-                    {' · '}
-
-                    {getSourceLabel(
-                      managedConstraint
-                    )}
-                  </div>
-
-
-                  <button
-                    type="button"
-                    onClick={
-                      closeManagementDrawer
-                    }
-                    style={
-                      secondaryButtonStyle
-                    }
-                  >
-                    Close
-                  </button>
-
-                </div>
-
-                </aside>
-
               </div>
-            )}
-
-          </div>
-
-        </>
-      )}
-
-
-      {/* ======================================================
-          CREATE MODAL
-      ====================================================== */}
-
-      {showCreateModal && (
-
-        <div style={modalOverlayStyle}>
-
-          <div style={createModalStyle}>
-
-            <div style={createModalHeaderStyle}>
-
-              <div>
-
-                <div style={drawerEyebrowStyle}>
-                  PROJECT CONSTRAINT
-                </div>
-
-                <h2 style={createModalTitleStyle}>
-                  Add Constraint
-                </h2>
-
-              </div>
-
 
               <button
                 type="button"
                 onClick={() =>
-                  setShowCreateModal(
-                    false
-                  )
+                  moveWeek(1)
                 }
-                style={
-                  closeButtonStyle
-                }
+                style={styles.iconButton}
+                aria-label="Next week"
               >
-                ×
+                →
               </button>
 
-            </div>
+              <input
+                type="date"
+                value={weekStartDate}
+                onChange={(event) =>
+                  handleWeekDateChange(
+                    event.target.value,
+                  )
+                }
+                style={{
+                  ...styles.input,
+                  width: '165px',
+                }}
+                aria-label="Select week"
+              />
+            </>
+          )}
+        </div>
 
+        <div
+          style={{
+            display: 'flex',
+            gap: '10px',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <select
+            value={selectedProjectId}
+            onChange={(event) =>
+              setSelectedProjectId(
+                event.target.value,
+              )
+            }
+            style={styles.select}
+          >
+            <option value="">
+              Select Project
+            </option>
 
-            <form
-              onSubmit={
-                createConstraint
+            {projects.map(
+              (project) => (
+                <option
+                  key={project.id}
+                  value={project.id}
+                >
+                  {project.code
+                    ? `${project.code} - ${project.name}`
+                    : project.name}
+                </option>
+              ),
+            )}
+          </select>
+
+          <button
+            type="button"
+            onClick={loadWeeklyPlan}
+            disabled={
+              !selectedProjectId ||
+              loading
+            }
+            style={styles.secondaryButton}
+          >
+            Refresh
+          </button>
+
+          {selectedProjectId && (
+            <>
+              {weeklyPlan ? (
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    ...(isDraft
+                      ? styles.draftBadge
+                      : isCommitted
+                        ? styles.committedBadge
+                        : isClosed
+                          ? styles.closedBadge
+                          : styles.cancelledBadge),
+                  }}
+                >
+                  {planStatusLabel(
+                    weeklyPlan.status,
+                  )}
+                </span>
+              ) : (
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    background: '#f1f5f9',
+                    color: '#64748b',
+                  }}
+                >
+                  No Weekly Plan
+                </span>
+              )}
+
+              {!weeklyPlan && (
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={async () => {
+                    setActionLoading(true);
+                    await createWeeklyPlan();
+                    setActionLoading(false);
+                  }}
+                  style={styles.primaryButton}
+                >
+                  Create Weekly Plan
+                </button>
+              )}
+
+              {isDraft && (
+                <>
+                  <button
+                    type="button"
+                    onClick={openActivityModal}
+                    style={styles.primaryButton}
+                  >
+                    + Add Activity
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      actionLoading
+                    }
+                    onClick={cancelWeek}
+                    style={{
+                      ...styles.secondaryButton,
+                      borderColor: '#fecaca',
+                      color: '#b91c1c',
+                      background: '#ffffff',
+                    }}
+                  >
+                    Cancel Week
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      formalItems.length === 0 ||
+                      actionLoading
+                    }
+                    onClick={commitWeek}
+                    style={styles.commitButton}
+                  >
+                    Commit Week
+                  </button>
+                </>
+              )}
+
+              {isCommitted && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowUnplannedPanel(true)
+                    }
+                    style={styles.secondaryButton}
+                  >
+                    + Add Unplanned Work
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      !canClose ||
+                      actionLoading
+                    }
+                    onClick={closeWeek}
+                    style={styles.closeButton}
+                  >
+                    Close Week
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+          </div>,
+          headerActionsTarget,
+        )}
+
+      {/* FEEDBACK */}
+
+      {message && (
+        <div
+          style={
+            styles.successBox
+          }
+        >
+          {message}
+        </div>
+      )}
+
+      {errorMessage && (
+        <div
+          style={
+            styles.errorBox
+          }
+        >
+          {errorMessage}
+        </div>
+      )}
+
+      {!selectedProjectId ? (
+        <div
+          style={
+            styles.emptyState
+          }
+        >
+          <div
+            style={{
+              fontSize:
+                '2.5rem',
+              marginBottom:
+                '10px',
+            }}
+          >
+            📅
+          </div>
+
+          <h2
+            style={{
+              margin:
+                '0 0 8px 0',
+              color: '#0f2745',
+            }}
+          >
+            Select a Project
+          </h2>
+
+          <p
+            style={{
+              margin: 0,
+              color: '#64748b',
+            }}
+          >
+            Choose a project to create, commit and evaluate its Weekly Plan.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* METRICS */}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: '12px',
+              marginBottom:
+                '18px',
+            }}
+          >
+            <MetricCard
+              label="PPC"
+              value={
+                ppc === null
+                  ? '—'
+                  : `${Number(
+                      ppc,
+                    ).toFixed(1)}%`
               }
-              style={createFormStyle}
+              accent={
+                ppcTargetMet ===
+                true
+                  ? 'success'
+                  : ppcTargetMet ===
+                      false
+                    ? 'danger'
+                    : 'neutral'
+              }
+              footer={
+                isClosed
+                  ? 'Final PPC'
+                  : isCommitted
+                    ? 'Live PPC'
+                    : 'Available after commitment'
+              }
+            />
+
+            <MetricCard
+              label="Committed"
+              value={String(
+                performance?.total_commitments ||
+                  0,
+              )}
+            />
+
+            <MetricCard
+              label="Completed"
+              value={String(
+                performance?.completed_commitments ||
+                  0,
+              )}
+              accent="success"
+            />
+
+            <MetricCard
+              label="Missed"
+              value={String(
+                performance?.missed_commitments ||
+                  0,
+              )}
+              accent="danger"
+            />
+
+            <MetricCard
+              label="Pending"
+              value={String(
+                performance?.pending_commitments ||
+                  0,
+              )}
+            />
+
+            <MetricCard
+              label="Unplanned"
+              value={String(
+                performance?.unplanned_work_items ??
+                  unplannedItems.length,
+              )}
+              footer="Excluded from PPC"
+            />
+          </div>
+
+          {/* SECONDARY METRICS */}
+
+          {weeklyPlan && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '12px',
+                marginBottom:
+                  '18px',
+              }}
             >
-
-              <ModalField
-                label="Category"
+              <div
+                style={
+                  styles.card
+                }
               >
-                <select
-                  value={
-                    createForm.category
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-
-                        category:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
+                <div
                   style={
-                    modalInputStyle
+                    styles.smallLabel
                   }
                 >
-                  {CATEGORY_OPTIONS.map(
-                    (option) => (
-                      <option
-                        key={
-                          option.value
-                        }
-                        value={
-                          option.value
-                        }
-                      >
-                        {option.label}
-                      </option>
-                    )
-                  )}
-                </select>
-              </ModalField>
+                  PPC Target
+                </div>
 
+                {isDraft ? (
+                  <div
+                    style={{
+                      display:
+                        'flex',
+                      alignItems:
+                        'center',
+                      gap: '8px',
+                      marginTop:
+                        '8px',
+                    }}
+                  >
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={
+                        weeklyPlan.ppc_target
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        updatePpcTarget(
+                          event.target.value,
+                        )
+                      }
+                      style={{
+                        ...styles.input,
+                        width:
+                          '85px',
+                      }}
+                    />
 
-              <ModalField
-                label="Priority"
+                    <strong>
+                      %
+                    </strong>
+                  </div>
+                ) : (
+                  <div
+                    style={
+                      styles.secondaryMetricValue
+                    }
+                  >
+                    {Number(
+                      ppcTarget,
+                    ).toFixed(1)}
+                    %
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={
+                  styles.card
+                }
               >
-                <select
-                  value={
-                    createForm.priority
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-
-                        priority:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
+                <div
                   style={
-                    modalInputStyle
+                    styles.smallLabel
                   }
                 >
-                  {PRIORITY_OPTIONS.map(
-                    (option) => (
-                      <option
-                        key={
-                          option.value
-                        }
-                        value={
-                          option.value
-                        }
-                      >
-                        {option.label}
-                      </option>
-                    )
-                  )}
-                </select>
-              </ModalField>
+                  Previous Week PPC
+                </div>
 
-
-              <ModalField
-                label="Impact"
-              >
-                <select
-                  value={
-                    createForm.impact
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-
-                        impact:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
+                <div
                   style={
-                    modalInputStyle
+                    styles.secondaryMetricValue
                   }
                 >
-                  {IMPACT_OPTIONS.map(
-                    (option) => (
-                      <option
-                        key={
-                          option.value
-                        }
-                        value={
-                          option.value
-                        }
-                      >
-                        {option.label}
-                      </option>
-                    )
-                  )}
-                </select>
-              </ModalField>
+                  {trend?.previous_week_ppc ===
+                    null ||
+                  trend?.previous_week_ppc ===
+                    undefined
+                    ? '—'
+                    : `${Number(
+                        trend.previous_week_ppc,
+                      ).toFixed(
+                        1,
+                      )}%`}
+                </div>
+              </div>
 
-
-              <ModalField
-                label="What is blocking the work? *"
+              <div
+                style={
+                  styles.card
+                }
               >
-                <input
-                  value={
-                    createForm.title
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-
-                        title:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
+                <div
                   style={
-                    modalInputStyle
+                    styles.smallLabel
                   }
-                />
-              </ModalField>
+                >
+                  Change vs Previous
+                </div>
 
+                <div
+                  style={
+                    styles.secondaryMetricValue
+                  }
+                >
+                  {trend?.ppc_change_vs_previous_week ===
+                    null ||
+                  trend?.ppc_change_vs_previous_week ===
+                    undefined
+                    ? '—'
+                    : `${Number(
+                        trend.ppc_change_vs_previous_week,
+                      ) >= 0
+                        ? '+'
+                        : ''}${Number(
+                        trend.ppc_change_vs_previous_week,
+                      ).toFixed(
+                        1,
+                      )} pp`}
+                </div>
+              </div>
 
-              <ModalField
-                label="Responsible Party *"
+              <div
+                style={
+                  styles.card
+                }
               >
-                <input
-                  value={
-                    createForm
-                      .responsible_party
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-
-                        responsible_party:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
+                <div
                   style={
-                    modalInputStyle
+                    styles.smallLabel
                   }
-                />
-              </ModalField>
+                >
+                  Rolling 4-Week PPC
+                </div>
 
+                <div
+                  style={
+                    styles.secondaryMetricValue
+                  }
+                >
+                  {trend?.rolling_4_week_ppc ===
+                    null ||
+                  trend?.rolling_4_week_ppc ===
+                    undefined
+                    ? '—'
+                    : `${Number(
+                        trend.rolling_4_week_ppc,
+                      ).toFixed(
+                        1,
+                      )}%`}
+                </div>
+              </div>
+            </div>
+          )}
 
-              <ModalField
-                label="Required By Date *"
+          {/* NO PLAN */}
+
+          {!weeklyPlan &&
+            !loading && (
+              <div
+                style={
+                  styles.emptyState
+                }
               >
-                <input
-                  type="date"
-                  value={
-                    createForm
-                      .required_by_date
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
+                <h2
+                  style={{
+                    margin:
+                      '0 0 8px 0',
+                    color:
+                      '#0f2745',
+                  }}
+                >
+                  No Weekly Plan for Week{' '}
+                  {weekInfo.week}
+                </h2>
 
-                        required_by_date:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
-                  style={
-                    modalInputStyle
-                  }
-                />
-              </ModalField>
-
-
-              <ModalField
-                label="Required Action *"
-              >
-                <textarea
-                  value={
-                    createForm
-                      .action_required
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-
-                        action_required:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
-                  style={
-                    modalTextareaStyle
-                  }
-                />
-              </ModalField>
-
-
-              <ModalField
-                label="Notes"
-              >
-                <textarea
-                  value={
-                    createForm
-                      .description
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-
-                        description:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
-                  style={
-                    modalTextareaStyle
-                  }
-                />
-              </ModalField>
-
-
-              <label style={checkboxStyle}>
-
-                <input
-                  type="checkbox"
-                  checked={
-                    createForm.blocking
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setCreateForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-
-                        blocking:
-                          event
-                            .target
-                            .checked,
-                      })
-                    )
-                  }
-                />
-
-                Blocking Constraint
-
-              </label>
-
-
-              <div style={rightActionsStyle}>
+                <p
+                  style={{
+                    margin:
+                      '0 0 18px 0',
+                    color:
+                      '#64748b',
+                  }}
+                >
+                  Create the plan, then add Weekly Activities linked to Make Ready Work Packages.
+                </p>
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowCreateModal(
-                      false
-                    )
-                  }
-                  style={
-                    secondaryButtonStyle
-                  }
-                >
-                  Cancel
-                </button>
-
-
-                <button
-                  type="submit"
                   disabled={
-                    creatingConstraint
+                    actionLoading
                   }
+                  onClick={async () => {
+                    setActionLoading(
+                      true,
+                    );
+
+                    await createWeeklyPlan();
+
+                    setActionLoading(
+                      false,
+                    );
+                  }}
                   style={
-                    primaryButtonStyle
+                    styles.primaryButton
                   }
                 >
-                  {creatingConstraint
-                    ? 'Creating...'
-                    : 'Create Constraint'}
+                  Create Weekly Plan
                 </button>
+              </div>
+            )}
 
+          {/* WEEKLY ITEMS */}
+
+          {weeklyPlan && (
+            <div
+              style={
+                styles.card
+              }
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent:
+                    'space-between',
+                  alignItems:
+                    'center',
+                  gap: '12px',
+                  flexWrap:
+                    'wrap',
+                  marginBottom:
+                    '14px',
+                }}
+              >
+                <div>
+                  <h2
+                    style={{
+                      margin: 0,
+                      fontSize:
+                        '1.05rem',
+                      color:
+                        '#0f2745',
+                    }}
+                  >
+                    Weekly Commitments
+                  </h2>
+
+                  <div
+                    style={{
+                      color:
+                        '#64748b',
+                      fontSize:
+                        '0.82rem',
+                      marginTop:
+                        '4px',
+                    }}
+                  >
+                    Activities become commitments only when the week is committed.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    fontSize:
+                      '0.8rem',
+                    color:
+                      '#64748b',
+                  }}
+                >
+                  {items.length}{' '}
+                  {items.length === 1
+                    ? 'item'
+                    : 'items'}
+                </div>
               </div>
 
-            </form>
+              {items.length ===
+              0 ? (
+                <div
+                  style={
+                    styles.tableEmpty
+                  }
+                >
+                  No activities have been added to this Weekly Plan.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    overflowX:
+                      'auto',
+                    border:
+                      '1px solid #e2e8f0',
+                    borderRadius:
+                      '8px',
+                  }}
+                >
+                  <table
+                    style={{
+                      width: '100%',
+                      minWidth:
+                        '1450px',
+                      borderCollapse:
+                        'collapse',
+                      background:
+                        '#ffffff',
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <TableHeader>
+                          Type
+                        </TableHeader>
 
-          </div>
+                        <TableHeader>
+                          Work Package
+                        </TableHeader>
 
-        </div>
+                        <TableHeader>
+                          Activity
+                        </TableHeader>
+
+                        <TableHeader>
+                          Location
+                        </TableHeader>
+
+                        <TableHeader>
+                          Week
+                        </TableHeader>
+
+                        <TableHeader>
+                          Responsible
+                        </TableHeader>
+
+                        <TableHeader>
+                          Planned Qty.
+                        </TableHeader>
+
+                        <TableHeader>
+                          Actual Qty.
+                        </TableHeader>
+
+                        <TableHeader>
+                          Unit
+                        </TableHeader>
+
+                        <TableHeader>
+                          Commitment
+                        </TableHeader>
+
+                        <TableHeader>
+                          Result
+                        </TableHeader>
+
+                        <TableHeader>
+                          Variance
+                        </TableHeader>
+
+                        <TableHeader>
+                          Actions
+                        </TableHeader>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {items.map(
+                        (item) => {
+                          const quantityAchievement =
+                            item.planned_quantity &&
+                            item.actual_quantity !==
+                              null &&
+                            item.actual_quantity !==
+                              undefined
+                              ? (
+                                  Number(
+                                    item.actual_quantity,
+                                  ) /
+                                  Number(
+                                    item.planned_quantity,
+                                  )
+                                ) *
+                                100
+                              : null;
+
+                          return (
+                            <tr
+                              key={
+                                item.id
+                              }
+                              style={{
+                                background:
+                                  item.is_unplanned_work
+                                    ? '#fffbeb'
+                                    : item.execution_result ===
+                                        'completed'
+                                      ? '#f0fdf4'
+                                      : item.execution_result ===
+                                          'not_completed'
+                                        ? '#fef2f2'
+                                        : '#ffffff',
+
+                                borderBottom:
+                                  '1px solid #e2e8f0',
+                              }}
+                            >
+                              <TableCell>
+                                <span
+                                  style={{
+                                    ...styles.miniBadge,
+
+                                    background:
+                                      item.is_unplanned_work
+                                        ? '#fef3c7'
+                                        : '#e0f2fe',
+
+                                    color:
+                                      item.is_unplanned_work
+                                        ? '#92400e'
+                                        : '#075985',
+                                  }}
+                                >
+                                  {item.is_unplanned_work
+                                    ? 'Unplanned'
+                                    : 'Weekly'}
+                                </span>
+                              </TableCell>
+
+                              <TableCell>
+                                <strong>
+                                  {item.package_code ||
+                                    '—'}
+                                </strong>
+                              </TableCell>
+
+                              <TableCell>
+                                <div
+                                  style={{
+                                    fontWeight:
+                                      700,
+                                    color:
+                                      '#0f2745',
+                                    maxWidth:
+                                      '320px',
+                                    whiteSpace:
+                                      'normal',
+                                  }}
+                                >
+                                  {item.activity_description}
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                <div
+                                  style={{
+                                    maxWidth:
+                                      '220px',
+                                    whiteSpace:
+                                      'normal',
+                                  }}
+                                >
+                                  {item.location_path ||
+                                    item.location_name ||
+                                    '—'}
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                <div>
+                                  {formatShortDate(
+                                    item.planned_start_date,
+                                  )}
+                                </div>
+
+                                <div
+                                  style={{
+                                    fontSize:
+                                      '0.75rem',
+                                    color:
+                                      '#64748b',
+                                    marginTop:
+                                      '2px',
+                                  }}
+                                >
+                                  to{' '}
+                                  {formatShortDate(
+                                    item.planned_finish_date,
+                                  )}
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                {isDraft ? (
+                                  <input
+                                    defaultValue={
+                                      item.responsible_party ||
+                                      ''
+                                    }
+                                    onBlur={(
+                                      event,
+                                    ) =>
+                                      updateDraftItem(
+                                        item.id,
+                                        'responsible_party',
+                                        event.target.value,
+                                      )
+                                    }
+                                    placeholder="Responsible"
+                                    style={
+                                      styles.tableInput
+                                    }
+                                  />
+                                ) : (
+                                  item.responsible_party ||
+                                  '—'
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                {isDraft ? (
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    defaultValue={
+                                      item.planned_quantity ??
+                                      ''
+                                    }
+                                    onBlur={(
+                                      event,
+                                    ) =>
+                                      updateDraftItem(
+                                        item.id,
+                                        'planned_quantity',
+                                        event.target.value,
+                                      )
+                                    }
+                                    style={
+                                      styles.tableNumberInput
+                                    }
+                                  />
+                                ) : (
+                                  item.planned_quantity ??
+                                  '—'
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                {isCommitted &&
+                                (
+                                  item.is_unplanned_work ||
+                                  item.execution_result ===
+                                    'pending'
+                                ) ? (
+                                  <div>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      value={
+                                        item.actual_quantity ??
+                                        ''
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        setItems(
+                                          (
+                                            previous,
+                                          ) =>
+                                            previous.map(
+                                              (
+                                                current,
+                                              ) =>
+                                                current.id ===
+                                                item.id
+                                                  ? {
+                                                      ...current,
+                                                      actual_quantity:
+                                                        numberOrNull(
+                                                          event.target.value,
+                                                        ),
+                                                    }
+                                                  : current,
+                                            ),
+                                        )
+                                      }
+                                      onBlur={(
+                                        event,
+                                      ) =>
+                                        updateActualQuantity(
+                                          item.id,
+                                          event.target.value,
+                                        )
+                                      }
+                                      style={
+                                        styles.tableNumberInput
+                                      }
+                                    />
+
+                                    {quantityAchievement !==
+                                      null && (
+                                      <div
+                                        style={{
+                                          fontSize:
+                                            '0.72rem',
+                                          color:
+                                            '#64748b',
+                                          marginTop:
+                                            '4px',
+                                        }}
+                                      >
+                                        {quantityAchievement.toFixed(
+                                          1,
+                                        )}
+                                        %
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div>
+                                      {item.actual_quantity ??
+                                        '—'}
+                                    </div>
+
+                                    {quantityAchievement !==
+                                      null && (
+                                      <div
+                                        style={{
+                                          fontSize:
+                                            '0.72rem',
+                                          color:
+                                            '#64748b',
+                                          marginTop:
+                                            '4px',
+                                        }}
+                                      >
+                                        {quantityAchievement.toFixed(
+                                          1,
+                                        )}
+                                        %
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                {isDraft ? (
+                                  <input
+                                    defaultValue={
+                                      item.unit ||
+                                      ''
+                                    }
+                                    onBlur={(
+                                      event,
+                                    ) =>
+                                      updateDraftItem(
+                                        item.id,
+                                        'unit',
+                                        event.target.value,
+                                      )
+                                    }
+                                    placeholder="m²"
+                                    style={{
+                                      ...styles.tableInput,
+                                      width:
+                                        '70px',
+                                    }}
+                                  />
+                                ) : (
+                                  item.unit ||
+                                  '—'
+                                )}
+                              </TableCell>
+
+                              <TableCell>
+                                <span
+                                  style={{
+                                    ...styles.miniBadge,
+
+                                    background:
+                                      item.commitment_status ===
+                                      'committed'
+                                        ? '#dbeafe'
+                                        : '#f1f5f9',
+
+                                    color:
+                                      item.commitment_status ===
+                                      'committed'
+                                        ? '#1d4ed8'
+                                        : '#475569',
+                                  }}
+                                >
+                                  {item.commitment_status}
+                                </span>
+                              </TableCell>
+
+                              <TableCell>
+                                <ExecutionBadge
+                                  result={
+                                    item.execution_result
+                                  }
+                                />
+                              </TableCell>
+
+                              <TableCell>
+                                <div
+                                  style={{
+                                    maxWidth:
+                                      '190px',
+                                    whiteSpace:
+                                      'normal',
+                                  }}
+                                >
+                                  {varianceLabel(
+                                    item.variance_reason,
+                                  )}
+
+                                  {item.variance_notes && (
+                                    <div
+                                      style={{
+                                        marginTop:
+                                          '4px',
+                                        fontSize:
+                                          '0.75rem',
+                                        color:
+                                          '#64748b',
+                                      }}
+                                    >
+                                      {item.variance_notes}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+
+                              <TableCell>
+                                <div
+                                  style={{
+                                    display:
+                                      'flex',
+                                    gap: '6px',
+                                    flexWrap:
+                                      'wrap',
+                                  }}
+                                >
+                                  {isDraft &&
+                                    !item.is_unplanned_work && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          deleteDraftItem(
+                                            item,
+                                          )
+                                        }
+                                        style={
+                                          styles.smallDangerButton
+                                        }
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+
+                                  {isCommitted &&
+                                    !item.is_unplanned_work &&
+                                    item.execution_result ===
+                                      'pending' && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            actionLoading
+                                          }
+                                          onClick={() =>
+                                            markCompleted(
+                                              item,
+                                            )
+                                          }
+                                          style={
+                                            styles.smallSuccessButton
+                                          }
+                                        >
+                                          Completed
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            actionLoading
+                                          }
+                                          onClick={() =>
+                                            openMissedModal(
+                                              item,
+                                            )
+                                          }
+                                          style={
+                                            styles.smallDangerButton
+                                          }
+                                        >
+                                          Missed
+                                        </button>
+                                      </>
+                                    )}
+
+                                  {isCommitted &&
+                                    !item.is_unplanned_work &&
+                                    [
+                                      'completed',
+                                      'not_completed',
+                                    ].includes(
+                                      item.execution_result,
+                                    ) && (
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          actionLoading
+                                        }
+                                        onClick={() =>
+                                          openEditResultModal(
+                                            item,
+                                          )
+                                        }
+                                        style={
+                                          styles.smallSecondaryButton
+                                        }
+                                      >
+                                        Edit Result
+                                      </button>
+                                    )}
+
+                                  {!isDraft &&
+                                    !isCommitted && (
+                                      <span
+                                        style={{
+                                          color:
+                                            '#94a3b8',
+                                          fontSize:
+                                            '0.78rem',
+                                        }}
+                                      >
+                                        Locked
+                                      </span>
+                                    )}
+                                </div>
+                              </TableCell>
+                            </tr>
+                          );
+                        },
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* VARIANCE PARETO */}
+
+          {weeklyPlan &&
+            pareto.length > 0 && (
+              <div
+                style={{
+                  ...styles.card,
+                  marginTop:
+                    '18px',
+                }}
+              >
+                <h2
+                  style={{
+                    margin:
+                      '0 0 5px 0',
+                    fontSize:
+                      '1.05rem',
+                    color:
+                      '#0f2745',
+                  }}
+                >
+                  Reasons for Variance
+                </h2>
+
+                <p
+                  style={{
+                    margin:
+                      '0 0 15px 0',
+                    fontSize:
+                      '0.82rem',
+                    color:
+                      '#64748b',
+                  }}
+                >
+                  Pareto analysis of missed formal commitments.
+                </p>
+
+                <div
+                  style={{
+                    display:
+                      'grid',
+                    gap: '9px',
+                  }}
+                >
+                  {pareto.map(
+                    (row) => (
+                      <div
+                        key={
+                          row.variance_reason
+                        }
+                        style={{
+                          display:
+                            'grid',
+                          gridTemplateColumns:
+                            'minmax(180px, 1fr) 90px 90px 100px',
+                          gap: '12px',
+                          alignItems:
+                            'center',
+                          padding:
+                            '10px 12px',
+                          border:
+                            '1px solid #e2e8f0',
+                          borderRadius:
+                            '7px',
+                        }}
+                      >
+                        <strong>
+                          {varianceLabel(
+                            row.variance_reason,
+                          )}
+                        </strong>
+
+                        <span>
+                          {row.variance_count}{' '}
+                          occurrences
+                        </span>
+
+                        <span>
+                          {Number(
+                            row.variance_percent,
+                          ).toFixed(
+                            1,
+                          )}
+                          %
+                        </span>
+
+                        <span>
+                          {Number(
+                            row.cumulative_variance_percent,
+                          ).toFixed(
+                            1,
+                          )}
+                          % cumulative
+                        </span>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            )}
+
+          {/* ADD ACTIVITY MODAL */}
+
+          {showActivityPanel &&
+            isDraft && (
+              <ModalOverlay>
+                <div
+                  style={
+                    styles.modalLarge
+                  }
+                >
+                  <div
+                    style={
+                      styles.modalHeader
+                    }
+                  >
+                    <div>
+                      <h2
+                        style={{
+                          margin: 0,
+                          color:
+                            '#0f2745',
+                        }}
+                      >
+                        Add Weekly Activity
+                      </h2>
+
+                      <p
+                        style={{
+                          margin:
+                            '5px 0 0 0',
+                          color:
+                            '#64748b',
+                          fontSize:
+                            '0.85rem',
+                        }}
+                      >
+                        Create the activity, link it to its Work Package, and verify Make Ready before adding it to the Weekly Plan.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowActivityPanel(
+                          false,
+                        );
+
+                        setActivityForm(
+                          EMPTY_ACTIVITY_FORM,
+                        );
+                      }}
+                      style={
+                        styles.closeModalButton
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'minmax(0, 1fr) minmax(320px, 0.9fr)',
+                      gap: '20px',
+                    }}
+                  >
+                    <div>
+                      <FormField label="Activity">
+                        <input
+                          value={
+                            activityForm.activityDescription
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                activityDescription:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={
+                            styles.input
+                          }
+                          placeholder="Example: Install drywall"
+                        />
+                      </FormField>
+
+                      <FormField label="Work Package">
+                        <select
+                          value={
+                            activityForm.lookaheadSheetRowId
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                lookaheadSheetRowId:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={{
+                            ...styles.select,
+                            width: '100%',
+                          }}
+                        >
+                          <option value="">
+                            Select Work Package
+                          </option>
+
+                          {workPackages.map(
+                            (
+                              workPackage,
+                            ) => (
+                              <option
+                                key={
+                                  workPackage.sheet_row_id
+                                }
+                                value={
+                                  workPackage.sheet_row_id
+                                }
+                              >
+                                {workPackage.package_code}
+                                {' - '}
+                                {workPackage.package_description}
+                                {workPackage.readiness_is_clear
+                                  ? ' · Ready'
+                                  : ' · Not Ready'}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </FormField>
+
+                      <FormField label="Location">
+                        <input
+                          value={
+                            activityForm.locationName
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                locationName:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={
+                            styles.input
+                          }
+                          placeholder="Example: LEVEL 1 ZONE 1"
+                        />
+                      </FormField>
+
+                      <FormField label="Responsible">
+                        <input
+                          value={
+                            activityForm.responsibleParty
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                responsibleParty:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={
+                            styles.input
+                          }
+                          placeholder="Responsible person or crew"
+                        />
+                      </FormField>
+
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns:
+                            '1fr 1fr',
+                          gap: '10px',
+                        }}
+                      >
+                        <FormField label="Planned Quantity">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={
+                              activityForm.plannedQuantity
+                            }
+                            onChange={(
+                              event,
+                            ) =>
+                              setActivityForm(
+                                (
+                                  previous,
+                                ) => ({
+                                  ...previous,
+                                  plannedQuantity:
+                                    event.target.value,
+                                }),
+                              )
+                            }
+                            style={
+                              styles.input
+                            }
+                          />
+                        </FormField>
+
+                        <FormField label="Unit">
+                          <input
+                            value={
+                              activityForm.unit
+                            }
+                            onChange={(
+                              event,
+                            ) =>
+                              setActivityForm(
+                                (
+                                  previous,
+                                ) => ({
+                                  ...previous,
+                                  unit:
+                                    event.target.value,
+                                }),
+                              )
+                            }
+                            style={
+                              styles.input
+                            }
+                            placeholder="m²"
+                          />
+                        </FormField>
+                      </div>
+
+                      <FormField label="Notes">
+                        <textarea
+                          rows="3"
+                          value={
+                            activityForm.notes
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setActivityForm(
+                              (
+                                previous,
+                              ) => ({
+                                ...previous,
+                                notes:
+                                  event.target.value,
+                              }),
+                            )
+                          }
+                          style={{
+                            ...styles.input,
+                            resize:
+                              'vertical',
+                          }}
+                        />
+                      </FormField>
+                    </div>
+
+                    <div>
+                      <div
+                        style={{
+                          border:
+                            '1px solid #e2e8f0',
+                          borderRadius:
+                            '10px',
+                          padding:
+                            '16px',
+                          background:
+                            '#f8fafc',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display:
+                              'flex',
+                            justifyContent:
+                              'space-between',
+                            alignItems:
+                              'center',
+                            gap:
+                              '10px',
+                            marginBottom:
+                              '14px',
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={
+                                styles.smallLabel
+                              }
+                            >
+                              Make Ready
+                            </div>
+
+                            <div
+                              style={{
+                                fontWeight:
+                                  900,
+                                color:
+                                  '#0f2745',
+                                marginTop:
+                                  '4px',
+                              }}
+                            >
+                              {selectedWorkPackage
+                                ? `${selectedWorkPackage.package_code} - ${selectedWorkPackage.package_description}`
+                                : 'Select a Work Package'}
+                            </div>
+                          </div>
+
+                          {selectedWorkPackage && (
+                            <span
+                              style={{
+                                ...styles.statusBadge,
+                                ...(selectedPackageReady
+                                  ? styles.closedBadge
+                                  : styles.cancelledBadge),
+                                background:
+                                  selectedPackageReady
+                                    ? '#dcfce7'
+                                    : '#fee2e2',
+                                color:
+                                  selectedPackageReady
+                                    ? '#166534'
+                                    : '#991b1b',
+                              }}
+                            >
+                              {selectedPackageReady
+                                ? 'READY TO COMMIT'
+                                : 'NOT READY TO COMMIT'}
+                            </span>
+                          )}
+                        </div>
+
+                        {!selectedWorkPackage ? (
+                          <div
+                            style={{
+                              color:
+                                '#64748b',
+                              fontSize:
+                                '0.82rem',
+                            }}
+                          >
+                            Choose a Work Package to verify its Koskela Make Ready conditions.
+                          </div>
+                        ) : (
+                          <>
+                            <div
+                              style={{
+                                display:
+                                  'grid',
+                                gap:
+                                  '8px',
+                              }}
+                            >
+                              {MAKE_READY_CATEGORIES.map(
+                                (
+                                  category,
+                                ) => {
+                                  const status =
+                                    selectedWorkPackage[
+                                      category.key
+                                    ];
+
+                                  const source =
+                                    selectedWorkPackage[
+                                      category.sourceKey
+                                    ];
+
+                                  return (
+                                    <div
+                                      key={
+                                        category.key
+                                      }
+                                      style={{
+                                        display:
+                                          'flex',
+                                        justifyContent:
+                                          'space-between',
+                                        alignItems:
+                                          'center',
+                                        gap:
+                                          '10px',
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontSize:
+                                            '0.82rem',
+                                          color:
+                                            '#334155',
+                                        }}
+                                      >
+                                        {category.label}
+                                      </span>
+
+                                      <span
+                                        style={{
+                                          ...styles.readinessBadge,
+                                          ...makeReadyStatusStyle(
+                                            status,
+                                            source,
+                                          ),
+                                        }}
+                                      >
+                                        {makeReadyStatusLabel(
+                                          status,
+                                          source,
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                },
+                              )}
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop:
+                                  '16px',
+                                paddingTop:
+                                  '14px',
+                                borderTop:
+                                  '1px solid #e2e8f0',
+                              }}
+                            >
+                              {selectedPackageReady ? (
+                                <div
+                                  style={{
+                                    padding:
+                                      '10px 12px',
+                                    background:
+                                      '#f0fdf4',
+                                    border:
+                                      '1px solid #bbf7d0',
+                                    borderRadius:
+                                      '8px',
+                                    color:
+                                      '#166534',
+                                    fontSize:
+                                      '0.8rem',
+                                    fontWeight:
+                                      800,
+                                  }}
+                                >
+                                  <div>
+                                    READY TO COMMIT
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      marginTop:
+                                        '4px',
+                                      fontWeight:
+                                        600,
+                                    }}
+                                  >
+                                    {selectedWorkPackage.satisfied_category_count} of 7 Make Ready conditions satisfied. This Work Package can move to Weekly Planning.
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  style={{
+                                    padding:
+                                      '10px 12px',
+                                    background:
+                                      '#fef2f2',
+                                    border:
+                                      '1px solid #fecaca',
+                                    borderRadius:
+                                      '8px',
+                                    color:
+                                      '#991b1b',
+                                    fontSize:
+                                      '0.8rem',
+                                  }}
+                                >
+                                  <strong>
+                                    NOT READY TO COMMIT
+                                  </strong>
+
+                                  <div
+                                    style={{
+                                      marginTop:
+                                        '4px',
+                                      color:
+                                        '#7f1d1d',
+                                    }}
+                                  >
+                                    {selectedWorkPackage.satisfied_category_count} of 7 Make Ready conditions satisfied.
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      marginTop:
+                                        '10px',
+                                      fontWeight:
+                                        700,
+                                    }}
+                                  >
+                                    Outstanding Make Ready conditions:
+                                  </div>
+
+                                  <ul
+                                    style={{
+                                      margin:
+                                        '7px 0 0 18px',
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {blockingCategories.map(
+                                      (
+                                        category,
+                                      ) => {
+                                        const status =
+                                          selectedWorkPackage[
+                                            category.key
+                                          ];
+
+                                        const constraint =
+                                          getConstraintForCategory(
+                                            category,
+                                          );
+
+                                        let reason =
+                                          'Not Assessed';
+
+                                        if (
+                                          status ===
+                                          'constrained'
+                                        ) {
+                                          reason =
+                                            constraintLifecycleLabel(
+                                              constraint,
+                                            );
+                                        } else if (
+                                          status &&
+                                          status !==
+                                            'not_assessed'
+                                        ) {
+                                          reason =
+                                            makeReadyStatusLabel(
+                                              status,
+                                              selectedWorkPackage[
+                                                category.sourceKey
+                                              ],
+                                            );
+                                        }
+
+                                        return (
+                                          <li
+                                            key={
+                                              category.key
+                                            }
+                                            style={{
+                                              marginBottom:
+                                                '4px',
+                                            }}
+                                          >
+                                            <strong>
+                                              {category.label}
+                                            </strong>
+                                            {' — '}
+                                            {reason}
+                                          </li>
+                                        );
+                                      },
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={
+                      styles.modalFooter
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowActivityPanel(
+                          false,
+                        );
+
+                        setActivityForm(
+                          EMPTY_ACTIVITY_FORM,
+                        );
+                      }}
+                      style={
+                        styles.secondaryButton
+                      }
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        actionLoading ||
+                        !activityForm.activityDescription.trim() ||
+                        !selectedPackageReady
+                      }
+                      onClick={
+                        addWeeklyActivity
+                      }
+                      style={{
+                        ...styles.primaryButton,
+                        opacity:
+                          actionLoading ||
+                          !activityForm.activityDescription.trim() ||
+                          !selectedPackageReady
+                            ? 0.45
+                            : 1,
+                        cursor:
+                          actionLoading ||
+                          !activityForm.activityDescription.trim() ||
+                          !selectedPackageReady
+                            ? 'not-allowed'
+                            : 'pointer',
+                      }}
+                    >
+                      Add Activity
+                    </button>
+                  </div>
+                </div>
+              </ModalOverlay>
+            )}
+
+          {/* UNPLANNED WORK MODAL */}
+
+          {showUnplannedPanel &&
+            isCommitted && (
+              <ModalOverlay>
+                <div
+                  style={
+                    styles.modal
+                  }
+                >
+                  <div
+                    style={
+                      styles.modalHeader
+                    }
+                  >
+                    <div>
+                      <h2
+                        style={{
+                          margin: 0,
+                          color:
+                            '#0f2745',
+                        }}
+                      >
+                        Add Unplanned Work
+                      </h2>
+
+                      <p
+                        style={{
+                          margin:
+                            '5px 0 0 0',
+                          color:
+                            '#64748b',
+                          fontSize:
+                            '0.85rem',
+                        }}
+                      >
+                        This work occurred after the weekly commitment freeze and will not affect PPC.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowUnplannedPanel(
+                          false,
+                        )
+                      }
+                      style={
+                        styles.closeModalButton
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <FormField label="Activity">
+                    <input
+                      value={
+                        unplannedForm.activityDescription
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setUnplannedForm(
+                          (
+                            previous,
+                          ) => ({
+                            ...previous,
+                            activityDescription:
+                              event.target.value,
+                          }),
+                        )
+                      }
+                      style={
+                        styles.input
+                      }
+                      placeholder="Describe the unplanned activity"
+                    />
+                  </FormField>
+
+                  <FormField label="Location">
+                    <input
+                      value={
+                        unplannedForm.locationName
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setUnplannedForm(
+                          (
+                            previous,
+                          ) => ({
+                            ...previous,
+                            locationName:
+                              event.target.value,
+                          }),
+                        )
+                      }
+                      style={
+                        styles.input
+                      }
+                    />
+                  </FormField>
+
+                  <FormField label="Responsible">
+                    <input
+                      value={
+                        unplannedForm.responsibleParty
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setUnplannedForm(
+                          (
+                            previous,
+                          ) => ({
+                            ...previous,
+                            responsibleParty:
+                              event.target.value,
+                          }),
+                        )
+                      }
+                      style={
+                        styles.input
+                      }
+                    />
+                  </FormField>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        '1fr 1fr 1fr',
+                      gap: '10px',
+                    }}
+                  >
+                    <FormField label="Planned Qty.">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={
+                          unplannedForm.plannedQuantity
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setUnplannedForm(
+                            (
+                              previous,
+                            ) => ({
+                              ...previous,
+                              plannedQuantity:
+                                event.target.value,
+                            }),
+                          )
+                        }
+                        style={
+                          styles.input
+                        }
+                      />
+                    </FormField>
+
+                    <FormField label="Actual Qty.">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={
+                          unplannedForm.actualQuantity
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setUnplannedForm(
+                            (
+                              previous,
+                            ) => ({
+                              ...previous,
+                              actualQuantity:
+                                event.target.value,
+                            }),
+                          )
+                        }
+                        style={
+                          styles.input
+                        }
+                      />
+                    </FormField>
+
+                    <FormField label="Unit">
+                      <input
+                        value={
+                          unplannedForm.unit
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setUnplannedForm(
+                            (
+                              previous,
+                            ) => ({
+                              ...previous,
+                              unit:
+                                event.target.value,
+                            }),
+                          )
+                        }
+                        style={
+                          styles.input
+                        }
+                        placeholder="m²"
+                      />
+                    </FormField>
+                  </div>
+
+                  <FormField label="Notes">
+                    <textarea
+                      rows="3"
+                      value={
+                        unplannedForm.notes
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setUnplannedForm(
+                          (
+                            previous,
+                          ) => ({
+                            ...previous,
+                            notes:
+                              event.target.value,
+                          }),
+                        )
+                      }
+                      style={{
+                        ...styles.input,
+                        resize:
+                          'vertical',
+                      }}
+                    />
+                  </FormField>
+
+                  <div
+                    style={
+                      styles.modalFooter
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowUnplannedPanel(
+                          false,
+                        )
+                      }
+                      style={
+                        styles.secondaryButton
+                      }
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        actionLoading
+                      }
+                      onClick={
+                        addUnplannedWork
+                      }
+                      style={
+                        styles.primaryButton
+                      }
+                    >
+                      Add Unplanned Work
+                    </button>
+                  </div>
+                </div>
+              </ModalOverlay>
+            )}
+
+          {/* EDIT RESULT MODAL */}
+
+          {editResult && (
+            <ModalOverlay>
+              <div
+                style={
+                  styles.modal
+                }
+              >
+                <div
+                  style={
+                    styles.modalHeader
+                  }
+                >
+                  <div>
+                    <h2
+                      style={{
+                        margin: 0,
+                        color:
+                          '#0f2745',
+                      }}
+                    >
+                      Edit Result
+                    </h2>
+
+                    <p
+                      style={{
+                        margin:
+                          '5px 0 0 0',
+                        color:
+                          '#64748b',
+                        fontSize:
+                          '0.85rem',
+                      }}
+                    >
+                      Correct execution information without changing the original commitment.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditResult(
+                        null,
+                      )
+                    }
+                    style={
+                      styles.closeModalButton
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    padding:
+                      '12px 14px',
+                    marginBottom:
+                      '14px',
+                    border:
+                      '1px solid #dbeafe',
+                    background:
+                      '#eff6ff',
+                    borderRadius:
+                      '10px',
+                    color:
+                      '#1e3a5f',
+                    fontSize:
+                      '0.84rem',
+                    lineHeight:
+                      1.45,
+                  }}
+                >
+                  <strong>
+                    {editResult.packageCode ||
+                      'Weekly'}
+                  </strong>
+                  {' · '}
+                  {editResult.activityDescription}
+
+                  <div
+                    style={{
+                      marginTop:
+                        '4px',
+                      color:
+                        '#64748b',
+                    }}
+                  >
+                    Original commitment: {' '}
+                    {editResult.plannedQuantity ||
+                      '—'}{' '}
+                    {editResult.unit || ''}
+                  </div>
+                </div>
+
+                <FormField label="Result">
+                  <select
+                    value={
+                      editResult.result
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setEditResult(
+                        {
+                          ...editResult,
+                          result:
+                            event.target.value,
+                        },
+                      )
+                    }
+                    style={
+                      styles.select
+                    }
+                  >
+                    <option value="completed">
+                      Completed
+                    </option>
+
+                    <option value="not_completed">
+                      Missed
+                    </option>
+                  </select>
+                </FormField>
+
+                <FormField label="Actual Quantity">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={
+                      editResult.actualQuantity
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setEditResult(
+                        {
+                          ...editResult,
+                          actualQuantity:
+                            event.target.value,
+                        },
+                      )
+                    }
+                    style={
+                      styles.input
+                    }
+                  />
+                </FormField>
+
+                {editResult.result ===
+                  'not_completed' && (
+                  <>
+                    <FormField label="Reason for Variance">
+                      <select
+                        value={
+                          editResult.varianceReason
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setEditResult(
+                            {
+                              ...editResult,
+                              varianceReason:
+                                event.target.value,
+                            },
+                          )
+                        }
+                        style={
+                          styles.select
+                        }
+                      >
+                        <option value="">
+                          Select reason
+                        </option>
+
+                        {VARIANCE_REASONS.map(
+                          (reason) => (
+                            <option
+                              key={
+                                reason.value
+                              }
+                              value={
+                                reason.value
+                              }
+                            >
+                              {reason.label}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </FormField>
+
+                    <FormField label="Variance Notes">
+                      <textarea
+                        rows="4"
+                        value={
+                          editResult.varianceNotes
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setEditResult(
+                            {
+                              ...editResult,
+                              varianceNotes:
+                                event.target.value,
+                            },
+                          )
+                        }
+                        style={{
+                          ...styles.input,
+                          resize:
+                            'vertical',
+                        }}
+                        placeholder="Describe what prevented completion."
+                      />
+                    </FormField>
+                  </>
+                )}
+
+                {editResult.result ===
+                  'completed' &&
+                  editResult.plannedQuantity && (
+                    <div
+                      style={{
+                        padding:
+                          '10px 12px',
+                        marginTop:
+                          '2px',
+                        border:
+                          '1px solid #bbf7d0',
+                        background:
+                          '#f0fdf4',
+                        borderRadius:
+                          '8px',
+                        color:
+                          '#166534',
+                        fontSize:
+                          '0.8rem',
+                      }}
+                    >
+                      Completed requires Actual Qty. to be at least the committed Planned Qty.
+                    </div>
+                  )}
+
+                <div
+                  style={
+                    styles.modalFooter
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditResult(
+                        null,
+                      )
+                    }
+                    style={
+                      styles.secondaryButton
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      actionLoading
+                    }
+                    onClick={
+                      saveEditedResult
+                    }
+                    style={
+                      editResult.result ===
+                      'not_completed'
+                        ? styles.dangerButton
+                        : styles.primaryButton
+                    }
+                  >
+                    Save Correction
+                  </button>
+                </div>
+              </div>
+            </ModalOverlay>
+          )}
+
+          {/* MISSED COMMITMENT MODAL */}
+
+          {missedCommitment && (
+            <ModalOverlay>
+              <div
+                style={
+                  styles.modal
+                }
+              >
+                <div
+                  style={
+                    styles.modalHeader
+                  }
+                >
+                  <div>
+                    <h2
+                      style={{
+                        margin: 0,
+                        color:
+                          '#0f2745',
+                      }}
+                    >
+                      Missed Commitment
+                    </h2>
+
+                    <p
+                      style={{
+                        margin:
+                          '5px 0 0 0',
+                        color:
+                          '#64748b',
+                        fontSize:
+                          '0.85rem',
+                      }}
+                    >
+                      Capture why the commitment was not completed.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMissedCommitment(
+                        null,
+                      )
+                    }
+                    style={
+                      styles.closeModalButton
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <FormField label="Reason for Variance">
+                  <select
+                    value={
+                      missedCommitment.varianceReason
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setMissedCommitment(
+                        {
+                          ...missedCommitment,
+                          varianceReason:
+                            event.target.value,
+                        },
+                      )
+                    }
+                    style={
+                      styles.select
+                    }
+                  >
+                    <option value="">
+                      Select reason
+                    </option>
+
+                    {VARIANCE_REASONS.map(
+                      (reason) => (
+                        <option
+                          key={
+                            reason.value
+                          }
+                          value={
+                            reason.value
+                          }
+                        >
+                          {reason.label}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </FormField>
+
+                <FormField label="Actual Quantity">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={
+                      missedCommitment.actualQuantity
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setMissedCommitment(
+                        {
+                          ...missedCommitment,
+                          actualQuantity:
+                            event.target.value,
+                        },
+                      )
+                    }
+                    style={
+                      styles.input
+                    }
+                  />
+                </FormField>
+
+                <FormField label="Variance Notes">
+                  <textarea
+                    rows="4"
+                    value={
+                      missedCommitment.varianceNotes
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setMissedCommitment(
+                        {
+                          ...missedCommitment,
+                          varianceNotes:
+                            event.target.value,
+                        },
+                      )
+                    }
+                    style={{
+                      ...styles.input,
+                      resize:
+                        'vertical',
+                    }}
+                    placeholder="Describe what prevented completion."
+                  />
+                </FormField>
+
+                <div
+                  style={
+                    styles.modalFooter
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMissedCommitment(
+                        null,
+                      )
+                    }
+                    style={
+                      styles.secondaryButton
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      actionLoading
+                    }
+                    onClick={
+                      saveMissedCommitment
+                    }
+                    style={
+                      styles.dangerButton
+                    }
+                  >
+                    Record Missed Commitment
+                  </button>
+                </div>
+              </div>
+            </ModalOverlay>
+          )}
+        </>
       )}
 
-    </div>
-  );
-}
-
-
-// ============================================================
-// COMPONENTS
-// ============================================================
-
-function SectionCard({
-  title,
-  subtitle,
-  children,
-}) {
-
-  return (
-    <section style={sectionCardStyle}>
-
-      <div style={sectionHeaderStyle}>
-
-        <div style={sectionHeadingStyle}>
-          {title}
-        </div>
-
-        {subtitle && (
-          <div style={sectionSupportingTextStyle}>
-            {subtitle}
-          </div>
-        )}
-
-      </div>
-
-
-      <div style={sectionContentStyle}>
-        {children}
-      </div>
-
-    </section>
-  );
-}
-
-
-function SummaryCard({
-  label,
-  value,
-  description,
-  alert,
-  positive,
-}) {
-
-  return (
-    <div
-      style={{
-        ...summaryCardStyle,
-
-        borderColor:
-          alert
-            ? '#fecaca'
-            : positive
-              ? '#bbf7d0'
-              : '#e2e8f0',
-
-        background:
-          alert
-            ? '#fff7f7'
-            : positive
-              ? '#f7fef9'
-              : '#ffffff',
-      }}
-    >
-
-      <div style={summaryLabelStyle}>
-        {label}
-      </div>
-
-      <div
-        style={{
-          ...summaryValueStyle,
-
-          color:
-            alert
-              ? '#b91c1c'
-              : positive
-                ? '#166534'
-                : '#0f172a',
-        }}
-      >
-        {value}
-      </div>
-
-      <div style={summaryDescriptionStyle}>
-        {description}
-      </div>
-
-    </div>
-  );
-}
-
-
-function DrawerMetric({
-  label,
-  value,
-  alert,
-}) {
-
-  return (
-    <div
-      style={{
-        ...drawerMetricStyle,
-
-        background:
-          alert
-            ? '#fff7f7'
-            : '#f8fafc',
-
-        borderColor:
-          alert
-            ? '#fecaca'
-            : '#e2e8f0',
-      }}
-    >
-
-      <div style={metaLabelStyle}>
-        {label}
-      </div>
-
-      <div
-        style={{
-          marginTop:
-            '5px',
-
-          color:
-            alert
-              ? '#b91c1c'
-              : '#0f172a',
-
-          fontSize:
-            '14px',
-
-          fontWeight:
-            900,
-        }}
-      >
-        {value}
-      </div>
-
-    </div>
-  );
-}
-
-
-function MiniSummary({
-  label,
-  value,
-}) {
-
-  return (
-    <div style={miniSummaryStyle}>
-
-      <div style={metaLabelStyle}>
-        {label}
-      </div>
-
-      <div style={miniSummaryValueStyle}>
-        {value ?? '—'}
-      </div>
-
-    </div>
-  );
-}
-
-
-function FilterField({
-  label,
-  children,
-}) {
-
-  return (
-    <div>
-
-      <label style={filterLabelStyle}>
-        {label}
-      </label>
-
-      {children}
-
-    </div>
-  );
-}
-
-
-function ModalField({
-  label,
-  children,
-}) {
-
-  return (
-    <div style={fieldStyle}>
-
-      <label style={modalLabelStyle}>
-        {label}
-      </label>
-
-      {children}
-
-    </div>
-  );
-}
-
-
-function DrawerSection({
-  title,
-  subtitle,
-  children,
-}) {
-
-  return (
-    <section style={drawerSectionStyle}>
-
-      <div style={drawerSectionHeadingStyle}>
-        {title}
-      </div>
-
-      {subtitle && (
-        <div style={drawerSectionSupportingTextStyle}>
-          {subtitle}
+      {loading && (
+        <div
+          style={{
+            marginTop:
+              '12px',
+            color:
+              '#64748b',
+            fontSize:
+              '0.85rem',
+          }}
+        >
+          Loading Weekly Planning...
         </div>
       )}
-
-      <div style={sectionBodyStyle}>
-        {children}
-      </div>
-
-    </section>
-  );
-}
-
-
-function ForecastCard({
-  label,
-  value,
-  description,
-  alert,
-}) {
-
-  return (
-    <div
-      style={{
-        ...forecastCardStyle,
-
-        background:
-          alert
-            ? '#fff7f7'
-            : '#f8fafc',
-
-        borderColor:
-          alert
-            ? '#fecaca'
-            : '#e2e8f0',
-      }}
-    >
-
-      <div style={metaLabelStyle}>
-        {label}
-      </div>
-
-      <div
-        style={{
-          marginTop:
-            '5px',
-
-          color:
-            alert
-              ? '#b91c1c'
-              : '#0f172a',
-
-          fontSize:
-            '15px',
-
-          fontWeight:
-            900,
-        }}
-      >
-        {value}
-      </div>
-
-      <div style={forecastDescriptionStyle}>
-        {description}
-      </div>
-
     </div>
   );
 }
 
+// ============================================================
+// SMALL COMPONENTS
+// ============================================================
 
-function ForecastDateFields({
-  requiredBy,
-  date,
-  setDate,
-  preview,
+function MetricCard({
+  label,
+  value,
+  footer,
+  accent = 'neutral',
 }) {
+  const accentStyle =
+    accent === 'success'
+      ? {
+          background:
+            '#f0fdf4',
+          borderColor:
+            '#bbf7d0',
+          color:
+            '#166534',
+        }
+      : accent === 'danger'
+        ? {
+            background:
+              '#fef2f2',
+            borderColor:
+              '#fecaca',
+            color:
+              '#991b1b',
+          }
+        : {
+            background:
+              '#ffffff',
+            borderColor:
+              '#e2e8f0',
+            color:
+              '#0f2745',
+          };
 
   return (
-    <>
-
-      <ModalField
-        label="New Planned Resolution Date *"
-      >
-        <input
-          type="date"
-          value={date}
-          onChange={(
-            event
-          ) =>
-            setDate(
-              event.target.value
-            )
-          }
-          style={
-            modalInputStyle
-          }
-        />
-      </ModalField>
-
-
+    <div
+      style={{
+        border: `1px solid ${accentStyle.borderColor}`,
+        background:
+          accentStyle.background,
+        borderRadius:
+          '10px',
+        padding:
+          '15px',
+      }}
+    >
       <div
         style={
-          preview?.delayed
-            ? delayAssessmentStyle
-            : safeAssessmentStyle
+          styles.smallLabel
         }
       >
-
-        <div style={metaLabelStyle}>
-          Schedule Exposure
-        </div>
-
-        <strong>
-          {preview?.label ||
-            'Select a date'}
-        </strong>
-
-        <div style={helperTextStyle}>
-          Required By:{' '}
-          {formatDate(
-            requiredBy
-          )}
-        </div>
-
+        {label}
       </div>
 
-    </>
-  );
-}
+      <div
+        style={{
+          fontSize:
+            '1.65rem',
+          fontWeight:
+            900,
+          color:
+            accentStyle.color,
+          marginTop:
+            '7px',
+        }}
+      >
+        {value}
+      </div>
 
-
-function StatusBadge({
-  label,
-  style,
-}) {
-
-  return (
-    <span
-      style={{
-        ...badgeBaseStyle,
-
-        background:
-          style.background,
-
-        border:
-          `1px solid ${style.border}`,
-
-        color:
-          style.color,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-
-function ExposureBadge({
-  status,
-  days,
-}) {
-
-  const exposed =
-    status ===
-    'exposed';
-
-
-  return (
-    <div
-      style={{
-        ...exposureBadgeStyle,
-
-        borderColor:
-          exposed
-            ? '#fecaca'
-            : '#bbf7d0',
-
-        background:
-          exposed
-            ? '#fef2f2'
-            : '#f0fdf4',
-
-        color:
-          exposed
-            ? '#b91c1c'
-            : '#166534',
-      }}
-    >
-
-      <strong>
-        {getExposureLabel(
-          days
-        )}
-      </strong>
-
-      <span style={exposureStatusTextStyle}>
-        {exposed
-          ? 'EXPOSED'
-          : 'PROTECTED'}
-      </span>
-
+      {footer && (
+        <div
+          style={{
+            fontSize:
+              '0.72rem',
+            color:
+              '#64748b',
+            marginTop:
+              '5px',
+          }}
+        >
+          {footer}
+        </div>
+      )}
     </div>
   );
 }
 
-
-function LifecycleStage({
-  label,
-  active,
+function ExecutionBadge({
+  result,
 }) {
-
-  return (
-    <span
-      style={{
-        ...lifecycleStageStyle,
-
-        borderColor:
-          active
-            ? '#2563eb'
-            : '#e2e8f0',
-
-        background:
-          active
-            ? '#eff6ff'
-            : '#ffffff',
-
-        color:
-          active
-            ? '#1d4ed8'
-            : '#64748b',
-
-        fontWeight:
-          active
-            ? 900
-            : 700,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-
-function LifecycleButton({
-  label,
-  description,
-  onClick,
-  emphasis,
-  warning,
-  danger,
-}) {
-
   let background =
-    '#ffffff';
-
-  let border =
-    '#cbd5e1';
+    '#f1f5f9';
 
   let color =
-    '#334155';
+    '#475569';
 
+  let label =
+    'Pending';
 
-  if (emphasis) {
+  if (
+    result === 'completed'
+  ) {
     background =
-      '#f0fdf4';
-
-    border =
-      '#86efac';
+      '#dcfce7';
 
     color =
       '#166534';
+
+    label =
+      'Completed';
   }
 
-
-  if (warning) {
+  if (
+    result ===
+    'not_completed'
+  ) {
     background =
-      '#fff7ed';
-
-    border =
-      '#fdba74';
+      '#fee2e2';
 
     color =
-      '#9a3412';
+      '#991b1b';
+
+    label =
+      'Missed';
   }
 
-
-  if (danger) {
+  if (
+    result ===
+    'not_applicable'
+  ) {
     background =
-      '#fef2f2';
-
-    border =
-      '#fecaca';
+      '#e2e8f0';
 
     color =
-      '#b91c1c';
-  }
+      '#475569';
 
+    label =
+      'N/A';
+  }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <span
       style={{
-        ...lifecycleButtonStyle,
-
+        ...styles.miniBadge,
         background,
-
-        border:
-          `1px solid ${border}`,
-
         color,
       }}
     >
-
-      <strong>
-        {label}
-      </strong>
-
-      <span style={lifecycleDescriptionStyle}>
-        {description}
-      </span>
-
-    </button>
+      {label}
+    </span>
   );
 }
 
-
-function ActionPanel({
-  title,
-  description,
+function TableHeader({
   children,
 }) {
-
   return (
-    <div style={actionPanelStyle}>
-
-      <div style={actionPanelTitleStyle}>
-        {title}
-      </div>
-
-      <div style={actionPanelDescriptionStyle}>
-        {description}
-      </div>
-
-      <div style={actionPanelBodyStyle}>
-        {children}
-      </div>
-
-    </div>
-  );
-}
-
-
-function LifecycleActionPanel({
-  title,
-  description,
-  label,
-  value,
-  setValue,
-  saving,
-  confirmLabel,
-  onCancel,
-  onConfirm,
-  positive,
-  danger,
-}) {
-
-  return (
-    <ActionPanel
-      title={title}
-      description={description}
+    <th
+      style={{
+        background:
+          '#0f2745',
+        color:
+          '#ffffff',
+        padding:
+          '11px 10px',
+        textAlign:
+          'left',
+        fontSize:
+          '0.75rem',
+        letterSpacing:
+          '0.02em',
+        borderRight:
+          '1px solid #27476d',
+        position:
+          'sticky',
+        top: 0,
+        zIndex: 2,
+      }}
     >
-
-      <ModalField
-        label={label}
-      >
-        <textarea
-          value={value}
-          onChange={(
-            event
-          ) =>
-            setValue(
-              event.target.value
-            )
-          }
-          style={
-            smallTextareaStyle
-          }
-        />
-      </ModalField>
-
-
-      <ActionButtons
-        saving={saving}
-        confirmLabel={
-          confirmLabel
-        }
-        onCancel={onCancel}
-        onConfirm={onConfirm}
-        positive={positive}
-        danger={danger}
-      />
-
-    </ActionPanel>
+      {children}
+    </th>
   );
 }
 
-
-function ActionButtons({
-  saving,
-  confirmLabel,
-  onCancel,
-  onConfirm,
-  positive,
-  warning,
-  danger,
-}) {
-
-  let style =
-    primaryButtonStyle;
-
-
-  if (positive) {
-    style =
-      successPrimaryButtonStyle;
-  }
-
-
-  if (warning) {
-    style =
-      warningPrimaryButtonStyle;
-  }
-
-
-  if (danger) {
-    style =
-      dangerPrimaryButtonStyle;
-  }
-
-
-  return (
-    <div style={rightActionsStyle}>
-
-      <button
-        type="button"
-        onClick={onCancel}
-        style={
-          secondaryButtonStyle
-        }
-      >
-        Cancel
-      </button>
-
-
-      <button
-        type="button"
-        disabled={saving}
-        onClick={onConfirm}
-        style={style}
-      >
-        {saving
-          ? 'Processing...'
-          : confirmLabel}
-      </button>
-
-    </div>
-  );
-}
-
-
-function RecoveryActionCard({
-  action,
-  selected,
-  activePanel,
-  note,
-  setNote,
-  effectiveness,
-  setEffectiveness,
-  saving,
-  onOpenPanel,
-  onClosePanel,
-  onStart,
-  onComplete,
-  onEvaluate,
-  onCancel,
-}) {
-
-  return (
-    <div style={recoveryActionCardStyle}>
-
-      <div style={recoveryActionHeaderStyle}>
-
-        <div>
-
-          <div style={recoveryActionTitleRowStyle}>
-
-            <strong>
-              {action.action_title}
-            </strong>
-
-
-            <StatusBadge
-              label={
-                getStatusLabel(
-                  action.status
-                )
-              }
-              style={
-                getStatusStyle(
-                  action.status
-                )
-              }
-            />
-
-          </div>
-
-
-          <div style={recoveryActionApproachStyle}>
-            {formatLabel(
-              action
-                .response_approach
-            )}
-
-            {' · '}
-
-            {formatLabel(
-              action
-                .expected_impact
-            )}
-          </div>
-
-        </div>
-
-
-        <div style={recoveryActionDueStyle}>
-          Due{' '}
-          <strong>
-            {formatDate(
-              action.due_date
-            )}
-          </strong>
-        </div>
-
-      </div>
-
-
-      {action.action_description && (
-        <div style={recoveryActionDescriptionStyle}>
-          {action.action_description}
-        </div>
-      )}
-
-
-      <div style={recoveryActionMetaGridStyle}>
-
-        <div>
-
-          <div style={metaLabelStyle}>
-            Responsible
-          </div>
-
-          <strong>
-            {action
-              .responsible_party}
-          </strong>
-
-        </div>
-
-
-        <div>
-
-          <div style={metaLabelStyle}>
-            Effectiveness
-          </div>
-
-          <StatusBadge
-            label={
-              action.effectiveness ===
-                'not_evaluated'
-                ? 'Not Evaluated'
-                : formatLabel(
-                    action.effectiveness
-                  )
-            }
-            style={
-              getEffectivenessStyle(
-                action.effectiveness
-              )
-            }
-          />
-
-        </div>
-
-      </div>
-
-
-      {action.effectiveness_notes && (
-        <div style={effectivenessNotesStyle}>
-          {action.effectiveness_notes}
-        </div>
-      )}
-
-
-      <div style={recoveryActionButtonsStyle}>
-
-        {action.status ===
-          'open' && (
-          <button
-            type="button"
-            onClick={() =>
-              onOpenPanel(
-                action.id,
-                'start'
-              )
-            }
-            style={
-              smallActionButtonStyle
-            }
-          >
-            Start
-          </button>
-        )}
-
-
-        {[
-          'open',
-          'in_progress',
-        ].includes(
-          action.status
-        ) && (
-          <button
-            type="button"
-            onClick={() =>
-              onOpenPanel(
-                action.id,
-                'complete'
-              )
-            }
-            style={
-              smallPositiveButtonStyle
-            }
-          >
-            Complete
-          </button>
-        )}
-
-
-        {action.status ===
-          'completed' &&
-          action.effectiveness ===
-            'not_evaluated' && (
-          <button
-            type="button"
-            onClick={() =>
-              onOpenPanel(
-                action.id,
-                'evaluate'
-              )
-            }
-            style={
-              smallEvaluationButtonStyle
-            }
-          >
-            Evaluate
-          </button>
-        )}
-
-
-        {[
-          'open',
-          'in_progress',
-        ].includes(
-          action.status
-        ) && (
-          <button
-            type="button"
-            onClick={() =>
-              onOpenPanel(
-                action.id,
-                'cancel'
-              )
-            }
-            style={
-              smallDangerButtonStyle
-            }
-          >
-            Cancel
-          </button>
-        )}
-
-      </div>
-
-
-      {selected &&
-        activePanel ===
-          'start' && (
-        <ActionPanel
-          title="Start Recovery Action"
-          description="Move this action to In Progress."
-        >
-
-          <ModalField
-            label="Optional Comment"
-          >
-            <textarea
-              value={note}
-              onChange={(
-                event
-              ) =>
-                setNote(
-                  event.target.value
-                )
-              }
-              style={
-                smallTextareaStyle
-              }
-            />
-          </ModalField>
-
-
-          <ActionButtons
-            saving={saving}
-            confirmLabel="Start"
-            onCancel={
-              onClosePanel
-            }
-            onConfirm={() =>
-              onStart(
-                action.id
-              )
-            }
-          />
-
-        </ActionPanel>
-      )}
-
-
-      {selected &&
-        activePanel ===
-          'complete' && (
-        <ActionPanel
-          title="Complete Recovery Action"
-          description="Completion does not automatically resolve the parent constraint."
-        >
-
-          <ModalField
-            label="Completion Note *"
-          >
-            <textarea
-              value={note}
-              onChange={(
-                event
-              ) =>
-                setNote(
-                  event.target.value
-                )
-              }
-              style={
-                smallTextareaStyle
-              }
-            />
-          </ModalField>
-
-
-          <ActionButtons
-            saving={saving}
-            confirmLabel="Mark Completed"
-            positive
-            onCancel={
-              onClosePanel
-            }
-            onConfirm={() =>
-              onComplete(
-                action.id
-              )
-            }
-          />
-
-        </ActionPanel>
-      )}
-
-
-      {selected &&
-        activePanel ===
-          'evaluate' && (
-        <ActionPanel
-          title="Evaluate Effectiveness"
-          description="Determine whether this action actually protected or improved the plan."
-        >
-
-          <ModalField
-            label="Effectiveness *"
-          >
-            <select
-              value={
-                effectiveness
-              }
-              onChange={(
-                event
-              ) =>
-                setEffectiveness(
-                  event.target.value
-                )
-              }
-              style={
-                modalInputStyle
-              }
-            >
-              {EFFECTIVENESS_OPTIONS.map(
-                (option) => (
-                  <option
-                    key={
-                      option.value
-                    }
-                    value={
-                      option.value
-                    }
-                  >
-                    {option.label}
-                  </option>
-                )
-              )}
-            </select>
-          </ModalField>
-
-
-          <ModalField
-            label="Effectiveness Notes *"
-          >
-            <textarea
-              value={note}
-              onChange={(
-                event
-              ) =>
-                setNote(
-                  event.target.value
-                )
-              }
-              style={
-                smallTextareaStyle
-              }
-            />
-          </ModalField>
-
-
-          <ActionButtons
-            saving={saving}
-            confirmLabel="Save Evaluation"
-            onCancel={
-              onClosePanel
-            }
-            onConfirm={() =>
-              onEvaluate(
-                action.id
-              )
-            }
-          />
-
-        </ActionPanel>
-      )}
-
-
-      {selected &&
-        activePanel ===
-          'cancel' && (
-        <ActionPanel
-          title="Cancel Recovery Action"
-          description="Use when this action is no longer applicable."
-        >
-
-          <ModalField
-            label="Cancellation Reason *"
-          >
-            <textarea
-              value={note}
-              onChange={(
-                event
-              ) =>
-                setNote(
-                  event.target.value
-                )
-              }
-              style={
-                smallTextareaStyle
-              }
-            />
-          </ModalField>
-
-
-          <ActionButtons
-            saving={saving}
-            confirmLabel="Cancel Action"
-            danger
-            onCancel={
-              onClosePanel
-            }
-            onConfirm={() =>
-              onCancel(
-                action.id
-              )
-            }
-          />
-
-        </ActionPanel>
-      )}
-
-    </div>
-  );
-}
-
-
-function HistoryEntry({
-  entry,
-}) {
-
-  const statusChanged =
-    entry.status_from !==
-      entry.status_to &&
-    (
-      entry.status_from ||
-      entry.status_to
-    );
-
-
-  const forecastChanged =
-    entry
-      .previous_target_resolution_date !==
-      entry
-        .new_target_resolution_date &&
-    (
-      entry
-        .previous_target_resolution_date ||
-      entry
-        .new_target_resolution_date
-    );
-
-
-  return (
-    <div style={historyCardStyle}>
-
-      <div style={historyHeaderStyle}>
-
-        <div>
-
-          <strong>
-            {getActionTypeLabel(
-              entry.action_type
-            )}
-          </strong>
-
-          <div style={historyActorStyle}>
-            {entry.performed_by ||
-              'System / Legacy Record'}
-          </div>
-
-        </div>
-
-
-        <div style={historyDateStyle}>
-          {formatDateTime(
-            entry.created_at
-          )}
-        </div>
-
-      </div>
-
-
-      {statusChanged && (
-        <div style={historyChangeStyle}>
-
-          <span>
-            Status
-          </span>
-
-          <strong>
-            {getStatusLabel(
-              entry.status_from
-            )}
-
-            {' → '}
-
-            {getStatusLabel(
-              entry.status_to
-            )}
-          </strong>
-
-        </div>
-      )}
-
-
-      {forecastChanged && (
-        <div style={historyChangeStyle}>
-
-          <span>
-            Forecast
-          </span>
-
-          <strong>
-            {formatDate(
-              entry
-                .previous_target_resolution_date
-            )}
-
-            {' → '}
-
-            {formatDate(
-              entry
-                .new_target_resolution_date
-            )}
-          </strong>
-
-        </div>
-      )}
-
-
-      {entry.comment && (
-        <div style={historyCommentStyle}>
-          {entry.comment}
-        </div>
-      )}
-
-    </div>
-  );
-}
-
-
-function MessageBox({
-  type,
+function TableCell({
   children,
 }) {
+  return (
+    <td
+      style={{
+        padding:
+          '10px',
+        fontSize:
+          '0.82rem',
+        borderRight:
+          '1px solid #e2e8f0',
+        verticalAlign:
+          'middle',
+      }}
+    >
+      {children}
+    </td>
+  );
+}
 
+function ModalOverlay({
+  children,
+}) {
   return (
     <div
-      style={
-        type ===
-        'error'
-          ? errorMessageStyle
-          : successMessageStyle
-      }
+      style={{
+        position:
+          'fixed',
+        inset: 0,
+        background:
+          'rgba(15, 23, 42, 0.50)',
+        display:
+          'flex',
+        alignItems:
+          'center',
+        justifyContent:
+          'center',
+        padding:
+          '20px',
+        zIndex:
+          9999,
+      }}
     >
       {children}
     </div>
   );
 }
 
+function FormField({
+  label,
+  children,
+}) {
+  return (
+    <label
+      style={{
+        display:
+          'grid',
+        gap:
+          '6px',
+        marginBottom:
+          '13px',
+      }}
+    >
+      <span
+        style={{
+          fontSize:
+            '0.8rem',
+          fontWeight:
+            800,
+          color:
+            '#334155',
+        }}
+      >
+        {label}
+      </span>
+
+      {children}
+    </label>
+  );
+}
 
 // ============================================================
 // STYLES
 // ============================================================
 
-const pageStyle = {
-  minHeight:
-    '100%',
+const styles = {
+  card: {
+    background:
+      '#ffffff',
 
-  padding:
-    '0 24px 36px',
+    border:
+      '1px solid #e2e8f0',
 
-  background:
-    '#f8fafc',
+    borderRadius:
+      '10px',
 
-  color:
-    '#0f172a',
-};
+    padding:
+      '16px',
 
+    boxShadow:
+      '0 1px 2px rgba(15, 23, 42, 0.04)',
 
-// ============================================================
-// STANDARD PAGE SECTIONS
-// ============================================================
+    marginBottom:
+      '18px',
+  },
 
-const sectionCardStyle = {
-  marginBottom:
-    '10px',
+  emptyState: {
+    background:
+      '#ffffff',
 
-  border:
-    '1px solid #e2e8f0',
+    border:
+      '1px dashed #cbd5e1',
 
-  borderRadius:
-    '9px',
+    borderRadius:
+      '12px',
 
-  background:
-    '#ffffff',
+    minHeight:
+      '300px',
 
-  overflow:
-    'hidden',
-};
+    display:
+      'flex',
 
+    alignItems:
+      'center',
 
-const sectionHeaderStyle = {
-  minHeight:
-    '62px',
+    justifyContent:
+      'center',
 
-  padding:
-    '13px 14px 0',
-};
+    flexDirection:
+      'column',
 
+    textAlign:
+      'center',
 
-const sectionHeadingStyle = {
-  color:
-    '#0f172a',
+    padding:
+      '30px',
+  },
 
-  fontSize:
-    '18px',
+  tableEmpty: {
+    padding:
+      '28px',
 
-  fontWeight:
-    900,
+    textAlign:
+      'center',
 
-  lineHeight:
-    1.2,
-};
+    color:
+      '#64748b',
 
+    background:
+      '#f8fafc',
 
-const sectionSupportingTextStyle = {
-  marginTop:
-    '4px',
+    borderRadius:
+      '8px',
+  },
 
-  color:
-    '#94a3b8',
+  input: {
+    border:
+      '1px solid #cbd5e1',
 
-  fontSize:
-    '13px',
+    borderRadius:
+      '7px',
 
-  lineHeight:
-    1.45,
-};
+    padding:
+      '9px 10px',
 
+    fontSize:
+      '0.85rem',
 
-const sectionContentStyle = {
-  padding:
-    '10px 14px 12px',
-};
+    outline:
+      'none',
 
+    background:
+      '#ffffff',
 
-// ============================================================
-// SUMMARY
-// ============================================================
+    color:
+      '#0f172a',
 
-const summaryGridStyle = {
-  display:
-    'grid',
+    width:
+      '100%',
 
-  gridTemplateColumns:
-    'repeat(4,minmax(0,1fr))',
+    boxSizing:
+      'border-box',
+  },
 
-  gap:
-    '10px',
+  select: {
+    border:
+      '1px solid #cbd5e1',
 
-  margin:
-    0,
-};
+    borderRadius:
+      '7px',
 
+    padding:
+      '9px 10px',
 
-const summaryCardStyle = {
-  padding:
-    '14px',
+    minWidth:
+      '220px',
 
-  border:
-    '1px solid #e2e8f0',
+    fontSize:
+      '0.85rem',
 
-  borderRadius:
-    '8px',
+    outline:
+      'none',
 
-  background:
-    '#ffffff',
-};
+    background:
+      '#ffffff',
 
+    color:
+      '#0f172a',
+  },
 
-const summaryLabelStyle = {
-  color:
-    '#64748b',
+  tableInput: {
+    border:
+      '1px solid #cbd5e1',
 
-  fontSize:
-    '13px',
+    borderRadius:
+      '5px',
 
-  fontWeight:
-    900,
+    padding:
+      '6px 7px',
 
-  textTransform:
-    'uppercase',
-};
+    fontSize:
+      '0.78rem',
 
+    width:
+      '140px',
+  },
 
-const summaryValueStyle = {
-  marginTop:
-    '5px',
+  tableNumberInput: {
+    border:
+      '1px solid #cbd5e1',
 
-  fontSize:
-    '36px',
+    borderRadius:
+      '5px',
 
-  fontWeight:
-    900,
-};
+    padding:
+      '6px 7px',
 
+    fontSize:
+      '0.78rem',
 
-const summaryDescriptionStyle = {
-  marginTop:
-    '6px',
+    width:
+      '90px',
+  },
 
-  color:
-    '#94a3b8',
+  primaryButton: {
+    border:
+      'none',
 
-  fontSize:
-    '13px',
-};
+    borderRadius:
+      '7px',
 
+    background:
+      '#1d4ed8',
 
-// ============================================================
-// REGISTER FILTERS
-// ============================================================
+    color:
+      '#ffffff',
 
-const filterLabelStyle = {
-  display:
-    'block',
+    padding:
+      '9px 14px',
 
-  marginBottom:
-    '5px',
+    fontWeight:
+      800,
 
-  color:
-    '#475569',
+    fontSize:
+      '0.82rem',
 
-  fontSize:
-    '11px',
+    cursor:
+      'pointer',
+  },
 
-  fontWeight:
-    800,
-};
+  secondaryButton: {
+    border:
+      '1px solid #cbd5e1',
 
+    borderRadius:
+      '7px',
 
-const registerFiltersStyle = {
-  display:
-    'grid',
+    background:
+      '#ffffff',
 
-  gridTemplateColumns:
-    'repeat(5,minmax(125px,1fr))',
+    color:
+      '#334155',
 
-  gap:
-    '8px',
+    padding:
+      '9px 14px',
 
-  marginTop:
-    '10px',
-};
+    fontWeight:
+      700,
 
+    fontSize:
+      '0.82rem',
 
-const registerFilterInputStyle = {
-  width:
-    '100%',
+    cursor:
+      'pointer',
+  },
 
-  height:
-    '34px',
+  commitButton: {
+    border:
+      'none',
 
-  padding:
-    '0 8px',
+    borderRadius:
+      '7px',
 
-  border:
-    '1px solid #cbd5e1',
+    background:
+      '#0f766e',
 
-  borderRadius:
-    '5px',
+    color:
+      '#ffffff',
 
-  background:
-    '#ffffff',
+    padding:
+      '9px 14px',
 
-  color:
-    '#0f172a',
+    fontWeight:
+      800,
 
-  fontSize:
-    '11px',
-};
+    fontSize:
+      '0.82rem',
 
+    cursor:
+      'pointer',
+  },
 
-// ============================================================
-// SPLIT WORKSPACE
-// ============================================================
+  closeButton: {
+    border:
+      'none',
 
-const splitWorkspaceStyle = {
-  display:
-    'block',
+    borderRadius:
+      '7px',
 
-  width:
-    '100%',
-};
+    background:
+      '#0f2745',
 
+    color:
+      '#ffffff',
 
-const registerPanelStyle = {
-  minWidth:
-    0,
+    padding:
+      '9px 14px',
 
-  overflow:
-    'hidden',
+    fontWeight:
+      800,
 
-  border:
-    '1px solid #e2e8f0',
+    fontSize:
+      '0.82rem',
 
-  borderRadius:
-    '9px',
+    cursor:
+      'pointer',
+  },
 
-  background:
-    '#ffffff',
-};
+  dangerButton: {
+    border:
+      'none',
 
+    borderRadius:
+      '7px',
 
-const registerHeaderStyle = {
-  padding:
-    '12px 14px 10px',
+    background:
+      '#b91c1c',
 
-  borderBottom:
-    '1px solid #e2e8f0',
+    color:
+      '#ffffff',
 
-  background:
-    '#ffffff',
-};
+    padding:
+      '9px 14px',
 
+    fontWeight:
+      800,
 
-const registerHeaderTopStyle = {
-  display:
-    'flex',
+    fontSize:
+      '0.82rem',
 
-  alignItems:
-    'flex-start',
+    cursor:
+      'pointer',
+  },
 
-  justifyContent:
-    'space-between',
+  iconButton: {
+    width:
+      '36px',
 
-  gap:
-    '12px',
-};
+    height:
+      '36px',
 
+    border:
+      '1px solid #cbd5e1',
 
-const registerCountStyle = {
-  color:
-    '#64748b',
+    borderRadius:
+      '7px',
 
-  fontSize:
-    '12px',
+    background:
+      '#ffffff',
 
-  fontWeight:
-    700,
-};
+    color:
+      '#334155',
 
+    cursor:
+      'pointer',
 
-const tableContainerStyle = {
-  overflowX:
-    'auto',
+    fontWeight:
+      900,
+  },
 
-  overflowY:
-    'auto',
+  smallSecondaryButton: {
+    border:
+      '1px solid #cbd5e1',
 
-  maxHeight:
-    'calc(100vh - 445px)',
+    background:
+      '#ffffff',
 
-  minHeight:
-    '220px',
+    color:
+      '#334155',
 
-  scrollbarGutter:
-    'stable',
-};
+    borderRadius:
+      '5px',
 
+    padding:
+      '5px 7px',
 
-const tableStyle = {
-  width:
-    '100%',
+    fontSize:
+      '0.72rem',
 
-  minWidth:
-    '1200px',
+    fontWeight:
+      800,
 
-  borderCollapse:
-    'collapse',
+    cursor:
+      'pointer',
+  },
 
-  tableLayout:
-    'auto',
-};
+  smallSuccessButton: {
+    border:
+      '1px solid #86efac',
 
+    background:
+      '#f0fdf4',
 
-const headerCellStyle = {
-  position:
-    'sticky',
+    color:
+      '#166534',
 
-  top:
-    0,
+    borderRadius:
+      '5px',
 
-  zIndex:
-    5,
+    padding:
+      '5px 7px',
 
-  padding:
-    '11px 10px',
+    fontSize:
+      '0.72rem',
 
-  borderBottom:
-    '1px solid #cbd5e1',
+    fontWeight:
+      800,
 
-  background:
-    '#f8fafc',
+    cursor:
+      'pointer',
+  },
 
-  boxShadow:
-    '0 1px 0 #cbd5e1',
+  smallDangerButton: {
+    border:
+      '1px solid #fecaca',
 
-  color:
-    '#64748b',
+    background:
+      '#fef2f2',
 
-  fontSize:
-    '12px',
+    color:
+      '#991b1b',
 
-  fontWeight:
-    900,
+    borderRadius:
+      '5px',
 
-  textAlign:
-    'center',
-};
+    padding:
+      '5px 7px',
 
+    fontSize:
+      '0.72rem',
 
-const bodyCellStyle = {
-  padding:
-    '13px 11px',
+    fontWeight:
+      800,
 
-  borderBottom:
-    '1px solid #e2e8f0',
+    cursor:
+      'pointer',
+  },
 
-  fontSize:
-    '13px',
+  smallLabel: {
+    fontSize:
+      '0.72rem',
 
-  textAlign:
-    'center',
+    fontWeight:
+      800,
 
-  verticalAlign:
-    'middle',
-};
+    letterSpacing:
+      '0.05em',
 
+    color:
+      '#64748b',
 
-const leftCellStyle = {
-  ...bodyCellStyle,
+    textTransform:
+      'uppercase',
+  },
 
-  textAlign:
-    'left',
-};
+  secondaryMetricValue: {
+    marginTop:
+      '8px',
 
+    fontSize:
+      '1.35rem',
 
-const constraintTitleStyle = {
-  maxWidth:
-    '220px',
+    fontWeight:
+      900,
 
-  marginTop:
-    '4px',
+    color:
+      '#0f2745',
+  },
 
-  color:
-    '#475569',
+  statusBadge: {
+    display:
+      'inline-flex',
 
-  fontSize:
-    '13px',
+    alignItems:
+      'center',
 
-  lineHeight:
-    1.4,
-};
+    minHeight:
+      '32px',
 
+    padding:
+      '0 11px',
 
-const inlineBadgesStyle = {
-  display:
-    'flex',
+    borderRadius:
+      '999px',
 
-  gap:
-    '4px',
+    fontSize:
+      '0.75rem',
 
-  marginTop:
-    '5px',
+    fontWeight:
+      800,
+  },
 
-  flexWrap:
-    'wrap',
-};
+  draftBadge: {
+    background:
+      '#fef3c7',
 
+    color:
+      '#92400e',
+  },
 
-const blockingInlineStyle = {
-  padding:
-    '2px 5px',
+  committedBadge: {
+    background:
+      '#dbeafe',
 
-  borderRadius:
-    '999px',
+    color:
+      '#1d4ed8',
+  },
 
-  background:
-    '#fef2f2',
+  closedBadge: {
+    background:
+      '#dcfce7',
 
-  color:
-    '#b91c1c',
+    color:
+      '#166534',
+  },
 
-  fontSize:
-    '10px',
+  cancelledBadge: {
+    background:
+      '#f1f5f9',
 
-  fontWeight:
-    900,
-};
+    color:
+      '#64748b',
+  },
 
+  miniBadge: {
+    display:
+      'inline-block',
 
-const sourceInlineStyle = {
-  padding:
-    '2px 5px',
+    padding:
+      '4px 7px',
 
-  borderRadius:
-    '999px',
+    borderRadius:
+      '999px',
 
-  background:
-    '#eff6ff',
+    fontSize:
+      '0.7rem',
 
-  color:
-    '#1d4ed8',
+    fontWeight:
+      800,
 
-  fontSize:
-    '10px',
+    textTransform:
+      'capitalize',
+  },
 
-  fontWeight:
-    900,
-};
+  readinessBadge: {
+    display:
+      'inline-block',
 
+    minWidth:
+      '94px',
 
-const secondaryTextStyle = {
-  marginTop:
-    '3px',
+    textAlign:
+      'center',
 
-  color:
-    '#94a3b8',
+    padding:
+      '4px 8px',
 
-  fontSize:
-    '12px',
-};
+    borderRadius:
+      '999px',
 
+    fontSize:
+      '0.7rem',
 
-const effectivePriorityStackStyle = {
-  display:
-    'inline-flex',
+    fontWeight:
+      800,
+  },
 
-  flexDirection:
-    'column',
+  successBox: {
+    background:
+      '#f0fdf4',
 
-  alignItems:
-    'center',
+    border:
+      '1px solid #bbf7d0',
 
-  gap:
-    '3px',
-};
+    color:
+      '#166534',
 
+    borderRadius:
+      '8px',
 
-const autoLabelStyle = {
-  color:
-    '#b91c1c',
+    padding:
+      '10px 12px',
 
-  fontSize:
-    '10px',
+    marginBottom:
+      '14px',
 
-  fontWeight:
-    900,
+    fontSize:
+      '0.84rem',
+  },
 
-  letterSpacing:
-    '0.08em',
-};
+  errorBox: {
+    background:
+      '#fef2f2',
 
+    border:
+      '1px solid #fecaca',
 
-// ============================================================
-// BADGES
-// ============================================================
+    color:
+      '#991b1b',
 
-const badgeBaseStyle = {
-  display:
-    'inline-flex',
+    borderRadius:
+      '8px',
 
-  alignItems:
-    'center',
+    padding:
+      '10px 12px',
 
-  padding:
-    '4px 7px',
+    marginBottom:
+      '14px',
 
-  borderRadius:
-    '999px',
+    fontSize:
+      '0.84rem',
+  },
 
-  fontSize:
-    '11px',
+  modal: {
+    width:
+      '100%',
 
-  fontWeight:
-    900,
-};
+    maxWidth:
+      '560px',
 
+    maxHeight:
+      '90vh',
 
-const exposureBadgeStyle = {
-  display:
-    'inline-flex',
+    overflowY:
+      'auto',
 
-  flexDirection:
-    'column',
+    background:
+      '#ffffff',
 
-  alignItems:
-    'center',
+    borderRadius:
+      '12px',
 
-  gap:
-    '2px',
+    padding:
+      '20px',
 
-  padding:
-    '5px 7px',
+    boxShadow:
+      '0 24px 60px rgba(15, 23, 42, 0.25)',
+  },
 
-  border:
-    '1px solid',
+  modalLarge: {
+    width:
+      '100%',
 
-  borderRadius:
-    '6px',
+    maxWidth:
+      '980px',
 
-  fontSize:
-    '11px',
-};
+    maxHeight:
+      '90vh',
 
+    overflowY:
+      'auto',
 
-const exposureStatusTextStyle = {
-  fontSize:
-    '9px',
+    background:
+      '#ffffff',
 
-  fontWeight:
-    900,
+    borderRadius:
+      '12px',
 
-  letterSpacing:
-    '0.08em',
-};
+    padding:
+      '20px',
 
+    boxShadow:
+      '0 24px 60px rgba(15, 23, 42, 0.25)',
+  },
 
-const blockingPillStyle = {
-  ...badgeBaseStyle,
+  modalHeader: {
+    display:
+      'flex',
 
-  border:
-    '1px solid #fecaca',
+    justifyContent:
+      'space-between',
 
-  background:
-    '#fef2f2',
+    gap:
+      '15px',
 
-  color:
-    '#b91c1c',
-};
+    alignItems:
+      'flex-start',
 
+    marginBottom:
+      '18px',
+  },
 
-// ============================================================
-// BUTTONS
-// ============================================================
+  modalFooter: {
+    display:
+      'flex',
 
-const primaryButtonStyle = {
-  height:
-    '42px',
+    justifyContent:
+      'flex-end',
 
-  padding:
-    '0 12px',
+    gap:
+      '8px',
 
-  border:
-    '1px solid #2563eb',
+    marginTop:
+      '18px',
 
-  borderRadius:
-    '6px',
+    paddingTop:
+      '14px',
 
-  background:
-    '#2563eb',
+    borderTop:
+      '1px solid #e2e8f0',
+  },
 
-  color:
-    '#ffffff',
+  closeModalButton: {
+    border:
+      'none',
 
-  fontSize:
-    '14px',
+    background:
+      'transparent',
 
-  fontWeight:
-    900,
+    color:
+      '#64748b',
 
-  cursor:
-    'pointer',
-};
+    fontSize:
+      '1.6rem',
 
+    cursor:
+      'pointer',
 
-const successPrimaryButtonStyle = {
-  ...primaryButtonStyle,
-
-  border:
-    '1px solid #16a34a',
-
-  background:
-    '#16a34a',
-};
-
-
-const warningPrimaryButtonStyle = {
-  ...primaryButtonStyle,
-
-  border:
-    '1px solid #ea580c',
-
-  background:
-    '#ea580c',
-};
-
-
-const dangerPrimaryButtonStyle = {
-  ...primaryButtonStyle,
-
-  border:
-    '1px solid #dc2626',
-
-  background:
-    '#dc2626',
-};
-
-
-const secondaryButtonStyle = {
-  height:
-    '42px',
-
-  padding:
-    '0 11px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '14px',
-
-  fontWeight:
-    800,
-
-  cursor:
-    'pointer',
-};
-
-
-const secondaryActionButtonStyle = {
-  ...secondaryButtonStyle,
-
-  border:
-    '1px solid #bfdbfe',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-};
-
-
-const manageButtonStyle = {
-  height:
-    '34px',
-
-  padding:
-    '0 9px',
-
-  border:
-    '1px solid #93c5fd',
-
-  borderRadius:
-    '5px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
-};
-
-
-// ============================================================
-// CENTERED CONSTRAINT MANAGEMENT MODAL
-// ============================================================
-
-const managementModalOverlayStyle = {
-  position:
-    'fixed',
-
-  inset:
-    0,
-
-  zIndex:
-    9800,
-
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  padding:
-    '24px',
-
-  background:
-    'rgba(15,23,42,0.58)',
-
-  backdropFilter:
-    'blur(2px)',
-};
-
-
-const drawerStyle = {
-  display:
-    'flex',
-
-  flexDirection:
-    'column',
-
-  width:
-    'min(1180px, calc(100vw - 48px))',
-
-  height:
-    'min(880px, calc(100vh - 48px))',
-
-  maxWidth:
-    '1180px',
-
-  maxHeight:
-    'calc(100vh - 48px)',
-
-  overflow:
-    'hidden',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '14px',
-
-  background:
-    '#ffffff',
-
-  boxShadow:
-    '0 28px 80px rgba(15,23,42,0.32)',
-};
-
-
-const drawerHeaderStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '12px',
-
-  padding:
-    '16px 18px',
-
-  borderBottom:
-    '1px solid #e2e8f0',
-
-  background:
-    '#ffffff',
-
-  flexShrink:
-    0,
-};
-
-
-const drawerEyebrowStyle = {
-  color:
-    '#2563eb',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    900,
-
-  letterSpacing:
-    '0.08em',
-};
-
-
-const drawerTitleRowStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '6px',
-
-  marginTop:
-    '4px',
-
-  flexWrap:
-    'wrap',
-};
-
-
-const drawerTitleStyle = {
-  margin:
-    0,
-
-  fontSize:
-    '20px',
-
-  fontWeight:
-    900,
-};
-
-
-const drawerConstraintTitleStyle = {
-  marginTop:
-    '5px',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '14px',
-
-  fontWeight:
-    700,
-
-  lineHeight:
-    1.4,
-};
-
-
-const drawerPriorityRowStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '8px',
-
-  marginTop:
-    '9px',
-
-  flexWrap:
-    'wrap',
-};
-
-
-const drawerMetaLabelStyle = {
-  marginRight:
-    '4px',
-
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    900,
-
-  textTransform:
-    'uppercase',
-};
-
-
-const closeButtonStyle = {
-  width:
-    '31px',
-
-  height:
-    '31px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '22px',
-
-  cursor:
-    'pointer',
-};
-
-
-const drawerSummaryStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(3,minmax(0,1fr))',
-
-  gap:
-    '8px',
-
-  padding:
-    '10px 18px',
-
-  borderBottom:
-    '1px solid #e2e8f0',
-
-  background:
-    '#f8fafc',
-
-  flexShrink:
-    0,
-};
-
-
-const drawerMetricStyle = {
-  padding:
-    '8px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '6px',
-};
-
-
-const drawerTabsStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(5,minmax(0,1fr))',
-
-  borderBottom:
-    '1px solid #e2e8f0',
-
-  flexShrink:
-    0,
-};
-
-
-const drawerTabStyle = {
-  minHeight:
-    '46px',
-
-  padding:
-    '5px 3px',
-
-  border:
-    'none',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
-};
-
-
-const drawerBodyStyle = {
-  flex:
-    1,
-
-  minHeight:
-    0,
-
-  overflowY:
-    'auto',
-
-  padding:
-    '16px 18px',
-
-  background:
-    '#f8fafc',
-};
-
-
-const drawerFooterStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '8px',
-
-  padding:
-    '10px 18px',
-
-  borderTop:
-    '1px solid #e2e8f0',
-
-  background:
-    '#ffffff',
-
-  flexShrink:
-    0,
-};
-
-
-const footerMetaStyle = {
-  color:
-    '#64748b',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-};
-
-
-const drawerSectionStyle = {
-  marginBottom:
-    '9px',
-
-  padding:
-    '11px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '8px',
-
-  background:
-    '#ffffff',
-};
-
-
-const drawerSectionHeadingStyle = {
-  color:
-    '#0f172a',
-
-  fontSize:
-    '16px',
-
-  fontWeight:
-    900,
-};
-
-
-const drawerSectionSupportingTextStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '12px',
-
-  lineHeight:
-    1.4,
-};
-
-
-const sectionBodyStyle = {
-  marginTop:
-    '11px',
-};
-
-
-const fieldStyle = {
-  marginBottom:
-    '11px',
-};
-
-
-const modalLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '5px',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '13px',
-
-  fontWeight:
-    800,
-};
-
-
-const modalInputStyle = {
-  width:
-    '100%',
-
-  height:
-    '42px',
-
-  padding:
-    '0 8px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '14px',
-};
-
-
-const modalTextareaStyle = {
-  width:
-    '100%',
-
-  minHeight:
-    '90px',
-
-  padding:
-    '8px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontFamily:
-    'inherit',
-
-  fontSize:
-    '14px',
-
-  resize:
-    'vertical',
-};
-
-
-const smallTextareaStyle = {
-  ...modalTextareaStyle,
-
-  minHeight:
-    '78px',
-};
-
-
-const checkboxStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '7px',
-
-  marginBottom:
-    '11px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f8fafc',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    700,
-};
-
-
-const rightActionsStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'flex-end',
-
-  gap:
-    '7px',
-
-  flexWrap:
-    'wrap',
-};
-
-
-const autoPriorityNoticeStyle = {
-  marginBottom:
-    '11px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#991b1b',
-
-  fontSize:
-    '11px',
-
-  lineHeight:
-    1.45,
-};
-
-
-// ============================================================
-// LIFECYCLE
-// ============================================================
-
-const lifecycleFlowStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '4px',
-
-  marginBottom:
-    '10px',
-
-  flexWrap:
-    'wrap',
-};
-
-
-const lifecycleStageStyle = {
-  padding:
-    '4px 6px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '999px',
-
-  fontSize:
-    '11px',
-};
-
-
-const lifecycleArrowStyle = {
-  color:
-    '#cbd5e1',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
-};
-
-
-const lifecycleButtonsGridStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(2,minmax(0,1fr))',
-
-  gap:
-    '6px',
-};
-
-
-const lifecycleButtonStyle = {
-  display:
-    'flex',
-
-  flexDirection:
-    'column',
-
-  padding:
-    '9px',
-
-  borderRadius:
-    '6px',
-
-  textAlign:
-    'left',
-
-  fontSize:
-    '12px',
-
-  cursor:
-    'pointer',
-};
-
-
-const lifecycleDescriptionStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '11px',
-};
-
-
-// ============================================================
-// ACTION PANEL
-// ============================================================
-
-const actionPanelStyle = {
-  marginTop:
-    '10px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #bfdbfe',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#f8fbff',
-};
-
-
-const actionPanelTitleStyle = {
-  fontSize:
-    '14px',
-
-  fontWeight:
-    900,
-};
-
-
-const actionPanelDescriptionStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '12px',
-
-  lineHeight:
-    1.4,
-};
-
-
-const actionPanelBodyStyle = {
-  marginTop:
-    '10px',
-};
-
-
-// ============================================================
-// FORECAST
-// ============================================================
-
-const forecastStackStyle = {
-  display:
-    'grid',
-
-  gap:
-    '7px',
-
-  marginBottom:
-    '10px',
-};
-
-
-const forecastCardStyle = {
-  padding:
-    '10px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-};
-
-
-const forecastDescriptionStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '12px',
-
-  lineHeight:
-    1.4,
-};
-
-
-const metaLabelStyle = {
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    900,
-
-  textTransform:
-    'uppercase',
-};
-
-
-const forecastButtonStyle = {
-  height:
-    '38px',
-
-  padding:
-    '0 10px',
-
-  border:
-    '1px solid #fdba74',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff7ed',
-
-  color:
-    '#9a3412',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
-};
-
-
-const reopenButtonStyle = {
-  ...forecastButtonStyle,
-
-  marginTop:
-    '8px',
-
-  border:
-    '1px solid #f97316',
-
-  background:
-    '#fff7ed',
-
-  color:
-    '#c2410c',
-};
-
-
-const delayAssessmentStyle = {
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '12px',
-};
-
-
-const safeAssessmentStyle = {
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #bbf7d0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-
-  fontSize:
-    '12px',
-};
-
-
-const helperTextStyle = {
-  marginTop:
-    '4px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '11px',
-};
-
-
-const criticalEscalationStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '8px',
-
-  marginBottom:
-    '10px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#991b1b',
-
-  fontSize:
-    '12px',
-};
-
-
-const noticeTextStyle = {
-  marginTop:
-    '3px',
-
-  fontSize:
-    '11px',
-
-  lineHeight:
-    1.4,
-};
-
-
-const warningBoxStyle = {
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #fde68a',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fffbeb',
-
-  color:
-    '#92400e',
-
-  fontSize:
-    '11px',
-
-  lineHeight:
-    1.4,
-};
-
-
-const reopenNoticeStyle = {
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #fdba74',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff7ed',
-
-  color:
-    '#9a3412',
-
-  fontSize:
-    '11px',
-};
-
-
-const inlineValidationStyle = {
-  marginTop:
-    '5px',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-};
-
-
-const reopenTransitionStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    '1fr auto 1fr',
-
-  alignItems:
-    'center',
-
-  gap:
-    '8px',
-
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  fontSize:
-    '12px',
-};
-
-
-const reopenArrowStyle = {
-  color:
-    '#cbd5e1',
-
-  fontSize:
-    '20px',
-
-  fontWeight:
-    900,
-};
-
-
-// ============================================================
-// ACTION PLAN
-// ============================================================
-
-const actionSummaryGridStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(3,minmax(0,1fr))',
-
-  gap:
-    '6px',
-
-  marginBottom:
-    '10px',
-};
-
-
-const miniSummaryStyle = {
-  padding:
-    '8px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f8fafc',
-};
-
-
-const miniSummaryValueStyle = {
-  marginTop:
-    '4px',
-
-  fontSize:
-    '13px',
-
-  fontWeight:
-    900,
-};
-
-
-const addRecoveryButtonStyle = {
-  height:
-    '38px',
-
-  padding:
-    '0 10px',
-
-  border:
-    '1px solid #93c5fd',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
-};
-
-
-const actionPlanEmptyStyle = {
-  marginTop:
-    '10px',
-
-  padding:
-    '14px',
-
-  border:
-    '1px dashed #cbd5e1',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '12px',
-};
-
-
-const emptyDescriptionStyle = {
-  marginTop:
-    '4px',
-
-  fontSize:
-    '11px',
-
-  lineHeight:
-    1.4,
-};
-
-
-const recoveryActionListStyle = {
-  display:
-    'grid',
-
-  gap:
-    '8px',
-
-  marginTop:
-    '10px',
-};
-
-
-const recoveryActionCardStyle = {
-  padding:
-    '10px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#f8fafc',
-};
-
-
-const recoveryActionHeaderStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '8px',
-
-  flexWrap:
-    'wrap',
-
-  fontSize:
-    '12px',
-};
-
-
-const recoveryActionTitleRowStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  gap:
-    '5px',
-
-  flexWrap:
-    'wrap',
-};
-
-
-const recoveryActionApproachStyle = {
-  marginTop:
-    '4px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-};
-
-
-const recoveryActionDueStyle = {
-  color:
-    '#475569',
-
-  fontSize:
-    '11px',
-};
-
-
-const recoveryActionDescriptionStyle = {
-  marginTop:
-    '8px',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '12px',
-
-  lineHeight:
-    1.4,
-};
-
-
-const recoveryActionMetaGridStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(2,minmax(0,1fr))',
-
-  gap:
-    '8px',
-
-  marginTop:
-    '9px',
-
-  fontSize:
-    '11px',
-};
-
-
-const effectivenessNotesStyle = {
-  marginTop:
-    '8px',
-
-  padding:
-    '7px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '5px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '11px',
-};
-
-
-const recoveryActionButtonsStyle = {
-  display:
-    'flex',
-
-  gap:
-    '5px',
-
-  flexWrap:
-    'wrap',
-
-  marginTop:
-    '9px',
-};
-
-
-const smallActionButtonStyle = {
-  height:
-    '32px',
-
-  padding:
-    '0 8px',
-
-  border:
-    '1px solid #93c5fd',
-
-  borderRadius:
-    '5px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    800,
-
-  cursor:
-    'pointer',
-};
-
-
-const smallPositiveButtonStyle = {
-  ...smallActionButtonStyle,
-
-  border:
-    '1px solid #86efac',
-
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-};
-
-
-const smallEvaluationButtonStyle = {
-  ...smallActionButtonStyle,
-
-  border:
-    '1px solid #c4b5fd',
-
-  background:
-    '#f5f3ff',
-
-  color:
-    '#6d28d9',
-};
-
-
-const smallDangerButtonStyle = {
-  ...smallActionButtonStyle,
-
-  border:
-    '1px solid #fecaca',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#b91c1c',
-};
-
-
-// ============================================================
-// AFFECTED WORK
-// ============================================================
-
-const affectedCardStyle = {
-  marginBottom:
-    '7px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#f8fafc',
-};
-
-
-const affectedHeaderStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '8px',
-
-  fontSize:
-    '12px',
-};
-
-
-const sourceBadgeStyle = {
-  padding:
-    '3px 6px',
-
-  border:
-    '1px solid #bfdbfe',
-
-  borderRadius:
-    '999px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    800,
-};
-
-
-const affectedLocationStyle = {
-  marginTop:
-    '4px',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    700,
-};
-
-
-const affectedDateStyle = {
-  marginTop:
-    '6px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '11px',
-};
-
-
-// ============================================================
-// HISTORY
-// ============================================================
-
-const historyCardStyle = {
-  marginBottom:
-    '8px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#f8fafc',
-
-  fontSize:
-    '11px',
-};
-
-
-const historyHeaderStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '8px',
-};
-
-
-const historyActorStyle = {
-  marginTop:
-    '3px',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '10px',
-};
-
-
-const historyDateStyle = {
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '10px',
-};
-
-
-const historyChangeStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    '60px 1fr',
-
-  gap:
-    '6px',
-
-  marginTop:
-    '7px',
-};
-
-
-const historyCommentStyle = {
-  marginTop:
-    '7px',
-
-  paddingTop:
-    '7px',
-
-  borderTop:
-    '1px solid #e2e8f0',
-
-  color:
-    '#475569',
-
-  lineHeight:
-    1.4,
-};
-
-
-// ============================================================
-// CREATE MODAL
-// ============================================================
-
-const modalOverlayStyle = {
-  position:
-    'fixed',
-
-  inset:
-    0,
-
-  zIndex:
-    9500,
-
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  padding:
-    '20px',
-
-  background:
-    'rgba(15,23,42,0.62)',
-};
-
-
-const createModalStyle = {
-  width:
-    'min(620px,96vw)',
-
-  maxHeight:
-    '92vh',
-
-  overflowY:
-    'auto',
-
-  borderRadius:
-    '10px',
-
-  background:
-    '#ffffff',
-
-  boxShadow:
-    '0 24px 70px rgba(15,23,42,0.30)',
-};
-
-
-const createModalHeaderStyle = {
-  display:
-    'flex',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '20px',
-
-  padding:
-    '16px 18px',
-
-  borderBottom:
-    '1px solid #e2e8f0',
-};
-
-
-const createModalTitleStyle = {
-  margin:
-    '4px 0 0',
-
-  fontSize:
-    '22px',
-};
-
-
-const createFormStyle = {
-  padding:
-    '18px',
-};
-
-
-// ============================================================
-// MESSAGES / EMPTY
-// ============================================================
-
-const emptyStyle = {
-  padding:
-    '38px',
-
-  textAlign:
-    'center',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '13px',
-};
-
-
-const emptyInnerStyle = {
-  padding:
-    '14px',
-
-  border:
-    '1px dashed #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#64748b',
-
-  textAlign:
-    'center',
-
-  fontSize:
-    '12px',
-};
-
-
-const errorMessageStyle = {
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '12px',
-};
-
-
-const successMessageStyle = {
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #bbf7d0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-
-  fontSize:
-    '12px',
+    lineHeight:
+      1,
+  },
 };
