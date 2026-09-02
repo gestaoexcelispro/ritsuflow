@@ -2909,15 +2909,35 @@ export default function LocationBreakdownPage() {
                                                 </div>
                                               </div>
 
-                                              <button
-                                                type="button"
-                                                className={styles.zoneEditButton}
-                                                onClick={() =>
-                                                  openEditLocationModal(location)
+                                              <div
+                                                className={
+                                                  styles.zoneLocationActions
                                                 }
                                               >
-                                                Assign zone
-                                              </button>
+                                                <button
+                                                  type="button"
+                                                  className={styles.zoneEditButton}
+                                                  onClick={() =>
+                                                    openEditLocationModal(location)
+                                                  }
+                                                  disabled={isSaving}
+                                                >
+                                                  Assign zone
+                                                </button>
+
+                                                <button
+                                                  type="button"
+                                                  className={
+                                                    styles.zoneDeleteButton
+                                                  }
+                                                  onClick={() =>
+                                                    deleteLocation(location)
+                                                  }
+                                                  disabled={isSaving}
+                                                >
+                                                  Delete
+                                                </button>
+                                              </div>
                                             </div>
                                           ))}
                                         </div>
