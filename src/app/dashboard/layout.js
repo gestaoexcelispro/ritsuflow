@@ -26,15 +26,20 @@ import styles from './dashboard.module.css'
 // RitsuFlow™
 // DASHBOARD NAVIGATION
 //
-// No external icon library required.
+// Product navigation follows the user's workflow rather than
+// exposing every underlying database/domain structure.
 //
-// Expanded:
-// [icon] Page Name
+// Project Setup will progressively become the unified project
+// definition workspace:
 //
-// Collapsed:
-// [icon]
-//    ↓ hover
-// Page Name tooltip
+// General
+// → Scope
+// → Locations
+// → Allocation
+// → Production Parameters
+//
+// Existing Location Structure and Work Packages routes remain
+// available temporarily during the migration.
 // ============================================================
 
 
@@ -87,25 +92,6 @@ function NavIcon({
         <svg {...commonProps}>
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.2 19.3a1.7 1.7 0 0 0-1.4.4l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.7 8.2a1.7 1.7 0 0 0-.4-1.4l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.8 4.7a1.7 1.7 0 0 0 1.4-.4l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.1.4.3.7.6 1 .3.2.7.4 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.7.6z" />
-        </svg>
-      )
-
-
-    case 'location':
-      return (
-        <svg {...commonProps}>
-          <path d="M12 21s6-5 6-11a6 6 0 1 0-12 0c0 6 6 11 6 11z" />
-          <circle cx="12" cy="10" r="2" />
-        </svg>
-      )
-
-
-    case 'packages':
-      return (
-        <svg {...commonProps}>
-          <path d="M4 7l8-4 8 4-8 4z" />
-          <path d="M4 12l8 4 8-4" />
-          <path d="M4 17l8 4 8-4" />
         </svg>
       )
 
@@ -210,7 +196,13 @@ function NavIcon({
         <svg {...commonProps}>
           <path d="M12 3L2.5 20h19z" />
           <path d="M12 9v4" />
-          <circle cx="12" cy="16.5" r=".7" fill="currentColor" stroke="none" />
+          <circle
+            cx="12"
+            cy="16.5"
+            r=".7"
+            fill="currentColor"
+            stroke="none"
+          />
         </svg>
       )
 
@@ -302,18 +294,6 @@ const baseNavigationGroups = [
         label: 'Project Setup',
         href: '/dashboard/projects/setup',
         icon: 'setup',
-      },
-
-      {
-        label: 'Location Structure',
-        href: '/dashboard/projects/locations',
-        icon: 'location',
-      },
-
-      {
-        label: 'Work Packages',
-        href: '/dashboard/projects/work-packages',
-        icon: 'packages',
       },
 
     ],
@@ -445,6 +425,21 @@ const platformNavigationGroup = {
   ],
 
 }
+
+
+// ============================================================
+// LEGACY PROJECT SETUP ROUTES
+//
+// These routes remain available while their functionality is
+// progressively absorbed into the unified Project Setup page.
+// ============================================================
+
+const projectSetupLegacyRoutes = [
+
+  '/dashboard/projects/locations',
+  '/dashboard/projects/work-packages',
+
+]
 
 
 // ============================================================
@@ -677,6 +672,23 @@ export default function DashboardLayout({
 
 
   // ==========================================================
+  // LEGACY PROJECT SETUP ROUTE
+  // ==========================================================
+
+  const isProjectSetupLegacyRoute =
+    projectSetupLegacyRoutes.some(
+      (
+        legacyRoute
+      ) =>
+        pathname ===
+          legacyRoute ||
+        pathname.startsWith(
+          `${legacyRoute}/`
+        )
+    )
+
+
+  // ==========================================================
   // ACTIVE ROUTE
   // ==========================================================
 
@@ -706,6 +718,25 @@ export default function DashboardLayout({
       return (
         pathname ===
         href
+      )
+
+    }
+
+
+    if (
+      href ===
+      '/dashboard/projects/setup'
+    ) {
+
+      return (
+        pathname ===
+          href ||
+        pathname ===
+          `${href}/` ||
+        pathname.startsWith(
+          `${href}/`
+        ) ||
+        isProjectSetupLegacyRoute
       )
 
     }
@@ -1453,7 +1484,7 @@ export default function DashboardLayout({
                                       position:
                                         'absolute',
 
-                                      left:
+                                    left:
                                         '-5px',
 
                                       top:
