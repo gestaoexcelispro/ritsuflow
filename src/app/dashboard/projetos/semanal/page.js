@@ -34,30 +34,44 @@ const VARIANCE_REASONS = [
 const MAKE_READY_CATEGORIES = [
   {
     key: 'projects_information_status',
+    sourceKey: 'projects_information_source',
+    category: 'projects_information',
     label: 'Projects / Information',
   },
   {
     key: 'materials_status',
+    sourceKey: 'materials_source',
+    category: 'materials',
     label: 'Materials',
   },
   {
     key: 'labor_status',
+    sourceKey: 'labor_source',
+    category: 'labor',
     label: 'Labor',
   },
   {
     key: 'equipment_status',
+    sourceKey: 'equipment_source',
+    category: 'equipment',
     label: 'Equipment',
   },
   {
     key: 'space_status',
+    sourceKey: 'space_source',
+    category: 'space',
     label: 'Space',
   },
   {
     key: 'predecessor_status',
+    sourceKey: 'predecessor_source',
+    category: 'predecessor',
     label: 'Predecessor',
   },
   {
     key: 'external_conditions_status',
+    sourceKey: 'external_conditions_source',
+    category: 'external_conditions',
     label: 'External Conditions',
   },
 ];
@@ -271,16 +285,26 @@ function planStatusLabel(status) {
   }
 }
 
-function makeReadyStatusLabel(status) {
+function makeReadyStatusLabel(
+  status,
+  source,
+) {
+  if (
+    status === 'clear' &&
+    source === 'constraint_cleared'
+  ) {
+    return 'Yes 🔒';
+  }
+
   switch (status) {
     case 'clear':
-      return 'Clear';
+      return 'Yes';
 
     case 'not_applicable':
       return 'N/A';
 
     case 'constrained':
-      return 'Constrained';
+      return 'No 🔒';
 
     case 'not_assessed':
       return 'Not Assessed';
@@ -290,11 +314,22 @@ function makeReadyStatusLabel(status) {
   }
 }
 
-function makeReadyStatusStyle(status) {
+function makeReadyStatusStyle(
+  status,
+  source,
+) {
   if (
-    status === 'clear' ||
-    status === 'not_applicable'
+    status === 'clear' &&
+    source === 'constraint_cleared'
   ) {
+    return {
+      background: '#dbeafe',
+      color: '#1d4ed8',
+      border: '1px solid #bfdbfe',
+    };
+  }
+
+  if (status === 'clear') {
     return {
       background: '#dcfce7',
       color: '#166534',
@@ -315,6 +350,31 @@ function makeReadyStatusStyle(status) {
     color: '#64748b',
     border: '1px solid #e2e8f0',
   };
+}
+
+function constraintLifecycleLabel(
+  constraint,
+) {
+  if (!constraint) {
+    return 'Constraint Blocking';
+  }
+
+  switch (constraint.status) {
+    case 'resolved':
+      return 'Resolved — Awaiting Verification';
+
+    case 'in_progress':
+      return 'Active Constraint — In Progress';
+
+    case 'waiting':
+      return 'Active Constraint — Waiting';
+
+    case 'open':
+      return 'Active Constraint';
+
+    default:
+      return 'Constraint Blocking';
+  }
 }
 
 // ============================================================
@@ -396,6 +456,11 @@ export default function WeeklyPlanningPage() {
   const [
     workPackages,
     setWorkPackages,
+  ] = useState([]);
+
+  const [
+    constraintLifecycle,
+    setConstraintLifecycle,
   ] = useState([]);
 
   const [
@@ -498,6 +563,50 @@ export default function WeeklyPlanningPage() {
   const selectedPackageReady =
     selectedWorkPackage?.readiness_is_clear ===
     true;
+
+  const getConstraintForCategory =
+    useCallback(
+      (category) => {
+        if (!selectedWorkPackage) {
+          return null;
+        }
+
+        const matches =
+          constraintLifecycle.filter(
+            (constraint) =>
+              constraint.koskela_sheet_row_id ===
+                selectedWorkPackage.sheet_row_id &&
+              constraint.koskela_category ===
+                category.category,
+          );
+
+        if (matches.length === 0) {
+          return null;
+        }
+
+        const lifecyclePriority = {
+          open: 1,
+          in_progress: 2,
+          waiting: 3,
+          resolved: 4,
+          cleared: 5,
+          cancelled: 6,
+        };
+
+        return [...matches].sort(
+          (a, b) =>
+            (lifecyclePriority[a.status] || 99) -
+              (lifecyclePriority[b.status] || 99) ||
+            String(b.updated_at || '').localeCompare(
+              String(a.updated_at || ''),
+            ),
+        )[0];
+      },
+      [
+        constraintLifecycle,
+        selectedWorkPackage,
+      ],
+    );
 
   const blockingCategories =
     selectedWorkPackage
@@ -825,6 +934,61 @@ export default function WeeklyPlanningPage() {
   useEffect(() => {
     loadWorkPackages();
   }, [loadWorkPackages]);
+
+  // ==========================================================
+  // LOAD CONSTRAINT LIFECYCLE FOR MAKE READY EXPLANATION
+  // ==========================================================
+
+  const loadConstraintLifecycle =
+    useCallback(
+      async () => {
+        if (
+          !selectedProjectId ||
+          !weeklyPlan?.lookahead_plan_id
+        ) {
+          setConstraintLifecycle([]);
+          return;
+        }
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from(
+              'constraint_management_overview',
+            )
+            .select(
+              'id,status,current_outlook,blocking,sheet_readiness_assessment_id,koskela_sheet_row_id,koskela_lookahead_plan_id,koskela_category,koskela_package_code,resolved_at,verified_at,cleared_at,updated_at',
+            )
+            .eq(
+              'project_id',
+              selectedProjectId,
+            )
+            .eq(
+              'koskela_lookahead_plan_id',
+              weeklyPlan.lookahead_plan_id,
+            );
+
+        if (error) {
+          console.error(error);
+          setConstraintLifecycle([]);
+          return;
+        }
+
+        setConstraintLifecycle(
+          data || [],
+        );
+      },
+      [
+        selectedProjectId,
+        weeklyPlan?.lookahead_plan_id,
+      ],
+    );
+
+  useEffect(() => {
+    loadConstraintLifecycle();
+  }, [loadConstraintLifecycle]);
 
   // ==========================================================
   // CREATE WEEKLY PLAN
@@ -3539,8 +3703,8 @@ export default function WeeklyPlanningPage() {
                               }}
                             >
                               {selectedPackageReady
-                                ? 'Ready'
-                                : 'Not Ready'}
+                                ? 'READY TO COMMIT'
+                                : 'NOT READY TO COMMIT'}
                             </span>
                           )}
                         </div>
@@ -3575,6 +3739,11 @@ export default function WeeklyPlanningPage() {
                                       category.key
                                     ];
 
+                                  const source =
+                                    selectedWorkPackage[
+                                      category.sourceKey
+                                    ];
+
                                   return (
                                     <div
                                       key={
@@ -3607,11 +3776,13 @@ export default function WeeklyPlanningPage() {
                                           ...styles.readinessBadge,
                                           ...makeReadyStatusStyle(
                                             status,
+                                            source,
                                           ),
                                         }}
                                       >
                                         {makeReadyStatusLabel(
                                           status,
+                                          source,
                                         )}
                                       </span>
                                     </div>
@@ -3649,7 +3820,20 @@ export default function WeeklyPlanningPage() {
                                       800,
                                   }}
                                 >
-                                  ✓ Make Ready complete. This Work Package can move to Weekly Planning.
+                                  <div>
+                                    READY TO COMMIT
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      marginTop:
+                                        '4px',
+                                      fontWeight:
+                                        600,
+                                    }}
+                                  >
+                                    {selectedWorkPackage.satisfied_category_count} of 7 Make Ready conditions satisfied. This Work Package can move to Weekly Planning.
+                                  </div>
                                 </div>
                               ) : (
                                 <div
@@ -3669,16 +3853,29 @@ export default function WeeklyPlanningPage() {
                                   }}
                                 >
                                   <strong>
-                                    Activity blocked.
+                                    NOT READY TO COMMIT
                                   </strong>
 
                                   <div
                                     style={{
                                       marginTop:
-                                        '6px',
+                                        '4px',
+                                      color:
+                                        '#7f1d1d',
                                     }}
                                   >
-                                    Resolve or assess:
+                                    {selectedWorkPackage.satisfied_category_count} of 7 Make Ready conditions satisfied.
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      marginTop:
+                                        '10px',
+                                      fontWeight:
+                                        700,
+                                    }}
+                                  >
+                                    Outstanding Make Ready conditions:
                                   </div>
 
                                   <ul
@@ -3691,15 +3888,60 @@ export default function WeeklyPlanningPage() {
                                     {blockingCategories.map(
                                       (
                                         category,
-                                      ) => (
-                                        <li
-                                          key={
+                                      ) => {
+                                        const status =
+                                          selectedWorkPackage[
                                             category.key
-                                          }
-                                        >
-                                          {category.label}
-                                        </li>
-                                      ),
+                                          ];
+
+                                        const constraint =
+                                          getConstraintForCategory(
+                                            category,
+                                          );
+
+                                        let reason =
+                                          'Not Assessed';
+
+                                        if (
+                                          status ===
+                                          'constrained'
+                                        ) {
+                                          reason =
+                                            constraintLifecycleLabel(
+                                              constraint,
+                                            );
+                                        } else if (
+                                          status &&
+                                          status !==
+                                            'not_assessed'
+                                        ) {
+                                          reason =
+                                            makeReadyStatusLabel(
+                                              status,
+                                              selectedWorkPackage[
+                                                category.sourceKey
+                                              ],
+                                            );
+                                        }
+
+                                        return (
+                                          <li
+                                            key={
+                                              category.key
+                                            }
+                                            style={{
+                                              marginBottom:
+                                                '4px',
+                                            }}
+                                          >
+                                            <strong>
+                                              {category.label}
+                                            </strong>
+                                            {' — '}
+                                            {reason}
+                                          </li>
+                                        );
+                                      },
                                     )}
                                   </ul>
                                 </div>
