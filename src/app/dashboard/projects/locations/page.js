@@ -2629,6 +2629,17 @@ export default function LocationBreakdownPage() {
                               >
                                 + Floor
                               </button>
+
+                              <button
+                                type="button"
+                                className={`${styles.hierarchyTextAction} ${styles.deleteAction}`}
+                                onClick={() =>
+                                  deleteZone(group.building)
+                                }
+                                disabled={isSaving}
+                              >
+                                Delete
+                              </button>
                             </>
                           )}
                         </div>
@@ -2712,6 +2723,17 @@ export default function LocationBreakdownPage() {
                                       }
                                     >
                                       + Zone
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      className={`${styles.hierarchyTextAction} ${styles.deleteAction}`}
+                                      onClick={() =>
+                                        deleteZone(floor)
+                                      }
+                                      disabled={isSaving}
+                                    >
+                                      Delete
                                     </button>
                                   </div>
                                 </div>
@@ -2913,6 +2935,13 @@ export default function LocationBreakdownPage() {
                                                 className={
                                                   styles.zoneLocationActions
                                                 }
+                                                style={{
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'flex-end',
+                                                  gap: '12px',
+                                                  flexShrink: 0,
+                                                }}
                                               >
                                                 <button
                                                   type="button"
@@ -2921,6 +2950,19 @@ export default function LocationBreakdownPage() {
                                                     openEditLocationModal(location)
                                                   }
                                                   disabled={isSaving}
+                                                  style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    padding: '6px 8px',
+                                                    border: 'none',
+                                                    background: 'transparent',
+                                                    color: '#005f8f',
+                                                    fontWeight: 800,
+                                                    cursor: isSaving
+                                                      ? 'not-allowed'
+                                                      : 'pointer',
+                                                  }}
                                                 >
                                                   Assign zone
                                                 </button>
@@ -2934,6 +2976,19 @@ export default function LocationBreakdownPage() {
                                                     deleteLocation(location)
                                                   }
                                                   disabled={isSaving}
+                                                  style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    padding: '6px 8px',
+                                                    border: 'none',
+                                                    background: 'transparent',
+                                                    color: '#b42318',
+                                                    fontWeight: 800,
+                                                    cursor: isSaving
+                                                      ? 'not-allowed'
+                                                      : 'pointer',
+                                                  }}
                                                 >
                                                   Delete
                                                 </button>
