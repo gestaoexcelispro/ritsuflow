@@ -921,7 +921,10 @@ export default function WeeklyPlanningPage() {
         }
 
         setWorkPackages(
-          data || [],
+          (data || []).filter(
+            (workPackage) =>
+              workPackage.package_code !== 'BUF',
+          ),
         );
       },
       [
