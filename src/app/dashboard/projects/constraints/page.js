@@ -493,9 +493,14 @@ export default function WeeklyPlanningPage() {
   ] = useState(null);
 
   const [
-    editResult,
-    setEditResult,
-  ] = useState(null);
+    executionEditMode,
+    setExecutionEditMode,
+  ] = useState(false);
+
+  const [
+    executionEditSnapshot,
+    setExecutionEditSnapshot,
+  ] = useState([]);
 
   const [
     loading,
@@ -563,6 +568,13 @@ export default function WeeklyPlanningPage() {
     items.filter(
       (item) =>
         item.is_unplanned_work,
+    );
+
+  const missedFormalItems =
+    formalItems.filter(
+      (item) =>
+        item.execution_result ===
+        'not_completed',
     );
 
   const selectedPackageReady =
@@ -1722,170 +1734,200 @@ export default function WeeklyPlanningPage() {
     };
 
   // ==========================================================
-  // EDIT EXECUTION RESULT
+  // CONTROLLED EXECUTION EDIT MODE
   // ==========================================================
 
-  const openEditResultModal =
-    (item) => {
-      if (
-        !isCommitted ||
-        item.is_unplanned_work ||
-        ![
-          'completed',
-          'not_completed',
-        ].includes(
-          item.execution_result,
-        )
-      ) {
+  const beginExecutionEdit =
+    () => {
+      if (!isCommitted) {
         return;
       }
 
-      setEditResult({
-        itemId: item.id,
+      clearMessages();
 
-        activityDescription:
-          item.activity_description || '',
+      setExecutionEditSnapshot(
+        items.map(
+          (item) => ({
+            ...item,
+          }),
+        ),
+      );
 
-        packageCode:
-          item.package_code || '',
-
-        plannedQuantity:
-          item.planned_quantity !== null &&
-          item.planned_quantity !== undefined
-            ? String(
-                item.planned_quantity,
-              )
-            : '',
-
-        unit:
-          item.unit || '',
-
-        result:
-          item.execution_result,
-
-        completedAt:
-          item.completed_at || null,
-
-        actualQuantity:
-          item.actual_quantity !== null &&
-          item.actual_quantity !== undefined
-            ? String(
-                item.actual_quantity,
-              )
-            : '',
-
-        varianceReason:
-          item.variance_reason || '',
-
-        varianceNotes:
-          item.variance_notes || '',
-      });
+      setExecutionEditMode(true);
     };
 
-  const saveEditedResult =
+  const cancelExecutionEdit =
+    () => {
+      setItems(
+        executionEditSnapshot.map(
+          (item) => ({
+            ...item,
+          }),
+        ),
+      );
+
+      setExecutionEditSnapshot([]);
+      setExecutionEditMode(false);
+      clearMessages();
+    };
+
+  const updateExecutionDraft =
+    (
+      itemId,
+      patch,
+    ) => {
+      setItems(
+        (previous) =>
+          previous.map(
+            (item) =>
+              item.id === itemId
+                ? {
+                    ...item,
+                    ...patch,
+                  }
+                : item,
+          ),
+      );
+    };
+
+  const saveExecutionChanges =
     async () => {
-      if (!editResult) {
+      if (
+        !isCommitted ||
+        !executionEditMode
+      ) {
         return;
       }
 
-      const plannedQuantity =
-        numberOrNull(
-          editResult.plannedQuantity,
+      const editableItems =
+        items.filter(
+          (item) =>
+            !item.is_unplanned_work,
         );
 
-      const actualQuantity =
-        numberOrNull(
-          editResult.actualQuantity,
-        );
-
-      if (
-        editResult.result ===
-          'completed' &&
-        plannedQuantity !== null &&
-        (
-          actualQuantity === null ||
-          actualQuantity < plannedQuantity
-        )
+      for (
+        const item of editableItems
       ) {
-        setErrorMessage(
-          'Completed is not allowed while Actual Qty. is lower than Planned Qty. Select Missed and record the Reason for Variance.',
-        );
+        const plannedQuantity =
+          numberOrNull(
+            item.planned_quantity,
+          );
 
-        return;
-      }
+        const actualQuantity =
+          numberOrNull(
+            item.actual_quantity,
+          );
 
-      if (
-        editResult.result ===
-          'not_completed' &&
-        !editResult.varianceReason
-      ) {
-        setErrorMessage(
-          'Reason for Variance is required for a missed commitment.',
-        );
+        if (
+          item.execution_result ===
+            'completed' &&
+          plannedQuantity !== null &&
+          (
+            actualQuantity === null ||
+            actualQuantity <
+              plannedQuantity
+          )
+        ) {
+          setErrorMessage(
+            `"${item.activity_description}" cannot be Completed because Actual Qty. is lower than Planned Qty. Select Missed and record the Reason for Variance.`,
+          );
 
-        return;
+          return;
+        }
+
+        if (
+          item.execution_result ===
+            'not_completed' &&
+          !item.variance_reason
+        ) {
+          setErrorMessage(
+            `Reason for Variance is required for "${item.activity_description}".`,
+          );
+
+          return;
+        }
       }
 
       clearMessages();
       setActionLoading(true);
 
       try {
-        const isCompleted =
-          editResult.result ===
-          'completed';
+        for (
+          const item of editableItems
+        ) {
+          const isCompleted =
+            item.execution_result ===
+            'completed';
 
-        const {
-          error,
-        } =
-          await supabase
-            .from(
-              'weekly_plan_items',
-            )
-            .update({
-              execution_result:
-                editResult.result,
+          const isMissed =
+            item.execution_result ===
+            'not_completed';
 
-              actual_quantity:
-                actualQuantity,
+          const {
+            error,
+          } =
+            await supabase
+              .from(
+                'weekly_plan_items',
+              )
+              .update({
+                actual_quantity:
+                  numberOrNull(
+                    item.actual_quantity,
+                  ),
 
-              completed_at:
-                isCompleted
-                  ? editResult.completedAt ||
-                    new Date().toISOString()
-                  : null,
+                execution_result:
+                  item.execution_result,
 
-              variance_reason:
-                isCompleted
-                  ? null
-                  : editResult.varianceReason,
+                completed_at:
+                  isCompleted
+                    ? item.completed_at ||
+                      new Date().toISOString()
+                    : null,
 
-              variance_notes:
-                isCompleted
-                  ? null
-                  : editResult.varianceNotes.trim() ||
-                    null,
-            })
-            .eq(
-              'id',
-              editResult.itemId,
-            );
+                variance_reason:
+                  isMissed
+                    ? item.variance_reason ||
+                      null
+                    : null,
 
-        if (error) {
-          throw error;
+                variance_notes:
+                  isMissed
+                    ? (
+                        item.variance_notes ||
+                        ''
+                      ).trim() ||
+                      null
+                    : null,
+
+                variance_recorded_at:
+                  isMissed
+                    ? new Date().toISOString()
+                    : null,
+              })
+              .eq(
+                'id',
+                item.id,
+              );
+
+          if (error) {
+            throw error;
+          }
         }
 
-        const editedActivity =
-          editResult.activityDescription;
-
-        setEditResult(null);
+        setExecutionEditSnapshot([]);
+        setExecutionEditMode(false);
 
         setMessage(
-          `Execution result for "${editedActivity}" updated. PPC and Reasons for Variance were recalculated.`,
+          'Weekly execution information updated. PPC and Reasons for Variance were recalculated.',
         );
 
         await loadWeeklyPlan();
       } catch (error) {
         showError(error);
+        await loadWeeklyPlan();
+        setExecutionEditSnapshot([]);
+        setExecutionEditMode(false);
       } finally {
         setActionLoading(false);
       }
@@ -2456,27 +2498,80 @@ export default function WeeklyPlanningPage() {
 
               {isCommitted && (
                 <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowUnplannedPanel(true)
-                    }
-                    style={styles.secondaryButton}
-                  >
-                    + Add Unplanned Work
-                  </button>
+                  {!executionEditMode ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={
+                          actionLoading
+                        }
+                        onClick={
+                          beginExecutionEdit
+                        }
+                        style={
+                          styles.secondaryButton
+                        }
+                      >
+                        Edit Results
+                      </button>
 
-                  <button
-                    type="button"
-                    disabled={
-                      !canClose ||
-                      actionLoading
-                    }
-                    onClick={closeWeek}
-                    style={styles.closeButton}
-                  >
-                    Close Week
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowUnplannedPanel(true)
+                        }
+                        style={
+                          styles.secondaryButton
+                        }
+                      >
+                        + Add Unplanned Work
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={
+                          !canClose ||
+                          actionLoading
+                        }
+                        onClick={closeWeek}
+                        style={styles.closeButton}
+                      >
+                        Close Week
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={
+                          actionLoading
+                        }
+                        onClick={
+                          cancelExecutionEdit
+                        }
+                        style={
+                          styles.secondaryButton
+                        }
+                      >
+                        Cancel Changes
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={
+                          actionLoading
+                        }
+                        onClick={
+                          saveExecutionChanges
+                        }
+                        style={
+                          styles.primaryButton
+                        }
+                      >
+                        Save Changes
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </>
@@ -3198,10 +3293,61 @@ export default function WeeklyPlanningPage() {
                               <TableCell>
                                 {isCommitted &&
                                 (
-                                  item.is_unplanned_work ||
-                                  item.execution_result ===
-                                    'pending'
+                                  executionEditMode &&
+                                  !item.is_unplanned_work
                                 ) ? (
+                                  <div>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      value={
+                                        item.actual_quantity ??
+                                        ''
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        updateExecutionDraft(
+                                          item.id,
+                                          {
+                                            actual_quantity:
+                                              numberOrNull(
+                                                event.target.value,
+                                              ),
+                                          },
+                                        )
+                                      }
+                                      style={
+                                        styles.tableNumberInput
+                                      }
+                                    />
+
+                                    {quantityAchievement !==
+                                      null && (
+                                      <div
+                                        style={{
+                                          fontSize:
+                                            '0.72rem',
+                                          color:
+                                            '#64748b',
+                                          marginTop:
+                                            '4px',
+                                        }}
+                                      >
+                                        {quantityAchievement.toFixed(
+                                          1,
+                                        )}
+                                        %
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : isCommitted &&
+                                  (
+                                    item.is_unplanned_work ||
+                                    item.execution_result ===
+                                      'pending'
+                                  ) ? (
                                   <div>
                                     <input
                                       type="number"
@@ -3348,41 +3494,180 @@ export default function WeeklyPlanningPage() {
                               </TableCell>
 
                               <TableCell>
-                                <ExecutionBadge
-                                  result={
-                                    item.execution_result
-                                  }
-                                />
+                                {executionEditMode &&
+                                isCommitted &&
+                                !item.is_unplanned_work ? (
+                                  <select
+                                    value={
+                                      item.execution_result ||
+                                      'pending'
+                                    }
+                                    onChange={(
+                                      event,
+                                    ) => {
+                                      const nextResult =
+                                        event.target.value;
+
+                                      updateExecutionDraft(
+                                        item.id,
+                                        {
+                                          execution_result:
+                                            nextResult,
+
+                                          variance_reason:
+                                            nextResult ===
+                                            'not_completed'
+                                              ? item.variance_reason
+                                              : null,
+
+                                          variance_notes:
+                                            nextResult ===
+                                            'not_completed'
+                                              ? item.variance_notes
+                                              : null,
+                                        },
+                                      );
+                                    }}
+                                    style={{
+                                      ...styles.select,
+                                      minWidth:
+                                        '118px',
+                                    }}
+                                  >
+                                    <option value="pending">
+                                      Pending
+                                    </option>
+
+                                    <option value="completed">
+                                      Completed
+                                    </option>
+
+                                    <option value="not_completed">
+                                      Missed
+                                    </option>
+                                  </select>
+                                ) : (
+                                  <ExecutionBadge
+                                    result={
+                                      item.execution_result
+                                    }
+                                  />
+                                )}
                               </TableCell>
 
                               <TableCell>
-                                <div
-                                  style={{
-                                    maxWidth:
-                                      '190px',
-                                    whiteSpace:
-                                      'normal',
-                                  }}
-                                >
-                                  {varianceLabel(
-                                    item.variance_reason,
-                                  )}
-
-                                  {item.variance_notes && (
-                                    <div
-                                      style={{
-                                        marginTop:
-                                          '4px',
-                                        fontSize:
-                                          '0.75rem',
-                                        color:
-                                          '#64748b',
-                                      }}
+                                {executionEditMode &&
+                                isCommitted &&
+                                !item.is_unplanned_work &&
+                                item.execution_result ===
+                                  'not_completed' ? (
+                                  <div
+                                    style={{
+                                      display:
+                                        'grid',
+                                      gap: '6px',
+                                      minWidth:
+                                        '180px',
+                                    }}
+                                  >
+                                    <select
+                                      value={
+                                        item.variance_reason ||
+                                        ''
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        updateExecutionDraft(
+                                          item.id,
+                                          {
+                                            variance_reason:
+                                              event.target.value,
+                                          },
+                                        )
+                                      }
+                                      style={
+                                        styles.select
+                                      }
                                     >
-                                      {item.variance_notes}
-                                    </div>
-                                  )}
-                                </div>
+                                      <option value="">
+                                        Select reason
+                                      </option>
+
+                                      {VARIANCE_REASONS.map(
+                                        (
+                                          reason,
+                                        ) => (
+                                          <option
+                                            key={
+                                              reason.value
+                                            }
+                                            value={
+                                              reason.value
+                                            }
+                                          >
+                                            {
+                                              reason.label
+                                            }
+                                          </option>
+                                        ),
+                                      )}
+                                    </select>
+
+                                    <textarea
+                                      rows="2"
+                                      value={
+                                        item.variance_notes ||
+                                        ''
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        updateExecutionDraft(
+                                          item.id,
+                                          {
+                                            variance_notes:
+                                              event.target.value,
+                                          },
+                                        )
+                                      }
+                                      placeholder="Variance notes"
+                                      style={{
+                                        ...styles.input,
+                                        minHeight:
+                                          '58px',
+                                      }}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div
+                                    style={{
+                                      maxWidth:
+                                        '190px',
+                                      whiteSpace:
+                                        'normal',
+                                    }}
+                                  >
+                                    {varianceLabel(
+                                      item.variance_reason,
+                                    )}
+
+                                    {item.variance_notes && (
+                                      <div
+                                        style={{
+                                          marginTop:
+                                            '4px',
+                                          fontSize:
+                                            '0.75rem',
+                                          color:
+                                            '#64748b',
+                                        }}
+                                      >
+                                        {item.variance_notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </TableCell>
 
                               <TableCell>
@@ -3413,6 +3698,7 @@ export default function WeeklyPlanningPage() {
                                     )}
 
                                   {isCommitted &&
+                                    !executionEditMode &&
                                     !item.is_unplanned_work &&
                                     item.execution_result ===
                                       'pending' && (
@@ -3454,6 +3740,7 @@ export default function WeeklyPlanningPage() {
                                     )}
 
                                   {isCommitted &&
+                                    !executionEditMode &&
                                     !item.is_unplanned_work &&
                                     [
                                       'completed',
@@ -3466,17 +3753,31 @@ export default function WeeklyPlanningPage() {
                                         disabled={
                                           actionLoading
                                         }
-                                        onClick={() =>
-                                          openEditResultModal(
-                                            item,
-                                          )
+                                        onClick={
+                                          beginExecutionEdit
                                         }
                                         style={
                                           styles.smallSecondaryButton
                                         }
                                       >
-                                        Edit Result
+                                        Edit
                                       </button>
+                                    )}
+
+                                  {isCommitted &&
+                                    executionEditMode &&
+                                    !item.is_unplanned_work && (
+                                      <span
+                                        style={{
+                                          ...styles.miniBadge,
+                                          background:
+                                            '#fef3c7',
+                                          color:
+                                            '#92400e',
+                                        }}
+                                      >
+                                        Editing
+                                      </span>
                                     )}
 
                                   {!isDraft &&
@@ -3516,31 +3817,107 @@ export default function WeeklyPlanningPage() {
                     '18px',
                 }}
               >
-                <h2
+                <div
                   style={{
-                    margin:
-                      '0 0 5px 0',
-                    fontSize:
-                      '1.05rem',
-                    color:
-                      '#0f2745',
+                    display:
+                      'flex',
+                    alignItems:
+                      'flex-start',
+                    justifyContent:
+                      'space-between',
+                    gap: '12px',
+                    marginBottom:
+                      '15px',
                   }}
                 >
-                  Reasons for Variance
-                </h2>
+                  <div>
+                    <h2
+                      style={{
+                        margin:
+                          '0 0 5px 0',
+                        fontSize:
+                          '1.05rem',
+                        color:
+                          '#0f2745',
+                      }}
+                    >
+                      Reasons for Variance
+                    </h2>
 
-                <p
-                  style={{
-                    margin:
-                      '0 0 15px 0',
-                    fontSize:
-                      '0.82rem',
-                    color:
-                      '#64748b',
-                  }}
-                >
-                  Pareto analysis of missed formal commitments.
-                </p>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize:
+                          '0.82rem',
+                        color:
+                          '#64748b',
+                      }}
+                    >
+                      Pareto analysis of missed formal commitments.
+                    </p>
+                  </div>
+
+                  {isCommitted && (
+                    <div
+                      style={{
+                        display:
+                          'flex',
+                        gap: '8px',
+                        flexWrap:
+                          'wrap',
+                      }}
+                    >
+                      {!executionEditMode ? (
+                        <button
+                          type="button"
+                          disabled={
+                            actionLoading
+                          }
+                          onClick={
+                            beginExecutionEdit
+                          }
+                          style={
+                            styles.smallSecondaryButton
+                          }
+                        >
+                          Edit Variances
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            disabled={
+                              actionLoading
+                            }
+                            onClick={
+                              cancelExecutionEdit
+                            }
+                            style={
+                              styles.smallSecondaryButton
+                            }
+                          >
+                            Cancel Changes
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={
+                              actionLoading
+                            }
+                            onClick={
+                              saveExecutionChanges
+                            }
+                            style={
+                              styles.smallSuccessButton
+                            }
+                          >
+                            Save Changes
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div
                   style={{
@@ -3603,6 +3980,251 @@ export default function WeeklyPlanningPage() {
                     ),
                   )}
                 </div>
+
+                {executionEditMode &&
+                  missedFormalItems.length >
+                    0 && (
+                  <div
+                    style={{
+                      marginTop:
+                        '16px',
+                      paddingTop:
+                        '16px',
+                      borderTop:
+                        '1px solid #e2e8f0',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight:
+                          800,
+                        color:
+                          '#0f2745',
+                        marginBottom:
+                          '10px',
+                      }}
+                    >
+                      Edit Missed Commitments
+                    </div>
+
+                    <div
+                      style={{
+                        display:
+                          'grid',
+                        gap: '10px',
+                      }}
+                    >
+                      {missedFormalItems.map(
+                        (item) => (
+                          <div
+                            key={
+                              item.id
+                            }
+                            style={{
+                              display:
+                                'grid',
+                              gridTemplateColumns:
+                                'minmax(220px, 1.2fr) 120px minmax(180px, 0.8fr) minmax(220px, 1fr)',
+                              gap: '10px',
+                              alignItems:
+                                'start',
+                              padding:
+                                '12px',
+                              border:
+                                '1px solid #e2e8f0',
+                              borderRadius:
+                                '8px',
+                              background:
+                                '#fff',
+                            }}
+                          >
+                            <div>
+                              <div
+                                style={{
+                                  fontWeight:
+                                    800,
+                                  color:
+                                    '#0f2745',
+                                }}
+                              >
+                                {
+                                  item.package_code
+                                }{' '}
+                                ·{' '}
+                                {
+                                  item.activity_description
+                                }
+                              </div>
+
+                              <div
+                                style={{
+                                  marginTop:
+                                    '4px',
+                                  fontSize:
+                                    '0.78rem',
+                                  color:
+                                    '#64748b',
+                                }}
+                              >
+                                Planned:{' '}
+                                {item.planned_quantity ??
+                                  '—'}{' '}
+                                {item.unit ||
+                                  ''}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div
+                                style={{
+                                  fontSize:
+                                    '0.75rem',
+                                  fontWeight:
+                                    700,
+                                  color:
+                                    '#475569',
+                                  marginBottom:
+                                    '5px',
+                                }}
+                              >
+                                Actual Qty.
+                              </div>
+
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                value={
+                                  item.actual_quantity ??
+                                  ''
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateExecutionDraft(
+                                    item.id,
+                                    {
+                                      actual_quantity:
+                                        numberOrNull(
+                                          event.target.value,
+                                        ),
+                                    },
+                                  )
+                                }
+                                style={
+                                  styles.tableNumberInput
+                                }
+                              />
+                            </div>
+
+                            <div>
+                              <div
+                                style={{
+                                  fontSize:
+                                    '0.75rem',
+                                  fontWeight:
+                                    700,
+                                  color:
+                                    '#475569',
+                                  marginBottom:
+                                    '5px',
+                                }}
+                              >
+                                Reason
+                              </div>
+
+                              <select
+                                value={
+                                  item.variance_reason ||
+                                  ''
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateExecutionDraft(
+                                    item.id,
+                                    {
+                                      variance_reason:
+                                        event.target.value,
+                                    },
+                                  )
+                                }
+                                style={
+                                  styles.select
+                                }
+                              >
+                                <option value="">
+                                  Select reason
+                                </option>
+
+                                {VARIANCE_REASONS.map(
+                                  (
+                                    reason,
+                                  ) => (
+                                    <option
+                                      key={
+                                        reason.value
+                                      }
+                                      value={
+                                        reason.value
+                                      }
+                                    >
+                                      {
+                                        reason.label
+                                      }
+                                    </option>
+                                  ),
+                                )}
+                              </select>
+                            </div>
+
+                            <div>
+                              <div
+                                style={{
+                                  fontSize:
+                                    '0.75rem',
+                                  fontWeight:
+                                    700,
+                                  color:
+                                    '#475569',
+                                  marginBottom:
+                                    '5px',
+                                }}
+                              >
+                                Variance Notes
+                              </div>
+
+                              <textarea
+                                rows="2"
+                                value={
+                                  item.variance_notes ||
+                                  ''
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateExecutionDraft(
+                                    item.id,
+                                    {
+                                      variance_notes:
+                                        event.target.value,
+                                    },
+                                  )
+                                }
+                                placeholder="Describe what prevented completion."
+                                style={{
+                                  ...styles.input,
+                                  minHeight:
+                                    '62px',
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -4545,295 +5167,6 @@ export default function WeeklyPlanningPage() {
                 </div>
               </ModalOverlay>
             )}
-
-          {/* EDIT RESULT MODAL */}
-
-          {editResult && (
-            <ModalOverlay>
-              <div
-                style={
-                  styles.modal
-                }
-              >
-                <div
-                  style={
-                    styles.modalHeader
-                  }
-                >
-                  <div>
-                    <h2
-                      style={{
-                        margin: 0,
-                        color:
-                          '#0f2745',
-                      }}
-                    >
-                      Edit Result
-                    </h2>
-
-                    <p
-                      style={{
-                        margin:
-                          '5px 0 0 0',
-                        color:
-                          '#64748b',
-                        fontSize:
-                          '0.85rem',
-                      }}
-                    >
-                      Correct execution information without changing the original commitment.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditResult(
-                        null,
-                      )
-                    }
-                    style={
-                      styles.closeModalButton
-                    }
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    padding:
-                      '12px 14px',
-                    marginBottom:
-                      '14px',
-                    border:
-                      '1px solid #dbeafe',
-                    background:
-                      '#eff6ff',
-                    borderRadius:
-                      '10px',
-                    color:
-                      '#1e3a5f',
-                    fontSize:
-                      '0.84rem',
-                    lineHeight:
-                      1.45,
-                  }}
-                >
-                  <strong>
-                    {editResult.packageCode ||
-                      'Weekly'}
-                  </strong>
-                  {' · '}
-                  {editResult.activityDescription}
-
-                  <div
-                    style={{
-                      marginTop:
-                        '4px',
-                      color:
-                        '#64748b',
-                    }}
-                  >
-                    Original commitment: {' '}
-                    {editResult.plannedQuantity ||
-                      '—'}{' '}
-                    {editResult.unit || ''}
-                  </div>
-                </div>
-
-                <FormField label="Result">
-                  <select
-                    value={
-                      editResult.result
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setEditResult(
-                        {
-                          ...editResult,
-                          result:
-                            event.target.value,
-                        },
-                      )
-                    }
-                    style={
-                      styles.select
-                    }
-                  >
-                    <option value="completed">
-                      Completed
-                    </option>
-
-                    <option value="not_completed">
-                      Missed
-                    </option>
-                  </select>
-                </FormField>
-
-                <FormField label="Actual Quantity">
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={
-                      editResult.actualQuantity
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setEditResult(
-                        {
-                          ...editResult,
-                          actualQuantity:
-                            event.target.value,
-                        },
-                      )
-                    }
-                    style={
-                      styles.input
-                    }
-                  />
-                </FormField>
-
-                {editResult.result ===
-                  'not_completed' && (
-                  <>
-                    <FormField label="Reason for Variance">
-                      <select
-                        value={
-                          editResult.varianceReason
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          setEditResult(
-                            {
-                              ...editResult,
-                              varianceReason:
-                                event.target.value,
-                            },
-                          )
-                        }
-                        style={
-                          styles.select
-                        }
-                      >
-                        <option value="">
-                          Select reason
-                        </option>
-
-                        {VARIANCE_REASONS.map(
-                          (reason) => (
-                            <option
-                              key={
-                                reason.value
-                              }
-                              value={
-                                reason.value
-                              }
-                            >
-                              {reason.label}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </FormField>
-
-                    <FormField label="Variance Notes">
-                      <textarea
-                        rows="4"
-                        value={
-                          editResult.varianceNotes
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          setEditResult(
-                            {
-                              ...editResult,
-                              varianceNotes:
-                                event.target.value,
-                            },
-                          )
-                        }
-                        style={{
-                          ...styles.input,
-                          resize:
-                            'vertical',
-                        }}
-                        placeholder="Describe what prevented completion."
-                      />
-                    </FormField>
-                  </>
-                )}
-
-                {editResult.result ===
-                  'completed' &&
-                  editResult.plannedQuantity && (
-                    <div
-                      style={{
-                        padding:
-                          '10px 12px',
-                        marginTop:
-                          '2px',
-                        border:
-                          '1px solid #bbf7d0',
-                        background:
-                          '#f0fdf4',
-                        borderRadius:
-                          '8px',
-                        color:
-                          '#166534',
-                        fontSize:
-                          '0.8rem',
-                      }}
-                    >
-                      Completed requires Actual Qty. to be at least the committed Planned Qty.
-                    </div>
-                  )}
-
-                <div
-                  style={
-                    styles.modalFooter
-                  }
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditResult(
-                        null,
-                      )
-                    }
-                    style={
-                      styles.secondaryButton
-                    }
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={
-                      actionLoading
-                    }
-                    onClick={
-                      saveEditedResult
-                    }
-                    style={
-                      editResult.result ===
-                      'not_completed'
-                        ? styles.dangerButton
-                        : styles.primaryButton
-                    }
-                  >
-                    Save Correction
-                  </button>
-                </div>
-              </div>
-            </ModalOverlay>
-          )}
 
           {/* MISSED COMMITMENT MODAL */}
 
