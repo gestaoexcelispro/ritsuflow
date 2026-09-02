@@ -73,6 +73,7 @@ const emptyScopeItemForm = {
   unit: 'm²',
   custom_unit: '',
   scope_quantity: '',
+  unit_cost: '',
 }
 
 
@@ -161,6 +162,33 @@ function createServiceCode(
 }
 
 
+function formatCurrency(value, currencyCode = 'USD') {
+  if (value === null || value === undefined || value === '') {
+    return '—'
+  }
+
+  const numericValue = Number(value)
+
+  if (!Number.isFinite(numericValue)) {
+    return '—'
+  }
+
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode || 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numericValue)
+  } catch {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numericValue)
+  }
+}
+
+
 function formatQuantity(value) {
   if (
     value === null ||
@@ -196,6 +224,7 @@ export default function ScopeWorkspace({
   userId,
   initialWorkPackages = [],
   initialScopeItems = [],
+  currencyCode = 'USD',
 }) {
   const supabase =
     useMemo(
@@ -440,6 +469,33 @@ export default function ScopeWorkspace({
     ).length
 
 
+  const costDefinedCount =
+    activeScopeItems.filter(
+      (scopeItem) =>
+        scopeItem.unit_cost !== null &&
+        scopeItem.unit_cost !== undefined
+    ).length
+
+
+  const projectScopeCost =
+    activeScopeItems.reduce(
+      (total, scopeItem) => {
+        const quantity = Number(scopeItem.scope_quantity)
+        const unitCost = Number(scopeItem.unit_cost)
+
+        if (
+          !Number.isFinite(quantity) ||
+          !Number.isFinite(unitCost)
+        ) {
+          return total
+        }
+
+        return total + quantity * unitCost
+      },
+      0
+    )
+
+
   const scopeDefinitionComplete =
     activeScopeItems.length > 0 &&
     assignedScopeItemCount ===
@@ -447,6 +503,8 @@ export default function ScopeWorkspace({
     quantityDefinedCount ===
       activeScopeItems.length &&
     unitDefinedCount ===
+      activeScopeItems.length &&
+    costDefinedCount ===
       activeScopeItems.length
 
 
@@ -544,6 +602,12 @@ export default function ScopeWorkspace({
           : String(
               scopeItem.scope_quantity
             ),
+
+      unit_cost:
+        scopeItem.unit_cost === null ||
+        scopeItem.unit_cost === undefined
+          ? ''
+          : String(scopeItem.unit_cost),
     })
 
     setServiceCodeWasEdited(true)
@@ -973,6 +1037,31 @@ export default function ScopeWorkspace({
 
 
     // --------------------------------------------------------
+    // Unit Cost
+    // --------------------------------------------------------
+
+    const unitCostText =
+      String(scopeItemForm.unit_cost).trim()
+
+    let unitCost = null
+
+    if (unitCostText !== '') {
+      unitCost =
+        Number(unitCostText.replace(',', '.'))
+
+      if (
+        !Number.isFinite(unitCost) ||
+        unitCost < 0
+      ) {
+        setErrorMessage(
+          'Enter a valid Unit Cost greater than or equal to zero.'
+        )
+        return
+      }
+    }
+
+
+    // --------------------------------------------------------
     // Scope Item code
     // --------------------------------------------------------
 
@@ -1082,6 +1171,9 @@ export default function ScopeWorkspace({
 
             scope_quantity:
               scopeQuantity,
+
+            unit_cost:
+              unitCost,
           })
           .eq(
             'id',
@@ -1099,6 +1191,7 @@ export default function ScopeWorkspace({
             service_name,
             unit,
             scope_quantity,
+            unit_cost,
             sequence_number,
             is_active
           `)
@@ -1183,6 +1276,9 @@ export default function ScopeWorkspace({
             scope_quantity:
               scopeQuantity,
 
+            unit_cost:
+              unitCost,
+
             sequence_number:
               nextSequence,
 
@@ -1200,6 +1296,7 @@ export default function ScopeWorkspace({
             service_name,
             unit,
             scope_quantity,
+            unit_cost,
             sequence_number,
             is_active
           `)
@@ -1546,7 +1643,7 @@ export default function ScopeWorkspace({
               styles.metricLabel
             }
           >
-            Quantities Defined
+            Scope Cost
           </span>
 
           <strong
@@ -1554,9 +1651,10 @@ export default function ScopeWorkspace({
               styles.metricValue
             }
           >
-            {quantityDefinedCount}
-            /
-            {activeScopeItems.length}
+            {formatCurrency(
+              projectScopeCost,
+              currencyCode
+            )}
           </strong>
 
           <span
@@ -1564,7 +1662,7 @@ export default function ScopeWorkspace({
               styles.metricDetail
             }
           >
-            Authoritative quantities
+            {costDefinedCount}/{activeScopeItems.length} Scope Items costed
           </span>
         </article>
       </section>
@@ -1757,6 +1855,26 @@ export default function ScopeWorkspace({
                     workPackage.id
                   ) || []
 
+                const packageCost =
+                  packageItems.reduce(
+                    (total, scopeItem) => {
+                      const quantity =
+                        Number(scopeItem.scope_quantity)
+                      const unitCost =
+                        Number(scopeItem.unit_cost)
+
+                      if (
+                        !Number.isFinite(quantity) ||
+                        !Number.isFinite(unitCost)
+                      ) {
+                        return total
+                      }
+
+                      return total + quantity * unitCost
+                    },
+                    0
+                  )
+
 
                 return (
                   <article
@@ -1837,6 +1955,11 @@ export default function ScopeWorkspace({
                           {packageItems.length === 1
                             ? 'Scope Item'
                             : 'Scope Items'}
+                          {' · '}
+                          {formatCurrency(
+                            packageCost,
+                            currencyCode
+                          )}
                         </span>
 
 
@@ -1924,6 +2047,14 @@ export default function ScopeWorkspace({
                           </span>
 
                           <span>
+                            Unit Cost
+                          </span>
+
+                          <span>
+                            Total Cost
+                          </span>
+
+                          <span>
                             Status
                           </span>
 
@@ -1948,7 +2079,9 @@ export default function ScopeWorkspace({
                                 ).trim()
                               ) &&
                               scopeItem.scope_quantity !== null &&
-                              scopeItem.scope_quantity !== undefined
+                              scopeItem.scope_quantity !== undefined &&
+                              scopeItem.unit_cost !== null &&
+                              scopeItem.unit_cost !== undefined
 
 
                             return (
@@ -2007,6 +2140,28 @@ export default function ScopeWorkspace({
                                   {formatQuantity(
                                     scopeItem.scope_quantity
                                   )}
+                                </span>
+
+
+                                <span>
+                                  {formatCurrency(
+                                    scopeItem.unit_cost,
+                                    currencyCode
+                                  )}
+                                </span>
+
+
+                                <span>
+                                  {scopeItem.scope_quantity !== null &&
+                                  scopeItem.scope_quantity !== undefined &&
+                                  scopeItem.unit_cost !== null &&
+                                  scopeItem.unit_cost !== undefined
+                                    ? formatCurrency(
+                                        Number(scopeItem.scope_quantity) *
+                                          Number(scopeItem.unit_cost),
+                                        currencyCode
+                                      )
+                                    : '—'}
                                 </span>
 
 
@@ -2838,6 +2993,72 @@ export default function ScopeWorkspace({
                   quantity for this Scope Item.
                 </small>
               </label>
+
+
+              <label
+                className={
+                  styles.scopeModalField
+                }
+              >
+                <span>
+                  Unit Cost
+                </span>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  inputMode="decimal"
+                  value={
+                    scopeItemForm.unit_cost
+                  }
+                  onChange={(event) =>
+                    setScopeItemForm(
+                      (currentForm) => ({
+                        ...currentForm,
+
+                        unit_cost:
+                          event.target.value,
+                      })
+                    )
+                  }
+                  placeholder="50.00"
+                />
+
+                <small>
+                  Cost per {scopeItemForm.unit === 'OTHER'
+                    ? scopeItemForm.custom_unit || 'unit'
+                    : scopeItemForm.unit}.
+                </small>
+              </label>
+
+
+              <div
+                className={
+                  styles.scopeModalField
+                }
+              >
+                <span>
+                  Total Cost
+                </span>
+
+                <strong>
+                  {scopeItemForm.scope_quantity !== '' &&
+                  scopeItemForm.unit_cost !== '' &&
+                  Number.isFinite(Number(scopeItemForm.scope_quantity)) &&
+                  Number.isFinite(Number(scopeItemForm.unit_cost))
+                    ? formatCurrency(
+                        Number(scopeItemForm.scope_quantity) *
+                          Number(scopeItemForm.unit_cost),
+                        currencyCode
+                      )
+                    : '—'}
+                </strong>
+
+                <small>
+                  Calculated automatically from Quantity × Unit Cost.
+                </small>
+              </div>
             </div>
 
 
