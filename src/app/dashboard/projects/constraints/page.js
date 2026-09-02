@@ -9050,6 +9050,18 @@ const registerCountStyle = {
 const tableContainerStyle = {
   overflowX:
     'auto',
+
+  overflowY:
+    'auto',
+
+  maxHeight:
+    'calc(100vh - 445px)',
+
+  minHeight:
+    '220px',
+
+  scrollbarGutter:
+    'stable',
 };
 
 
@@ -9069,6 +9081,15 @@ const tableStyle = {
 
 
 const headerCellStyle = {
+  position:
+    'sticky',
+
+  top:
+    0,
+
+  zIndex:
+    5,
+
   padding:
     '11px 10px',
 
@@ -9077,6 +9098,9 @@ const headerCellStyle = {
 
   background:
     '#f8fafc',
+
+  boxShadow:
+    '0 1px 0 #cbd5e1',
 
   color:
     '#64748b',
