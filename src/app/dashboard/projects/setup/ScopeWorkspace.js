@@ -24,12 +24,21 @@ import styles from '../../projetos/coleta/project-setup.module.css'
 //     └── Scope Quantity
 //
 // Database:
+//
 // project_work_packages
 //        ↓
 // project_services
 //
+// IMPORTANT:
+//
+// Work Packages represent scope.
+//
+// Planning buffers / time lags such as BUF are NOT
+// Work Packages and should be represented later in the
+// planning relationship / scheduling logic.
+//
 // `project_services` remains the physical database table.
-// In the product UI it is presented as "Scope Item".
+// In the RitsuFlow UI it is presented as "Scope Item".
 // ============================================================
 
 
@@ -81,7 +90,7 @@ function getErrorMessage(error) {
   }
 
   if (error.code === '23503') {
-    return 'This record is connected to other project information and cannot be changed.'
+    return 'This record is already referenced by other project information and cannot be deleted.'
   }
 
   if (error.code === '23514') {
@@ -258,6 +267,12 @@ export default function ScopeWorkspace({
   const [
     savingScopeItemId,
     setSavingScopeItemId,
+  ] = useState(null)
+
+
+  const [
+    deletingWorkPackageId,
+    setDeletingWorkPackageId,
   ] = useState(null)
 
 
@@ -563,10 +578,7 @@ export default function ScopeWorkspace({
   ) {
     event.preventDefault()
 
-    if (
-      !projectId ||
-      !userId
-    ) {
+    if (!projectId) {
       return
     }
 
@@ -625,8 +637,7 @@ export default function ScopeWorkspace({
 
 
     // --------------------------------------------------------
-    // Get next Work Package color from existing RitsuFlow
-    // color allocation function.
+    // Obtain next Work Package color.
     // --------------------------------------------------------
 
     const {
@@ -656,6 +667,9 @@ export default function ScopeWorkspace({
 
     // --------------------------------------------------------
     // Create Work Package.
+    //
+    // IMPORTANT:
+    // project_work_packages does NOT contain created_by.
     // --------------------------------------------------------
 
     const {
@@ -681,9 +695,6 @@ export default function ScopeWorkspace({
 
           is_active:
             true,
-
-          created_by:
-            userId,
         })
         .select(`
           id,
@@ -691,9 +702,7 @@ export default function ScopeWorkspace({
           code,
           description,
           color,
-          is_active,
-          created_at,
-          updated_at
+          is_active
         `)
         .single()
 
@@ -731,6 +740,127 @@ export default function ScopeWorkspace({
 
     setWorkPackageForm(
       emptyWorkPackageForm
+    )
+  }
+
+
+  // ==========================================================
+  // DELETE WORK PACKAGE
+  // ==========================================================
+
+  async function deleteWorkPackage(
+    workPackage
+  ) {
+    if (
+      !workPackage?.id ||
+      !projectId
+    ) {
+      return
+    }
+
+
+    // --------------------------------------------------------
+    // We inspect ALL Scope Items, including archived ones.
+    //
+    // The database relationship uses ON DELETE RESTRICT.
+    // Therefore a Work Package must not be deleted while
+    // project_services records still reference it.
+    // --------------------------------------------------------
+
+    const relatedScopeItems =
+      scopeItems.filter(
+        (scopeItem) =>
+          scopeItem.project_work_package_id ===
+          workPackage.id
+      )
+
+
+    if (
+      relatedScopeItems.length > 0
+    ) {
+      setErrorMessage(
+        `${workPackage.code} cannot be deleted because ${relatedScopeItems.length} Scope ${
+          relatedScopeItems.length === 1
+            ? 'Item is'
+            : 'Items are'
+        } still assigned to it. Reassign those Scope Items first.`
+      )
+
+      setNoticeMessage('')
+
+      return
+    }
+
+
+    const confirmed =
+      window.confirm(
+        `Delete Work Package "${workPackage.code} — ${workPackage.description}"?\n\nThis permanently removes the Work Package from the project scope.`
+      )
+
+
+    if (!confirmed) {
+      return
+    }
+
+
+    setDeletingWorkPackageId(
+      workPackage.id
+    )
+
+    setErrorMessage('')
+    setNoticeMessage('')
+
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          'project_work_packages'
+        )
+        .delete()
+        .eq(
+          'id',
+          workPackage.id
+        )
+        .eq(
+          'project_id',
+          projectId
+        )
+
+
+    if (error) {
+      setErrorMessage(
+        getErrorMessage(
+          error
+        )
+      )
+
+      setDeletingWorkPackageId(
+        null
+      )
+
+      return
+    }
+
+
+    setWorkPackages(
+      (currentWorkPackages) =>
+        currentWorkPackages.filter(
+          (currentWorkPackage) =>
+            currentWorkPackage.id !==
+            workPackage.id
+        )
+    )
+
+
+    setDeletingWorkPackageId(
+      null
+    )
+
+
+    setNoticeMessage(
+      `${workPackage.code} — ${workPackage.description} was deleted from the project scope.`
     )
   }
 
@@ -970,9 +1100,7 @@ export default function ScopeWorkspace({
             unit,
             scope_quantity,
             sequence_number,
-            is_active,
-            created_at,
-            updated_at
+            is_active
           `)
           .single()
 
@@ -1073,9 +1201,7 @@ export default function ScopeWorkspace({
             unit,
             scope_quantity,
             sequence_number,
-            is_active,
-            created_at,
-            updated_at
+            is_active
           `)
           .single()
 
@@ -1257,9 +1383,7 @@ export default function ScopeWorkspace({
           unit,
           scope_quantity,
           sequence_number,
-          is_active,
-          created_at,
-          updated_at
+          is_active
         `)
         .single()
 
@@ -1515,9 +1639,10 @@ export default function ScopeWorkspace({
               }
             >
               Define Work Packages and the Scope Items
-              contained within each package. Scope Item
-              quantities are authoritative and are not
-              automatically summed at Work Package level.
+              contained within each package. Work Packages
+              represent scope. Planning buffers and time lags
+              are managed by the scheduling model rather than
+              the Scope Breakdown Structure.
             </p>
           </div>
 
@@ -1632,6 +1757,7 @@ export default function ScopeWorkspace({
                     workPackage.id
                   ) || []
 
+
                 return (
                   <article
                     className={
@@ -1713,6 +1839,7 @@ export default function ScopeWorkspace({
                             : 'Scope Items'}
                         </span>
 
+
                         <button
                           type="button"
                           className={
@@ -1725,6 +1852,33 @@ export default function ScopeWorkspace({
                           }
                         >
                           + Add Scope Item
+                        </button>
+
+
+                        <button
+                          type="button"
+                          className={
+                            styles.scopePackageAddButton
+                          }
+                          onClick={() =>
+                            deleteWorkPackage(
+                              workPackage
+                            )
+                          }
+                          disabled={
+                            deletingWorkPackageId ===
+                            workPackage.id
+                          }
+                          title={
+                            packageItems.length > 0
+                              ? 'Reassign Scope Items before deleting this Work Package.'
+                              : 'Delete Work Package'
+                          }
+                        >
+                          {deletingWorkPackageId ===
+                          workPackage.id
+                            ? 'Deleting...'
+                            : 'Delete'}
                         </button>
                       </div>
                     </div>
@@ -2247,6 +2401,8 @@ export default function ScopeWorkspace({
               Work Packages are the first
               organizational level of the
               project Scope Breakdown Structure.
+              Buffers and scheduling lags are
+              defined separately in Planning.
             </p>
 
 
