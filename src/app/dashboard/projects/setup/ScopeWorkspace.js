@@ -5,11 +5,32 @@ import {
   useState,
 } from 'react'
 
-import {
-  createClient,
-} from '../../../../lib/supabase/client'
+import { createClient } from '../../../../lib/supabase/client'
 
 import styles from '../../projetos/coleta/project-setup.module.css'
+
+
+// ============================================================
+// RITSUFLOW™
+// SCOPE WORKSPACE
+//
+// Scope Breakdown Structure:
+//
+// Work Package
+//     ↓
+// Scope Item
+//     ├── Description
+//     ├── Unit
+//     └── Scope Quantity
+//
+// Database:
+// project_work_packages
+//        ↓
+// project_services
+//
+// `project_services` remains the physical database table.
+// In the product UI it is presented as "Scope Item".
+// ============================================================
 
 
 const unitOptions = [
@@ -45,6 +66,10 @@ const emptyScopeItemForm = {
   scope_quantity: '',
 }
 
+
+// ============================================================
+// HELPERS
+// ============================================================
 
 function getErrorMessage(error) {
   if (!error) {
@@ -102,11 +127,10 @@ function createServiceCode(
 
   const existingCodes =
     new Set(
-      scopeItems.map(
-        (scopeItem) =>
-          String(
-            scopeItem.service_code || ''
-          ).toUpperCase()
+      scopeItems.map((scopeItem) =>
+        String(
+          scopeItem.service_code || ''
+        ).toUpperCase()
       )
     )
 
@@ -154,6 +178,10 @@ function formatQuantity(value) {
 }
 
 
+// ============================================================
+// COMPONENT
+// ============================================================
+
 export default function ScopeWorkspace({
   projectId,
   userId,
@@ -166,75 +194,87 @@ export default function ScopeWorkspace({
       []
     )
 
+
+  // ==========================================================
+  // STATE
+  // ==========================================================
+
   const [
     workPackages,
     setWorkPackages,
-  ] =
-    useState(initialWorkPackages)
+  ] = useState(
+    initialWorkPackages
+  )
+
 
   const [
     scopeItems,
     setScopeItems,
-  ] =
-    useState(initialScopeItems)
+  ] = useState(
+    initialScopeItems
+  )
+
 
   const [
     isWorkPackageModalOpen,
     setIsWorkPackageModalOpen,
-  ] =
-    useState(false)
+  ] = useState(false)
+
 
   const [
     isScopeItemModalOpen,
     setIsScopeItemModalOpen,
-  ] =
-    useState(false)
+  ] = useState(false)
+
 
   const [
     workPackageForm,
     setWorkPackageForm,
-  ] =
-    useState(emptyWorkPackageForm)
+  ] = useState(
+    emptyWorkPackageForm
+  )
+
 
   const [
     scopeItemForm,
     setScopeItemForm,
-  ] =
-    useState(emptyScopeItemForm)
+  ] = useState(
+    emptyScopeItemForm
+  )
+
 
   const [
     serviceCodeWasEdited,
     setServiceCodeWasEdited,
-  ] =
-    useState(false)
+  ] = useState(false)
+
 
   const [
     isSaving,
     setIsSaving,
-  ] =
-    useState(false)
+  ] = useState(false)
+
 
   const [
     savingScopeItemId,
     setSavingScopeItemId,
-  ] =
-    useState(null)
+  ] = useState(null)
+
 
   const [
     errorMessage,
     setErrorMessage,
-  ] =
-    useState('')
+  ] = useState('')
+
 
   const [
     noticeMessage,
     setNoticeMessage,
-  ] =
-    useState('')
+  ] = useState('')
 
 
   // ==========================================================
-  // DERIVED DATA
+  // ACTIVE WORK PACKAGES
   // ==========================================================
 
   const activeWorkPackages =
@@ -264,6 +304,10 @@ export default function ScopeWorkspace({
     )
 
 
+  // ==========================================================
+  // ACTIVE SCOPE ITEMS
+  // ==========================================================
+
   const activeScopeItems =
     useMemo(
       () =>
@@ -277,7 +321,6 @@ export default function ScopeWorkspace({
               firstScopeItem,
               secondScopeItem
             ) => {
-
               const firstSequence =
                 Number(
                   firstScopeItem.sequence_number
@@ -305,7 +348,6 @@ export default function ScopeWorkspace({
                   secondScopeItem.service_name || ''
                 )
               )
-
             }
           ),
       [
@@ -314,18 +356,18 @@ export default function ScopeWorkspace({
     )
 
 
+  // ==========================================================
+  // GROUP SCOPE ITEMS BY WORK PACKAGE
+  // ==========================================================
+
   const scopeItemsByWorkPackage =
     useMemo(
       () => {
-
         const map =
           new Map()
 
         activeScopeItems.forEach(
-          (
-            scopeItem
-          ) => {
-
+          (scopeItem) => {
             const key =
               scopeItem.project_work_package_id ||
               'unassigned'
@@ -340,12 +382,10 @@ export default function ScopeWorkspace({
             map
               .get(key)
               .push(scopeItem)
-
           }
         )
 
         return map
-
       },
       [
         activeScopeItems,
@@ -353,11 +393,13 @@ export default function ScopeWorkspace({
     )
 
 
+  // ==========================================================
+  // COMPLETENESS
+  // ==========================================================
+
   const assignedScopeItemCount =
     activeScopeItems.filter(
-      (
-        scopeItem
-      ) =>
+      (scopeItem) =>
         Boolean(
           scopeItem.project_work_package_id
         )
@@ -366,9 +408,7 @@ export default function ScopeWorkspace({
 
   const quantityDefinedCount =
     activeScopeItems.filter(
-      (
-        scopeItem
-      ) =>
+      (scopeItem) =>
         scopeItem.scope_quantity !== null &&
         scopeItem.scope_quantity !== undefined
     ).length
@@ -376,9 +416,7 @@ export default function ScopeWorkspace({
 
   const unitDefinedCount =
     activeScopeItems.filter(
-      (
-        scopeItem
-      ) =>
+      (scopeItem) =>
         Boolean(
           String(
             scopeItem.unit || ''
@@ -398,7 +436,7 @@ export default function ScopeWorkspace({
 
 
   // ==========================================================
-  // MODALS
+  // WORK PACKAGE MODAL
   // ==========================================================
 
   function openWorkPackageModal() {
@@ -407,6 +445,7 @@ export default function ScopeWorkspace({
     )
 
     setErrorMessage('')
+    setNoticeMessage('')
     setIsWorkPackageModalOpen(true)
   }
 
@@ -417,24 +456,32 @@ export default function ScopeWorkspace({
     }
 
     setIsWorkPackageModalOpen(false)
+
     setWorkPackageForm(
       emptyWorkPackageForm
     )
+
     setErrorMessage('')
   }
 
+
+  // ==========================================================
+  // SCOPE ITEM MODAL
+  // ==========================================================
 
   function openNewScopeItemModal(
     workPackageId = ''
   ) {
     setScopeItemForm({
       ...emptyScopeItemForm,
+
       project_work_package_id:
         workPackageId || '',
     })
 
     setServiceCodeWasEdited(false)
     setErrorMessage('')
+    setNoticeMessage('')
     setIsScopeItemModalOpen(true)
   }
 
@@ -486,6 +533,7 @@ export default function ScopeWorkspace({
 
     setServiceCodeWasEdited(true)
     setErrorMessage('')
+    setNoticeMessage('')
     setIsScopeItemModalOpen(true)
   }
 
@@ -496,9 +544,11 @@ export default function ScopeWorkspace({
     }
 
     setIsScopeItemModalOpen(false)
+
     setScopeItemForm(
       emptyScopeItemForm
     )
+
     setServiceCodeWasEdited(false)
     setErrorMessage('')
   }
@@ -513,13 +563,23 @@ export default function ScopeWorkspace({
   ) {
     event.preventDefault()
 
+    if (
+      !projectId ||
+      !userId
+    ) {
+      return
+    }
+
+
     const normalizedCode =
       normalizeWorkPackageCode(
         workPackageForm.code
       )
 
+
     const normalizedDescription =
       workPackageForm.description.trim()
+
 
     if (
       normalizedCode.length !== 3
@@ -527,40 +587,46 @@ export default function ScopeWorkspace({
       setErrorMessage(
         'Work Package code must contain exactly three letters.'
       )
+
       return
     }
+
 
     if (!normalizedDescription) {
       setErrorMessage(
         'Enter a Work Package description.'
       )
+
       return
     }
 
+
     const duplicateCode =
       workPackages.some(
-        (
-          workPackage
-        ) =>
+        (workPackage) =>
           String(
             workPackage.code || ''
           ).toUpperCase() ===
           normalizedCode
       )
 
+
     if (duplicateCode) {
       setErrorMessage(
         `Work Package ${normalizedCode} already exists in this project.`
       )
+
       return
     }
+
 
     setIsSaving(true)
     setErrorMessage('')
 
 
     // --------------------------------------------------------
-    // Get the next project Work Package color.
+    // Get next Work Package color from existing RitsuFlow
+    // color allocation function.
     // --------------------------------------------------------
 
     const {
@@ -575,6 +641,7 @@ export default function ScopeWorkspace({
         }
       )
 
+
     if (colorError) {
       setErrorMessage(
         getErrorMessage(
@@ -586,6 +653,10 @@ export default function ScopeWorkspace({
       return
     }
 
+
+    // --------------------------------------------------------
+    // Create Work Package.
+    // --------------------------------------------------------
 
     const {
       data,
@@ -629,7 +700,9 @@ export default function ScopeWorkspace({
 
     if (error) {
       setErrorMessage(
-        getErrorMessage(error)
+        getErrorMessage(
+          error
+        )
       )
 
       setIsSaving(false)
@@ -638,20 +711,24 @@ export default function ScopeWorkspace({
 
 
     setWorkPackages(
-      (
-        currentWorkPackages
-      ) => [
+      (currentWorkPackages) => [
         ...currentWorkPackages,
         data,
       ]
     )
 
+
     setNoticeMessage(
       `${data.code} — ${data.description} was added to the project scope.`
     )
 
+
     setIsSaving(false)
-    setIsWorkPackageModalOpen(false)
+
+    setIsWorkPackageModalOpen(
+      false
+    )
+
     setWorkPackageForm(
       emptyWorkPackageForm
     )
@@ -667,13 +744,23 @@ export default function ScopeWorkspace({
   ) {
     event.preventDefault()
 
+    if (
+      !projectId ||
+      !userId
+    ) {
+      return
+    }
+
+
     const normalizedName =
       scopeItemForm.service_name.trim()
+
 
     if (!normalizedName) {
       setErrorMessage(
         'Enter a Scope Item description.'
       )
+
       return
     }
 
@@ -684,12 +771,18 @@ export default function ScopeWorkspace({
       setErrorMessage(
         'Select a Work Package.'
       )
+
       return
     }
 
 
+    // --------------------------------------------------------
+    // Unit
+    // --------------------------------------------------------
+
     let finalUnit =
       scopeItemForm.unit
+
 
     if (
       scopeItemForm.unit ===
@@ -702,20 +795,29 @@ export default function ScopeWorkspace({
         setErrorMessage(
           'Enter a custom unit.'
         )
+
         return
       }
     }
 
+
+    // --------------------------------------------------------
+    // Scope Quantity
+    // --------------------------------------------------------
 
     const quantityText =
       String(
         scopeItemForm.scope_quantity
       ).trim()
 
+
     let scopeQuantity =
       null
 
-    if (quantityText !== '') {
+
+    if (
+      quantityText !== ''
+    ) {
       scopeQuantity =
         Number(
           quantityText.replace(
@@ -723,6 +825,7 @@ export default function ScopeWorkspace({
             '.'
           )
         )
+
 
       if (
         !Number.isFinite(
@@ -733,24 +836,29 @@ export default function ScopeWorkspace({
         setErrorMessage(
           'Enter a valid Scope Quantity greater than or equal to zero.'
         )
+
         return
       }
     }
 
+
+    // --------------------------------------------------------
+    // Scope Item code
+    // --------------------------------------------------------
 
     let normalizedCode =
       normalizeServiceCode(
         scopeItemForm.service_code
       )
 
+
     if (!normalizedCode) {
       normalizedCode =
         createServiceCode(
           normalizedName,
+
           activeScopeItems.filter(
-            (
-              scopeItem
-            ) =>
+            (scopeItem) =>
               scopeItem.id !==
               scopeItemForm.id
           )
@@ -758,11 +866,13 @@ export default function ScopeWorkspace({
     }
 
 
+    // --------------------------------------------------------
+    // Duplicate description
+    // --------------------------------------------------------
+
     const duplicateName =
       activeScopeItems.some(
-        (
-          scopeItem
-        ) =>
+        (scopeItem) =>
           scopeItem.id !==
             scopeItemForm.id &&
           String(
@@ -779,15 +889,18 @@ export default function ScopeWorkspace({
       setErrorMessage(
         'A Scope Item with this description already exists in the project.'
       )
+
       return
     }
 
 
+    // --------------------------------------------------------
+    // Duplicate code
+    // --------------------------------------------------------
+
     const duplicateCode =
       activeScopeItems.some(
-        (
-          scopeItem
-        ) =>
+        (scopeItem) =>
           scopeItem.id !==
             scopeItemForm.id &&
           String(
@@ -802,6 +915,7 @@ export default function ScopeWorkspace({
       setErrorMessage(
         'A Scope Item with this code already exists in the project.'
       )
+
       return
     }
 
@@ -810,8 +924,11 @@ export default function ScopeWorkspace({
     setErrorMessage('')
 
 
-    if (scopeItemForm.id) {
+    // ========================================================
+    // UPDATE EXISTING SCOPE ITEM
+    // ========================================================
 
+    if (scopeItemForm.id) {
       const {
         data,
         error,
@@ -862,7 +979,9 @@ export default function ScopeWorkspace({
 
       if (error) {
         setErrorMessage(
-          getErrorMessage(error)
+          getErrorMessage(
+            error
+          )
         )
 
         setIsSaving(false)
@@ -871,13 +990,9 @@ export default function ScopeWorkspace({
 
 
       setScopeItems(
-        (
-          currentScopeItems
-        ) =>
+        (currentScopeItems) =>
           currentScopeItems.map(
-            (
-              scopeItem
-            ) =>
+            (scopeItem) =>
               scopeItem.id ===
               data.id
                 ? data
@@ -885,12 +1000,18 @@ export default function ScopeWorkspace({
           )
       )
 
+
       setNoticeMessage(
         `${data.service_name} was updated.`
       )
+    }
 
-    } else {
 
+    // ========================================================
+    // CREATE NEW SCOPE ITEM
+    // ========================================================
+
+    else {
       const nextSequence =
         activeScopeItems.reduce(
           (
@@ -961,7 +1082,9 @@ export default function ScopeWorkspace({
 
       if (error) {
         setErrorMessage(
-          getErrorMessage(error)
+          getErrorMessage(
+            error
+          )
         )
 
         setIsSaving(false)
@@ -970,32 +1093,37 @@ export default function ScopeWorkspace({
 
 
       setScopeItems(
-        (
-          currentScopeItems
-        ) => [
+        (currentScopeItems) => [
           ...currentScopeItems,
           data,
         ]
       )
 
+
       setNoticeMessage(
         `${data.service_name} was added to the project scope.`
       )
-
     }
 
 
     setIsSaving(false)
-    setIsScopeItemModalOpen(false)
+
+    setIsScopeItemModalOpen(
+      false
+    )
+
     setScopeItemForm(
       emptyScopeItemForm
     )
-    setServiceCodeWasEdited(false)
+
+    setServiceCodeWasEdited(
+      false
+    )
   }
 
 
   // ==========================================================
-  // QUICK PACKAGE ASSIGNMENT
+  // ASSIGN EXISTING SCOPE ITEM TO WORK PACKAGE
   // ==========================================================
 
   async function assignWorkPackage(
@@ -1034,28 +1162,28 @@ export default function ScopeWorkspace({
 
     if (error) {
       setErrorMessage(
-        getErrorMessage(error)
+        getErrorMessage(
+          error
+        )
       )
 
       setSavingScopeItemId(
         null
       )
+
       return
     }
 
 
     setScopeItems(
-      (
-        currentScopeItems
-      ) =>
+      (currentScopeItems) =>
         currentScopeItems.map(
-          (
-            scopeItem
-          ) =>
+          (scopeItem) =>
             scopeItem.id ===
             scopeItemId
               ? {
                   ...scopeItem,
+
                   project_work_package_id:
                     workPackageId,
                 }
@@ -1067,6 +1195,7 @@ export default function ScopeWorkspace({
     setSavingScopeItemId(
       null
     )
+
 
     setNoticeMessage(
       'Scope Item was assigned to its Work Package.'
@@ -1083,8 +1212,9 @@ export default function ScopeWorkspace({
   ) {
     const confirmed =
       window.confirm(
-        `Archive "${scopeItem.service_name}"? Existing planning or production records will remain connected to this Scope Item.`
+        `Archive "${scopeItem.service_name}"? Existing planning, quantity, and production records will remain connected to this Scope Item.`
       )
+
 
     if (!confirmed) {
       return
@@ -1136,24 +1266,23 @@ export default function ScopeWorkspace({
 
     if (error) {
       setErrorMessage(
-        getErrorMessage(error)
+        getErrorMessage(
+          error
+        )
       )
 
       setSavingScopeItemId(
         null
       )
+
       return
     }
 
 
     setScopeItems(
-      (
-        currentScopeItems
-      ) =>
+      (currentScopeItems) =>
         currentScopeItems.map(
-          (
-            currentScopeItem
-          ) =>
+          (currentScopeItem) =>
             currentScopeItem.id ===
             data.id
               ? data
@@ -1165,6 +1294,7 @@ export default function ScopeWorkspace({
     setSavingScopeItemId(
       null
     )
+
 
     setNoticeMessage(
       `${scopeItem.service_name} was archived from the active project scope.`
@@ -1178,6 +1308,10 @@ export default function ScopeWorkspace({
 
   return (
     <>
+      {/* ======================================================
+          SUMMARY
+          ====================================================== */}
+
       <section
         className={
           styles.scopeWorkspaceSummary
@@ -1201,9 +1335,7 @@ export default function ScopeWorkspace({
               styles.metricValue
             }
           >
-            {
-              activeWorkPackages.length
-            }
+            {activeWorkPackages.length}
           </strong>
 
           <span
@@ -1234,9 +1366,7 @@ export default function ScopeWorkspace({
               styles.metricValue
             }
           >
-            {
-              activeScopeItems.length
-            }
+            {activeScopeItems.length}
           </strong>
 
           <span
@@ -1267,13 +1397,9 @@ export default function ScopeWorkspace({
               styles.metricValue
             }
           >
-            {
-              assignedScopeItemCount
-            }
+            {assignedScopeItemCount}
             /
-            {
-              activeScopeItems.length
-            }
+            {activeScopeItems.length}
           </strong>
 
           <span
@@ -1304,13 +1430,9 @@ export default function ScopeWorkspace({
               styles.metricValue
             }
           >
-            {
-              quantityDefinedCount
-            }
+            {quantityDefinedCount}
             /
-            {
-              activeScopeItems.length
-            }
+            {activeScopeItems.length}
           </strong>
 
           <span
@@ -1323,6 +1445,10 @@ export default function ScopeWorkspace({
         </article>
       </section>
 
+
+      {/* ======================================================
+          COMPLETENESS
+          ====================================================== */}
 
       <section
         className={
@@ -1339,13 +1465,12 @@ export default function ScopeWorkspace({
           </span>
 
           <strong>
-            {
-              scopeDefinitionComplete
-                ? 'Complete'
-                : 'Incomplete'
-            }
+            {scopeDefinitionComplete
+              ? 'Complete'
+              : 'Incomplete'}
           </strong>
         </div>
+
 
         <span
           className={
@@ -1354,14 +1479,16 @@ export default function ScopeWorkspace({
               : styles.scopeWorkspaceIncomplete
           }
         >
-          {
-            scopeDefinitionComplete
-              ? 'READY'
-              : 'ACTION REQUIRED'
-          }
+          {scopeDefinitionComplete
+            ? 'READY'
+            : 'ACTION REQUIRED'}
         </span>
       </section>
 
+
+      {/* ======================================================
+          PROJECT SCOPE
+          ====================================================== */}
 
       <section
         className={
@@ -1421,8 +1548,7 @@ export default function ScopeWorkspace({
                 openNewScopeItemModal()
               }
               disabled={
-                activeWorkPackages.length ===
-                0
+                activeWorkPackages.length === 0
               }
             >
               + Scope Item
@@ -1443,10 +1569,12 @@ export default function ScopeWorkspace({
         )}
 
 
-        {activeWorkPackages.length ===
-          0 &&
-        activeScopeItems.length ===
-          0 ? (
+        {/* ====================================================
+            EMPTY STATE
+            ==================================================== */}
+
+        {activeWorkPackages.length === 0 &&
+        activeScopeItems.length === 0 ? (
           <div
             className={
               styles.workspaceEmpty
@@ -1489,17 +1617,20 @@ export default function ScopeWorkspace({
               styles.scopeStructure
             }
           >
+
+            {/* ================================================
+                WORK PACKAGES
+                ================================================ */}
+
             {activeWorkPackages.map(
               (
                 workPackage,
                 packageIndex
               ) => {
-
                 const packageItems =
                   scopeItemsByWorkPackage.get(
                     workPackage.id
                   ) || []
-
 
                 return (
                   <article
@@ -1525,14 +1656,12 @@ export default function ScopeWorkspace({
                             styles.scopePackageNumber
                           }
                         >
-                          {
-                            String(
-                              packageIndex + 1
-                            ).padStart(
-                              2,
-                              '0'
-                            )
-                          }
+                          {String(
+                            packageIndex + 1
+                          ).padStart(
+                            2,
+                            '0'
+                          )}
                         </span>
 
 
@@ -1554,9 +1683,7 @@ export default function ScopeWorkspace({
                               styles.scopePackageCode
                             }
                           >
-                            {
-                              workPackage.code
-                            }
+                            {workPackage.code}
                           </div>
 
                           <h3
@@ -1564,9 +1691,7 @@ export default function ScopeWorkspace({
                               styles.scopePackageName
                             }
                           >
-                            {
-                              workPackage.description
-                            }
+                            {workPackage.description}
                           </h3>
                         </div>
                       </div>
@@ -1582,15 +1707,10 @@ export default function ScopeWorkspace({
                             styles.scopePackageCount
                           }
                         >
-                          {
-                            packageItems.length
-                          }{' '}
-                          {
-                            packageItems.length ===
-                            1
-                              ? 'Scope Item'
-                              : 'Scope Items'
-                          }
+                          {packageItems.length}{' '}
+                          {packageItems.length === 1
+                            ? 'Scope Item'
+                            : 'Scope Items'}
                         </span>
 
                         <button
@@ -1610,8 +1730,11 @@ export default function ScopeWorkspace({
                     </div>
 
 
-                    {packageItems.length ===
-                    0 ? (
+                    {/* ========================================
+                        PACKAGE EMPTY
+                        ======================================== */}
+
+                    {packageItems.length === 0 ? (
                       <div
                         className={
                           styles.scopePackageEmpty
@@ -1633,18 +1756,23 @@ export default function ScopeWorkspace({
                           }
                         >
                           <span>ID</span>
+
                           <span>
                             Scope Item
                           </span>
+
                           <span>
                             Unit
                           </span>
+
                           <span>
                             Scope Quantity
                           </span>
+
                           <span>
                             Status
                           </span>
+
                           <span>
                             Actions
                           </span>
@@ -1656,21 +1784,17 @@ export default function ScopeWorkspace({
                             scopeItem,
                             itemIndex
                           ) => {
-
                             const isComplete =
                               Boolean(
                                 scopeItem.project_work_package_id
                               ) &&
                               Boolean(
                                 String(
-                                  scopeItem.unit ||
-                                  ''
+                                  scopeItem.unit || ''
                                 ).trim()
                               ) &&
-                              scopeItem.scope_quantity !==
-                                null &&
-                              scopeItem.scope_quantity !==
-                                undefined
+                              scopeItem.scope_quantity !== null &&
+                              scopeItem.scope_quantity !== undefined
 
 
                             return (
@@ -1687,14 +1811,8 @@ export default function ScopeWorkspace({
                                     styles.scopeItemNumber
                                   }
                                 >
-                                  {
-                                    packageIndex +
-                                    1
-                                  }.
-                                  {
-                                    itemIndex +
-                                    1
-                                  }
+                                  {packageIndex + 1}.
+                                  {itemIndex + 1}
                                 </span>
 
 
@@ -1704,16 +1822,12 @@ export default function ScopeWorkspace({
                                   }
                                 >
                                   <strong>
-                                    {
-                                      scopeItem.service_name
-                                    }
+                                    {scopeItem.service_name}
                                   </strong>
 
                                   <span>
-                                    {
-                                      scopeItem.service_code ||
-                                      'No code'
-                                    }
+                                    {scopeItem.service_code ||
+                                      'No code'}
                                   </span>
                                 </div>
 
@@ -1723,28 +1837,22 @@ export default function ScopeWorkspace({
                                     styles.scopeItemUnit
                                   }
                                 >
-                                  {
-                                    scopeItem.unit ||
-                                    '—'
-                                  }
+                                  {scopeItem.unit ||
+                                    '—'}
                                 </span>
 
 
                                 <span
                                   className={
-                                    scopeItem.scope_quantity ===
-                                      null ||
-                                    scopeItem.scope_quantity ===
-                                      undefined
+                                    scopeItem.scope_quantity === null ||
+                                    scopeItem.scope_quantity === undefined
                                       ? styles.scopeItemQuantityMissing
                                       : styles.scopeItemQuantity
                                   }
                                 >
-                                  {
-                                    formatQuantity(
-                                      scopeItem.scope_quantity
-                                    )
-                                  }
+                                  {formatQuantity(
+                                    scopeItem.scope_quantity
+                                  )}
                                 </span>
 
 
@@ -1755,11 +1863,9 @@ export default function ScopeWorkspace({
                                       : styles.scopeRowIncomplete
                                   }
                                 >
-                                  {
-                                    isComplete
-                                      ? 'Complete'
-                                      : 'Incomplete'
-                                  }
+                                  {isComplete
+                                    ? 'Complete'
+                                    : 'Incomplete'}
                                 </span>
 
 
@@ -1813,6 +1919,10 @@ export default function ScopeWorkspace({
             )}
 
 
+            {/* ================================================
+                UNASSIGNED SCOPE ITEMS
+                ================================================ */}
+
             {scopeItemsByWorkPackage.has(
               'unassigned'
             ) && (
@@ -1857,6 +1967,7 @@ export default function ScopeWorkspace({
                     </div>
                   </div>
 
+
                   <span
                     className={
                       styles.scopePackageCount
@@ -1883,15 +1994,26 @@ export default function ScopeWorkspace({
                     }
                   >
                     <span>ID</span>
-                    <span>Scope Item</span>
-                    <span>Unit</span>
+
+                    <span>
+                      Scope Item
+                    </span>
+
+                    <span>
+                      Unit
+                    </span>
+
                     <span>
                       Scope Quantity
                     </span>
+
                     <span>
                       Work Package
                     </span>
-                    <span>Actions</span>
+
+                    <span>
+                      Actions
+                    </span>
                   </div>
 
 
@@ -1918,10 +2040,7 @@ export default function ScopeWorkspace({
                             }
                           >
                             U.
-                            {
-                              itemIndex +
-                              1
-                            }
+                            {itemIndex + 1}
                           </span>
 
 
@@ -1931,16 +2050,12 @@ export default function ScopeWorkspace({
                             }
                           >
                             <strong>
-                              {
-                                scopeItem.service_name
-                              }
+                              {scopeItem.service_name}
                             </strong>
 
                             <span>
-                              {
-                                scopeItem.service_code ||
-                                'No code'
-                              }
+                              {scopeItem.service_code ||
+                                'No code'}
                             </span>
                           </div>
 
@@ -1950,28 +2065,22 @@ export default function ScopeWorkspace({
                               styles.scopeItemUnit
                             }
                           >
-                            {
-                              scopeItem.unit ||
-                              '—'
-                            }
+                            {scopeItem.unit ||
+                              '—'}
                           </span>
 
 
                           <span
                             className={
-                              scopeItem.scope_quantity ===
-                                null ||
-                              scopeItem.scope_quantity ===
-                                undefined
+                              scopeItem.scope_quantity === null ||
+                              scopeItem.scope_quantity === undefined
                                 ? styles.scopeItemQuantityMissing
                                 : styles.scopeItemQuantity
                             }
                           >
-                            {
-                              formatQuantity(
-                                scopeItem.scope_quantity
-                              )
-                            }
+                            {formatQuantity(
+                              scopeItem.scope_quantity
+                            )}
                           </span>
 
 
@@ -1984,14 +2093,11 @@ export default function ScopeWorkspace({
                               savingScopeItemId ===
                               scopeItem.id
                             }
-                            onChange={
-                              (
-                                event
-                              ) =>
-                                assignWorkPackage(
-                                  scopeItem.id,
-                                  event.target.value
-                                )
+                            onChange={(event) =>
+                              assignWorkPackage(
+                                scopeItem.id,
+                                event.target.value
+                              )
                             }
                           >
                             <option value="">
@@ -1999,9 +2105,7 @@ export default function ScopeWorkspace({
                             </option>
 
                             {activeWorkPackages.map(
-                              (
-                                workPackage
-                              ) => (
+                              (workPackage) => (
                                 <option
                                   value={
                                     workPackage.id
@@ -2010,13 +2114,9 @@ export default function ScopeWorkspace({
                                     workPackage.id
                                   }
                                 >
-                                  {
-                                    workPackage.code
-                                  }{' '}
-                                  —{' '}
-                                  {
-                                    workPackage.description
-                                  }
+                                  {workPackage.code}
+                                  {' — '}
+                                  {workPackage.description}
                                 </option>
                               )
                             )}
@@ -2035,6 +2135,10 @@ export default function ScopeWorkspace({
                                   scopeItem
                                 )
                               }
+                              disabled={
+                                savingScopeItemId ===
+                                scopeItem.id
+                              }
                             >
                               Edit
                             </button>
@@ -2050,6 +2154,10 @@ export default function ScopeWorkspace({
       </section>
 
 
+      {/* ======================================================
+          NOTICE
+          ====================================================== */}
+
       {noticeMessage && (
         <div
           className={
@@ -2057,7 +2165,9 @@ export default function ScopeWorkspace({
           }
           role="status"
         >
-          <span>✓</span>
+          <span>
+            ✓
+          </span>
 
           <span>
             {noticeMessage}
@@ -2085,20 +2195,14 @@ export default function ScopeWorkspace({
           className={
             styles.scopeModalBackdrop
           }
-          onMouseDown={
-            (
-              event
-            ) => {
-
-              if (
-                event.target ===
-                event.currentTarget
-              ) {
-                closeWorkPackageModal()
-              }
-
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              closeWorkPackageModal()
             }
-          }
+          }}
         >
           <form
             className={
@@ -2168,22 +2272,17 @@ export default function ScopeWorkspace({
                   value={
                     workPackageForm.code
                   }
-                  onChange={
-                    (
-                      event
-                    ) =>
-                      setWorkPackageForm(
-                        (
-                          currentForm
-                        ) => ({
-                          ...currentForm,
+                  onChange={(event) =>
+                    setWorkPackageForm(
+                      (currentForm) => ({
+                        ...currentForm,
 
-                          code:
-                            normalizeWorkPackageCode(
-                              event.target.value
-                            ),
-                        })
-                      )
+                        code:
+                          normalizeWorkPackageCode(
+                            event.target.value
+                          ),
+                      })
+                    )
                   }
                   placeholder="VEX"
                 />
@@ -2207,20 +2306,15 @@ export default function ScopeWorkspace({
                   value={
                     workPackageForm.description
                   }
-                  onChange={
-                    (
-                      event
-                    ) =>
-                      setWorkPackageForm(
-                        (
-                          currentForm
-                        ) => ({
-                          ...currentForm,
+                  onChange={(event) =>
+                    setWorkPackageForm(
+                      (currentForm) => ({
+                        ...currentForm,
 
-                          description:
-                            event.target.value,
-                        })
-                      )
+                        description:
+                          event.target.value,
+                      })
+                    )
                   }
                   placeholder="Exterior Walls"
                 />
@@ -2269,11 +2363,9 @@ export default function ScopeWorkspace({
                   isSaving
                 }
               >
-                {
-                  isSaving
-                    ? 'Saving...'
-                    : 'Add Work Package'
-                }
+                {isSaving
+                  ? 'Saving...'
+                  : 'Add Work Package'}
               </button>
             </div>
           </form>
@@ -2290,20 +2382,14 @@ export default function ScopeWorkspace({
           className={
             styles.scopeModalBackdrop
           }
-          onMouseDown={
-            (
-              event
-            ) => {
-
-              if (
-                event.target ===
-                event.currentTarget
-              ) {
-                closeScopeItemModal()
-              }
-
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              closeScopeItemModal()
             }
-          }
+          }}
         >
           <form
             className={
@@ -2324,11 +2410,9 @@ export default function ScopeWorkspace({
                 </p>
 
                 <h2>
-                  {
-                    scopeItemForm.id
-                      ? 'Edit Scope Item'
-                      : 'Add Scope Item'
-                  }
+                  {scopeItemForm.id
+                    ? 'Edit Scope Item'
+                    : 'Add Scope Item'}
                 </h2>
               </div>
 
@@ -2373,20 +2457,15 @@ export default function ScopeWorkspace({
                   value={
                     scopeItemForm.project_work_package_id
                   }
-                  onChange={
-                    (
-                      event
-                    ) =>
-                      setScopeItemForm(
-                        (
-                          currentForm
-                        ) => ({
-                          ...currentForm,
+                  onChange={(event) =>
+                    setScopeItemForm(
+                      (currentForm) => ({
+                        ...currentForm,
 
-                          project_work_package_id:
-                            event.target.value,
-                        })
-                      )
+                        project_work_package_id:
+                          event.target.value,
+                      })
+                    )
                   }
                 >
                   <option value="">
@@ -2394,9 +2473,7 @@ export default function ScopeWorkspace({
                   </option>
 
                   {activeWorkPackages.map(
-                    (
-                      workPackage
-                    ) => (
+                    (workPackage) => (
                       <option
                         value={
                           workPackage.id
@@ -2405,13 +2482,9 @@ export default function ScopeWorkspace({
                           workPackage.id
                         }
                       >
-                        {
-                          workPackage.code
-                        }{' '}
-                        —{' '}
-                        {
-                          workPackage.description
-                        }
+                        {workPackage.code}
+                        {' — '}
+                        {workPackage.description}
                       </option>
                     )
                   )}
@@ -2433,35 +2506,27 @@ export default function ScopeWorkspace({
                   value={
                     scopeItemForm.service_name
                   }
-                  onChange={
-                    (
-                      event
-                    ) => {
+                  onChange={(event) => {
+                    const nextName =
+                      event.target.value
 
-                      const nextName =
-                        event.target.value
+                    setScopeItemForm(
+                      (currentForm) => ({
+                        ...currentForm,
 
-                      setScopeItemForm(
-                        (
-                          currentForm
-                        ) => ({
-                          ...currentForm,
+                        service_name:
+                          nextName,
 
-                          service_name:
-                            nextName,
-
-                          service_code:
-                            serviceCodeWasEdited
-                              ? currentForm.service_code
-                              : createServiceCode(
-                                  nextName,
-                                  activeScopeItems
-                                ),
-                        })
-                      )
-
-                    }
-                  }
+                        service_code:
+                          serviceCodeWasEdited
+                            ? currentForm.service_code
+                            : createServiceCode(
+                                nextName,
+                                activeScopeItems
+                              ),
+                      })
+                    )
+                  }}
                   placeholder="Install the Glasroc board"
                 />
               </label>
@@ -2481,30 +2546,22 @@ export default function ScopeWorkspace({
                   value={
                     scopeItemForm.service_code
                   }
-                  onChange={
-                    (
-                      event
-                    ) => {
+                  onChange={(event) => {
+                    setServiceCodeWasEdited(
+                      true
+                    )
 
-                      setServiceCodeWasEdited(
-                        true
-                      )
+                    setScopeItemForm(
+                      (currentForm) => ({
+                        ...currentForm,
 
-                      setScopeItemForm(
-                        (
-                          currentForm
-                        ) => ({
-                          ...currentForm,
-
-                          service_code:
-                            normalizeServiceCode(
-                              event.target.value
-                            ),
-                        })
-                      )
-
-                    }
-                  }
+                        service_code:
+                          normalizeServiceCode(
+                            event.target.value
+                          ),
+                      })
+                    )
+                  }}
                   placeholder="GLASROC_BOARD"
                 />
               </label>
@@ -2523,46 +2580,32 @@ export default function ScopeWorkspace({
                   value={
                     scopeItemForm.unit
                   }
-                  onChange={
-                    (
-                      event
-                    ) =>
-                      setScopeItemForm(
-                        (
-                          currentForm
-                        ) => ({
-                          ...currentForm,
+                  onChange={(event) =>
+                    setScopeItemForm(
+                      (currentForm) => ({
+                        ...currentForm,
 
-                          unit:
-                            event.target.value,
+                        unit:
+                          event.target.value,
 
-                          custom_unit:
-                            event.target.value ===
-                            'OTHER'
-                              ? currentForm.custom_unit
-                              : '',
-                        })
-                      )
+                        custom_unit:
+                          event.target.value ===
+                          'OTHER'
+                            ? currentForm.custom_unit
+                            : '',
+                      })
+                    )
                   }
                 >
                   {unitOptions.map(
-                    (
-                      unit
-                    ) => (
+                    (unit) => (
                       <option
-                        value={
-                          unit
-                        }
-                        key={
-                          unit
-                        }
+                        value={unit}
+                        key={unit}
                       >
-                        {
-                          unit ===
-                          'OTHER'
-                            ? 'Other...'
-                            : unit
-                        }
+                        {unit === 'OTHER'
+                          ? 'Other...'
+                          : unit}
                       </option>
                     )
                   )}
@@ -2588,20 +2631,15 @@ export default function ScopeWorkspace({
                     value={
                       scopeItemForm.custom_unit
                     }
-                    onChange={
-                      (
-                        event
-                      ) =>
-                        setScopeItemForm(
-                          (
-                            currentForm
-                          ) => ({
-                            ...currentForm,
+                    onChange={(event) =>
+                      setScopeItemForm(
+                        (currentForm) => ({
+                          ...currentForm,
 
-                            custom_unit:
-                              event.target.value,
-                          })
-                        )
+                          custom_unit:
+                            event.target.value,
+                        })
+                      )
                     }
                     placeholder="Example: box"
                   />
@@ -2626,20 +2664,15 @@ export default function ScopeWorkspace({
                   value={
                     scopeItemForm.scope_quantity
                   }
-                  onChange={
-                    (
-                      event
-                    ) =>
-                      setScopeItemForm(
-                        (
-                          currentForm
-                        ) => ({
-                          ...currentForm,
+                  onChange={(event) =>
+                    setScopeItemForm(
+                      (currentForm) => ({
+                        ...currentForm,
 
-                          scope_quantity:
-                            event.target.value,
-                        })
-                      )
+                        scope_quantity:
+                          event.target.value,
+                      })
+                    )
                   }
                   placeholder="1500"
                 />
@@ -2693,13 +2726,11 @@ export default function ScopeWorkspace({
                   isSaving
                 }
               >
-                {
-                  isSaving
-                    ? 'Saving...'
-                    : scopeItemForm.id
-                      ? 'Save Scope Item'
-                      : 'Add Scope Item'
-                }
+                {isSaving
+                  ? 'Saving...'
+                  : scopeItemForm.id
+                    ? 'Save Scope Item'
+                    : 'Add Scope Item'}
               </button>
             </div>
           </form>
