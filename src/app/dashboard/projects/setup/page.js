@@ -1426,149 +1426,50 @@ export default async function ProjectSetupPage({
       }
     >
       {/* ======================================================
-          PAGE HEADER
+          COMPACT PROJECT CONTEXT
           ====================================================== */}
 
       <section
         className={
-          styles.heading
+          styles.compactProjectContext
         }
       >
-        <div
+        <span
           className={
-            styles.headingContent
+            styles.compactProjectCode
           }
         >
-          <p
-            className={
-              styles.eyebrow
-            }
-          >
-            Project definition
-          </p>
+          {selectedProject.code ||
+            'PROJECT'}
+        </span>
 
-          <h1
-            className={
-              styles.title
-            }
-          >
-            Project Setup
-          </h1>
+        <strong
+          className={
+            styles.compactProjectName
+          }
+        >
+          {selectedProject.name}
+        </strong>
 
-          <p
-            className={
-              styles.description
-            }
-          >
-            Define what the project
-            is, what must be
-            delivered, where
-            production will occur,
-            and how the scope is
-            distributed before
-            planning begins.
-          </p>
-        </div>
-
+        <span
+          className={
+            styles.compactProjectStatus
+          }
+        >
+          {statusLabels[
+            selectedProject.status
+          ] ||
+            selectedProject.status}
+        </span>
 
         <Link
           href="/dashboard/projects/setup"
           className={
-            styles.backLink
+            styles.compactProjectSwitch
           }
         >
-          ← Select project
+          Change project
         </Link>
-      </section>
-
-
-      {/* ======================================================
-          PROJECT CONTEXT
-          ====================================================== */}
-
-      <section
-        className={
-          styles.projectContext
-        }
-      >
-        <div
-          className={
-            styles.projectContextIdentity
-          }
-        >
-          <span
-            className={
-              styles.projectContextCode
-            }
-          >
-            {selectedProject.code ||
-              'PROJECT'}
-          </span>
-
-
-          <div>
-            <h2
-              className={
-                styles.projectContextName
-              }
-            >
-              {selectedProject.name}
-            </h2>
-
-            <p
-              className={
-                styles.projectContextMeta
-              }
-            >
-              {selectedProject.client_name ||
-                'Client not specified'}
-
-              <span>
-                ·
-              </span>
-
-              {formatLocation(
-                selectedProject
-              )}
-
-              <span>
-                ·
-              </span>
-
-              {statusLabels[
-                selectedProject.status
-              ] ||
-                selectedProject.status}
-            </p>
-          </div>
-        </div>
-
-
-        <div
-          className={
-            styles.readinessBlock
-          }
-        >
-          <span
-            className={
-              styles.readinessLabel
-            }
-          >
-            Ready for Planning
-          </span>
-
-          <span
-            className={
-              projectReadyForPlanning
-                ? styles.readinessReady
-                : styles.readinessNotReady
-            }
-          >
-            {projectReadyForPlanning
-              ? 'READY'
-              : 'NOT READY'}
-          </span>
-        </div>
       </section>
 
 
