@@ -81,12 +81,28 @@ function zoneSoft(name) {
 }
 
 
+function formatQuantity(value) {
+  const numericValue = Number(value)
+
+  if (!Number.isFinite(numericValue)) {
+    return '0'
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(numericValue)
+}
+
+
 export default function LocationWorkspace({
   projectId,
   projectName = 'Project',
   projectCode = '',
   userId,
   initialLocations = [],
+  scopeItems = [],
+  allocations = [],
 }) {
   const supabase = useMemo(() => createClient(), [])
 
@@ -160,6 +176,54 @@ export default function LocationWorkspace({
     (location) =>
       !['building', 'floor', 'zone'].includes(location.location_type)
   )
+
+
+  const allocationsByLocation = useMemo(() => {
+    const result = new Map()
+
+    allocations.forEach((allocation) => {
+      if (!allocation.location_id || !allocation.service_id) return
+
+      if (!result.has(allocation.location_id)) {
+        result.set(allocation.location_id, new Map())
+      }
+
+      const serviceMap = result.get(allocation.location_id)
+      const currentValue = serviceMap.get(allocation.service_id) || 0
+
+      serviceMap.set(
+        allocation.service_id,
+        currentValue + Number(allocation.quantity || 0)
+      )
+    })
+
+    return result
+  }, [allocations])
+
+
+  function serviceQuantitiesForLocation(locationId) {
+    const serviceMap = allocationsByLocation.get(locationId)
+
+    if (!serviceMap) return []
+
+    return scopeItems
+      .map((scopeItem) => ({
+        ...scopeItem,
+        allocatedQuantity: serviceMap.get(scopeItem.id) || 0,
+      }))
+      .filter((scopeItem) => scopeItem.allocatedQuantity !== 0)
+  }
+
+
+  function directZonesForParent(parentId) {
+    return zones.filter((zone) => {
+      if (parentId) {
+        return zone.parent_id === parentId
+      }
+
+      return !zone.parent_id
+    })
+  }
 
 
   const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -237,13 +301,15 @@ export default function LocationWorkspace({
         key: building.id,
         building,
         name: building.name,
+        directZones: directZonesForParent(building.id),
         floors: floorEntriesForBuilding(building),
       }))
       .filter(
         (group) =>
           !normalizedSearch ||
           matchesSearch(group.building) ||
-          group.floors.length > 0
+          group.floors.length > 0 ||
+          group.directZones.some((zone) => matchesSearch(zone))
       )
 
     const orphanFloors = floorEntriesForBuilding(null)
@@ -253,6 +319,7 @@ export default function LocationWorkspace({
         key: 'project-root',
         building: null,
         name: projectName,
+        directZones: directZonesForParent(null),
         floors: buildings.length === 0
           ? floors
               .map((floor) => {
@@ -774,7 +841,131 @@ export default function LocationWorkspace({
 
 
                     {!buildingCollapsed && (
-                      <div className={styles.floorStack}>
+                      <>
+                        {group.directZones
+                          .filter(
+                            (zone) =>
+                              !normalizedSearch ||
+                              matchesSearch(zone) ||
+                              serviceQuantitiesForLocation(zone.id).some(
+                                (scopeItem) =>
+                                  String(scopeItem.service_name || '')
+                                    .toLowerCase()
+                                    .includes(normalizedSearch) ||
+                                  String(scopeItem.service_code || '')
+                                    .toLowerCase()
+                                    .includes(normalizedSearch)
+                              )
+                          )
+                          .map((zone) => {
+                            const zoneServices =
+                              serviceQuantitiesForLocation(zone.id)
+
+                            return (
+                              <div className={styles.zoneGrid} key={`direct-${zone.id}`}>
+                                <article
+                                  className={styles.zoneCard}
+                                  style={{
+                                    '--zone-accent': zoneAccent(zone.name),
+                                    '--zone-soft': zoneSoft(zone.name),
+                                  }}
+                                >
+                                  <div className={styles.zoneHeader}>
+                                    <div className={styles.zoneIdentity}>
+                                      <span className={styles.zoneDot} />
+                                      <div>
+                                        <span className={styles.hierarchyLevelLabel}>
+                                          Zone / Area
+                                        </span>
+                                        <strong>{zone.name}</strong>
+                                      </div>
+                                    </div>
+
+                                    <div className={styles.zoneHeaderActions}>
+                                      <span className={styles.zoneCount}>
+                                        {zoneServices.length}{' '}
+                                        {zoneServices.length === 1
+                                          ? 'Scope Item'
+                                          : 'Scope Items'}
+                                      </span>
+
+                                      <button
+                                        type="button"
+                                        className={styles.zoneEditButton}
+                                        onClick={() => openEditLocationModal(zone)}
+                                      >
+                                        Edit
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        className={`${styles.zoneEditButton} ${styles.zoneDeleteButton}`}
+                                        onClick={() => deleteTree(zone)}
+                                        disabled={isSaving}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className={styles.zoneLocationList}>
+                                    {zoneServices.length === 0 ? (
+                                      <div className={styles.zoneEmptyState}>
+                                        No service quantities allocated to this zone yet.
+                                      </div>
+                                    ) : (
+                                      zoneServices.map((scopeItem) => (
+                                        <div
+                                          className={styles.zoneLocationRow}
+                                          key={`${zone.id}-${scopeItem.id}`}
+                                        >
+                                          <div className={styles.zoneLocationIdentity}>
+                                            <span className={styles.zoneLocationIcon}>
+                                              {scopeItem.service_code || '•'}
+                                            </span>
+
+                                            <div>
+                                              <strong>
+                                                {scopeItem.service_name}
+                                              </strong>
+
+                                              <span>
+                                                {scopeItem.service_code || 'Scope Item'}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <div className={styles.zoneLocationActions}>
+                                            <strong>
+                                              {formatQuantity(
+                                                scopeItem.allocatedQuantity
+                                              )}{' '}
+                                              {scopeItem.unit || ''}
+                                            </strong>
+                                          </div>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    className={styles.zoneAddButton}
+                                    onClick={() =>
+                                      openNewLocationModal({
+                                        parentId: zone.id,
+                                        locationType: 'area',
+                                      })
+                                    }
+                                  >
+                                    + Add production location
+                                  </button>
+                                </article>
+                              </div>
+                            )
+                          })}
+
+                        <div className={styles.floorStack}>
                         {group.floors.length === 0 ? (
                           <div className={styles.floorEmptyState}>
                             <strong>No divisions yet.</strong>
@@ -1059,6 +1250,7 @@ export default function LocationWorkspace({
                           })
                         )}
                       </div>
+                      </>
                     )}
                   </article>
                 )
