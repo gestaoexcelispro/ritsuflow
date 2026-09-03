@@ -1,4 +1,4 @@
-import Link from 'next/link'
+﻿import Link from 'next/link'
 import { createClient } from '../../lib/supabase/server'
 import styles from './overview.module.css'
 
@@ -205,7 +205,7 @@ export default async function DashboardHome() {
     {
       label: 'Active projects',
       value: projectQueryFailed
-        ? '—'
+        ? 'â€”'
         : String(activeProjects),
 
       detail: formatProjectDetail({
@@ -220,7 +220,7 @@ export default async function DashboardHome() {
     {
       label: 'Locations',
       value: locationQueryFailed
-        ? '—'
+        ? 'â€”'
         : String(locations),
 
       detail: formatLocationDetail({
@@ -232,13 +232,13 @@ export default async function DashboardHome() {
     },
     {
       label: 'Open constraints',
-      value: '—',
+      value: 'â€”',
       detail: 'Constraint module coming next',
       icon: 'CM',
     },
     {
       label: 'Plan reliability',
-      value: '—',
+      value: 'â€”',
       detail: 'Weekly planning module coming next',
       icon: 'PPC',
     },
@@ -276,7 +276,7 @@ export default async function DashboardHome() {
 
   const readinessItems = [
     {
-      icon: '✓',
+      icon: 'âœ“',
       name: 'Secure authentication',
       status: 'Complete',
       statusClass: styles.statusComplete,
@@ -427,7 +427,7 @@ export default async function DashboardHome() {
                 className={styles.cycleArrow}
                 aria-hidden="true"
               >
-                →
+                â†’
               </span>
             </Link>
           ))}
@@ -517,7 +517,7 @@ export default async function DashboardHome() {
           </div>
 
           <Link
-            href="/dashboard/projetos/coleta"
+            href="/dashboard/projects/setup"
             className={
               styles.primaryButton
             }
@@ -529,3 +529,4 @@ export default async function DashboardHome() {
     </div>
   )
 }
+

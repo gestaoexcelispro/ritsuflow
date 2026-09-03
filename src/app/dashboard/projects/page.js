@@ -1,16 +1,16 @@
+﻿'use client'
+
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from 'react'
+import { useLanguage } from '../../../contexts/LanguageContext'
+import { createClient } from '../../../lib/supabase/client'
 
-import { createClient } from '../../../../lib/supabase/server'
-
-import ProjectForm from './ProjectForm'
-import ScopeWorkspace from './ScopeWorkspace'
-import LocationWorkspace from './LocationWorkspace'
-
-import styles from './project-setup.module.css'
-import selectorStyles from './selector.module.css'
-
-export const dynamic = 'force-dynamic'
+const PROJECT_COVER_BUCKET =
+  'project-covers'
 
 const statusLabels = {
   planning: 'Planning',
@@ -20,813 +20,605 @@ const statusLabels = {
   archived: 'Archived',
 }
 
-const setupSections = [
-  { id: 'general', number: '01', label: 'General', description: 'Project identity and contractual information.' },
-  { id: 'scope', number: '02', label: 'Scope', description: 'Define the Scope Breakdown Structure.' },
-  { id: 'locations', number: '03', label: 'Locations', description: 'Define the physical production hierarchy.' },
-  { id: 'allocation', number: '04', label: 'Allocation', description: 'Allocate project scope across locations.' },
-  { id: 'production', number: '05', label: 'Production Parameters', description: 'Define productivity and production inputs.' },
-]
-
-function createSuggestedCode(projects) {
-  const highestNumber = projects.reduce((currentHighest, project) => {
-    const match = project.code?.match(/^RF-(\d+)$/)
-    if (!match) return currentHighest
-    return Math.max(currentHighest, Number(match[1]))
-  }, 0)
-
-  return `RF-${String(highestNumber + 1).padStart(4, '0')}`
-}
-
 function formatLocation(project) {
-  const locationParts = [project.city, project.state_region].filter(Boolean)
-  if (locationParts.length > 0) return locationParts.join(', ')
-  return project.country_code || 'Location not specified'
-}
-
-function normalizeSection(value) {
-  const validSections = new Set(setupSections.map((section) => section.id))
-  if (typeof value === 'string' && validSections.has(value)) return value
-  return 'general'
-}
-
-function formatQuantity(value) {
-  if (value === null || value === undefined || value === '') return '—'
-  const numericValue = Number(value)
-  if (!Number.isFinite(numericValue)) return String(value)
-
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(numericValue)
-}
-
-function getAllocationStatus(scopeQuantity, allocatedQuantity) {
-  if (scopeQuantity === null || scopeQuantity === undefined) {
-    return 'quantity_missing'
-  }
-
-  const scope = Number(scopeQuantity)
-  const allocated = Number(allocatedQuantity || 0)
-  const tolerance = 0.000001
-
-  if (Math.abs(allocated - scope) <= tolerance) return 'fully_allocated'
-  if (allocated === 0) return 'not_allocated'
-  if (allocated < scope) return 'partially_allocated'
-  return 'overallocated'
-}
-
-function getAllocationStatusLabel(status) {
-  const labels = {
-    quantity_missing: 'Quantity missing',
-    not_allocated: 'Not allocated',
-    partially_allocated: 'Partially allocated',
-    fully_allocated: 'Fully allocated',
-    overallocated: 'Overallocated',
-  }
-
-  return labels[status] || 'Not evaluated'
-}
-
-function getAllocationStatusClass(status) {
-  if (status === 'fully_allocated') return styles.statusSuccess
-  if (status === 'partially_allocated' || status === 'not_allocated') return styles.statusWarning
-  if (status === 'overallocated') return styles.statusDanger
-  return styles.statusNeutral
-}
-
-export default async function ProjectSetupPage({ searchParams }) {
-  const resolvedSearchParams = await searchParams
-
-  const rawProjectId = resolvedSearchParams?.projectId
-  const rawMode = resolvedSearchParams?.mode
-  const rawSection = resolvedSearchParams?.section
-
-  const projectId = Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId
-  const mode = Array.isArray(rawMode) ? rawMode[0] : rawMode
-  const requestedSection = Array.isArray(rawSection) ? rawSection[0] : rawSection
-  const activeSection = normalizeSection(requestedSection)
-  const isCreateMode = mode === 'new' && !projectId
-
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect('/login')
-
-  const { data: organization, error: organizationError } = await supabase
-    .from('organizations')
-    .select('id, name')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (organizationError || !organization) {
-    console.error('RitsuFlow organization could not be loaded.', organizationError)
-
-    return (
-      <div className={styles.container}>
-        <div className={styles.errorPanel}>
-          <h1 className={styles.errorTitle}>Organization unavailable</h1>
-          <p className={styles.errorDescription}>
-            The project workspace could not identify an organization for your account.
-          </p>
-          <Link href="/dashboard" className={styles.backLink}>
-            Return to overview
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
-  const { data: projectsData, error: projectsError } = await supabase
-    .from('projects')
-    .select(`
-      id,
-      code,
-      name,
-      client_name,
-      status,
-      city,
-      state_region,
-      country_code,
-      proposal_number,
-      contract_number,
-      contract_value,
-      currency_code,
-      planned_start_date,
-      planned_finish_date,
-      address_line,
-      neighborhood,
-      postal_code,
-      cover_image_path,
-      latitude,
-      longitude,
-      geofence_radius_m,
-      geofence_enabled,
-      max_gps_accuracy_m
-    `)
-    .eq('organization_id', organization.id)
-    .neq('status', 'archived')
-    .order('created_at', { ascending: false })
-
-  if (projectsError) {
-    console.error('RitsuFlow projects could not be loaded.', projectsError)
-  }
-
-  const projects = projectsData || []
-  let selectedProject = null
-
-  if (projectId) {
-    selectedProject = projects.find((project) => project.id === projectId) || null
-
-    if (!selectedProject) {
-      return (
-        <div className={styles.container}>
-          <div className={styles.errorPanel}>
-            <h1 className={styles.errorTitle}>Project unavailable</h1>
-            <p className={styles.errorDescription}>
-              The requested project does not exist or your account cannot access it.
-            </p>
-            <Link href="/dashboard/projects/setup" className={styles.backLink}>
-              Select another project
-            </Link>
-          </div>
-        </div>
-      )
-    }
-  }
-
-  const suggestedCode = createSuggestedCode(projects)
-
-  if (!selectedProject && !isCreateMode) {
-    return (
-      <div className={styles.container}>
-        <section className={styles.heading}>
-          <div className={styles.headingContent}>
-            <p className={styles.eyebrow}>Project definition</p>
-            <h1 className={styles.title}>Project Setup</h1>
-            <p className={styles.description}>
-              Select a project to define its identity, scope, production locations, scope allocation,
-              and production parameters before planning begins.
-            </p>
-          </div>
-
-          <Link href="/dashboard/projects" className={styles.backLink}>
-            ← Back to projects
-          </Link>
-        </section>
-
-        <div className={styles.contextBar}>
-          <div className={styles.contextIdentity}>
-            <span className={styles.contextIcon}>OR</span>
-            <div>
-              <p className={styles.contextLabel}>Organization</p>
-              <p className={styles.contextValue}>{organization.name}</p>
-            </div>
-          </div>
-
-          <span className={styles.contextMode}>
-            {projects.length === 1 ? '1 project' : `${projects.length} projects`}
-          </span>
-        </div>
-
-        <article className={styles.formPanel}>
-          <div className={`${styles.formHeader} ${selectorStyles.selectorHeader}`}>
-            <div>
-              <h2 className={styles.formTitle}>Select a project</h2>
-              <p className={styles.formDescription}>
-                Choose the project whose definition you want to review or update.
-              </p>
-            </div>
-
-            <Link href="/dashboard/projects/setup?mode=new" className={styles.primaryButton}>
-              + Create new project
-            </Link>
-          </div>
-
-          {projects.length === 0 ? (
-            <div className={selectorStyles.emptyState}>
-              <h3 className={selectorStyles.emptyTitle}>No projects available.</h3>
-              <p className={selectorStyles.emptyDescription}>
-                Create the first project before defining its scope and production structure.
-              </p>
-              <Link href="/dashboard/projects/setup?mode=new" className={styles.primaryButton}>
-                Create first project
-              </Link>
-            </div>
-          ) : (
-            <div className={styles.section}>
-              <div className={selectorStyles.projectList}>
-                {projects.map((project) => (
-                  <article className={selectorStyles.projectCard} key={project.id}>
-                    <span className={selectorStyles.projectCode}>{project.code || 'Unassigned'}</span>
-
-                    <div className={selectorStyles.projectIdentity}>
-                      <span className={selectorStyles.projectName}>{project.name}</span>
-                      <span className={selectorStyles.projectLocation}>{formatLocation(project)}</span>
-                    </div>
-
-                    <span className={selectorStyles.projectClient}>
-                      {project.client_name || 'Client not specified'}
-                    </span>
-
-                    <span className={selectorStyles.projectStatus}>
-                      {statusLabels[project.status] || project.status}
-                    </span>
-
-                    <Link
-                      href={`/dashboard/projects/setup?projectId=${project.id}&section=general`}
-                      className={selectorStyles.configureLink}
-                    >
-                      Configure →
-                    </Link>
-                  </article>
-                ))}
-              </div>
-            </div>
-          )}
-        </article>
-      </div>
-    )
-  }
-
-  if (isCreateMode) {
-    return (
-      <div className={styles.container}>
-        <section className={styles.heading}>
-          <div className={styles.headingContent}>
-            <p className={styles.eyebrow}>Project foundation</p>
-            <h1 className={styles.title}>Create Project</h1>
-            <p className={styles.description}>
-              Establish the project identity, contractual information, planned boundaries,
-              geographic information, and cover image.
-            </p>
-          </div>
-
-          <Link href="/dashboard/projects/setup" className={styles.backLink}>
-            ← Select project
-          </Link>
-        </section>
-
-        <ProjectForm
-          organizationId={organization.id}
-          organizationName={organization.name}
-          userId={user.id}
-          project={null}
-          suggestedCode={suggestedCode}
-        />
-      </div>
-    )
-  }
-
-  const [
-    workPackagesResult,
-    scopeItemsResult,
-    locationsResult,
-    allocationsResult,
-    productivityResult,
-  ] = await Promise.all([
-    supabase
-      .from('project_work_packages')
-      .select(`
-        id,
-        project_id,
-        code,
-        description,
-        color,
-        is_active
-      `)
-      .eq('project_id', selectedProject.id)
-      .order('code', { ascending: true }),
-
-    supabase
-      .from('project_services')
-      .select(`
-        id,
-        project_id,
-        project_work_package_id,
-        service_code,
-        service_name,
-        unit,
-        scope_quantity,
-        unit_cost,
-        sequence_number,
-        is_active
-      `)
-      .eq('project_id', selectedProject.id)
-      .order('sequence_number', { ascending: true }),
-
-    supabase
-      .from('locations')
-      .select(`
-        id,
-        project_id,
-        parent_id,
-        name,
-        location_type,
-        environment_type,
-        sequence_number,
-        created_at,
-        updated_at
-      `)
-      .eq('project_id', selectedProject.id)
-      .order('sequence_number', { ascending: true }),
-
-    supabase
-      .from('location_service_quantities')
-      .select(`
-        location_id,
-        service_id,
-        quantity
-      `)
-      .eq('project_id', selectedProject.id),
-
-    supabase
-      .from('project_service_productivity')
-      .select(`
-        id,
-        service_id
-      `)
-      .eq('project_id', selectedProject.id),
-  ])
-
-  if (workPackagesResult.error) {
-    console.error('Work Packages could not be loaded.', workPackagesResult.error)
-  }
-
-  if (scopeItemsResult.error) {
-    console.error('Scope Items could not be loaded.', scopeItemsResult.error)
-  }
-
-  if (locationsResult.error) {
-    console.error('Locations could not be loaded.', locationsResult.error)
-  }
-
-  if (allocationsResult.error) {
-    console.error('Scope allocations could not be loaded.', allocationsResult.error)
-  }
-
-  if (productivityResult.error) {
-    console.error('Production parameters could not be loaded.', productivityResult.error)
-  }
-
-  const workPackages = workPackagesResult.data || []
-  const scopeItems = scopeItemsResult.data || []
-  const activeWorkPackages = workPackages.filter((workPackage) => workPackage.is_active !== false)
-  const activeScopeItems = scopeItems.filter((scopeItem) => scopeItem.is_active !== false)
-  const locations = locationsResult.data || []
-  const allocations = allocationsResult.data || []
-  const productivityRecords = productivityResult.data || []
-
-  const assignedScopeItemCount = activeScopeItems.filter((scopeItem) =>
-    Boolean(scopeItem.project_work_package_id)
-  ).length
-
-  const quantityDefinedCount = activeScopeItems.filter(
-    (scopeItem) => scopeItem.scope_quantity !== null && scopeItem.scope_quantity !== undefined
-  ).length
-
-  const unitsDefinedCount = activeScopeItems.filter((scopeItem) =>
-    Boolean(String(scopeItem.unit || '').trim())
-  ).length
-
-  const scopeComplete =
-    activeScopeItems.length > 0 &&
-    assignedScopeItemCount === activeScopeItems.length &&
-    quantityDefinedCount === activeScopeItems.length &&
-    unitsDefinedCount === activeScopeItems.length
-
-  const locationCount = locations.length
-  const locationsComplete = locationCount > 0
-
-  const allocatedByScopeItem = new Map()
-
-  allocations.forEach((allocation) => {
-    const currentValue = allocatedByScopeItem.get(allocation.service_id) || 0
-    allocatedByScopeItem.set(
-      allocation.service_id,
-      currentValue + Number(allocation.quantity || 0)
-    )
-  })
-
-  const reconciliation = activeScopeItems.map((scopeItem) => {
-    const allocatedQuantity = allocatedByScopeItem.get(scopeItem.id) || 0
-    const status = getAllocationStatus(scopeItem.scope_quantity, allocatedQuantity)
-
-    const scopeQuantity =
-      scopeItem.scope_quantity === null || scopeItem.scope_quantity === undefined
-        ? null
-        : Number(scopeItem.scope_quantity)
-
-    const unallocatedQuantity = scopeQuantity === null ? null : scopeQuantity - allocatedQuantity
-
-    const allocationPercentage =
-      scopeQuantity === null || scopeQuantity === 0
-        ? null
-        : (allocatedQuantity / scopeQuantity) * 100
-
-    return {
-      ...scopeItem,
-      allocated_quantity: allocatedQuantity,
-      unallocated_quantity: unallocatedQuantity,
-      allocation_percentage: allocationPercentage,
-      allocation_status: status,
-    }
-  })
-
-  const fullyAllocatedCount = reconciliation.filter(
-    (item) => item.allocation_status === 'fully_allocated'
-  ).length
-
-  const partiallyAllocatedCount = reconciliation.filter(
-    (item) => item.allocation_status === 'partially_allocated'
-  ).length
-
-  const notAllocatedCount = reconciliation.filter(
-    (item) => item.allocation_status === 'not_allocated'
-  ).length
-
-  const overallocatedCount = reconciliation.filter(
-    (item) => item.allocation_status === 'overallocated'
-  ).length
-
-  const quantityMissingCount = reconciliation.filter(
-    (item) => item.allocation_status === 'quantity_missing'
-  ).length
-
-  const allocationComplete =
-    activeScopeItems.length > 0 && fullyAllocatedCount === activeScopeItems.length
-
-  const scopeItemsWithProductivity = new Set(
-    productivityRecords.map((record) => record.service_id).filter(Boolean)
-  )
-
-  const productionParametersComplete =
-    activeScopeItems.length > 0 &&
-    activeScopeItems.every((scopeItem) => scopeItemsWithProductivity.has(scopeItem.id))
-
-  function sectionHref(sectionId) {
-    return `/dashboard/projects/setup?projectId=${selectedProject.id}&section=${sectionId}`
+  const cityAndState = [
+    project.city,
+    project.state_region,
+  ].filter(Boolean)
+
+  if (cityAndState.length > 0) {
+    return cityAndState.join(', ')
   }
 
   return (
-    <div className={styles.container}>
-      <section className={styles.compactProjectContext}>
-        <span className={styles.compactProjectCode}>{selectedProject.code || 'PROJECT'}</span>
-        <strong className={styles.compactProjectName}>{selectedProject.name}</strong>
-        <span className={styles.compactProjectStatus}>
-          {statusLabels[selectedProject.status] || selectedProject.status}
-        </span>
-        <Link href="/dashboard/projects/setup" className={styles.compactProjectSwitch}>
-          Change project
+    project.country_code ||
+    'Not specified'
+  )
+}
+
+function formatContractValue(project) {
+  if (
+    project.contract_value === null ||
+    project.contract_value === undefined
+  ) {
+    return 'â€”'
+  }
+
+  try {
+    return new Intl.NumberFormat(
+      'en-US',
+      {
+        style: 'currency',
+        currency:
+          project.currency_code ||
+          'USD',
+      }
+    ).format(
+      Number(
+        project.contract_value
+      )
+    )
+  } catch {
+    return String(
+      project.contract_value
+    )
+  }
+}
+
+export default function ProjectsPage() {
+  const { lang } = useLanguage()
+
+  const [projects, setProjects] =
+    useState([])
+
+  const [isLoading, setIsLoading] =
+    useState(true)
+
+  const [
+    deletingProjectId,
+    setDeletingProjectId,
+  ] = useState(null)
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState('')
+
+  const fetchProjects =
+    useCallback(async () => {
+      setIsLoading(true)
+      setErrorMessage('')
+
+      const supabase =
+        createClient()
+
+      const {
+        data,
+        error,
+      } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          code,
+          name,
+          client_name,
+          contract_value,
+          currency_code,
+          city,
+          state_region,
+          country_code,
+          status,
+          cover_image_path,
+          created_at
+        `)
+        .order('created_at', {
+          ascending: false,
+        })
+
+      if (error) {
+        console.error(
+          'Projects could not be loaded.',
+          error
+        )
+
+        setErrorMessage(
+          lang === 'en-US'
+            ? `Unable to load projects: ${error.message}`
+            : `NÃ£o foi possÃ­vel carregar os projetos: ${error.message}`
+        )
+      } else {
+        setProjects(data || [])
+      }
+
+      setIsLoading(false)
+    }, [lang])
+
+  useEffect(() => {
+    fetchProjects()
+  }, [fetchProjects])
+
+  async function handleDelete(
+    project
+  ) {
+    const confirmed =
+      window.confirm(
+        lang === 'en-US'
+          ? `Delete project "${project.name}"? This will permanently remove the project and all related data from every RitsuFlow module.`
+          : `Excluir o projeto "${project.name}"? Isso removerÃ¡ permanentemente o projeto e todos os dados relacionados de todos os mÃ³dulos do RitsuFlow.`
+      )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingProjectId(
+      project.id
+    )
+
+    setErrorMessage('')
+
+    const supabase =
+      createClient()
+
+    const { error } =
+      await supabase.rpc(
+        'delete_project_everywhere',
+        {
+          target_project_id:
+            project.id,
+        }
+      )
+
+    if (error) {
+      console.error(
+        'Project could not be deleted.',
+        error
+      )
+
+      setErrorMessage(
+        lang === 'en-US'
+          ? `Unable to delete the project: ${error.message}`
+          : `NÃ£o foi possÃ­vel excluir o projeto: ${error.message}`
+      )
+
+      setDeletingProjectId(null)
+      return
+    }
+
+    if (project.cover_image_path) {
+      const {
+        error: storageError,
+      } = await supabase.storage
+        .from(
+          PROJECT_COVER_BUCKET
+        )
+        .remove([
+          project.cover_image_path,
+        ])
+
+      if (storageError) {
+        console.warn(
+          'The project was deleted, but its cover image could not be removed from Storage.',
+          storageError
+        )
+      }
+    }
+
+    setProjects(
+      (currentProjects) =>
+        currentProjects.filter(
+          (currentProject) =>
+            currentProject.id !==
+            project.id
+        )
+    )
+
+    setDeletingProjectId(null)
+  }
+
+  return (
+    <div style={{ padding: '40px' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent:
+            'space-between',
+          alignItems: 'center',
+          gap: '24px',
+          marginBottom: '30px',
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              color: '#2A4365',
+              margin: '0 0 10px 0',
+              borderBottom:
+                '2px solid #e2e8f0',
+              paddingBottom: '10px',
+            }}
+          >
+            {lang === 'en-US'
+              ? 'Projects'
+              : 'Projetos'}
+          </h1>
+
+          <p
+            style={{
+              color: '#4a5568',
+              margin: 0,
+            }}
+          >
+            {lang === 'en-US'
+              ? 'Create and manage the projects used across every RitsuFlow module.'
+              : 'Crie e gerencie os projetos utilizados em todos os mÃ³dulos do RitsuFlow.'}
+          </p>
+        </div>
+
+        <Link
+          href="/dashboard/projects/setup?mode=new"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            minHeight: '44px',
+            padding: '0 20px',
+            borderRadius: '8px',
+            backgroundColor:
+              '#1d4ed8',
+            color: 'white',
+            fontWeight: 'bold',
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {lang === 'en-US'
+            ? '+ New Project'
+            : '+ Novo Projeto'}
         </Link>
-      </section>
+      </div>
 
-      <nav className={styles.setupNavigation} aria-label="Project setup sections">
-        {setupSections.map((section) => {
-          const isActive = activeSection === section.id
-          let state = 'pending'
+      {errorMessage && (
+        <div
+          role="alert"
+          style={{
+            marginBottom: '18px',
+            padding: '12px 15px',
+            border:
+              '1px solid #feb2b2',
+            borderRadius: '8px',
+            backgroundColor:
+              '#fff5f5',
+            color: '#c53030',
+          }}
+        >
+          {errorMessage}
+        </div>
+      )}
 
-          if (section.id === 'general') state = 'complete'
-          if (section.id === 'scope') state = scopeComplete ? 'complete' : 'incomplete'
-          if (section.id === 'locations') state = locationsComplete ? 'complete' : 'incomplete'
-          if (section.id === 'allocation') state = allocationComplete ? 'complete' : 'incomplete'
-          if (section.id === 'production') {
-            state = productionParametersComplete ? 'complete' : 'pending'
-          }
-
-          return (
-            <Link
-              href={sectionHref(section.id)}
-              className={[styles.setupTab, isActive ? styles.setupTabActive : '']
-                .filter(Boolean)
-                .join(' ')}
-              key={section.id}
-            >
-              <span className={styles.setupTabNumber}>{section.number}</span>
-
-              <span className={styles.setupTabContent}>
-                <span className={styles.setupTabLabel}>{section.label}</span>
-                <span className={styles.setupTabDescription}>{section.description}</span>
-              </span>
-
-              <span
-                className={[
-                  styles.setupTabState,
-                  state === 'complete' ? styles.setupTabStateComplete : '',
-                  state === 'incomplete' ? styles.setupTabStateIncomplete : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
+      <div
+        style={{
+          overflowX: 'auto',
+          borderRadius: '8px',
+          backgroundColor: 'white',
+          boxShadow:
+            '0 2px 4px rgba(0,0,0,0.05)',
+        }}
+      >
+        <table
+          style={{
+            width: '100%',
+            minWidth: '920px',
+            borderCollapse:
+              'collapse',
+            textAlign: 'left',
+          }}
+        >
+          <thead
+            style={{
+              borderBottom:
+                '2px solid #e2e8f0',
+              backgroundColor:
+                '#f7fafc',
+            }}
+          >
+            <tr>
+              <th
+                style={
+                  headerCellStyle
+                }
               >
-                {state === 'complete' ? '✓' : state === 'incomplete' ? '!' : '○'}
-              </span>
-            </Link>
-          )
-        })}
-      </nav>
+                {lang === 'en-US'
+                  ? 'Code'
+                  : 'CÃ³digo'}
+              </th>
 
-      {activeSection === 'general' && (
-        <>
-          <section className={styles.sectionIntro}>
-            <div>
-              <p className={styles.sectionIntroEyebrow}>01 — General</p>
-              <h2 className={styles.sectionIntroTitle}>Project identity and boundaries</h2>
-              <p className={styles.sectionIntroDescription}>
-                Maintain the contractual, geographic, scheduling, and identification information
-                that defines this project.
-              </p>
-            </div>
-          </section>
+              <th
+                style={
+                  headerCellStyle
+                }
+              >
+                {lang === 'en-US'
+                  ? 'Project'
+                  : 'Projeto'}
+              </th>
 
-          <ProjectForm
-            organizationId={organization.id}
-            organizationName={organization.name}
-            userId={user.id}
-            project={selectedProject}
-            suggestedCode={suggestedCode}
-          />
-        </>
-      )}
+              <th
+                style={
+                  headerCellStyle
+                }
+              >
+                {lang === 'en-US'
+                  ? 'Client'
+                  : 'Cliente'}
+              </th>
 
-      {activeSection === 'scope' && (
-        <>
-          <section className={styles.sectionIntro}>
-            <div>
-              <p className={styles.sectionIntroEyebrow}>02 — Scope</p>
-              <h2 className={styles.sectionIntroTitle}>Scope Breakdown Structure</h2>
-              <p className={styles.sectionIntroDescription}>
-                Define what the project must deliver. Work Packages organize the scope while Scope
-                Items define measurable production operations and their authoritative project quantities.
-              </p>
-            </div>
-          </section>
+              <th
+                style={
+                  headerCellStyle
+                }
+              >
+                {lang === 'en-US'
+                  ? 'Contract Value'
+                  : 'Valor do Contrato'}
+              </th>
 
-          <ScopeWorkspace
-            projectId={selectedProject.id}
-            userId={user.id}
-            initialWorkPackages={workPackages}
-            initialScopeItems={scopeItems}
-            currencyCode={selectedProject.currency_code || 'USD'}
-          />
-        </>
-      )}
+              <th
+                style={
+                  headerCellStyle
+                }
+              >
+                {lang === 'en-US'
+                  ? 'Location'
+                  : 'LocalizaÃ§Ã£o'}
+              </th>
 
-      {activeSection === 'locations' && (
-        <>
-          <section className={styles.sectionIntro}>
-            <div>
-              <p className={styles.sectionIntroEyebrow}>03 — Locations</p>
-              <h2 className={styles.sectionIntroTitle}>Location Breakdown Structure</h2>
-              <p className={styles.sectionIntroDescription}>
-                Define where production occurs using the project's physical hierarchy. Build the
-                structure from Building or Project through Division / Floor, Zone / Area, and
-                Production Location.
-              </p>
-            </div>
-          </section>
+              <th
+                style={
+                  headerCellStyle
+                }
+              >
+                Status
+              </th>
 
-          <LocationWorkspace
-            projectId={selectedProject.id}
-            projectName={selectedProject.name}
-            projectCode={selectedProject.code}
-            userId={user.id}
-            initialLocations={locations}
-            scopeItems={activeScopeItems}
-            allocations={allocations}
-          />
-        </>
-      )}
+              <th
+                style={
+                  headerCellStyle
+                }
+              >
+                {lang === 'en-US'
+                  ? 'Actions'
+                  : 'AÃ§Ãµes'}
+              </th>
+            </tr>
+          </thead>
 
-      {activeSection === 'allocation' && (
-        <>
-          <section className={styles.sectionIntro}>
-            <div>
-              <p className={styles.sectionIntroEyebrow}>04 — Allocation</p>
-              <h2 className={styles.sectionIntroTitle}>Scope Allocation</h2>
-              <p className={styles.sectionIntroDescription}>
-                Connect the Scope Breakdown Structure with the Location Breakdown Structure by
-                distributing each Scope Item quantity across production locations.
-              </p>
-            </div>
-          </section>
-
-          <section className={styles.metricGrid}>
-            <article className={styles.metricCard}>
-              <span className={styles.metricLabel}>Fully Allocated</span>
-              <strong className={styles.metricValue}>{fullyAllocatedCount}</strong>
-              <span className={styles.metricDetail}>Scope Items</span>
-            </article>
-
-            <article className={styles.metricCard}>
-              <span className={styles.metricLabel}>Partially Allocated</span>
-              <strong className={styles.metricValue}>{partiallyAllocatedCount}</strong>
-              <span className={styles.metricDetail}>Scope Items</span>
-            </article>
-
-            <article className={styles.metricCard}>
-              <span className={styles.metricLabel}>Not Allocated</span>
-              <strong className={styles.metricValue}>{notAllocatedCount}</strong>
-              <span className={styles.metricDetail}>Scope Items</span>
-            </article>
-
-            <article className={styles.metricCard}>
-              <span className={styles.metricLabel}>Overallocated</span>
-              <strong className={styles.metricValue}>{overallocatedCount}</strong>
-              <span className={styles.metricDetail}>Require correction</span>
-            </article>
-          </section>
-
-          {quantityMissingCount > 0 && (
-            <div className={styles.scopeWorkspaceError}>
-              {quantityMissingCount} Scope {quantityMissingCount === 1 ? 'Item does' : 'Items do'}{' '}
-              not yet have an authoritative Scope Quantity.
-            </div>
-          )}
-
-          <section className={styles.formPanel}>
-            <div className={styles.formHeader}>
-              <h2 className={styles.formTitle}>Quantity Reconciliation</h2>
-              <p className={styles.formDescription}>
-                Scope Quantity is authoritative. Allocated Quantity represents the amount distributed
-                across project locations.
-              </p>
-            </div>
-
-            {reconciliation.length === 0 ? (
-              <div className={styles.workspaceEmpty}>
-                <span className={styles.workspaceEmptyIcon}>%</span>
-                <h3>No allocation data available.</h3>
-                <p>
-                  Define Scope Items and their quantities before allocating them across project locations.
-                </p>
-              </div>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td
+                  colSpan="7"
+                  style={
+                    emptyCellStyle
+                  }
+                >
+                  {lang === 'en-US'
+                    ? 'Loading projects...'
+                    : 'Carregando projetos...'}
+                </td>
+              </tr>
+            ) : projects.length ===
+              0 ? (
+              <tr>
+                <td
+                  colSpan="7"
+                  style={
+                    emptyCellStyle
+                  }
+                >
+                  {lang === 'en-US'
+                    ? 'No projects configured yet.'
+                    : 'Nenhum projeto configurado atÃ© o momento.'}
+                </td>
+              </tr>
             ) : (
-              <div className={styles.reconciliationTable}>
-                <div className={styles.reconciliationHeader}>
-                  <span>Scope Item</span>
-                  <span>Scope Qty</span>
-                  <span>Allocated</span>
-                  <span>Unallocated</span>
-                  <span>Allocation</span>
-                  <span>Status</span>
-                </div>
-
-                {reconciliation.map((item) => (
-                  <div className={styles.reconciliationRow} key={item.id}>
-                    <div className={styles.reconciliationIdentity}>
-                      <strong>{item.service_name}</strong>
-                      <span>{item.service_code || 'Scope Item'}</span>
-                    </div>
-
-                    <span>{formatQuantity(item.scope_quantity)}</span>
-                    <span>{formatQuantity(item.allocated_quantity)}</span>
-                    <span>{formatQuantity(item.unallocated_quantity)}</span>
-                    <span>
-                      {item.allocation_percentage === null || item.allocation_percentage === undefined
-                        ? '—'
-                        : `${formatQuantity(item.allocation_percentage)}%`}
-                    </span>
-
-                    <span
-                      className={[
-                        styles.reconciliationStatus,
-                        getAllocationStatusClass(item.allocation_status),
-                      ].join(' ')}
+              projects.map(
+                (project) => (
+                  <tr
+                    key={project.id}
+                    style={{
+                      borderBottom:
+                        '1px solid #e2e8f0',
+                    }}
+                  >
+                    <td
+                      style={
+                        bodyCellStyle
+                      }
                     >
-                      {getAllocationStatusLabel(item.allocation_status)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                      <strong
+                        style={{
+                          color:
+                            '#1a365d',
+                        }}
+                      >
+                        {project.code ||
+                          'â€”'}
+                      </strong>
+                    </td>
+
+                    <td
+                      style={
+                        bodyCellStyle
+                      }
+                    >
+                      <strong
+                        style={{
+                          color:
+                            '#2d3748',
+                        }}
+                      >
+                        {project.name}
+                      </strong>
+                    </td>
+
+                    <td
+                      style={
+                        bodyCellStyle
+                      }
+                    >
+                      {project.client_name ||
+                        'â€”'}
+                    </td>
+
+                    <td
+                      style={
+                        bodyCellStyle
+                      }
+                    >
+                      <strong
+                        style={{
+                          color:
+                            '#2b6cb0',
+                        }}
+                      >
+                        {formatContractValue(
+                          project
+                        )}
+                      </strong>
+                    </td>
+
+                    <td
+                      style={
+                        bodyCellStyle
+                      }
+                    >
+                      {formatLocation(
+                        project
+                      )}
+                    </td>
+
+                    <td
+                      style={
+                        bodyCellStyle
+                      }
+                    >
+                      {statusLabels[
+                        project.status
+                      ] ||
+                        project.status}
+                    </td>
+
+                    <td
+                      style={{
+                        ...bodyCellStyle,
+                        whiteSpace:
+                          'nowrap',
+                      }}
+                    >
+                      <Link
+                        href={`/dashboard/projects/setup?projectId=${project.id}`}
+                        style={{
+                          display:
+                            'inline-flex',
+                          marginRight:
+                            '8px',
+                          padding:
+                            '7px 12px',
+                          borderRadius:
+                            '6px',
+                          backgroundColor:
+                            '#ebf8ff',
+                          color:
+                            '#2b6cb0',
+                          fontSize:
+                            '0.8rem',
+                          fontWeight:
+                            'bold',
+                          textDecoration:
+                            'none',
+                        }}
+                      >
+                        {lang ===
+                        'en-US'
+                          ? 'Setup'
+                          : 'Configurar'}
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDelete(
+                            project
+                          )
+                        }
+                        disabled={
+                          deletingProjectId ===
+                          project.id
+                        }
+                        style={{
+                          border: 'none',
+                          padding:
+                            '7px 12px',
+                          borderRadius:
+                            '6px',
+                          backgroundColor:
+                            '#fed7d7',
+                          color:
+                            '#c53030',
+                          cursor:
+                            deletingProjectId ===
+                            project.id
+                              ? 'not-allowed'
+                              : 'pointer',
+                          fontSize:
+                            '0.8rem',
+                          fontWeight:
+                            'bold',
+                          opacity:
+                            deletingProjectId ===
+                            project.id
+                              ? 0.6
+                              : 1,
+                        }}
+                      >
+                        {deletingProjectId ===
+                        project.id
+                          ? lang ===
+                            'en-US'
+                            ? 'Deleting...'
+                            : 'Excluindo...'
+                          : lang ===
+                              'en-US'
+                            ? 'Delete'
+                            : 'Excluir'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              )
             )}
-
-            <div className={styles.migrationAction}>
-              <Link
-                href={`/dashboard/projects/locations?projectId=${selectedProject.id}`}
-                className={styles.secondaryButton}
-              >
-                Open current quantity matrix
-              </Link>
-            </div>
-          </section>
-        </>
-      )}
-
-      {activeSection === 'production' && (
-        <>
-          <section className={styles.sectionIntro}>
-            <div>
-              <p className={styles.sectionIntroEyebrow}>05 — Production Parameters</p>
-              <h2 className={styles.sectionIntroTitle}>Production Parameters</h2>
-              <p className={styles.sectionIntroDescription}>
-                Define productivity assumptions, effective workforce, and production sizing
-                information consumed later by planning.
-              </p>
-            </div>
-          </section>
-
-          <section className={styles.metricGrid}>
-            <article className={styles.metricCard}>
-              <span className={styles.metricLabel}>Scope Items</span>
-              <strong className={styles.metricValue}>{activeScopeItems.length}</strong>
-              <span className={styles.metricDetail}>Active project scope</span>
-            </article>
-
-            <article className={styles.metricCard}>
-              <span className={styles.metricLabel}>Productivity Records</span>
-              <strong className={styles.metricValue}>{productivityRecords.length}</strong>
-              <span className={styles.metricDetail}>Project-specific production inputs</span>
-            </article>
-          </section>
-
-          <section className={styles.definitionBridge}>
-            <div className={styles.productionParameterFlow}>
-              <div className={styles.parameterNode}>
-                <span className={styles.parameterLabel}>Quantity</span>
-                <strong>Scope Allocation</strong>
-              </div>
-
-              <span className={styles.definitionArrow}>×</span>
-
-              <div className={styles.parameterNode}>
-                <span className={styles.parameterLabel}>Productivity</span>
-                <strong>Rate</strong>
-              </div>
-
-              <span className={styles.definitionArrow}>×</span>
-
-              <div className={styles.parameterNode}>
-                <span className={styles.parameterLabel}>Resources</span>
-                <strong>Effective Workforce</strong>
-              </div>
-
-              <span className={styles.definitionArrow}>→</span>
-
-              <div className={styles.parameterNode}>
-                <span className={styles.parameterLabel}>Planning Input</span>
-                <strong>Duration / Takt</strong>
-              </div>
-            </div>
-
-            <p className={styles.definitionBridgeText}>
-              Productivity and Takt pre-dimensioning remain available in the current Location
-              workspace during this migration. They will move into this section after Scope
-              Allocation is fully integrated.
-            </p>
-
-            <Link
-              href={`/dashboard/projects/locations?projectId=${selectedProject.id}`}
-              className={styles.secondaryButton}
-            >
-              Open current Production Parameters
-            </Link>
-          </section>
-        </>
-      )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
+
+const headerCellStyle = {
+  padding: '15px 20px',
+  color: '#4a5568',
+  fontWeight: 'bold',
+  whiteSpace: 'nowrap',
+}
+
+const bodyCellStyle = {
+  padding: '15px 20px',
+  color: '#4a5568',
+}
+
+const emptyCellStyle = {
+  padding: '30px 20px',
+  color: '#718096',
+  textAlign: 'center',
+}
+
