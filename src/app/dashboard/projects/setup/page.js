@@ -1048,6 +1048,7 @@ export default async function ProjectSetupPage({
           'location_service_quantities'
         )
         .select(`
+          location_id,
           service_id,
           quantity
         `)
@@ -1937,6 +1938,12 @@ export default async function ProjectSetupPage({
             }
             initialLocations={
               locations
+            }
+            scopeItems={
+              activeScopeItems
+            }
+            allocations={
+              allocations
             }
           />
         </>
