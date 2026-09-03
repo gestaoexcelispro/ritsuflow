@@ -352,7 +352,7 @@ const baseNavigationGroups = [
 
       {
         label: 'Lookahead Planning',
-        href: '/dashboard/projetos/lookahead',
+        href: '/dashboard/planning/lookahead',
         icon: 'lookahead',
       },
 
@@ -1883,4 +1883,5 @@ export default function DashboardLayout({
 
   )
 }
+
 

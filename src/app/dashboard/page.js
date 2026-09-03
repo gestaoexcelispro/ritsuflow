@@ -15,7 +15,7 @@ const planningCycle = [
     title: 'Lookahead Planning',
     description:
       'Prepare upcoming work and remove constraints before execution.',
-    href: '/dashboard/projetos/lookahead',
+    href: '/dashboard/planning/lookahead',
   },
   {
     number: '03',
@@ -529,5 +529,6 @@ export default async function DashboardHome() {
     </div>
   )
 }
+
 
 

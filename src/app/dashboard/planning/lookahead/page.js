@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, {
   useCallback,
@@ -11,7 +11,7 @@ import { supabase } from '../../../../lib/supabase';
 
 
 // ============================================================
-// RitsuFlow™
+// RitsuFlowâ„¢
 // LOOKAHEAD PLANNING
 //
 // GROUPED LOOKAHEAD + KOSKELA MATRIX
@@ -2077,7 +2077,7 @@ export default function LookaheadPage() {
           .replaceState(
             {},
             '',
-            `/dashboard/projetos/lookahead?projectId=${projectId}`
+            `/dashboard/planning/lookahead?projectId=${projectId}`
           );
 
       } else {
@@ -2086,7 +2086,7 @@ export default function LookaheadPage() {
           .replaceState(
             {},
             '',
-            '/dashboard/projetos/lookahead'
+            '/dashboard/planning/lookahead'
           );
 
       }
@@ -3577,7 +3577,7 @@ export default function LookaheadPage() {
 
 
         const confirmed = window.confirm(
-          `${packageLabel} · ${categoryLabel} will be marked No.
+          `${packageLabel} Â· ${categoryLabel} will be marked No.
 
 A Constraint Log record will be created and this criterion will be managed through Constraint Management until it is cleared.
 
@@ -4165,7 +4165,7 @@ Continue?`
 
                   {plan.status ===
                   'active'
-                    ? ' · Active'
+                    ? ' Â· Active'
                     : ''}
 
                 </option>
@@ -4199,8 +4199,8 @@ Continue?`
           }
         >
           {savingLookahead
-            ? '💾 Saving...'
-            : '💾 Save'}
+            ? 'ðŸ’¾ Saving...'
+            : 'ðŸ’¾ Save'}
         </button>
 
 
@@ -4224,7 +4224,7 @@ Continue?`
               : disabledButtonStyle
           }
         >
-          ⚡ Insert Package
+          âš¡ Insert Package
         </button>
 
 
@@ -4265,7 +4265,7 @@ Continue?`
                   (
                     holiday
                   ) =>
-                    `${holiday.data || holiday.date} · ${
+                    `${holiday.data || holiday.date} Â· ${
                       holiday.descricao ||
                       holiday.description ||
                       'Holiday'
@@ -4290,7 +4290,7 @@ Continue?`
           }
         >
 
-          📅 Holidays
+          ðŸ“… Holidays
 
           {masterPlanHolidays.length >
           0
@@ -4502,7 +4502,7 @@ Continue?`
               : tabStyle
           }
         >
-          📅 Lookahead &amp; Koskela Sheet
+          ðŸ“… Lookahead &amp; Koskela Sheet
         </button>
 
 
@@ -4523,7 +4523,7 @@ Continue?`
               : tabStyle
           }
         >
-          📍 Location Sequence
+          ðŸ“ Location Sequence
         </button>
 
 
@@ -4544,7 +4544,7 @@ Continue?`
               : tabStyle
           }
         >
-          ⚠️ Constraints Details
+          âš ï¸ Constraints Details
         </button>
 
       </div>
@@ -5049,7 +5049,7 @@ Continue?`
 
                               title="Row actions"
                             >
-                              ⋮
+                              â‹®
                             </button>
 
 
@@ -5538,7 +5538,7 @@ Continue?`
                                     700,
                                 }}
                               >
-                                —
+                                â€”
                               </span>
 
                             )}
@@ -5812,7 +5812,7 @@ Continue?`
                                       day.isHoliday
                                         ? day.holidayDescription
                                         : cellCode
-                                          ? `${cellCode} · ${
+                                          ? `${cellCode} Â· ${
                                               selectedPackage?.description ||
                                               manualCell?.package_description ||
                                               ''
@@ -5936,7 +5936,7 @@ Continue?`
                                           }}
                                         >
                                           {cellCode ||
-                                            '▼'}
+                                            'â–¼'}
                                         </button>
 
 
@@ -6224,7 +6224,7 @@ Continue?`
                                     (
                                       item
                                     ) =>
-                                      `${code} · ${getLocationName(
+                                      `${code} Â· ${getLocationName(
                                         item
                                       )}`
                                   )
@@ -6384,8 +6384,8 @@ Continue?`
                                       title={
                                         assessment?.readiness_source ===
                                         'constraint_cleared'
-                                          ? `Ready after Constraint Log verification · ${linkedConstraint.status}. Click to open the Constraint Log.`
-                                          : `Managed in Constraint Log · ${linkedConstraint.status}. Click to open the Constraint Log.`
+                                          ? `Ready after Constraint Log verification Â· ${linkedConstraint.status}. Click to open the Constraint Log.`
+                                          : `Managed in Constraint Log Â· ${linkedConstraint.status}. Click to open the Constraint Log.`
                                       }
 
                                       onClick={() => {
@@ -6431,10 +6431,10 @@ Continue?`
                                       }}
                                     >
                                       {status === 'constrained'
-                                        ? 'No 🔒'
+                                        ? 'No ðŸ”’'
                                         : status === 'clear'
-                                          ? 'Yes 🔒'
-                                          : 'Managed 🔒'}
+                                          ? 'Yes ðŸ”’'
+                                          : 'Managed ðŸ”’'}
                                     </button>
 
                                   ) : (
@@ -6493,7 +6493,7 @@ Continue?`
                                             : 'pointer',
                                       }}
                                     >
-                                      <option value="not_assessed">—</option>
+                                      <option value="not_assessed">â€”</option>
                                       <option value="clear">Yes</option>
                                       <option value="constrained">No</option>
                                       <option value="not_applicable">N/A</option>
@@ -6553,27 +6553,27 @@ Continue?`
               </strong>
 
               <span>
-                🟢 Yes - Ready Directly
+                ðŸŸ¢ Yes - Ready Directly
               </span>
 
               <span>
-                🔵 Yes - Ready After Constraint Cleared
+                ðŸ”µ Yes - Ready After Constraint Cleared
               </span>
 
               <span>
-                🔴 No - Active Constraint
+                ðŸ”´ No - Active Constraint
               </span>
 
               <span>
-                🔒 Managed in Constraint Log
+                ðŸ”’ Managed in Constraint Log
               </span>
 
               <span>
-                ⚪ Not Assessed
+                âšª Not Assessed
               </span>
 
               <span>
-                🟥 HOL - Master Plan Holiday
+                ðŸŸ¥ HOL - Master Plan Holiday
               </span>
 
               <span>
@@ -6582,7 +6582,7 @@ Continue?`
 
 
               <span>
-                Manual row timeline ▼ = select Work Package
+                Manual row timeline â–¼ = select Work Package
               </span>
 
             </div>
@@ -7037,7 +7037,7 @@ Continue?`
                                     ) =>
                                       `${getPackageCode(
                                         item
-                                      )} · ${getServiceName(
+                                      )} Â· ${getServiceName(
                                         item
                                       )}`
                                   )
@@ -7249,7 +7249,7 @@ Continue?`
                     '12px',
                 }}
               >
-                🎉 No active constraints at the moment.
+                ðŸŽ‰ No active constraints at the moment.
               </div>
 
             ) : (
@@ -7314,7 +7314,7 @@ Continue?`
 
                         <td style={bodyCellStyle}>
                           {row.package_code ||
-                            '—'}
+                            'â€”'}
                         </td>
 
 
@@ -7327,7 +7327,7 @@ Continue?`
                           }}
                         >
                           {row.description ||
-                            '—'}
+                            'â€”'}
                         </td>
 
 
@@ -7560,7 +7560,7 @@ Continue?`
                           workPackage.id
                         }
                       >
-                        {workPackage.code} · {workPackage.description}
+                        {workPackage.code} Â· {workPackage.description}
                       </option>
 
                     )
@@ -7636,7 +7636,7 @@ Continue?`
                         Line {lineId}
                         {lineId ===
                         sheetRows.length + 1
-                          ? ' · Bottom'
+                          ? ' Â· Bottom'
                           : ''}
                       </option>
 
@@ -8290,3 +8290,4 @@ const emptyStyle = {
   fontSize:
     '12px',
 };
+
