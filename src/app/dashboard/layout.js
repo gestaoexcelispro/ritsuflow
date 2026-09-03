@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import {
   useEffect,
@@ -23,7 +23,7 @@ import styles from './dashboard.module.css'
 
 
 // ============================================================
-// RitsuFlow™
+// RitsuFlowâ„¢
 // DASHBOARD NAVIGATION
 //
 // Product navigation follows the user's workflow rather than
@@ -33,10 +33,10 @@ import styles from './dashboard.module.css'
 // definition workspace:
 //
 // General
-// → Scope
-// → Locations
-// → Allocation
-// → Production Parameters
+// â†’ Scope
+// â†’ Locations
+// â†’ Allocation
+// â†’ Production Parameters
 //
 // Existing Location Structure and Work Packages routes remain
 // available temporarily during the migration.
@@ -346,7 +346,7 @@ const baseNavigationGroups = [
 
       {
         label: 'Master Plan',
-        href: '/dashboard/projetos/masterplan',
+        href: '/dashboard/planning/master-plan',
         icon: 'masterplan',
       },
 
@@ -1210,7 +1210,7 @@ export default function DashboardLayout({
 
                         }}
                       >
-                        ▼
+                        â–¼
                       </span>
 
                     )}
@@ -1656,7 +1656,7 @@ export default function DashboardLayout({
               }
               aria-label="Toggle navigation"
             >
-              ☰
+              â˜°
             </button>
 
 
@@ -1883,3 +1883,4 @@ export default function DashboardLayout({
 
   )
 }
+

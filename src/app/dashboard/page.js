@@ -8,7 +8,7 @@ const planningCycle = [
     title: 'Master Plan',
     description:
       'Define locations, production sequence, milestones, and long-term flow.',
-    href: '/dashboard/projetos/masterplan',
+    href: '/dashboard/planning/master-plan',
   },
   {
     number: '02',
@@ -529,4 +529,5 @@ export default async function DashboardHome() {
     </div>
   )
 }
+
 
