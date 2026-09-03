@@ -5,6 +5,7 @@ import { createClient } from '../../../../lib/supabase/server'
 
 import ProjectForm from '../../projetos/coleta/ProjectForm'
 import ScopeWorkspace from './ScopeWorkspace'
+import LocationWorkspace from './LocationWorkspace'
 
 import styles from '../../projetos/coleta/project-setup.module.css'
 import selectorStyles from './selector.module.css'
@@ -999,6 +1000,7 @@ export default async function ProjectSetupPage({
           service_name,
           unit,
           scope_quantity,
+          unit_cost,
           sequence_number,
           is_active
         `)
@@ -1019,11 +1021,25 @@ export default async function ProjectSetupPage({
           'locations'
         )
         .select(`
-          id
+          id,
+          project_id,
+          parent_id,
+          name,
+          location_type,
+          environment_type,
+          sequence_number,
+          created_at,
+          updated_at
         `)
         .eq(
           'project_id',
           selectedProject.id
+        )
+        .order(
+          'sequence_number',
+          {
+            ascending: true,
+          }
         ),
 
 
@@ -1847,6 +1863,10 @@ export default async function ProjectSetupPage({
             initialScopeItems={
               scopeItems
             }
+            currencyCode={
+              selectedProject.currency_code ||
+              'USD'
+            }
           />
         </>
       )}
@@ -1890,155 +1910,35 @@ export default async function ProjectSetupPage({
                 Define where production
                 occurs using the
                 project's physical
-                hierarchy.
+                hierarchy. Build the
+                structure from
+                Building or Project
+                through Division /
+                Floor, Zone / Area,
+                and Production
+                Location.
               </p>
             </div>
-
-
-            <div
-              className={
-                styles.sectionIntroActions
-              }
-            >
-              <Link
-                href={`/dashboard/projects/locations?projectId=${selectedProject.id}`}
-                className={
-                  styles.primaryButton
-                }
-              >
-                Open Location Structure
-              </Link>
-            </div>
           </section>
 
 
-          <section
-            className={
-              styles.metricGrid
+          <LocationWorkspace
+            projectId={
+              selectedProject.id
             }
-          >
-            <article
-              className={
-                styles.metricCard
-              }
-            >
-              <span
-                className={
-                  styles.metricLabel
-                }
-              >
-                Locations
-              </span>
-
-              <strong
-                className={
-                  styles.metricValue
-                }
-              >
-                {locationCount}
-              </strong>
-
-              <span
-                className={
-                  styles.metricDetail
-                }
-              >
-                Defined hierarchy nodes
-              </span>
-            </article>
-          </section>
-
-
-          <section
-            className={
-              styles.definitionBridge
+            projectName={
+              selectedProject.name
             }
-          >
-            <div
-              className={
-                styles.definitionBridgeGraphic
-              }
-            >
-              <div
-                className={
-                  styles.definitionNode
-                }
-              >
-                <span>
-                  Project
-                </span>
-              </div>
-
-              <span
-                className={
-                  styles.definitionArrow
-                }
-              >
-                →
-              </span>
-
-              <div
-                className={
-                  styles.definitionNode
-                }
-              >
-                <span>
-                  Division / Floor
-                </span>
-              </div>
-
-              <span
-                className={
-                  styles.definitionArrow
-                }
-              >
-                →
-              </span>
-
-              <div
-                className={
-                  styles.definitionNode
-                }
-              >
-                <span>
-                  Zone / Area
-                </span>
-              </div>
-
-              <span
-                className={
-                  styles.definitionArrow
-                }
-              >
-                →
-              </span>
-
-              <div
-                className={
-                  styles.definitionNode
-                }
-              >
-                <span>
-                  Production Location
-                </span>
-              </div>
-            </div>
-
-
-            <p
-              className={
-                styles.definitionBridgeText
-              }
-            >
-              The existing Location
-              Structure remains
-              operational during this
-              migration. We will move
-              its hierarchy editor
-              directly into Project
-              Setup in a later step.
-            </p>
-          </section>
+            projectCode={
+              selectedProject.code
+            }
+            userId={
+              user.id
+            }
+            initialLocations={
+              locations
+            }
+          />
         </>
       )}
 
