@@ -1485,3 +1485,131 @@
     flex-basis: 100%;
   }
 }
+
+/* ============================================================
+   PROJECT SETUP — DIRECT ZONE QUANTITY VIEW
+   ============================================================ */
+
+.directZoneGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px;
+  background: #f7fafc;
+}
+
+.directZoneCard {
+  min-width: 0;
+}
+
+.zoneServiceTable {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.zoneServiceHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 16px;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e5edf2;
+  background: #f8fafb;
+  color: #8193a2;
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zoneServiceHeader span:last-child {
+  text-align: right;
+}
+
+.zoneServiceRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 16px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #edf1f4;
+  transition: background-color 120ms ease;
+}
+
+.zoneServiceRow:last-child {
+  border-bottom: 0;
+}
+
+.zoneServiceRow:hover {
+  background: #fbfdfd;
+}
+
+.zoneServiceIdentity {
+  min-width: 0;
+}
+
+.zoneServiceIdentity strong,
+.zoneServiceIdentity span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zoneServiceIdentity strong {
+  color: #173b59;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.zoneServiceIdentity span {
+  margin-top: 4px;
+  color: #8a9baa;
+  font-size: 0.57rem;
+}
+
+.zoneServiceQuantity {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  opacity: 1;
+  visibility: visible;
+}
+
+.zoneServiceQuantity strong {
+  color: #061c2e;
+  font-size: 0.82rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.zoneServiceQuantity span {
+  color: #6f8294;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+@media (max-width: 1180px) {
+  .directZoneGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .directZoneGrid {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .zoneServiceHeader,
+  .zoneServiceRow {
+    grid-template-columns: minmax(0, 1fr) 96px;
+    gap: 10px;
+  }
+}
+
