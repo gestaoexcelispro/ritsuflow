@@ -7,7 +7,7 @@ import {
 
 import { createClient } from '../../../../lib/supabase/client'
 
-import styles from '../../projetos/coleta/project-setup.module.css'
+import styles from './project-setup.module.css'
 
 
 // ============================================================
