@@ -413,11 +413,11 @@ export default function MasterPlanPage() {
   // ----------------------------------------------------
   // SISTEMA GLOBAL DE DESFAZER AÃ‡Ã•ES (HISTORY STACK)
   // ----------------------------------------------------
-  const [historico, setHistorico] = useState([]);
+  const [history, setHistory] = useState([]);
   const isUndoRef = useRef(false);
 
-  const salvarHistorico = () => {
-    setHistorico(prev => [...prev, {
+  const saveHistory = () => {
+    setHistory(prev => [...prev, {
       pacotes: JSON.stringify(workPackages),
       celulas: JSON.stringify(dadosCelulas),
       realizado: JSON.stringify(dadosRealizado),
@@ -427,14 +427,14 @@ export default function MasterPlanPage() {
   };
 
   const handleDesfazer = () => {
-    if (historico.length === 0) return;
+    if (history.length === 0) return;
     
     // Trava o recÃ¡lculo automÃ¡tico para preservar o snapshot exatamente como ele era
     isUndoRef.current = true;
     
-    const novoHistorico = [...historico];
-    const snapshot = novoHistorico.pop();
-    setHistorico(novoHistorico);
+    const newHistory = [...history];
+    const snapshot = newHistory.pop();
+    setHistory(newHistory);
 
     setWorkPackages(JSON.parse(snapshot.pacotes));
     setDadosCelulas(JSON.parse(snapshot.celulas));
@@ -509,7 +509,7 @@ export default function MasterPlanPage() {
     setIsBaselineFrozen(Boolean(versao?.isBaseline));
     setModoControle(Boolean(versao?.isBaseline));
     setActiveScenarioId(versao?.id || null);
-    setHistorico([]);
+    setHistory([]);
   };
 
   const obterDependenciasPacote = (pacote) => {
@@ -1891,7 +1891,7 @@ export default function MasterPlanPage() {
         setSequenceEditingId(null);
         setIsBaselineFrozen(false);
         setModoControle(false);
-        setHistorico([]);
+        setHistory([]);
         return;
       }
 
@@ -2206,7 +2206,7 @@ export default function MasterPlanPage() {
         // Location Structure instead of the old hard-coded rows.
         setSecoes(canonicalSections);
 
-        setHistorico([]);
+        setHistory([]);
       }
     };
 
@@ -2974,7 +2974,7 @@ export default function MasterPlanPage() {
       return;
     }
 
-    salvarHistorico();
+    saveHistory();
 
     const isSequenceAnchor =
       isPacoteAncoraSequencia(
@@ -3201,12 +3201,12 @@ export default function MasterPlanPage() {
   const formatoIdealCode = calcularPapelSugerido();
 
   const handleCellChange = (linhaId, dataIso, valor) => {
-    salvarHistorico();
+    saveHistory();
     setDadosCelulas(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
   };
 
   const handleCellRealizadoChange = (linhaId, dataIso, valor) => {
-    salvarHistorico();
+    saveHistory();
     setDadosRealizado(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
   };
 
@@ -3614,7 +3614,7 @@ ${
   const handleLoadScenario = (versaoId) => {
     if (!versaoId) {
       if (window.confirm(t.confirmClear)) {
-        salvarHistorico();
+        saveHistory();
         setWorkPackages([]);
         setHolidays([]);
         setDadosCelulas({});
@@ -3644,7 +3644,7 @@ ${
 
     if (!window.confirm(t.confirmLoad)) return;
 
-    salvarHistorico();
+    saveHistory();
 
     const versao = scenarios.find((item) => item.id === versaoId);
 
@@ -3656,7 +3656,7 @@ ${
     e.preventDefault();
     if (newHolidayDate && newHolidayDescription) {
       if (holidays.find(f => f.data === newHolidayDate)) return alert(t.errHolidayExists);
-      salvarHistorico();
+      saveHistory();
       setHolidays([...holidays, { data: newHolidayDate, descricao: newHolidayDescription }]);
       setNewHolidayDate(''); 
       setNewHolidayDescription('');
@@ -3664,12 +3664,12 @@ ${
   };
   
   const handleRemoveHoliday = (data) => {
-    salvarHistorico();
+    saveHistory();
     setHolidays(holidays.filter(f => f.data !== data));
   };
 
   const handleAdicionarSecao = () => {
-    salvarHistorico();
+    saveHistory();
     setSecoes([...secoes, { id: `sec_${Date.now()}`, titulo: t.newSecTitle, linhas: [] }]);
   };
   
@@ -3677,13 +3677,13 @@ ${
   
   const handleRemoverSecao = (secId) => { 
     if(window.confirm(t.confirmDelSection)) {
-      salvarHistorico();
+      saveHistory();
       setSecoes(secoes.filter(s => s.id !== secId)); 
     }
   };
   
   const handleAdicionarLinha = (secId) => {
-    salvarHistorico();
+    saveHistory();
 
     setSecoes(
       secoes.map((section) =>
@@ -3741,7 +3741,7 @@ ${
     );
   
   const handleRemoverLinha = (secId, linhaId) => {
-    salvarHistorico();
+    saveHistory();
     setSecoes(secoes.map(s => s.id === secId ? { ...s, linhas: s.linhas.filter(l => l.id !== linhaId) } : s));
   };
 
@@ -4095,7 +4095,7 @@ ${
       return;
     }
 
-    salvarHistorico();
+    saveHistory();
 
     if (
       sequenceStartType === 'data' &&
@@ -4444,7 +4444,7 @@ ${
     if (tipoInicio === 'data' && !packageStartDate) return alert(t.errSelectDate);
     if (tipoInicio === 'predecessora' && !pacotePredecessora) return alert(t.errSelectPred);
 
-    salvarHistorico();
+    saveHistory();
 
     let selectedPlanningRow = null;
 
@@ -4823,8 +4823,8 @@ ${
             {/* BOTÃƒO DESFAZER */}
             <button 
               onClick={handleDesfazer} 
-              disabled={historico.length === 0 || isBaselineFrozen} 
-              style={{ backgroundColor: historico.length === 0 ? '#e2e8f0' : '#e53e3e', color: historico.length === 0 ? '#a0aec0' : 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: historico.length === 0 || isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+              disabled={history.length === 0 || isBaselineFrozen} 
+              style={{ backgroundColor: history.length === 0 ? '#e2e8f0' : '#e53e3e', color: history.length === 0 ? '#a0aec0' : 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: history.length === 0 || isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
             >
               â†© {t.undoBtn}
             </button>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
