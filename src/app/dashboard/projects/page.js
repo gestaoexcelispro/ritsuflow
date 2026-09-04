@@ -6,7 +6,6 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { useLanguage } from '../../../contexts/LanguageContext'
 import { createClient } from '../../../lib/supabase/client'
 
 const PROJECT_COVER_BUCKET =
@@ -66,8 +65,6 @@ function formatContractValue(project) {
 }
 
 export default function ProjectsPage() {
-  const { lang } = useLanguage()
-
   const [projects, setProjects] =
     useState([])
 
@@ -122,16 +119,14 @@ export default function ProjectsPage() {
         )
 
         setErrorMessage(
-          lang === 'en-US'
-            ? `Unable to load projects: ${error.message}`
-            : `Não foi possível carregar os projetos: ${error.message}`
+          `Unable to load projects: ${error.message}`
         )
       } else {
         setProjects(data || [])
       }
 
       setIsLoading(false)
-    }, [lang])
+    }, [])
 
   useEffect(() => {
     fetchProjects()
@@ -142,9 +137,7 @@ export default function ProjectsPage() {
   ) {
     const confirmed =
       window.confirm(
-        lang === 'en-US'
-          ? `Delete project "${project.name}"? This will permanently remove the project and all related data from every RitsuFlow module.`
-          : `Excluir o projeto "${project.name}"? Isso removerá permanentemente o projeto e todos os dados relacionados de todos os módulos do RitsuFlow.`
+        `Delete project "${project.name}"? This will permanently remove the project and all related data from every RitsuFlow module.`
       )
 
     if (!confirmed) {
@@ -176,9 +169,7 @@ export default function ProjectsPage() {
       )
 
       setErrorMessage(
-        lang === 'en-US'
-          ? `Unable to delete the project: ${error.message}`
-          : `Não foi possível excluir o projeto: ${error.message}`
+        `Unable to delete the project: ${error.message}`
       )
 
       setDeletingProjectId(null)
@@ -238,9 +229,7 @@ export default function ProjectsPage() {
               paddingBottom: '10px',
             }}
           >
-            {lang === 'en-US'
-              ? 'Projects'
-              : 'Projetos'}
+            Projects
           </h1>
 
           <p
@@ -249,9 +238,7 @@ export default function ProjectsPage() {
               margin: 0,
             }}
           >
-            {lang === 'en-US'
-              ? 'Create and manage the projects used across every RitsuFlow module.'
-              : 'Crie e gerencie os projetos utilizados em todos os módulos do RitsuFlow.'}
+            Create and manage the projects used across every RitsuFlow module.
           </p>
         </div>
 
@@ -271,9 +258,7 @@ export default function ProjectsPage() {
             whiteSpace: 'nowrap',
           }}
         >
-          {lang === 'en-US'
-            ? '+ New Project'
-            : '+ Novo Projeto'}
+          + New Project
         </Link>
       </div>
 
@@ -327,9 +312,7 @@ export default function ProjectsPage() {
                   headerCellStyle
                 }
               >
-                {lang === 'en-US'
-                  ? 'Code'
-                  : 'Código'}
+                Code
               </th>
 
               <th
@@ -337,9 +320,7 @@ export default function ProjectsPage() {
                   headerCellStyle
                 }
               >
-                {lang === 'en-US'
-                  ? 'Project'
-                  : 'Projeto'}
+                Project
               </th>
 
               <th
@@ -347,9 +328,7 @@ export default function ProjectsPage() {
                   headerCellStyle
                 }
               >
-                {lang === 'en-US'
-                  ? 'Client'
-                  : 'Cliente'}
+                Client
               </th>
 
               <th
@@ -357,9 +336,7 @@ export default function ProjectsPage() {
                   headerCellStyle
                 }
               >
-                {lang === 'en-US'
-                  ? 'Contract Value'
-                  : 'Valor do Contrato'}
+                Contract Value
               </th>
 
               <th
@@ -367,9 +344,7 @@ export default function ProjectsPage() {
                   headerCellStyle
                 }
               >
-                {lang === 'en-US'
-                  ? 'Location'
-                  : 'Localização'}
+                Location
               </th>
 
               <th
@@ -385,9 +360,7 @@ export default function ProjectsPage() {
                   headerCellStyle
                 }
               >
-                {lang === 'en-US'
-                  ? 'Actions'
-                  : 'Ações'}
+                Actions
               </th>
             </tr>
           </thead>
@@ -401,9 +374,7 @@ export default function ProjectsPage() {
                     emptyCellStyle
                   }
                 >
-                  {lang === 'en-US'
-                    ? 'Loading projects...'
-                    : 'Carregando projetos...'}
+                  Loading projects...
                 </td>
               </tr>
             ) : projects.length ===
@@ -415,9 +386,7 @@ export default function ProjectsPage() {
                     emptyCellStyle
                   }
                 >
-                  {lang === 'en-US'
-                    ? 'No projects configured yet.'
-                    : 'Nenhum projeto configurado até o momento.'}
+                  No projects configured yet.
                 </td>
               </tr>
             ) : (
@@ -538,10 +507,7 @@ export default function ProjectsPage() {
                             'none',
                         }}
                       >
-                        {lang ===
-                        'en-US'
-                          ? 'Setup'
-                          : 'Configurar'}
+                        Setup
                       </Link>
 
                       <button
@@ -583,14 +549,8 @@ export default function ProjectsPage() {
                       >
                         {deletingProjectId ===
                         project.id
-                          ? lang ===
-                            'en-US'
-                            ? 'Deleting...'
-                            : 'Excluindo...'
-                          : lang ===
-                              'en-US'
-                            ? 'Delete'
-                            : 'Excluir'}
+                          ? 'Deleting...'
+                          : 'Delete'}
                       </button>
                     </td>
                   </tr>
@@ -621,4 +581,6 @@ const emptyCellStyle = {
   color: '#718096',
   textAlign: 'center',
 }
+
+
 
