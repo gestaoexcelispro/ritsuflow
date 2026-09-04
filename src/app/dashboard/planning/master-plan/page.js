@@ -449,35 +449,7 @@ export default function MasterPlanPage() {
     setLocationStructureSections
   ] = useState([]);
 
-  const [secoes, setSecoes] = useState([
-    {
-      id: 'sec_1',
-      titulo: 'SERVIÃ‡OS INTERNOS',
-      linhas: [
-        { id: 'i1', descricao: 'PV2 ZONA 3' },
-        { id: 'i2', descricao: 'PV2 ZONA 2' },
-        { id: 'i3', descricao: 'PV2 ZONA 1' },
-        { id: 'i4', descricao: 'PV1 ZONA 3' },
-        { id: 'i5', descricao: 'PV1 ZONA 2' },
-        { id: 'i6', descricao: 'PV1 ZONA 1' },
-      ]
-    },
-    {
-      id: 'sec_2',
-      titulo: 'SERVIÃ‡OS EXTERNOS',
-      linhas: [
-        { id: 'e1', descricao: 'ESQUADRIAS' },
-        { id: 'e2', descricao: 'VEDAÃ‡Ã•ES EXTERNAS PV 2' },
-        { id: 'e3', descricao: 'VEDAÃ‡Ã•ES EXTERNAS PV 1' },
-        { id: 'e4', descricao: 'COBERTURA' },
-        { id: 'e5', descricao: 'ESTRUTURA PV2' },
-        { id: 'e6', descricao: 'ESTRUTURA PV1' },
-        { id: 'e7', descricao: 'PAINELIZAÃ‡ÃƒO LSF' },
-        { id: 'e8', descricao: 'FUNDAÃ‡ÃƒO' },
-        { id: 'e9', descricao: 'LIMPEZA FINAL E OUTROS' },
-      ]
-    }
-  ]);
+  const [secoes, setSecoes] = useState([]);
 
   // ----------------------------------------------------
   // SISTEMA GLOBAL DE DESFAZER AÃ‡Ã•ES (HISTORY STACK)
@@ -1957,6 +1929,7 @@ export default function MasterPlanPage() {
       if (!projetoSelecionado) {
         setZonasColeta([]);
         setLocationStructureSections([]);
+        setSecoes([]);
         setServicosProjeto({});
         setServicosCustomizados({});
         setVersoes([]);
@@ -2280,9 +2253,7 @@ export default function MasterPlanPage() {
 
         // New Master Plans start from the project's canonical
         // Location Structure instead of the old hard-coded rows.
-        if (canonicalSections.length > 0) {
-          setSecoes(canonicalSections);
-        }
+        setSecoes(canonicalSections);
 
         setHistorico([]);
       }
@@ -5764,4 +5735,5 @@ ${
     </div>
   );
 }
+
 
