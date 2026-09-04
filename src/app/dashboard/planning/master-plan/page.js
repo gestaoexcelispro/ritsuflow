@@ -5111,8 +5111,8 @@ ${
                     <option value="">{t.mPkgSelect}</option>
                     {sections.map(sec => (
                       <optgroup key={sec.id} label={sec.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (sec.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : sec.title)}>
-                        {sec.rows.map(linha => (
-                          <option key={linha.id} value={linha.id}>{linha.description || `Linha ID: ${linha.id}`}</option>
+                        {sec.rows.map(row => (
+                          <option key={row.id} value={row.id}>{row.description || `Linha ID: ${row.id}`}</option>
                         ))}
                       </optgroup>
                     ))}
@@ -5330,12 +5330,12 @@ ${
                         ))}
                       </tr>
 
-                      {section.rows.map((linha) => {
+                      {section.rows.map((row) => {
                         const currentId = globalIdCounter++;
                         
                         const renderCells = (isActual) => {
                           return visibleDates.map((d) => {
-                            const cellKey = `${linha.id}___${d.isoDate}`;
+                            const cellKey = `${row.id}___${d.isoDate}`;
                             const cellData = isActual ? actualCellData : plannedCellData;
                             const savedValue = cellData[cellKey];
                             
@@ -5413,7 +5413,7 @@ ${
                             const isDragTarget =
                               Boolean(
                                 packageDrag &&
-                                packageDrag.rowId === linha.id &&
+                                packageDrag.rowId === row.id &&
                                 proposedDragStart ===
                                   currentCellIndex
                               );
@@ -5424,14 +5424,14 @@ ${
                                 onDragOver={(event) =>
                                   updatePackageDragTarget(
                                     event,
-                                    linha.id,
+                                    row.id,
                                     d.isoDate
                                   )
                                 }
                                 onDrop={(event) =>
                                   finishPackageDrag(
                                     event,
-                                    linha.id,
+                                    row.id,
                                     d.isoDate
                                   )
                                 }
@@ -5503,7 +5503,7 @@ ${
                                     <>
                                       <select
                                         value={effectiveValue}
-                                        onChange={(e) => isActual ? handleActualCellChange(linha.id, d.isoDate, e.target.value) : handleCellChange(linha.id, d.isoDate, e.target.value)}
+                                        onChange={(e) => isActual ? handleActualCellChange(row.id, d.isoDate, e.target.value) : handleCellChange(row.id, d.isoDate, e.target.value)}
                                         disabled={isInputLocked}
                                         style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: colorConfig.color, color: colorConfig.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: isInputLocked ? 'default' : 'pointer', borderRadius: '2px', opacity: (controlMode && !isActual && effectiveValue) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
                                       >
@@ -5525,7 +5525,7 @@ ${
                         };
 
                         return (
-                          <React.Fragment key={linha.id}>
+                          <React.Fragment key={row.id}>
                             <tr style={{ borderBottom: controlMode ? 'none' : '1px dotted #cbd5e0', backgroundColor: controlMode ? '#f7fafc' : 'white' }}>
                               <td style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: controlMode ? '#f7fafc' : 'white', padding: '4px', textAlign: 'center', color: '#4a5568', borderRight: '1px solid #e2e8f0', fontWeight: '500' }}>
                                 {currentId}
@@ -5535,14 +5535,14 @@ ${
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '90%' }}>
                                     <input 
                                       type="text" 
-                                      value={linha.description} 
-                                      onChange={(e) => handleUpdateRow(section.id, linha.id, e.target.value)} 
+                                      value={row.description} 
+                                      onChange={(e) => handleUpdateRow(section.id, row.id, e.target.value)} 
                                       disabled={isBaselineFrozen}
                                       list="lista-zonas-coleta"
                                       placeholder={t.selectOrType}
                                       title={
-                                        linha.locationPath ||
-                                        linha.description ||
+                                        row.locationPath ||
+                                        row.description ||
                                         ''
                                       }
                                       style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: '#2d3748', fontSize: '0.85rem' }}
@@ -5550,7 +5550,7 @@ ${
                                     {controlMode && <span style={{ fontSize: '0.65rem', backgroundColor: '#cbd5e0', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: '#4a5568' }}>{t.plannedBadge}</span>}
                                   </div>
                                   {!isBaselineFrozen && (
-                                    <button onClick={() => handleRemoveRow(section.id, linha.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
+                                    <button onClick={() => handleRemoveRow(section.id, row.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
                                   )}
                                 </div>
                               </td>
@@ -5565,7 +5565,7 @@ ${
                                 <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: '320px' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '90%' }}>
-                                      <span style={{ flex: 1, color: '#a0aec0', fontSize: '0.85rem', paddingLeft: '2px' }}>â†³ {linha.description}</span>
+                                      <span style={{ flex: 1, color: '#a0aec0', fontSize: '0.85rem', paddingLeft: '2px' }}>â†³ {row.description}</span>
                                       <span style={{ fontSize: '0.65rem', backgroundColor: '#3182ce', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: 'white' }}>{t.actualBadge}</span>
                                     </div>
                                   </div>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
