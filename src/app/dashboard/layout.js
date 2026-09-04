@@ -23,7 +23,7 @@ import styles from './dashboard.module.css'
 
 
 // ============================================================
-// RitsuFlowâ„¢
+// RitsuFlow™
 // DASHBOARD NAVIGATION
 //
 // Product navigation follows the user's workflow rather than
@@ -33,10 +33,10 @@ import styles from './dashboard.module.css'
 // definition workspace:
 //
 // General
-// â†’ Scope
-// â†’ Locations
-// â†’ Allocation
-// â†’ Production Parameters
+// → Scope
+// → Locations
+// → Allocation
+// → Production Parameters
 //
 // Existing Location Structure and Work Packages routes remain
 // available temporarily during the migration.
@@ -1204,7 +1204,7 @@ export default function DashboardLayout({
 
                         }}
                       >
-                        â–¼
+                        ▼
                       </span>
 
                     )}
@@ -1650,7 +1650,7 @@ export default function DashboardLayout({
               }
               aria-label="Toggle navigation"
             >
-              â˜°
+              ☰
             </button>
 
 

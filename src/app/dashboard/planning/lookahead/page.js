@@ -4197,8 +4197,8 @@ Continue?`
           }
         >
           {savingLookahead
-            ? 'ðŸ’¾ Saving...'
-            : 'ðŸ’¾ Save'}
+            ? '💾 Saving...'
+            : '💾 Save'}
         </button>
 
 
@@ -4287,7 +4287,7 @@ Continue?`
           }
         >
 
-          ðŸ“… Holidays
+          📅 Holidays
 
           {masterPlanHolidays.length >
           0
@@ -4499,7 +4499,7 @@ Continue?`
               : tabStyle
           }
         >
-          ðŸ“… Lookahead &amp; Koskela Sheet
+          📅 Lookahead &amp; Koskela Sheet
         </button>
 
 
@@ -4520,7 +4520,7 @@ Continue?`
               : tabStyle
           }
         >
-          ðŸ“ Location Sequence
+          📍 Location Sequence
         </button>
 
 
@@ -6428,10 +6428,10 @@ Continue?`
                                       }}
                                     >
                                       {status === 'constrained'
-                                        ? 'No ðŸ”’'
+                                        ? 'No 🔒'
                                         : status === 'clear'
-                                          ? 'Yes ðŸ”’'
-                                          : 'Managed ðŸ”’'}
+                                          ? 'Yes 🔒'
+                                          : 'Managed 🔒'}
                                     </button>
 
                                   ) : (
@@ -6550,19 +6550,19 @@ Continue?`
               </strong>
 
               <span>
-                ðŸŸ¢ Yes - Ready Directly
+                🟢 Yes - Ready Directly
               </span>
 
               <span>
-                ðŸ”µ Yes - Ready After Constraint Cleared
+                🔵 Yes - Ready After Constraint Cleared
               </span>
 
               <span>
-                ðŸ”´ No - Active Constraint
+                🔴 No - Active Constraint
               </span>
 
               <span>
-                ðŸ”’ Managed in Constraint Log
+                🔒 Managed in Constraint Log
               </span>
 
               <span>
@@ -6570,7 +6570,7 @@ Continue?`
               </span>
 
               <span>
-                ðŸŸ¥ HOL - Master Plan Holiday
+                🟥 HOL - Master Plan Holiday
               </span>
 
               <span>
@@ -7246,7 +7246,7 @@ Continue?`
                     '12px',
                 }}
               >
-                ðŸŽ‰ No active constraints at the moment.
+                🎉 No active constraints at the moment.
               </div>
 
             ) : (

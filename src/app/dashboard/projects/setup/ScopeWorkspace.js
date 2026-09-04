@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import {
   useMemo,
@@ -3116,3 +3116,4 @@ export default function ScopeWorkspace({
     </>
   )
 }
+

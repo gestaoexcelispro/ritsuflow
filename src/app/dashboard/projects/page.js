@@ -41,7 +41,7 @@ function formatContractValue(project) {
     project.contract_value === null ||
     project.contract_value === undefined
   ) {
-    return 'â€”'
+    return '—'
   }
 
   try {
@@ -124,7 +124,7 @@ export default function ProjectsPage() {
         setErrorMessage(
           lang === 'en-US'
             ? `Unable to load projects: ${error.message}`
-            : `NÃ£o foi possÃ­vel carregar os projetos: ${error.message}`
+            : `Não foi possível carregar os projetos: ${error.message}`
         )
       } else {
         setProjects(data || [])
@@ -144,7 +144,7 @@ export default function ProjectsPage() {
       window.confirm(
         lang === 'en-US'
           ? `Delete project "${project.name}"? This will permanently remove the project and all related data from every RitsuFlow module.`
-          : `Excluir o projeto "${project.name}"? Isso removerÃ¡ permanentemente o projeto e todos os dados relacionados de todos os mÃ³dulos do RitsuFlow.`
+          : `Excluir o projeto "${project.name}"? Isso removerá permanentemente o projeto e todos os dados relacionados de todos os módulos do RitsuFlow.`
       )
 
     if (!confirmed) {
@@ -178,7 +178,7 @@ export default function ProjectsPage() {
       setErrorMessage(
         lang === 'en-US'
           ? `Unable to delete the project: ${error.message}`
-          : `NÃ£o foi possÃ­vel excluir o projeto: ${error.message}`
+          : `Não foi possível excluir o projeto: ${error.message}`
       )
 
       setDeletingProjectId(null)
@@ -251,7 +251,7 @@ export default function ProjectsPage() {
           >
             {lang === 'en-US'
               ? 'Create and manage the projects used across every RitsuFlow module.'
-              : 'Crie e gerencie os projetos utilizados em todos os mÃ³dulos do RitsuFlow.'}
+              : 'Crie e gerencie os projetos utilizados em todos os módulos do RitsuFlow.'}
           </p>
         </div>
 
@@ -329,7 +329,7 @@ export default function ProjectsPage() {
               >
                 {lang === 'en-US'
                   ? 'Code'
-                  : 'CÃ³digo'}
+                  : 'Código'}
               </th>
 
               <th
@@ -369,7 +369,7 @@ export default function ProjectsPage() {
               >
                 {lang === 'en-US'
                   ? 'Location'
-                  : 'LocalizaÃ§Ã£o'}
+                  : 'Localização'}
               </th>
 
               <th
@@ -387,7 +387,7 @@ export default function ProjectsPage() {
               >
                 {lang === 'en-US'
                   ? 'Actions'
-                  : 'AÃ§Ãµes'}
+                  : 'Ações'}
               </th>
             </tr>
           </thead>
@@ -417,7 +417,7 @@ export default function ProjectsPage() {
                 >
                   {lang === 'en-US'
                     ? 'No projects configured yet.'
-                    : 'Nenhum projeto configurado atÃ© o momento.'}
+                    : 'Nenhum projeto configurado até o momento.'}
                 </td>
               </tr>
             ) : (
@@ -442,7 +442,7 @@ export default function ProjectsPage() {
                         }}
                       >
                         {project.code ||
-                          'â€”'}
+                          '—'}
                       </strong>
                     </td>
 
@@ -467,7 +467,7 @@ export default function ProjectsPage() {
                       }
                     >
                       {project.client_name ||
-                        'â€”'}
+                        '—'}
                     </td>
 
                     <td

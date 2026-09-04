@@ -198,7 +198,7 @@ export default async function DashboardHome() {
     {
       label: 'Active projects',
       value: projectQueryFailed
-        ? 'â€”'
+        ? '—'
         : String(activeProjects),
 
       detail: formatProjectDetail({
@@ -213,7 +213,7 @@ export default async function DashboardHome() {
     {
       label: 'Locations',
       value: locationQueryFailed
-        ? 'â€”'
+        ? '—'
         : String(locations),
 
       detail: formatLocationDetail({
@@ -225,13 +225,13 @@ export default async function DashboardHome() {
     },
     {
       label: 'Open constraints',
-      value: 'â€”',
+      value: '—',
       detail: 'Constraint module coming next',
       icon: 'CM',
     },
     {
       label: 'Plan reliability',
-      value: 'â€”',
+      value: '—',
       detail: 'Weekly planning module coming next',
       icon: 'PPC',
     },
@@ -269,7 +269,7 @@ export default async function DashboardHome() {
 
   const readinessItems = [
     {
-      icon: 'âœ“',
+      icon: '✓',
       name: 'Secure authentication',
       status: 'Complete',
       statusClass: styles.statusComplete,
@@ -420,7 +420,7 @@ export default async function DashboardHome() {
                 className={styles.cycleArrow}
                 aria-hidden="true"
               >
-                â†’
+                →
               </span>
             </Link>
           ))}
