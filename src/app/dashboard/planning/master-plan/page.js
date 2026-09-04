@@ -546,13 +546,13 @@ export default function MasterPlanPage() {
     if (
       pacote?.packageStartType ===
         'predecessor' &&
-      pacote?.predecessoraId
+      pacote?.predecessorId
     ) {
       return [
         {
           type: 'external',
           predecessorId:
-            pacote.predecessoraId,
+            pacote.predecessorId,
           lagWorkingDays:
             Math.max(
               0,
@@ -636,9 +636,9 @@ export default function MasterPlanPage() {
     }
 
     return (
-      pacote.linhaId ===
+      pacote.rowId ===
         firstLocation.rowId &&
-      pacote.atividade ===
+      pacote.activity ===
         firstActivity.code
     );
   };
@@ -676,13 +676,13 @@ export default function MasterPlanPage() {
     packages.forEach(
       (pkg) => {
         if (
-          pkg?.linhaId &&
+          pkg?.rowId &&
           !orderedRowIds.includes(
-            pkg.linhaId
+            pkg.rowId
           )
         ) {
           orderedRowIds.push(
-            pkg.linhaId
+            pkg.rowId
           );
         }
       }
@@ -735,13 +735,13 @@ export default function MasterPlanPage() {
     packages.forEach(
       (pkg) => {
         if (
-          pkg?.atividade &&
+          pkg?.activity &&
           !orderedActivities.includes(
-            pkg.atividade
+            pkg.activity
           )
         ) {
           orderedActivities.push(
-            pkg.atividade
+            pkg.activity
           );
         }
       }
@@ -766,7 +766,7 @@ export default function MasterPlanPage() {
     packages.forEach(
       (pkg) => {
         packageAt.set(
-          `${pkg.linhaId}___${pkg.atividade}`,
+          `${pkg.rowId}___${pkg.activity}`,
           pkg
         );
       }
@@ -868,12 +868,12 @@ export default function MasterPlanPage() {
 
         const currentRowIndex =
           rowIndex.get(
-            pkg.linhaId
+            pkg.rowId
           );
 
         const currentActivityIndex =
           activityIndex.get(
-            pkg.atividade
+            pkg.activity
           );
 
         // TRADE dependency:
@@ -894,7 +894,7 @@ export default function MasterPlanPage() {
 
           const previousTrade =
             packageAt.get(
-              `${pkg.linhaId}___${previousActivity}`
+              `${pkg.rowId}___${previousActivity}`
             );
 
           if (
@@ -920,7 +920,7 @@ export default function MasterPlanPage() {
                 existingTrade
                   ?.lagWorkingDays ??
                 (
-                  pkg.predecessoraId ===
+                  pkg.predecessorId ===
                   previousTrade.id
                     ? Number(
                         pkg.lagWorkingDays ||
@@ -958,7 +958,7 @@ export default function MasterPlanPage() {
 
             const previousLocation =
               packageAt.get(
-                `${previousRowId}___${pkg.atividade}`
+                `${previousRowId}___${pkg.activity}`
               );
 
             if (
@@ -987,7 +987,7 @@ export default function MasterPlanPage() {
                 existingFlow
                   ?.lagWorkingDays ??
                 (
-                  pkg.predecessoraId ===
+                  pkg.predecessorId ===
                   previousLocation.id
                     ? Number(
                         pkg.lagWorkingDays ||
@@ -1059,8 +1059,8 @@ export default function MasterPlanPage() {
     pacote
   ) => {
     if (
-      !pacote?.linhaId ||
-      !pacote?.atividade
+      !pacote?.rowId ||
+      !pacote?.activity
     ) {
       return {
         scheduledStartDate: null,
@@ -1080,13 +1080,13 @@ export default function MasterPlanPage() {
             }
 
             const cellKey =
-              `${pacote.linhaId}___${day.dataIso}`;
+              `${pacote.rowId}___${day.dataIso}`;
 
             return (
               plannedCellData[
                 cellKey
               ] ===
-              pacote.atividade
+              pacote.activity
             );
           }
         )
@@ -1376,7 +1376,7 @@ export default function MasterPlanPage() {
         dependencies.find(
           (dependency) =>
             dependency.predecessorId ===
-            pkg.predecessoraId
+            pkg.predecessorId
         ) ||
         dependencies[0] ||
         null;
@@ -1418,12 +1418,12 @@ export default function MasterPlanPage() {
 
       const row =
         rowById.get(
-          pkg.linhaId
+          pkg.rowId
         ) || null;
 
       const service =
         workPackageCatalog[
-          pkg.atividade
+          pkg.activity
         ] || null;
 
       const hasPredecessor =
@@ -1432,7 +1432,7 @@ export default function MasterPlanPage() {
         );
 
       const fallbackStartDate =
-        pkg.dataInicio ||
+        pkg.startDate ||
         dataInicio ||
         null;
 
@@ -1462,9 +1462,9 @@ export default function MasterPlanPage() {
             packageId:
               pkg.id,
             packageCode:
-              pkg.atividade,
+              pkg.activity,
             rowId:
-              pkg.linhaId
+              pkg.rowId
           }
         );
       }
@@ -1492,12 +1492,12 @@ export default function MasterPlanPage() {
           null,
 
         row_key:
-          pkg.linhaId ||
+          pkg.rowId ||
           null,
 
         package_code:
           String(
-            pkg.atividade ||
+            pkg.activity ||
             ''
           )
             .trim()
@@ -1527,13 +1527,13 @@ export default function MasterPlanPage() {
               ) ||
               service.labelEn ||
               service.labelPt ||
-              pkg.atividade
-            : pkg.atividade ||
+              pkg.activity
+            : pkg.activity ||
               null,
 
         service_code:
           service?.sourceServiceCode ||
-          pkg.atividade ||
+          pkg.activity ||
           null,
 
         unit:
@@ -1557,7 +1557,7 @@ export default function MasterPlanPage() {
           Math.max(
             1,
             Number(
-              pkg.duracao ||
+              pkg.duration ||
               1
             )
           ),
@@ -1630,7 +1630,7 @@ export default function MasterPlanPage() {
           scheduledStartDate
       ) {
         throw new Error(
-          `Master Plan schedule persistence mismatch for ${pkg.atividade}: expected start ${scheduledStartDate}, stored ${insertedPackage?.scheduled_start_date || 'NULL'}.`
+          `Master Plan schedule persistence mismatch for ${pkg.activity}: expected start ${scheduledStartDate}, stored ${insertedPackage?.scheduled_start_date || 'NULL'}.`
         );
       }
 
@@ -1641,7 +1641,7 @@ export default function MasterPlanPage() {
           scheduledFinishDate
       ) {
         throw new Error(
-          `Master Plan schedule persistence mismatch for ${pkg.atividade}: expected finish ${scheduledFinishDate}, stored ${insertedPackage?.scheduled_finish_date || 'NULL'}.`
+          `Master Plan schedule persistence mismatch for ${pkg.activity}: expected finish ${scheduledFinishDate}, stored ${insertedPackage?.scheduled_finish_date || 'NULL'}.`
         );
       }
 
@@ -2428,7 +2428,7 @@ export default function MasterPlanPage() {
           calendarDates.findIndex(
             (day) =>
               day.dataIso ===
-              pacote.dataInicio
+              pacote.startDate
           );
 
         earliestLegalStart =
@@ -2551,7 +2551,7 @@ export default function MasterPlanPage() {
           Math.max(
             1,
             Number(
-              pacote.duracao ||
+              pacote.duration ||
               1
             )
           );
@@ -2759,7 +2759,7 @@ export default function MasterPlanPage() {
                 Math.max(
                   1,
                   Number(
-                    pacote.duracao ||
+                    pacote.duration ||
                     1
                   )
                 );
@@ -2774,7 +2774,7 @@ export default function MasterPlanPage() {
                 !day.isFeriado
               ) {
                 map.set(
-                  `${pacote.linhaId}___${day.dataIso}`,
+                  `${pacote.rowId}___${day.dataIso}`,
                   pacote
                 );
 
@@ -2849,7 +2849,7 @@ export default function MasterPlanPage() {
       packageId:
         pacote.id,
       rowId:
-        pacote.linhaId,
+        pacote.rowId,
       startIndex:
         schedule.startIndex,
       sourceIndex,
@@ -3015,7 +3015,7 @@ export default function MasterPlanPage() {
                 calendarDates[
                   legalTarget
                 ]?.dataIso ||
-                item.dataInicio;
+                item.startDate;
 
               const sequenceConfig =
                 getPackageSequenceConfig(
@@ -3053,9 +3053,9 @@ export default function MasterPlanPage() {
                 ...item,
                 packageStartType:
                   'data',
-                dataInicio:
+                startDate:
                   newStartDate,
-                predecessoraId:
+                predecessorId:
                   '',
                 dependencies: [],
                 lagWorkingDays:
@@ -3152,7 +3152,7 @@ export default function MasterPlanPage() {
             Math.max(
               1,
               Number(
-                pacote.duracao ||
+                pacote.duration ||
                 1
               )
             );
@@ -3167,9 +3167,9 @@ export default function MasterPlanPage() {
             !day.isFeriado
           ) {
             newGrid[
-              `${pacote.linhaId}___${day.dataIso}`
+              `${pacote.rowId}___${day.dataIso}`
             ] =
-              pacote.atividade;
+              pacote.activity;
 
             allocatedDays += 1;
           }
@@ -3746,9 +3746,9 @@ ${
   };
 
   const existingPackages = workPackages.map(p => {
-    let desc = p.linhaId;
-    secoes.forEach(sec => sec.rows.forEach(l => { if(l.id === p.linhaId) desc = l.description; }));
-    const sName = isEn ? (workPackageCatalog[p.atividade]?.labelEn || p.atividade) : (workPackageCatalog[p.atividade]?.labelPt || p.atividade);
+    let desc = p.rowId;
+    secoes.forEach(sec => sec.rows.forEach(l => { if(l.id === p.rowId) desc = l.description; }));
+    const sName = isEn ? (workPackageCatalog[p.activity]?.labelEn || p.activity) : (workPackageCatalog[p.activity]?.labelPt || p.activity);
     return {
       id: p.id,
       label: `${desc} - ${sName}`
@@ -3970,17 +3970,17 @@ ${
       startIndex = calendarDates.findIndex(
         (day) =>
           day.dataIso ===
-          pacote.dataInicio
+          pacote.startDate
       );
     } else if (
       pacote.packageStartType === 'predecessor' &&
-      pacote.predecessoraId
+      pacote.predecessorId
     ) {
       const predecessor =
         packagePool.find(
           (item) =>
             item.id ===
-            pacote.predecessoraId
+            pacote.predecessorId
         );
 
       if (predecessor) {
@@ -4027,7 +4027,7 @@ ${
         Math.max(
           1,
           Number(
-            pacote.duracao ||
+            pacote.duration ||
             1
           )
         );
@@ -4170,10 +4170,10 @@ ${
         pkg.generatedBySequence &&
         sequenceConfigurations.length <= 1 &&
         activeLocationIds.has(
-          pkg.linhaId
+          pkg.rowId
         ) &&
         activeActivityCodes.has(
-          pkg.atividade
+          pkg.activity
         )
       ) {
         return true;
@@ -4318,8 +4318,8 @@ ${
 
         const pkg = {
           id,
-          atividade: activity.code,
-          linhaId: location.rowId,
+          activity: activity.code,
+          rowId: location.rowId,
           locationId: location.locationId || null,
           locationPath: location.label || '',
           projectServiceId: service?.projectServiceId || null,
@@ -4329,12 +4329,12 @@ ${
             sequenceStartType === 'date'
               ? 'data'
               : startType,
-          dataInicio:
+          startDate:
             isFirstGeneratedPackage &&
             sequenceStartType === 'date'
               ? sequenceStartDate
               : startDate,
-          predecessoraId:
+          predecessorId:
             isFirstGeneratedPackage &&
             sequenceStartType === 'date'
               ? ''
@@ -4349,7 +4349,7 @@ ${
               ? []
               : dependencies,
           manualDelayWorkingDays: 0,
-          duracao: Math.max(1, Number(activity.duration || 1)),
+          duration: Math.max(1, Number(activity.duration || 1)),
           generatedBySequence: true,
           sequenceGroupId
         };
@@ -4486,8 +4486,8 @@ ${
 
     const novoPacote = {
       id: `pct_${Date.now()}`,
-      atividade: packageActivity,
-      linhaId: packageRowId,
+      activity: packageActivity,
+      rowId: packageRowId,
 
       // Canonical links are persisted inside the scenario snapshot.
       // They prepare Master Plan -> Lookahead -> Weekly -> Production
@@ -4508,13 +4508,13 @@ ${
         null,
 
       packageStartType: packageStartType,
-      dataInicio: packageStartDate,
-      predecessoraId: predecessorPackageId,
+      startDate: packageStartDate,
+      predecessorId: predecessorPackageId,
       lagWorkingDays: 0,
       dependencies:
         manualDependencies,
       manualDelayWorkingDays: 0,
-      duracao: packageDuration
+      duration: packageDuration
     };
 
     setWorkPackages([...workPackages, novoPacote]);
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
