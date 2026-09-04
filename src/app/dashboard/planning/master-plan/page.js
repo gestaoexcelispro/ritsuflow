@@ -2219,8 +2219,8 @@ export default function MasterPlanPage() {
       if (!dataInicio || !dataFim || !selectedProjectId) return;
 
       const parseLocalDate = (dataStr) => {
-        const [ano, mes, dia] = dataStr.split('-');
-        return new Date(ano, mes - 1, dia);
+        const [year, month, day] = dataStr.split('-');
+        return new Date(year, month - 1, day);
       };
 
       const inicio = parseLocalDate(dataInicio);
@@ -2233,25 +2233,25 @@ export default function MasterPlanPage() {
       
       const diasSemanaPt = ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sÃ¡b.'];
       const diasSemanaEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const diasSemana = isEn ? diasSemanaEn : diasSemanaPt;
+      const weekdays = isEn ? diasSemanaEn : diasSemanaPt;
 
       while (dataAtual <= fim) {
         const dataClonada = new Date(dataAtual);
-        const dia = String(dataClonada.getDate()).padStart(2, '0');
-        const mes = String(dataClonada.getMonth() + 1).padStart(2, '0');
-        const ano = dataClonada.getFullYear();
-        const diaSemanaIndex = dataClonada.getDay();
+        const day = String(dataClonada.getDate()).padStart(2, '0');
+        const month = String(dataClonada.getMonth() + 1).padStart(2, '0');
+        const year = dataClonada.getFullYear();
+        const weekdayIndex = dataClonada.getDay();
         
-        const dataIso = `${ano}-${mes}-${dia}`;
-        const isFeriado = holidays.some(f => f.date === dataIso);
+        const isoDate = `${year}-${month}-${day}`;
+        const isHoliday = holidays.some(f => f.date === isoDate);
 
         datas.push({
           dataCompleta: dataClonada,
-          dateLabel: isEn ? `${mes}/${dia}` : `${dia}/${mes}`, // MM/DD ou DD/MM para VisualizaÃ§Ã£o
-          weekLabel: diasSemana[diaSemanaIndex],
-          isWeekend: diaSemanaIndex === 0 || diaSemanaIndex === 6,
-          isHoliday: isFeriado,
-          isoDate: dataIso // CHAVE INVARIANTE USADA NO BANCO DE DADOS/MEMÃ“RIA
+          dateLabel: isEn ? `${month}/${day}` : `${day}/${month}`, // MM/DD ou DD/MM para VisualizaÃ§Ã£o
+          weekLabel: weekdays[weekdayIndex],
+          isWeekend: weekdayIndex === 0 || weekdayIndex === 6,
+          isHoliday: isHoliday,
+          isoDate: isoDate // CHAVE INVARIANTE USADA NO BANCO DE DADOS/MEMÃ“RIA
         });
         
         dataAtual.setDate(dataAtual.getDate() + 1);
@@ -2862,7 +2862,7 @@ export default function MasterPlanPage() {
   const updatePackageDragTarget = (
     event,
     rowId,
-    dataIso
+    isoDate
   ) => {
     if (
       !packageDrag ||
@@ -2881,7 +2881,7 @@ export default function MasterPlanPage() {
       calendarDates.findIndex(
         (day) =>
           day.isoDate ===
-          dataIso
+          isoDate
       );
 
     if (index < 0) return;
@@ -2901,7 +2901,7 @@ export default function MasterPlanPage() {
   const finishPackageDrag = (
     event,
     rowId,
-    dataIso
+    isoDate
   ) => {
     if (!packageDrag) {
       return;
@@ -2922,7 +2922,7 @@ export default function MasterPlanPage() {
       calendarDates.findIndex(
         (day) =>
           day.isoDate ===
-          dataIso
+          isoDate
       );
 
     if (
@@ -3200,14 +3200,14 @@ export default function MasterPlanPage() {
   
   const formatoIdealCode = calculateSuggestedRole();
 
-  const handleCellChange = (rowId, dataIso, value) => {
+  const handleCellChange = (rowId, isoDate, value) => {
     saveHistory();
-    setPlannedCellData(prev => ({ ...prev, [`${rowId}___${dataIso}`]: value }));
+    setPlannedCellData(prev => ({ ...prev, [`${rowId}___${isoDate}`]: value }));
   };
 
-  const handleActualCellChange = (rowId, dataIso, value) => {
+  const handleActualCellChange = (rowId, isoDate, value) => {
     saveHistory();
-    setActualCellData(prev => ({ ...prev, [`${rowId}___${dataIso}`]: value }));
+    setActualCellData(prev => ({ ...prev, [`${rowId}___${isoDate}`]: value }));
   };
 
   const handleFreezeBaseline = async () => {
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
