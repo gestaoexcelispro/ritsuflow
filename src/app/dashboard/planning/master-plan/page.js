@@ -1,6 +1,5 @@
 ﻿'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { useLanguage } from '../../../../contexts/LanguageContext';
 import { supabase } from '../../../../lib/supabase';
 
 // ============================================================
@@ -46,7 +45,6 @@ const SYSTEM_CALENDAR_CODES = {
 };
 
 
-// FunÃ§Ã£o auxiliar para calcular contraste de cor de texto (branco ou preto) dependendo da cor de fundo
 const getContrastYIQ = (hexcolor) => {
   const hex = hexcolor.replace("#", "");
   const r = parseInt(hex.substr(0,2),16);
@@ -192,136 +190,130 @@ const buildMasterPlanSectionsFromLocations = (locations = []) => {
 };
 
 export default function MasterPlanPage() {
-  const { lang } = useLanguage();
-  const isEn = lang === 'en-US';
-
-  // DicionÃ¡rio Completo de TraduÃ§Ã£o DinÃ¢mica
   const t = {
-    title: isEn ? 'PHYSICAL SCHEDULE - LINE OF BALANCE' : 'CRONOGRAMA FÃSICO - LINHA DE BALANÃ‡O',
-    selectProject: isEn ? '-- Select a Project --' : '-- Selecione uma Obra --',
-    scenarioLabel: isEn ? 'Scenario / Version (Last Planner)' : 'CenÃ¡rio / VersÃ£o (Last Planner)',
-    unsavedEdit: isEn ? '* Unsaved edit...' : '* EdiÃ§Ã£o nÃ£o salva...',
-    newBlank: isEn ? 'New Blank Scenario' : 'Novo CenÃ¡rio em Branco',
+    title: 'PHYSICAL SCHEDULE - LINE OF BALANCE',
+    selectProject: '-- Select a Project --',
+    scenarioLabel: 'Scenario / Version (Last Planner)',
+    unsavedEdit: '* Unsaved edit...',
+    newBlank: 'New Blank Scenario',
     
-    // AÃ‡Ã•ES DE CENÃRIO
-    saveScenario: isEn ? 'ðŸ’¾ Save' : 'ðŸ’¾ Salvar',
-    updateScenario: isEn ? 'ðŸ’¾ Update' : 'ðŸ’¾ Atualizar',
-    duplicateScenario: isEn ? 'ðŸ“‘ Duplicate' : 'ðŸ“‘ Duplicar',
-    promptDuplicate: isEn ? 'Enter a name for the copied Scenario:' : 'Digite um nome para a cÃ³pia do CenÃ¡rio:',
-    scenarioUpdated: isEn ? 'Scenario updated successfully!' : 'CenÃ¡rio atualizado com sucesso!',
-    scenarioSaveError: isEn ? 'The scenario could not be saved.' : 'NÃ£o foi possÃ­vel salvar o cenÃ¡rio.',
-    scenarioLoadError: isEn ? 'The Master Plan could not be loaded.' : 'NÃ£o foi possÃ­vel carregar o Master Plan.',
-    packageSyncError: isEn ? 'The scenario was saved, but the normalized work packages could not be synchronized.' : 'O cenÃ¡rio foi salvo, mas os pacotes de trabalho normalizados nÃ£o puderam ser sincronizados.',
+    saveScenario: 'ðŸ’¾ Save',
+    updateScenario: 'ðŸ’¾ Update',
+    duplicateScenario: 'ðŸ“‘ Duplicate',
+    promptDuplicate: 'Enter a name for the copied Scenario:',
+    scenarioUpdated: 'Scenario updated successfully!',
+    scenarioSaveError: 'The scenario could not be saved.',
+    scenarioLoadError: 'The Master Plan could not be loaded.',
+    packageSyncError: 'The scenario was saved, but the normalized work packages could not be synchronized.',
     
-    freezeBase: isEn ? 'ðŸ”’ Freeze Baseline' : 'ðŸ”’ Congelar Linha de Base',
-    editBase: isEn ? 'ðŸ”“ Edit Baseline' : 'ðŸ”“ Editar Base',
-    planning: isEn ? 'ðŸ“‹ Planning' : 'ðŸ“‹ Planejamento',
-    control: isEn ? 'âš™ï¸ Control (Actual)' : 'âš™ï¸ Controle (Realizado)',
-    insertPackage: isEn ? 'âš¡ Insert Package' : 'âš¡ Inserir Pacote',
-    generateSequence: isEn ? 'âš™ Generate Work Sequence' : 'âš™ Gerar SequÃªncia de Trabalho',
-    sequenceGenerator: isEn ? 'Work Sequence Generator' : 'Gerador de SequÃªncia de Trabalho',
-    sequenceLocations: isEn ? '1. Location Flow' : '1. Fluxo de Locais',
-    sequenceActivities: isEn ? '2. Activity Sequence' : '2. SequÃªncia de Atividades',
-    sequenceStart: isEn ? '3. Start Rule' : '3. Regra de InÃ­cio',
-    addActivity: isEn ? 'Add Activity' : 'Adicionar Atividade',
-    durationDays: isEn ? 'Duration (days)' : 'DuraÃ§Ã£o (dias)',
-    continuousFlow: isEn ? 'Continuous Flow' : 'Fluxo ContÃ­nuo',
-    continuousFlowHelp: isEn ? 'Each package respects the previous activity in the same location and the same activity in the previous location. The later finish controls the start.' : 'Cada pacote respeita a atividade anterior no mesmo local e a mesma atividade no local anterior. O tÃ©rmino mais tardio controla o inÃ­cio.',
-    packagesWillBeCreated: isEn ? 'work packages will be created' : 'pacotes de trabalho serÃ£o criados',
-    generatePackages: isEn ? 'Generate Packages' : 'Gerar Pacotes',
-    selectAtLeastOneLocation: isEn ? 'Select at least one location.' : 'Selecione pelo menos um local.',
-    selectAtLeastOneActivity: isEn ? 'Add at least one activity.' : 'Adicione pelo menos uma atividade.',
-    specificStartDate: isEn ? 'Specific start date' : 'Data de inÃ­cio especÃ­fica',
-    existingPredecessor: isEn ? 'Existing predecessor' : 'Predecessor existente',
-    sequenceSettings: isEn ? 'Sequence Settings' : 'ConfiguraÃ§Ãµes da SequÃªncia',
-    regenerateSequence: isEn ? 'Regenerate Sequence' : 'Regenerar SequÃªncia',
-    sequenceName: isEn ? 'Sequence Name' : 'Nome da SequÃªncia',
-    defaultSequenceName: isEn ? 'Main Work Sequence' : 'SequÃªncia Principal',
-    noSequenceConfigured: isEn ? 'No generated sequence is configured yet.' : 'Nenhuma sequÃªncia gerada estÃ¡ configurada ainda.',
-    confirmRegenerate: isEn ? 'This sequence may contain manual schedule adjustments. Regenerating will rebuild only the packages created by this sequence. Manual packages created with Insert Package will remain. Continue?' : 'Esta sequÃªncia pode conter ajustes manuais. Regenerar reconstruirÃ¡ apenas os pacotes criados por esta sequÃªncia. Pacotes manuais criados com Inserir Pacote permanecerÃ£o. Continuar?',
-    sequenceRegenerated: isEn ? 'Sequence regenerated successfully.' : 'SequÃªncia regenerada com sucesso.',
-    editSequenceHelp: isEn ? 'Review locations, activity order, durations, lags, and start rule, then regenerate the sequence.' : 'Revise locais, ordem das atividades, duraÃ§Ãµes, lags e regra de inÃ­cio e depois regenere a sequÃªncia.',
-    lagWorkingDays: isEn ? 'Lag (workdays)' : 'Lag (dias Ãºteis)',
-    startLag: isEn ? 'Start Lag (workdays)' : 'Lag inicial (dias Ãºteis)',
-    dragToReorder: isEn ? 'Drag rows to reorder, or use the arrows.' : 'Arraste as linhas para reordenar ou use as setas.',
-    dependencySyncError: isEn ? 'The scenario was saved, but the dependency network could not be synchronized.' : 'O cenÃ¡rio foi salvo, mas a rede de dependÃªncias nÃ£o pÃ´de ser sincronizada.',
-    dragPackageHint: isEn ? 'Drag horizontally to reschedule' : 'Arraste horizontalmente para reagendar',
-    dragPackageLockedRow: isEn ? 'Work packages stay locked to their Location row.' : 'Os pacotes permanecem bloqueados na linha de LocalizaÃ§Ã£o.',
-    undoBtn: isEn ? 'Undo' : 'Desfazer', // Novo botÃ£o de desfazer
-    showWeekends: isEn ? 'Show Weekends' : 'Mostrar Finais de Semana',
-    hideWeekends: isEn ? 'Hide Weekends' : 'Ocultar Finais de Semana',
-    holidaysBtn: isEn ? 'ðŸ“… Holidays' : 'ðŸ“… Feriados',
-    exportPdf: isEn ? 'ðŸ“Š Export PDF' : 'ðŸ“Š Exportar PDF',
-    startPrev: isEn ? 'Expected Start' : 'InÃ­cio Previsto',
-    endPrev: isEn ? 'Expected Finish' : 'TÃ©rmino Previsto',
-    noProject: isEn ? 'No Project Selected' : 'Nenhuma Obra Selecionada',
-    noProjectDesc: isEn ? 'Select a project from the menu above to create or view the Master Plan.' : 'Selecione um projeto no menu acima para criar ou visualizar o Master Plan.',
-    descHeader: isEn ? 'DESCRIPTION' : 'DESCRIÃ‡ÃƒO',
-    plannedBadge: isEn ? 'PLANNED' : 'PREVISTO',
-    actualBadge: isEn ? 'ACTUAL' : 'REALIZADO',
-    addRow: isEn ? '+ Add Row' : '+ Adicionar Linha',
-    addSection: isEn ? '+ Add New Schedule Section' : '+ Adicionar Nova SeÃ§Ã£o de Cronograma',
-    newSecTitle: isEn ? 'NEW WORK SECTION' : 'NOVA SEÃ‡ÃƒO DE SERVIÃ‡OS',
-    intWork: isEn ? 'INTERIOR WORK PACKAGES' : 'SERVIÃ‡OS INTERNOS',
-    extWork: isEn ? 'EXTERIOR WORK PACKAGES' : 'SERVIÃ‡OS EXTERNOS',
-    legend: isEn ? 'LEGEND:' : 'LEGENDA:',
-    selectOrType: isEn ? 'Select or type the step...' : 'Selecione ou digite a etapa...',
+    freezeBase: 'ðŸ”’ Freeze Baseline',
+    editBase: 'ðŸ”“ Edit Baseline',
+    planning: 'ðŸ“‹ Planning',
+    control: 'Control (Actual)',
+    insertPackage: 'Insert Package',
+    generateSequence: 'Generate Work Sequence',
+    sequenceGenerator: 'Work Sequence Generator',
+    sequenceLocations: '1. Location Flow',
+    sequenceActivities: '2. Activity Sequence',
+    sequenceStart: '3. Start Rule',
+    addActivity: 'Add Activity',
+    durationDays: 'Duration (days)',
+    continuousFlow: 'Continuous Flow',
+    continuousFlowHelp: 'Each package respects the previous activity in the same location and the same activity in the previous location. The later finish controls the start.',
+    packagesWillBeCreated: 'work packages will be created',
+    generatePackages: 'Generate Packages',
+    selectAtLeastOneLocation: 'Select at least one location.',
+    selectAtLeastOneActivity: 'Add at least one activity.',
+    specificStartDate: 'Specific start date',
+    existingPredecessor: 'Existing predecessor',
+    sequenceSettings: 'Sequence Settings',
+    regenerateSequence: 'Regenerate Sequence',
+    sequenceName: 'Sequence Name',
+    defaultSequenceName: 'Main Work Sequence',
+    noSequenceConfigured: 'No generated sequence is configured yet.',
+    confirmRegenerate: 'This sequence may contain manual schedule adjustments. Regenerating will rebuild only the packages created by this sequence. Manual packages created with Insert Package will remain. Continue?',
+    sequenceRegenerated: 'Sequence regenerated successfully.',
+    editSequenceHelp: 'Review locations, activity order, durations, lags, and start rule, then regenerate the sequence.',
+    lagWorkingDays: 'Lag (workdays)',
+    startLag: 'Start Lag (workdays)',
+    dragToReorder: 'Drag rows to reorder, or use the arrows.',
+    dependencySyncError: 'The scenario was saved, but the dependency network could not be synchronized.',
+    dragPackageHint: 'Drag horizontally to reschedule',
+    dragPackageLockedRow: 'Work packages stay locked to their Location row.',
+    undoBtn: 'Undo',
+    showWeekends: 'Show Weekends',
+    hideWeekends: 'Hide Weekends',
+    holidaysBtn: 'ðŸ“… Holidays',
+    exportPdf: 'ðŸ“Š Export PDF',
+    startPrev: 'Expected Start',
+    endPrev: 'Expected Finish',
+    noProject: 'No Project Selected',
+    noProjectDesc: 'Select a project from the menu above to create or view the Master Plan.',
+    descHeader: 'DESCRIPTION',
+    plannedBadge: 'PLANNED',
+    actualBadge: 'ACTUAL',
+    addRow: '+ Add Row',
+    addSection: '+ Add New Schedule Section',
+    newSecTitle: 'NEW WORK SECTION',
+    intWork: 'INTERIOR WORK PACKAGES',
+    extWork: 'EXTERIOR WORK PACKAGES',
+    legend: 'LEGEND:',
+    selectOrType: 'Select or type the step...',
     
-    // Alertas e ConfirmaÃ§Ãµes
-    confirmFreeze: isEn ? 'Are you sure you want to freeze the current schedule? This will create the official project Baseline.' : 'Tem certeza que deseja congelar o planejamento atual? Isso criarÃ¡ a Linha de Base oficial do projeto.',
-    confirmUnfreeze: isEn ? 'WARNING: Unfreezing the baseline will allow changes to the Planned schedule. Do you want to continue?' : 'ATENÃ‡ÃƒO: Descongelar a linha de base permitirÃ¡ alteraÃ§Ãµes no Previsto. Deseja continuar?',
-    promptScenario: isEn ? 'Enter a name for this Scenario/Version:' : 'Digite um nome para este CenÃ¡rio/VersÃ£o:',
-    scenarioSaved: isEn ? 'Scenario saved successfully! You can switch between scenarios in the top menu.' : 'CenÃ¡rio salvo com sucesso! VocÃª pode alternar entre os cenÃ¡rios no menu superior.',
-    confirmClear: isEn ? 'Do you want to clear the current schedule to create a blank scenario?' : 'Deseja limpar o planejamento atual para criar um cenÃ¡rio em branco?',
-    confirmLoad: isEn ? 'This will load the selected scenario and replace the current grid. Do you want to continue?' : 'Isso carregarÃ¡ o cenÃ¡rio selecionado e substituirÃ¡ a grade atual. Deseja continuar?',
-    errHolidayExists: isEn ? 'A holiday is already registered for this date!' : 'JÃ¡ existe um feriado cadastrado para esta data!',
-    confirmDelSection: isEn ? 'Do you want to delete this section?' : 'Deseja excluir a seÃ§Ã£o?',
-    errFillFields: isEn ? 'Fill in Activity, Location, and Duration.' : 'Preencha Atividade, Linha e DuraÃ§Ã£o.',
-    errSelectDate: isEn ? 'Select the start date.' : 'Selecione a data de inÃ­cio.',
-    errSelectPred: isEn ? 'Select a predecessor package.' : 'Selecione um pacote predecessor.',
-    errOutOfRange: isEn ? 'The chosen date is outside the schedule range.' : 'A data escolhida estÃ¡ fora do intervalo do cronograma.',
-    warnEndEarly: (dias, dur) => isEn ? `Warning: The schedule ended before all days were allocated. ${dias} of ${dur} working days were allocated.` : `AtenÃ§Ã£o: O cronograma acabou antes de alocar todos os dias. Foram alocados ${dias} de ${dur} dias Ãºteis.`,
+    confirmFreeze: 'Are you sure you want to freeze the current schedule? This will create the official project Baseline.',
+    confirmUnfreeze: 'WARNING: Unfreezing the baseline will allow changes to the Planned schedule. Do you want to continue?',
+    promptScenario: 'Enter a name for this Scenario/Version:',
+    scenarioSaved: 'Scenario saved successfully! You can switch between scenarios in the top menu.',
+    confirmClear: 'Do you want to clear the current schedule to create a blank scenario?',
+    confirmLoad: 'This will load the selected scenario and replace the current grid. Do you want to continue?',
+    errHolidayExists: 'A holiday is already registered for this date!',
+    confirmDelSection: 'Do you want to delete this section?',
+    errFillFields: 'Fill in Activity, Location, and Duration.',
+    errSelectDate: 'Select the start date.',
+    errSelectPred: 'Select a predecessor package.',
+    errOutOfRange: 'The chosen date is outside the schedule range.',
+    warnEndEarly: (days, duration) => `Warning: The schedule ended before all days were allocated. ${days} of ${duration} working days were allocated.`,
     
     // Textos do Modal de Pacote
-    mPkgTitle: isEn ? 'Insert Work Package' : 'Inserir Pacote de Trabalho',
-    mPkgService: isEn ? 'Service / Activity' : 'ServiÃ§o / Atividade',
-    mPkgSelect: isEn ? '-- Select --' : '-- Selecione --',
-    mPkgZone: isEn ? 'Location / Zone' : 'LocalizaÃ§Ã£o / Zona',
-    mPkgRadioDate: isEn ? 'ðŸ“… Start on Specific Date' : 'ðŸ“… Iniciar em Data EspecÃ­fica',
-    mPkgRadioPred: isEn ? 'ðŸ”— Start after Predecessor' : 'ðŸ”— Iniciar apÃ³s Predecessora',
-    mPkgStartDate: isEn ? 'Start Date' : 'Data de InÃ­cio',
-    mPkgLinkPred: isEn ? 'Link to Finish of:' : 'Vincular ao TÃ©rmino de:',
-    mPkgSelectPred: isEn ? '-- Select Completed Package --' : '-- Selecione o Pacote ConcluÃ­do --',
-    mPkgNoPred: isEn ? 'No package added yet. Use Specific Date first.' : 'Nenhum pacote lanÃ§ado ainda. Use a Data EspecÃ­fica primeiro.',
-    mPkgDuration: isEn ? 'Duration (Working Days)' : 'DuraÃ§Ã£o (Dias Ãšteis)',
-    mPkgCancel: isEn ? 'Cancel' : 'Cancelar',
-    mPkgAddGrid: isEn ? 'Add to Grid' : 'LanÃ§ar na Grade',
+    mPkgTitle: 'Insert Work Package',
+    mPkgService: 'Service / Activity',
+    mPkgSelect: '-- Select --',
+    mPkgZone: 'Location / Zone',
+    mPkgRadioDate: 'ðŸ“… Start on Specific Date',
+    mPkgRadioPred: 'ðŸ”— Start after Predecessor',
+    mPkgStartDate: 'Start Date',
+    mPkgLinkPred: 'Link to Finish of:',
+    mPkgSelectPred: '-- Select Completed Package --',
+    mPkgNoPred: 'No package added yet. Use Specific Date first.',
+    mPkgDuration: 'Duration (Working Days)',
+    mPkgCancel: 'Cancel',
+    mPkgAddGrid: 'Add to Grid',
     
 
-    mHolTitle: isEn ? 'Register Holidays (Local/State/Federal)' : 'Cadastrar Feriados (Mun/Est/Fed)',
-    mHolDescPlace: isEn ? 'Description (e.g., National Holiday)' : 'DescriÃ§Ã£o (ex: Padroeira)',
-    mHolAdd: isEn ? 'Add' : 'Adicionar',
-    mHolDateCol: isEn ? 'Date' : 'Data',
-    mHolDescCol: isEn ? 'Description' : 'DescriÃ§Ã£o',
-    mHolActionCol: isEn ? 'Action' : 'AÃ§Ã£o',
-    mHolEmpty: isEn ? 'No holidays registered.' : 'Nenhum feriado cadastrado.',
-    mHolDel: isEn ? 'Delete' : 'Excluir',
-    mHolDone: isEn ? 'Done' : 'Concluir',
+    mHolTitle: 'Register Holidays (Local/State/Federal)',
+    mHolDescPlace: 'Description (e.g., National Holiday)',
+    mHolAdd: 'Add',
+    mHolDateCol: 'Date',
+    mHolDescCol: 'Description',
+    mHolActionCol: 'Action',
+    mHolEmpty: 'No holidays registered.',
+    mHolDel: 'Delete',
+    mHolDone: 'Done',
     
-    mPdfTitle: isEn ? 'Print Configuration (PDF)' : 'ConfiguraÃ§Ã£o de ImpressÃ£o (PDF)',
-    mPdfSugest: isEn ? 'System Suggestion:' : 'SugestÃ£o do Sistema:',
-    mPdfSugestText: (len) => isEn ? `Based on your current schedule width (${len} columns), we recommend using paper size` : `Com base na largura atual do seu cronograma (${len} colunas), recomendamos utilizar o papel`,
-    mPdfSize: isEn ? 'Paper Size' : 'Tamanho da Folha',
-    mPdf_a4: isEn ? 'A4 (Standard)' : 'A4 (PadrÃ£o)',
-    mPdf_a3: isEn ? 'A3 (Recommended)' : 'A3 (Recomendado)',
-    mPdf_a2: isEn ? 'A2 (Large)' : 'A2 (Grande)',
-    mPdf_a1: isEn ? 'A1 (Giant)' : 'A1 (Gigante)',
-    mPdf_a0: isEn ? 'A0 (Extreme)' : 'A0 (Extremo)',
-    mPdf_unica: isEn ? 'Perfect Fit (Single Continuous Page)' : 'Ajuste Perfeito (PÃ¡gina Ãšnica ContÃ­nua)',
-    mPdfOrient: isEn ? 'Orientation' : 'OrientaÃ§Ã£o',
-    mPdfLand: isEn ? 'Landscape (Horizontal)' : 'Paisagem (Horizontal)',
-    mPdfPort: isEn ? 'Portrait (Vertical)' : 'Retrato (Vertical)',
-    mPdfConfirm: isEn ? 'Confirm and Download PDF' : 'Confirmar e Baixar PDF',
+    mPdfTitle: 'Print Configuration (PDF)',
+    mPdfSugest: 'System Suggestion:',
+    mPdfSugestText: (len) => `Based on your current schedule width (${len} columns), we recommend using paper size`,
+    mPdfSize: 'Paper Size',
+    mPdf_a4: 'A4 (Standard)',
+    mPdf_a3: 'A3 (Recommended)',
+    mPdf_a2: 'A2 (Large)',
+    mPdf_a1: 'A1 (Giant)',
+    mPdf_a0: 'A0 (Extreme)',
+    mPdf_unica: 'Perfect Fit (Single Continuous Page)',
+    mPdfOrient: 'Orientation',
+    mPdfLand: 'Landscape (Horizontal)',
+    mPdfPort: 'Portrait (Vertical)',
+    mPdfConfirm: 'Confirm and Download PDF',
   };
 
   const [projects, setProjects] = useState([]);
@@ -365,7 +357,6 @@ export default function MasterPlanPage() {
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfConfig, setPdfConfig] = useState({ formato: 'a3', orientacao: 'landscape' });
 
-  // SISTEMA DE VERSÃ•ES (LAST PLANNER)
   const [scenarios, setScenarios] = useState([]);
   const [activeScenarioId, setActiveScenarioId] = useState(null);
 
@@ -411,7 +402,6 @@ export default function MasterPlanPage() {
   const [sections, setSections] = useState([]);
 
   // ----------------------------------------------------
-  // SISTEMA GLOBAL DE DESFAZER AÃ‡Ã•ES (HISTORY STACK)
   // ----------------------------------------------------
   const [history, setHistory] = useState([]);
   const isUndoRef = useRef(false);
@@ -426,10 +416,9 @@ export default function MasterPlanPage() {
     }]);
   };
 
-  const handleDesfazer = () => {
+  const handleUndo = () => {
     if (history.length === 0) return;
     
-    // Trava o recÃ¡lculo automÃ¡tico para preservar o snapshot exatamente como ele era
     isUndoRef.current = true;
     
     const newHistory = [...history];
@@ -448,7 +437,7 @@ export default function MasterPlanPage() {
   const formatScenarioDate = (value) => {
     if (!value) return '';
     return new Date(value).toLocaleDateString(
-      isEn ? 'en-US' : 'pt-BR',
+      'en-US',
       {
         year: 'numeric',
         month: '2-digit',
@@ -1519,17 +1508,9 @@ export default function MasterPlanPage() {
           null,
 
         service_name:
-          service
-            ? (
-                isEn
-                  ? service.labelEn
-                  : service.labelPt
-              ) ||
-              service.labelEn ||
-              service.labelPt ||
-              pkg.activity
-            : pkg.activity ||
-              null,
+          service?.labelEn ||
+          pkg.activity ||
+          null,
 
         service_code:
           service?.sourceServiceCode ||
@@ -2211,55 +2192,50 @@ export default function MasterPlanPage() {
     };
 
     loadProjectMasterPlan();
-  }, [selectedProjectId, isEn]);
-
-  // GERAÃ‡ÃƒO DO CALENDÃRIO COM DATAS INTERNACIONAIS
+  }, [selectedProjectId]);
+  // CALENDAR GENERATION
   useEffect(() => {
     const generateCalendarDates = () => {
       if (!dataInicio || !dataFim || !selectedProjectId) return;
 
-      const parseLocalDate = (dataStr) => {
-        const [year, month, day] = dataStr.split('-');
+      const parseLocalDate = (dateString) => {
+        const [year, month, day] = dateString.split('-');
         return new Date(year, month - 1, day);
       };
 
-      const inicio = parseLocalDate(dataInicio);
-      const fim = parseLocalDate(dataFim);
+      const startDate = parseLocalDate(dataInicio);
+      const endDate = parseLocalDate(dataFim);
 
-      if (fim < inicio) { setCalendarDates([]); return; }
+      if (endDate < startDate) { setCalendarDates([]); return; }
 
-      const datas = [];
-      let dataAtual = new Date(inicio);
-      
-      const diasSemanaPt = ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sÃ¡b.'];
-      const diasSemanaEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const weekdays = isEn ? diasSemanaEn : diasSemanaPt;
+      const dates = [];
+      let currentDate = new Date(startDate);
+      const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-      while (dataAtual <= fim) {
-        const dataClonada = new Date(dataAtual);
-        const day = String(dataClonada.getDate()).padStart(2, '0');
-        const month = String(dataClonada.getMonth() + 1).padStart(2, '0');
-        const year = dataClonada.getFullYear();
-        const weekdayIndex = dataClonada.getDay();
+      while (currentDate <= endDate) {
+        const clonedDate = new Date(currentDate);
+        const day = String(clonedDate.getDate()).padStart(2, '0');
+        const month = String(clonedDate.getMonth() + 1).padStart(2, '0');
+        const year = clonedDate.getFullYear();
+        const weekdayIndex = clonedDate.getDay();
         
         const isoDate = `${year}-${month}-${day}`;
         const isHoliday = holidays.some(f => f.date === isoDate);
 
-        datas.push({
-          dataCompleta: dataClonada,
-          dateLabel: isEn ? `${month}/${day}` : `${day}/${month}`, // MM/DD ou DD/MM para VisualizaÃ§Ã£o
+        dates.push({
+          dateLabel: `${month}/${day}`,
           weekLabel: weekdays[weekdayIndex],
           isWeekend: weekdayIndex === 0 || weekdayIndex === 6,
           isHoliday: isHoliday,
-          isoDate: isoDate // CHAVE INVARIANTE USADA NO BANCO DE DADOS/MEMÃ“RIA
+          isoDate: isoDate // Stable database and history key
         });
         
-        dataAtual.setDate(dataAtual.getDate() + 1);
+        currentDate.setDate(currentDate.getDate() + 1);
       }
-      setCalendarDates(datas);
+      setCalendarDates(dates);
     };
     generateCalendarDates();
-  }, [dataInicio, dataFim, holidays, selectedProjectId, isEn]);
+  }, [dataInicio, dataFim, holidays, selectedProjectId]);
 
   const visibleDates = calendarDates.filter(d => hideWeekends ? !d.isWeekend : true);
 
@@ -2828,7 +2804,7 @@ export default function MasterPlanPage() {
     // Preserve the exact point where the user grabbed the
     // multi-day package. If the user grabs day 2 of a 3-day
     // package and drops it five cells earlier, the WHOLE package
-    // moves five cells earlier â€” the dropped cell does not become
+    // moves five cells earlier — the dropped cell does not become
     // the package start.
     const grabOffset =
       Math.max(
@@ -3113,7 +3089,6 @@ export default function MasterPlanPage() {
     setPackageDrag(null);
   };
 
-  // MOTOR DE RECÃLCULO AUTOMÃTICO
   useEffect(() => {
     if (
       calendarDates.length === 0
@@ -3402,7 +3377,6 @@ ${
     setControlMode(false);
   };
 
-  // SISTEMA DE VERSÃ•ES: SUPABASE
   // ----------------------------------------------------
   const handleSaveScenario = async () => {
     if (!selectedProjectId) return;
@@ -3673,7 +3647,7 @@ ${
     setSections([...sections, { id: `sec_${Date.now()}`, title: t.newSecTitle, rows: [] }]);
   };
   
-  const handleUpdateSectionTitle = (secId, novoTitulo) => setSections(sections.map(s => s.id === secId ? { ...s, title: novoTitulo } : s));
+  const handleUpdateSectionTitle = (secId, newTitle) => setSections(sections.map(s => s.id === secId ? { ...s, title: newTitle } : s));
   
   const handleRemoveSection = (secId) => { 
     if(window.confirm(t.confirmDelSection)) {
@@ -3748,7 +3722,7 @@ ${
   const existingPackages = workPackages.map(p => {
     let desc = p.rowId;
     sections.forEach(sec => sec.rows.forEach(l => { if(l.id === p.rowId) desc = l.description; }));
-    const sName = isEn ? (workPackageCatalog[p.activity]?.labelEn || p.activity) : (workPackageCatalog[p.activity]?.labelPt || p.activity);
+    const sName = workPackageCatalog[p.activity]?.labelEn || p.activity;
     return {
       id: p.id,
       label: `${desc} - ${sName}`
@@ -3850,7 +3824,7 @@ ${
     setShowSequenceModal(true);
   };
 
-  const moverSequencia = (setter, index, direction) => {
+  const moveSequence = (setter, index, direction) => {
     setter((current) => {
       const target = index + direction;
       if (target < 0 || target >= current.length) return current;
@@ -4163,7 +4137,7 @@ ${
       // Legacy migration fallback:
       // a generated package may predate sequenceGroupId. If there
       // is only one stored sequence configuration, packages marked
-      // generatedBySequence that match its Location Ã— Activity
+      // generatedBySequence that match its Location × Activity
       // footprint belong to that same sequence.
       if (
         !pkg.sequenceGroupId &&
@@ -4484,7 +4458,7 @@ ${
           ]
         : [];
 
-    const novoPacote = {
+    const newPackage = {
       id: `pct_${Date.now()}`,
       activity: packageActivity,
       rowId: packageRowId,
@@ -4517,14 +4491,13 @@ ${
       duration: packageDuration
     };
 
-    setWorkPackages([...workPackages, novoPacote]);
+    setWorkPackages([...workPackages, newPackage]);
 
     setShowWorkPackageModal(false);
     setPackageStartDate('');
     setPredecessorPackageId('');
     setPackageDuration(1);
     
-    // Desconecta da versÃ£o ativa se um novo pacote for inserido, ativando estado de rascunho
     setActiveScenarioId(null); 
   };
 
@@ -4544,7 +4517,7 @@ ${
 
   let globalIdCounter = 1;
 
-  const btnAdicionarStyle = {
+  const addButtonStyle = {
     backgroundColor: '#ebf8ff', color: '#2b6cb0', border: '1px dashed #3182ce',
     padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold',
     fontSize: '0.75rem', display: 'inline-block', marginTop: '5px'
@@ -4586,7 +4559,7 @@ ${
                 ? Math.max(0, Math.min(100, rawProgress))
                 : null;
               const progressLabel = progress === null
-                ? 'â€”'
+                ? '—'
                 : `${Math.round(progress)}%`;
               const progressHelper = !hasProductionScope
                 ? 'Production Control data not available yet.'
@@ -4655,7 +4628,7 @@ ${
                     style={{ width: '100%', minHeight: '48px', padding: '0 19px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: 0, borderTop: '1px solid #e6edf3', background: '#fff', color: '#071c31', cursor: 'pointer', fontSize: '0.73rem', fontWeight: 900, textAlign: 'left' }}
                   >
                     <span>Open Project</span>
-                    <span style={{ width: '28px', height: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: '#e8faf6', color: '#008f80', fontSize: '1rem' }}>â†’</span>
+                    <span style={{ width: '28px', height: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: '#e8faf6', color: '#008f80', fontSize: '1rem' }}>→</span>
                   </button>
                 </article>
               );
@@ -4673,7 +4646,6 @@ ${
         {zonasColeta.map((zona, idx) => <option key={idx} value={zona} />)}
       </datalist>
 
-      {/* CABEÃ‡ALHO SUPERIOR */}
       <div style={{ marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '15px' }}>
         <div>
           <h1 style={{ color: '#2A4365', margin: 0, fontStyle: 'italic', fontSize: '1.5rem', marginBottom: '10px' }}>
@@ -4698,7 +4670,6 @@ ${
 
             {selectedProjectId && (
               <>
-                {/* BLOCO DE GERENCIAMENTO DE VERSÃ•ES (CENÃRIOS) */}
                 {!isBaselineFrozen && (
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', borderLeft: '2px solid #e2e8f0', paddingLeft: '15px', borderRight: '2px solid #e2e8f0', paddingRight: '15px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -4713,7 +4684,6 @@ ${
                       </select>
                     </div>
 
-                    {/* BOTÃ•ES DE SALVAMENTO DINÃ‚MICOS */}
                     {activeScenarioId === null ? (
                       <button 
                         onClick={handleSaveScenario} 
@@ -4727,14 +4697,14 @@ ${
                         <button 
                           onClick={handleUpdateScenario} 
                           style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
-                          title={isEn ? "Update current scenario" : "Atualizar cenÃ¡rio atual"}
+                          title="Update current scenario"
                         >
                           {t.updateScenario}
                         </button>
                         <button 
                           onClick={handleDuplicateScenario} 
                           style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
-                          title={isEn ? "Create a copy of this scenario" : "Criar uma cÃ³pia deste cenÃ¡rio"}
+                          title="Create a copy of this scenario"
                         >
                           {t.duplicateScenario}
                         </button>
@@ -4813,20 +4783,19 @@ ${
                     : 1
               }}
             >
-              âš™ {t.sequenceSettings}
+              {t.sequenceSettings}
             </button>
 
             <button onClick={() => setShowWorkPackageModal(true)} disabled={isBaselineFrozen} style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.6 : 1 }}>
               {t.insertPackage}
             </button>
 
-            {/* BOTÃƒO DESFAZER */}
             <button 
-              onClick={handleDesfazer} 
+              onClick={handleUndo} 
               disabled={history.length === 0 || isBaselineFrozen} 
               style={{ backgroundColor: history.length === 0 ? '#e2e8f0' : '#e53e3e', color: history.length === 0 ? '#a0aec0' : 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: history.length === 0 || isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
             >
-              â†© {t.undoBtn}
+              ↩ {t.undoBtn}
             </button>
 
             <button onClick={() => setHideWeekends(!hideWeekends)} style={{ backgroundColor: hideWeekends ? '#2a4365' : '#edf2f7', color: hideWeekends ? 'white' : '#4a5568', border: '1px solid #cbd5e0', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
@@ -4843,7 +4812,7 @@ ${
                 <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#4a5568', marginBottom: '2px' }}>{t.startPrev}</label>
                 <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} disabled={isBaselineFrozen} style={{ padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none', color: '#2d3748', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.7 : 1 }} />
               </div>
-              <span style={{ color: '#a0aec0', fontWeight: 'bold', marginTop: '12px' }}>âžž</span>
+              <span style={{ color: '#a0aec0', fontWeight: 'bold', marginTop: '12px' }}>➞</span>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#4a5568', marginBottom: '2px' }}>{t.endPrev}</label>
                 <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} disabled={isBaselineFrozen} style={{ padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none', color: '#2d3748', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.7 : 1 }} />
@@ -4879,7 +4848,7 @@ ${
                   </p>
                 )}
               </div>
-              <button type="button" onClick={() => setShowSequenceModal(false)} style={{ border: 'none', background: 'transparent', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>Ã—</button>
+              <button type="button" onClick={() => setShowSequenceModal(false)} style={{ border: 'none', background: 'transparent', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
             </div>
 
             <div style={{ padding: '18px 24px 0' }}>
@@ -4939,10 +4908,10 @@ ${
                       }}
                     >
                       <input type="checkbox" checked={location.selected} onChange={(e) => setSequenceLocations((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: e.target.checked } : item))} />
-                      <span title={t.dragToReorder} style={{ color: '#94a3b8', fontWeight: 900, letterSpacing: '-2px', cursor: 'grab', userSelect: 'none' }}>â‹®â‹®</span>
+                      <span title={t.dragToReorder} style={{ color: '#94a3b8', fontWeight: 900, letterSpacing: '-2px', cursor: 'grab', userSelect: 'none' }}>⋮⋮</span>
                       <div title={location.label} style={{ minWidth: 0, fontSize: '0.78rem', fontWeight: 700, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{index + 1}. {location.label}</div>
-                      <button type="button" disabled={index === 0} onClick={() => moverSequencia(setSequenceLocations, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>â†‘</button>
-                      <button type="button" disabled={index === sequenceLocations.length - 1} onClick={() => moverSequencia(setSequenceLocations, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>â†“</button>
+                      <button type="button" disabled={index === 0} onClick={() => moveSequence(setSequenceLocations, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↑</button>
+                      <button type="button" disabled={index === sequenceLocations.length - 1} onClick={() => moveSequence(setSequenceLocations, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↓</button>
                     </div>
                   ))}
                 </div>
@@ -4956,7 +4925,7 @@ ${
                   <select value={sequenceNewActivity} onChange={(e) => setSequenceNewActivity(e.target.value)} style={{ padding: '9px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
                     <option value="">{t.mPkgSelectAct}</option>
                     {Object.entries(workPackageCatalog).map(([code, service]) => (
-                      <option key={code} value={code}>{code} - {isEn ? service.labelEn : service.labelPt}</option>
+                      <option key={code} value={code}>{code} - {service.labelEn}</option>
                     ))}
                   </select>
                   <button type="button" onClick={addSequenceActivity} style={{ padding: '9px 12px', border: 'none', borderRadius: '6px', backgroundColor: '#0b2239', color: 'white', fontWeight: 800, cursor: 'pointer' }}>{t.addActivity}</button>
@@ -5015,14 +4984,14 @@ ${
                           cursor: 'grab'
                         }}
                       >
-                        <span title={t.dragToReorder} style={{ color: '#94a3b8', fontWeight: 900, letterSpacing: '-2px', cursor: 'grab', userSelect: 'none' }}>â‹®â‹®</span>
+                        <span title={t.dragToReorder} style={{ color: '#94a3b8', fontWeight: 900, letterSpacing: '-2px', cursor: 'grab', userSelect: 'none' }}>⋮⋮</span>
                         <strong style={{ color: '#008f8c' }}>{index + 1}</strong>
-                        <div style={{ minWidth: 0, fontSize: '0.76rem', fontWeight: 700 }}>{activity.code} Â· {isEn ? service?.labelEn : service?.labelPt}</div>
+                        <div style={{ minWidth: 0, fontSize: '0.76rem', fontWeight: 700 }}>{activity.code} · {service?.labelEn}</div>
                         <input type="number" min="1" title={t.durationDays} value={activity.duration} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, duration: Math.max(1, Number(e.target.value || 1)) } : item))} style={{ width: '100%', padding: '7px', border: '1px solid #cbd5e1', borderRadius: '5px' }} />
                         <input type="number" min="0" title={t.lagWorkingDays} value={activity.lag ?? 0} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, lag: Math.max(0, Number(e.target.value || 0)) } : item))} style={{ width: '100%', padding: '7px', border: '1px solid #cbd5e1', borderRadius: '5px' }} />
-                        <button type="button" disabled={index === 0} onClick={() => moverSequencia(setSequenceActivities, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>â†‘</button>
-                        <button type="button" disabled={index === sequenceActivities.length - 1} onClick={() => moverSequencia(setSequenceActivities, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>â†“</button>
-                        <button type="button" onClick={() => setSequenceActivities((current) => current.filter((_, itemIndex) => itemIndex !== index))} style={{ height: '28px', border: 'none', borderRadius: '5px', background: '#fff1f2', color: '#e11d48', fontWeight: 900, cursor: 'pointer' }}>Ã—</button>
+                        <button type="button" disabled={index === 0} onClick={() => moveSequence(setSequenceActivities, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↑</button>
+                        <button type="button" disabled={index === sequenceActivities.length - 1} onClick={() => moveSequence(setSequenceActivities, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↓</button>
+                        <button type="button" onClick={() => setSequenceActivities((current) => current.filter((_, itemIndex) => itemIndex !== index))} style={{ height: '28px', border: 'none', borderRadius: '5px', background: '#fff1f2', color: '#e11d48', fontWeight: 900, cursor: 'pointer' }}>×</button>
                       </div>
                     );
                   })}
@@ -5071,7 +5040,7 @@ ${
 
             <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', position: 'sticky', bottom: 0, backgroundColor: 'white' }}>
               <div style={{ color: '#475569', fontSize: '0.82rem' }}>
-                <strong>{sequenceLocations.filter((item) => item.selected).length}</strong> locations Ã— <strong>{sequenceActivities.length}</strong> activities = <strong>{sequenceLocations.filter((item) => item.selected).length * sequenceActivities.length}</strong> {t.packagesWillBeCreated}
+                <strong>{sequenceLocations.filter((item) => item.selected).length}</strong> locations × <strong>{sequenceActivities.length}</strong> activities = <strong>{sequenceLocations.filter((item) => item.selected).length * sequenceActivities.length}</strong> {t.packagesWillBeCreated}
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="button" onClick={() => setShowSequenceModal(false)} style={{ padding: '10px 16px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white', cursor: 'pointer', fontWeight: 700 }}>{t.mPkgCancel}</button>
@@ -5099,7 +5068,7 @@ ${
                       {Object.entries(workPackageCatalog)
                         .filter(([sigla]) => sigla !== '' && sigla !== 'OFF' && sigla !== 'FER')
                         .map(([sigla, info]) => (
-                          <option key={sigla} value={sigla}>{isEn ? info.labelEn : info.labelPt} ({sigla})</option>
+                          <option key={sigla} value={sigla}>{info.labelEn} ({sigla})</option>
                       ))}
                     </select>
                   </div>
@@ -5110,9 +5079,9 @@ ${
                   <select required value={packageRowId} onChange={(e) => setPackageRowId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
                     <option value="">{t.mPkgSelect}</option>
                     {sections.map(sec => (
-                      <optgroup key={sec.id} label={sec.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (sec.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : sec.title)}>
+                      <optgroup key={sec.id} label={sec.title}>
                         {sec.rows.map(row => (
-                          <option key={row.id} value={row.id}>{row.description || `Linha ID: ${row.id}`}</option>
+                          <option key={row.id} value={row.id}>{row.description || `Row ID: ${row.id}`}</option>
                         ))}
                       </optgroup>
                     ))}
@@ -5194,7 +5163,7 @@ ${
                   ) : (
                     holidays.sort((a, b) => new Date(a.data) - new Date(b.data)).map((f, i) => {
                       const parts = f.date.split('-');
-                      const displayDate = isEn ? `${parts[1]}/${parts[2]}/${parts[0]}` : `${parts[2]}/${parts[1]}/${parts[0]}`;
+                      const displayDate = `${parts[1]}/${parts[2]}/${parts[0]}`;
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid #edf2f7' }}>
                           <td style={{ padding: '8px' }}>{displayDate}</td>
@@ -5259,7 +5228,6 @@ ${
         </div>
       )}
 
-      {/* TABELA GRÃFICA DA LINHA DE BALANÃ‡O */}
       {selectedProjectId && (
         <>
           <div style={{ flex: 1, overflow: 'auto', backgroundColor: 'white', border: '1px solid #cbd5e0', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
@@ -5287,7 +5255,7 @@ ${
 
                 <tbody>
                   {sections.map((section) => {
-                    const displayTitle = section.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (section.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : section.title);
+                    const displayTitle = section.title;
                     return (
                     <React.Fragment key={section.id}>
                       <tr style={{ backgroundColor: '#edf2f7' }}>
@@ -5321,7 +5289,7 @@ ${
                               )}
                             </div>
                             {!isBaselineFrozen && (
-                              <button onClick={() => handleRemoveSection(section.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
+                              <button onClick={() => handleRemoveSection(section.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>✖</button>
                             )}
                           </div>
                         </td>
@@ -5472,7 +5440,7 @@ ${
                                           null
                                         )
                                       }
-                                      title={`${t.dragPackageHint} Â· ${t.dragPackageLockedRow}`}
+                                      title={`${t.dragPackageHint} · ${t.dragPackageLockedRow}`}
                                       style={{
                                         width: '43px',
                                         height: '100%',
@@ -5514,7 +5482,7 @@ ${
                                       </select>
 
                                       {!isInputLocked && (
-                                        <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '0.45rem', color: colorConfig.text === '#fff' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)' }}>â–¼</div>
+                                        <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '0.45rem', color: colorConfig.text === '#fff' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)' }}>▼</div>
                                       )}
                                     </>
                                   )}
@@ -5550,7 +5518,7 @@ ${
                                     {controlMode && <span style={{ fontSize: '0.65rem', backgroundColor: '#cbd5e0', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: '#4a5568' }}>{t.plannedBadge}</span>}
                                   </div>
                                   {!isBaselineFrozen && (
-                                    <button onClick={() => handleRemoveRow(section.id, row.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
+                                    <button onClick={() => handleRemoveRow(section.id, row.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>✖</button>
                                   )}
                                 </div>
                               </td>
@@ -5565,7 +5533,7 @@ ${
                                 <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: '320px' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '90%' }}>
-                                      <span style={{ flex: 1, color: '#a0aec0', fontSize: '0.85rem', paddingLeft: '2px' }}>â†³ {row.description}</span>
+                                      <span style={{ flex: 1, color: '#a0aec0', fontSize: '0.85rem', paddingLeft: '2px' }}>↳ {row.description}</span>
                                       <span style={{ fontSize: '0.65rem', backgroundColor: '#3182ce', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: 'white' }}>{t.actualBadge}</span>
                                     </div>
                                   </div>
@@ -5580,7 +5548,7 @@ ${
                       {!isBaselineFrozen && (
                         <tr>
                           <td colSpan={2} style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', padding: '5px 15px', borderBottom: '1px solid #cbd5e0' }}>
-                            <button onClick={() => handleAddRow(section.id)} style={btnAdicionarStyle}>{t.addRow}</button>
+                            <button onClick={() => handleAddRow(section.id)} style={addButtonStyle}>{t.addRow}</button>
                           </td>
                           {visibleDates.map((d, i) => (
                             <td key={`add-${section.id}-${i}`} style={{ borderBottom: '1px solid #cbd5e0', backgroundColor: d.isHoliday ? '#fed7d7' : (d.isWeekend ? '#e2e8f0' : 'white') }}></td>
@@ -5610,7 +5578,7 @@ ${
             {Object.entries(workPackageCatalog).filter(([sigla]) => sigla !== '').map(([sigla, info]) => (
               <div key={sigla} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <div style={{ width: '12px', height: '12px', backgroundColor: info.color, borderRadius: '2px', border: '1px solid #cbd5e0' }}></div>
-                <span><b>{sigla}</b> - {isEn ? info.labelEn : info.labelPt}</span>
+                <span><b>{sigla}</b> - {info.labelEn}</span>
               </div>
             ))}
           </div>
@@ -5620,6 +5588,12 @@ ${
     </div>
   );
 }
+
+
+
+
+
+
 
 
 
