@@ -358,7 +358,7 @@ const baseNavigationGroups = [
 
       {
         label: 'Weekly Planning',
-        href: '/dashboard/projetos/semanal',
+        href: '/dashboard/planning/weekly-planning',
         icon: 'weekly',
       },
 
@@ -1883,5 +1883,6 @@ export default function DashboardLayout({
 
   )
 }
+
 
 

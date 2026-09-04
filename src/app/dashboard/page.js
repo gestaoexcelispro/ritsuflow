@@ -22,7 +22,7 @@ const planningCycle = [
     title: 'Weekly Planning',
     description:
       'Convert ready work into reliable field commitments.',
-    href: '/dashboard/projetos/semanal',
+    href: '/dashboard/planning/weekly-planning',
   },
   {
     number: '04',
@@ -529,6 +529,7 @@ export default async function DashboardHome() {
     </div>
   )
 }
+
 
 
 
