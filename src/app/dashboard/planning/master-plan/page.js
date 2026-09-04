@@ -418,11 +418,11 @@ export default function MasterPlanPage() {
 
   const saveHistory = () => {
     setHistory(prev => [...prev, {
-      pacotes: JSON.stringify(workPackages),
-      celulas: JSON.stringify(plannedCellData),
-      realizado: JSON.stringify(actualCellData),
+      packages: JSON.stringify(workPackages),
+      plannedCells: JSON.stringify(plannedCellData),
+      actualCells: JSON.stringify(actualCellData),
       holidays: JSON.stringify(holidays),
-      secoes: JSON.stringify(secoes)
+      sections: JSON.stringify(secoes)
     }]);
   };
 
@@ -436,11 +436,11 @@ export default function MasterPlanPage() {
     const snapshot = newHistory.pop();
     setHistory(newHistory);
 
-    setWorkPackages(JSON.parse(snapshot.pacotes));
-    setPlannedCellData(JSON.parse(snapshot.celulas));
-    setActualCellData(JSON.parse(snapshot.realizado));
+    setWorkPackages(JSON.parse(snapshot.packages));
+    setPlannedCellData(JSON.parse(snapshot.plannedCells));
+    setActualCellData(JSON.parse(snapshot.actualCells));
     setHolidays(JSON.parse(snapshot.holidays));
-    setSecoes(JSON.parse(snapshot.secoes));
+    setSecoes(JSON.parse(snapshot.sections));
     setActiveScenarioId(null);
   };
   // ----------------------------------------------------
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
