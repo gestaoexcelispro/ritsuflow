@@ -152,16 +152,16 @@ const buildMasterPlanSectionsFromLocations = (locations = []) => {
     if (!sectionMap.has(sectionKey)) {
       sectionMap.set(sectionKey, {
         id: `locsec_${sectionKey}`,
-        titulo: sectionTitle || 'PROJECT LOCATIONS',
+        title: sectionTitle || 'PROJECT LOCATIONS',
         source: 'location_structure',
         locationParentId: parent?.id || null,
-        linhas: [],
+        rows: [],
       });
     }
 
-    sectionMap.get(sectionKey).linhas.push({
+    sectionMap.get(sectionKey).rows.push({
       id: `loc_${location.id}`,
-      descricao: location.name || buildPath(location),
+      description: location.name || buildPath(location),
       locationId: location.id,
       locationPath: buildPath(location),
       source: 'location_structure',
@@ -172,21 +172,21 @@ const buildMasterPlanSectionsFromLocations = (locations = []) => {
   return Array.from(sectionMap.values())
     .map((section) => ({
       ...section,
-      linhas: [...section.linhas].sort((a, b) => {
+      rows: [...section.rows].sort((a, b) => {
         const bySequence =
           Number(a.sequenceNumber || 0) -
           Number(b.sequenceNumber || 0);
 
         if (bySequence !== 0) return bySequence;
 
-        return String(a.descricao || '').localeCompare(
-          String(b.descricao || '')
+        return String(a.description || '').localeCompare(
+          String(b.description || '')
         );
       }),
     }))
     .sort((a, b) =>
-      String(a.titulo || '').localeCompare(
-        String(b.titulo || '')
+      String(a.title || '').localeCompare(
+        String(b.title || '')
       )
     );
 };
@@ -694,7 +694,7 @@ export default function MasterPlanPage() {
     secoes.forEach(
       (section) => {
         (
-          section.linhas ||
+          section.rows ||
           []
         ).forEach(
           (row) => {
@@ -1293,7 +1293,7 @@ export default function MasterPlanPage() {
     const rowById = new Map();
 
     secoes.forEach((section) => {
-      (section.linhas || []).forEach((row) => {
+      (section.rows || []).forEach((row) => {
         rowById.set(
           row.id,
           row
@@ -1509,13 +1509,13 @@ export default function MasterPlanPage() {
           null,
 
         location_name:
-          row?.descricao ||
+          row?.description ||
           null,
 
         location_path:
           pkg.locationPath ||
           row?.locationPath ||
-          row?.descricao ||
+          row?.description ||
           null,
 
         service_name:
@@ -2023,10 +2023,10 @@ export default function MasterPlanPage() {
           ...new Set(
             canonicalSections.flatMap(
               (section) =>
-                section.linhas.map(
+                section.rows.map(
                   (row) =>
                     row.locationPath ||
-                    row.descricao
+                    row.description
                 )
             )
           ),
@@ -3670,10 +3670,10 @@ ${
 
   const handleAddSection = () => {
     saveHistory();
-    setSecoes([...secoes, { id: `sec_${Date.now()}`, titulo: t.newSecTitle, linhas: [] }]);
+    setSecoes([...secoes, { id: `sec_${Date.now()}`, title: t.newSecTitle, rows: [] }]);
   };
   
-  const handleUpdateSectionTitle = (secId, novoTitulo) => setSecoes(secoes.map(s => s.id === secId ? { ...s, titulo: novoTitulo } : s));
+  const handleUpdateSectionTitle = (secId, novoTitulo) => setSecoes(secoes.map(s => s.id === secId ? { ...s, title: novoTitulo } : s));
   
   const handleRemoveSection = (secId) => { 
     if(window.confirm(t.confirmDelSection)) {
@@ -3690,11 +3690,11 @@ ${
         section.id === secId
           ? {
               ...section,
-              linhas: [
-                ...section.linhas,
+              rows: [
+                ...section.rows,
                 {
                   id: `l_${Date.now()}`,
-                  descricao: '',
+                  description: '',
                   locationId: null,
                   locationPath: '',
                   source: 'manual'
@@ -3712,11 +3712,11 @@ ${
         section.id === secId
           ? {
               ...section,
-              linhas: section.linhas.map((row) =>
+              rows: section.rows.map((row) =>
                 row.id === linhaId
                   ? {
                       ...row,
-                      descricao: value,
+                      description: value,
                       // Editing a canonical row turns it into a manual row.
                       // This prevents a renamed label from silently pointing
                       // to the wrong Location Structure record.
@@ -3742,12 +3742,12 @@ ${
   
   const handleRemoveRow = (secId, linhaId) => {
     saveHistory();
-    setSecoes(secoes.map(s => s.id === secId ? { ...s, linhas: s.linhas.filter(l => l.id !== linhaId) } : s));
+    setSecoes(secoes.map(s => s.id === secId ? { ...s, rows: s.rows.filter(l => l.id !== linhaId) } : s));
   };
 
   const existingPackages = workPackages.map(p => {
     let desc = p.linhaId;
-    secoes.forEach(sec => sec.linhas.forEach(l => { if(l.id === p.linhaId) desc = l.descricao; }));
+    secoes.forEach(sec => sec.rows.forEach(l => { if(l.id === p.linhaId) desc = l.description; }));
     const sName = isEn ? (workPackageCatalog[p.atividade]?.labelEn || p.atividade) : (workPackageCatalog[p.atividade]?.labelPt || p.atividade);
     return {
       id: p.id,
@@ -3759,13 +3759,13 @@ ${
     const rows = [];
 
     secoes.forEach((section) => {
-      (section.linhas || []).forEach((row) => {
+      (section.rows || []).forEach((row) => {
         if (!row?.id) return;
 
         rows.push({
           rowId: row.id,
           locationId: row.locationId || null,
-          label: row.locationPath || row.descricao || row.id,
+          label: row.locationPath || row.description || row.id,
           selected: true
         });
       });
@@ -3799,7 +3799,7 @@ ${
     const currentRows = new Map();
 
     secoes.forEach((section) => {
-      (section.linhas || []).forEach((row) => {
+      (section.rows || []).forEach((row) => {
         currentRows.set(row.id, row);
       });
     });
@@ -3818,7 +3818,7 @@ ${
               label:
                 saved.label ||
                 row?.locationPath ||
-                row?.descricao ||
+                row?.description ||
                 saved.rowId,
               selected: saved.selected !== false
             };
@@ -4450,7 +4450,7 @@ ${
 
     secoes.some((section) => {
       const foundRow =
-        section.linhas.find(
+        section.rows.find(
           (row) =>
             row.id ===
             packageRowId
@@ -4497,7 +4497,7 @@ ${
         null,
       locationPath:
         selectedPlanningRow?.locationPath ||
-        selectedPlanningRow?.descricao ||
+        selectedPlanningRow?.description ||
         '',
       projectServiceId:
         selectedService?.projectServiceId ||
@@ -5110,9 +5110,9 @@ ${
                   <select required value={packageRowId} onChange={(e) => setPackageRowId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
                     <option value="">{t.mPkgSelect}</option>
                     {secoes.map(sec => (
-                      <optgroup key={sec.id} label={sec.titulo === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (sec.titulo === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : sec.titulo)}>
-                        {sec.linhas.map(linha => (
-                          <option key={linha.id} value={linha.id}>{linha.descricao || `Linha ID: ${linha.id}`}</option>
+                      <optgroup key={sec.id} label={sec.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (sec.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : sec.title)}>
+                        {sec.rows.map(linha => (
+                          <option key={linha.id} value={linha.id}>{linha.description || `Linha ID: ${linha.id}`}</option>
                         ))}
                       </optgroup>
                     ))}
@@ -5287,7 +5287,7 @@ ${
 
                 <tbody>
                   {secoes.map((secao) => {
-                    const displayTitle = secao.titulo === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (secao.titulo === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : secao.titulo);
+                    const displayTitle = secao.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (secao.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : secao.title);
                     return (
                     <React.Fragment key={secao.id}>
                       <tr style={{ backgroundColor: '#edf2f7' }}>
@@ -5330,7 +5330,7 @@ ${
                         ))}
                       </tr>
 
-                      {secao.linhas.map((linha) => {
+                      {secao.rows.map((linha) => {
                         const currentId = globalIdCounter++;
                         
                         const renderCells = (isActual) => {
@@ -5535,14 +5535,14 @@ ${
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '90%' }}>
                                     <input 
                                       type="text" 
-                                      value={linha.descricao} 
+                                      value={linha.description} 
                                       onChange={(e) => handleUpdateRow(secao.id, linha.id, e.target.value)} 
                                       disabled={isBaselineFrozen}
                                       list="lista-zonas-coleta"
                                       placeholder={t.selectOrType}
                                       title={
                                         linha.locationPath ||
-                                        linha.descricao ||
+                                        linha.description ||
                                         ''
                                       }
                                       style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: '#2d3748', fontSize: '0.85rem' }}
@@ -5565,7 +5565,7 @@ ${
                                 <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: '320px' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '90%' }}>
-                                      <span style={{ flex: 1, color: '#a0aec0', fontSize: '0.85rem', paddingLeft: '2px' }}>â†³ {linha.descricao}</span>
+                                      <span style={{ flex: 1, color: '#a0aec0', fontSize: '0.85rem', paddingLeft: '2px' }}>â†³ {linha.description}</span>
                                       <span style={{ fontSize: '0.65rem', backgroundColor: '#3182ce', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: 'white' }}>{t.actualBadge}</span>
                                     </div>
                                   </div>
@@ -5620,6 +5620,8 @@ ${
     </div>
   );
 }
+
+
 
 
 
