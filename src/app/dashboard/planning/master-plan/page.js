@@ -643,7 +643,7 @@ export default function MasterPlanPage() {
     );
   };
 
-  const reconstruirRedeDependencias = (
+  const rebuildDependencyNetwork = (
     packagesSnapshot
   ) => {
     const packages =
@@ -1017,10 +1017,10 @@ export default function MasterPlanPage() {
   // One dependency-network rebuild per schedule/section change.
   // This avoids the performance problem from Step 12.5 where
   // the network was reconstructed repeatedly inside cell logic.
-  const pacotesComRede =
+  const networkPackages =
     React.useMemo(
       () =>
-        reconstruirRedeDependencias(
+        rebuildDependencyNetwork(
           workPackages
         ),
       [
@@ -1029,11 +1029,11 @@ export default function MasterPlanPage() {
       ]
     );
 
-  const pacoteComRedePorId =
+  const networkPackageById =
     React.useMemo(
       () =>
         new Map(
-          pacotesComRede.map(
+          networkPackages.map(
             (pkg) => [
               pkg.id,
               pkg
@@ -1041,7 +1041,7 @@ export default function MasterPlanPage() {
           )
         ),
       [
-        pacotesComRede
+        networkPackages
       ]
     );
 
@@ -1109,7 +1109,7 @@ export default function MasterPlanPage() {
     };
   };
 
-  const criarSnapshotAgendaImutavel = (
+  const createImmutableScheduleSnapshot = (
     packagesSnapshot
   ) => {
     const rawPackages =
@@ -1120,12 +1120,12 @@ export default function MasterPlanPage() {
         : [];
 
     const packages =
-      reconstruirRedeDependencias(
+      rebuildDependencyNetwork(
         rawPackages
       );
 
     const schedules =
-      calcularAgendaPacotesCompleta(
+      calculateFullPackageSchedule(
         packages
       );
 
@@ -1181,7 +1181,7 @@ export default function MasterPlanPage() {
   };
 
 
-  const sincronizarPacotesNormalizados = async (
+  const syncNormalizedPackages = async (
     scenarioId,
     packagesSnapshot = workPackages,
     immutableScheduleSnapshot = null
@@ -1200,7 +1200,7 @@ export default function MasterPlanPage() {
       immutableScheduleSnapshot.packages &&
       immutableScheduleSnapshot.snapshot
         ? immutableScheduleSnapshot
-        : criarSnapshotAgendaImutavel(
+        : createImmutableScheduleSnapshot(
             packagesSnapshot
           );
 
@@ -1213,7 +1213,7 @@ export default function MasterPlanPage() {
     // IMPORTANT:
     // The schedule snapshot is built BEFORE the async persistence flow.
     //
-    // agendaPacotes is the authoritative schedule already used to draw
+    // packageSchedule is the authoritative schedule already used to draw
     // the Line of Balance. Persisting those exact results guarantees
     // that the database dates match what the user sees on screen.
     //
@@ -2273,7 +2273,7 @@ export default function MasterPlanPage() {
   // the earliest legal start. Horizontal dragging changes
   // this offset, never the package's Location or dependency
   // identity.
-  const calcularAgendaPacotesCompleta = (
+  const calculateFullPackageSchedule = (
     packagesSnapshot = workPackages
   ) => {
     const packages =
@@ -2630,7 +2630,7 @@ export default function MasterPlanPage() {
     return count;
   };
 
-  const normalizarDestinoDrag = (
+  const normalizeDragTarget = (
     targetIndex,
     direction = 1
   ) => {
@@ -2721,14 +2721,14 @@ export default function MasterPlanPage() {
     );
   };
 
-  const agendaPacotes =
+  const packageSchedule =
     React.useMemo(
       () =>
-        calcularAgendaPacotesCompleta(
-          pacotesComRede
+        calculateFullPackageSchedule(
+          networkPackages
         ),
       [
-        pacotesComRede,
+        networkPackages,
         datasPlanilha
       ]
     );
@@ -2739,10 +2739,10 @@ export default function MasterPlanPage() {
         const map =
           new Map();
 
-        pacotesComRede.forEach(
+        networkPackages.forEach(
           (pacote) => {
             const schedule =
-              agendaPacotes.get(
+              packageSchedule.get(
                 pacote.id
               );
 
@@ -2787,8 +2787,8 @@ export default function MasterPlanPage() {
         return map;
       },
       [
-        pacotesComRede,
-        agendaPacotes,
+        networkPackages,
+        packageSchedule,
         datasPlanilha
       ]
     );
@@ -2806,7 +2806,7 @@ export default function MasterPlanPage() {
     }
 
     const schedule =
-      agendaPacotes.get(
+      packageSchedule.get(
         pacote.id
       );
 
@@ -2949,13 +2949,13 @@ export default function MasterPlanPage() {
         : 1;
 
     const targetIndex =
-      normalizarDestinoDrag(
+      normalizeDragTarget(
         rawProposedStart,
         dragDirection
       );
 
     const pacote =
-      pacoteComRedePorId.get(
+      networkPackageById.get(
         packageDrag.packageId
       ) || null;
 
@@ -2965,7 +2965,7 @@ export default function MasterPlanPage() {
     }
 
     const schedule =
-      agendaPacotes.get(
+      packageSchedule.get(
         pacote.id
       );
 
@@ -3090,7 +3090,7 @@ export default function MasterPlanPage() {
               );
 
             const repairedPackage =
-              pacoteComRedePorId.get(
+              networkPackageById.get(
                 item.id
               );
 
@@ -3132,10 +3132,10 @@ export default function MasterPlanPage() {
 
     const novaGrade = {};
 
-    pacotesComRede.forEach(
+    networkPackages.forEach(
       (pacote) => {
         const schedule =
-          agendaPacotes.get(
+          packageSchedule.get(
             pacote.id
           );
 
@@ -3181,9 +3181,9 @@ export default function MasterPlanPage() {
       novaGrade
     );
   }, [
-    pacotesComRede,
+    networkPackages,
     datasPlanilha,
-    agendaPacotes
+    packageSchedule
   ]);
 
   const calcularPapelSugerido = () => {
@@ -3332,12 +3332,12 @@ export default function MasterPlanPage() {
     setControlMode(true);
 
     const immutableScheduleSnapshot =
-      criarSnapshotAgendaImutavel(
+      createImmutableScheduleSnapshot(
         workPackages
       );
 
     const packageSync =
-      await sincronizarPacotesNormalizados(
+      await syncNormalizedPackages(
         frozenVersion.id,
         workPackages,
         immutableScheduleSnapshot
@@ -3450,12 +3450,12 @@ ${
     setActiveScenarioId(novaVersao.id);
 
     const immutableScheduleSnapshot =
-      criarSnapshotAgendaImutavel(
+      createImmutableScheduleSnapshot(
         workPackages
       );
 
     const packageSync =
-      await sincronizarPacotesNormalizados(
+      await syncNormalizedPackages(
         novaVersao.id,
         workPackages,
         immutableScheduleSnapshot
@@ -3516,12 +3516,12 @@ ${
     );
 
     const immutableScheduleSnapshot =
-      criarSnapshotAgendaImutavel(
+      createImmutableScheduleSnapshot(
         workPackages
       );
 
     const packageSync =
-      await sincronizarPacotesNormalizados(
+      await syncNormalizedPackages(
         versaoAtualizada.id,
         workPackages,
         immutableScheduleSnapshot
@@ -3586,12 +3586,12 @@ ${
     setControlMode(false);
 
     const immutableScheduleSnapshot =
-      criarSnapshotAgendaImutavel(
+      createImmutableScheduleSnapshot(
         workPackages
       );
 
     const packageSync =
-      await sincronizarPacotesNormalizados(
+      await syncNormalizedPackages(
         novaVersao.id,
         workPackages,
         immutableScheduleSnapshot
@@ -3946,7 +3946,7 @@ ${
     return index;
   };
 
-  const calcularFimPacoteGerador = (
+  const calculateGeneratingPackageEnd = (
     pacote,
     packagePool,
     cache = new Map(),
@@ -3985,7 +3985,7 @@ ${
 
       if (predecessor) {
         const predecessorEnd =
-          calcularFimPacoteGerador(
+          calculateGeneratingPackageEnd(
             predecessor,
             packagePool,
             cache,
@@ -4286,7 +4286,7 @@ ${
               if (!predecessor) return;
 
               const finish =
-                calcularFimPacoteGerador(
+                calculateGeneratingPackageEnd(
                   predecessor,
                   pool,
                   finishCache
@@ -5383,7 +5383,7 @@ ${
 
                             const proposedDragStart =
                               packageDrag
-                                ? normalizarDestinoDrag(
+                                ? normalizeDragTarget(
                                     (
                                       packageDrag.targetIndex -
                                       Math.max(
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
