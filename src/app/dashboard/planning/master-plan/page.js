@@ -408,7 +408,7 @@ export default function MasterPlanPage() {
     setLocationStructureSections
   ] = useState([]);
 
-  const [secoes, setSecoes] = useState([]);
+  const [sections, setSections] = useState([]);
 
   // ----------------------------------------------------
   // SISTEMA GLOBAL DE DESFAZER AÃ‡Ã•ES (HISTORY STACK)
@@ -422,7 +422,7 @@ export default function MasterPlanPage() {
       plannedCells: JSON.stringify(plannedCellData),
       actualCells: JSON.stringify(actualCellData),
       holidays: JSON.stringify(holidays),
-      sections: JSON.stringify(secoes)
+      sections: JSON.stringify(sections)
     }]);
   };
 
@@ -440,7 +440,7 @@ export default function MasterPlanPage() {
     setPlannedCellData(JSON.parse(snapshot.plannedCells));
     setActualCellData(JSON.parse(snapshot.actualCells));
     setHolidays(JSON.parse(snapshot.holidays));
-    setSecoes(JSON.parse(snapshot.sections));
+    setSections(JSON.parse(snapshot.sections));
     setActiveScenarioId(null);
   };
   // ----------------------------------------------------
@@ -477,7 +477,7 @@ export default function MasterPlanPage() {
     setHolidays(Array.isArray(plan.holidays) ? plan.holidays : []);
 
     if (Array.isArray(plan.sections) && plan.sections.length > 0) {
-      setSecoes(plan.sections);
+      setSections(plan.sections);
     }
 
     setPlannedCellData(
@@ -691,7 +691,7 @@ export default function MasterPlanPage() {
     // Fallback only for rows that currently have no package.
     // They are appended after the saved execution-flow rows and do
     // not alter the dependency order of existing scheduled packages.
-    secoes.forEach(
+    sections.forEach(
       (section) => {
         (
           section.rows ||
@@ -1025,7 +1025,7 @@ export default function MasterPlanPage() {
         ),
       [
         workPackages,
-        secoes
+        sections
       ]
     );
 
@@ -1046,7 +1046,7 @@ export default function MasterPlanPage() {
     );
 
   const buildPlanData = () => ({
-    sections: secoes,
+    sections: sections,
     packages: workPackages,
     plannedCells: plannedCellData,
     actualCells: actualCellData,
@@ -1292,7 +1292,7 @@ export default function MasterPlanPage() {
     // ----------------------------------------------------
     const rowById = new Map();
 
-    secoes.forEach((section) => {
+    sections.forEach((section) => {
       (section.rows || []).forEach((row) => {
         rowById.set(
           row.id,
@@ -1882,7 +1882,7 @@ export default function MasterPlanPage() {
       if (!selectedProjectId) {
         setZonasColeta([]);
         setLocationStructureSections([]);
-        setSecoes([]);
+        setSections([]);
         setProjectServices({});
         setScenarios([]);
         setActiveScenarioId(null);
@@ -2204,7 +2204,7 @@ export default function MasterPlanPage() {
 
         // New Master Plans start from the project's canonical
         // Location Structure instead of the old hard-coded rows.
-        setSecoes(canonicalSections);
+        setSections(canonicalSections);
 
         setHistory([]);
       }
@@ -3626,7 +3626,7 @@ ${
         // Blank Scenario means a fresh plan using the project's
         // current canonical Location Structure.
         if (locationStructureSections.length > 0) {
-          setSecoes(
+          setSections(
             JSON.parse(
               JSON.stringify(
                 locationStructureSections
@@ -3670,23 +3670,23 @@ ${
 
   const handleAddSection = () => {
     saveHistory();
-    setSecoes([...secoes, { id: `sec_${Date.now()}`, title: t.newSecTitle, rows: [] }]);
+    setSections([...sections, { id: `sec_${Date.now()}`, title: t.newSecTitle, rows: [] }]);
   };
   
-  const handleUpdateSectionTitle = (secId, novoTitulo) => setSecoes(secoes.map(s => s.id === secId ? { ...s, title: novoTitulo } : s));
+  const handleUpdateSectionTitle = (secId, novoTitulo) => setSections(sections.map(s => s.id === secId ? { ...s, title: novoTitulo } : s));
   
   const handleRemoveSection = (secId) => { 
     if(window.confirm(t.confirmDelSection)) {
       saveHistory();
-      setSecoes(secoes.filter(s => s.id !== secId)); 
+      setSections(sections.filter(s => s.id !== secId)); 
     }
   };
   
   const handleAddRow = (secId) => {
     saveHistory();
 
-    setSecoes(
-      secoes.map((section) =>
+    setSections(
+      sections.map((section) =>
         section.id === secId
           ? {
               ...section,
@@ -3707,8 +3707,8 @@ ${
   };
 
   const handleUpdateRow = (secId, linhaId, value) =>
-    setSecoes(
-      secoes.map((section) =>
+    setSections(
+      sections.map((section) =>
         section.id === secId
           ? {
               ...section,
@@ -3742,12 +3742,12 @@ ${
   
   const handleRemoveRow = (secId, linhaId) => {
     saveHistory();
-    setSecoes(secoes.map(s => s.id === secId ? { ...s, rows: s.rows.filter(l => l.id !== linhaId) } : s));
+    setSections(sections.map(s => s.id === secId ? { ...s, rows: s.rows.filter(l => l.id !== linhaId) } : s));
   };
 
   const existingPackages = workPackages.map(p => {
     let desc = p.rowId;
-    secoes.forEach(sec => sec.rows.forEach(l => { if(l.id === p.rowId) desc = l.description; }));
+    sections.forEach(sec => sec.rows.forEach(l => { if(l.id === p.rowId) desc = l.description; }));
     const sName = isEn ? (workPackageCatalog[p.activity]?.labelEn || p.activity) : (workPackageCatalog[p.activity]?.labelPt || p.activity);
     return {
       id: p.id,
@@ -3758,7 +3758,7 @@ ${
   const abrirGeradorSequencia = () => {
     const rows = [];
 
-    secoes.forEach((section) => {
+    sections.forEach((section) => {
       (section.rows || []).forEach((row) => {
         if (!row?.id) return;
 
@@ -3798,7 +3798,7 @@ ${
 
     const currentRows = new Map();
 
-    secoes.forEach((section) => {
+    sections.forEach((section) => {
       (section.rows || []).forEach((row) => {
         currentRows.set(row.id, row);
       });
@@ -4448,7 +4448,7 @@ ${
 
     let selectedPlanningRow = null;
 
-    secoes.some((section) => {
+    sections.some((section) => {
       const foundRow =
         section.rows.find(
           (row) =>
@@ -5109,7 +5109,7 @@ ${
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgZone}</label>
                   <select required value={packageRowId} onChange={(e) => setPackageRowId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
                     <option value="">{t.mPkgSelect}</option>
-                    {secoes.map(sec => (
+                    {sections.map(sec => (
                       <optgroup key={sec.id} label={sec.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (sec.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : sec.title)}>
                         {sec.rows.map(linha => (
                           <option key={linha.id} value={linha.id}>{linha.description || `Linha ID: ${linha.id}`}</option>
@@ -5286,7 +5286,7 @@ ${
                 </thead>
 
                 <tbody>
-                  {secoes.map((secao) => {
+                  {sections.map((secao) => {
                     const displayTitle = secao.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (secao.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : secao.title);
                     return (
                     <React.Fragment key={secao.id}>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
