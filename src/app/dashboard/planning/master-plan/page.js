@@ -346,10 +346,10 @@ export default function MasterPlanPage() {
   // OFF / FER are calendar markers, not Work Packages, so they remain
   // system-level visual definitions.
   //
-  const [servicosProjeto, setServicosProjeto] = useState({});
+  const [projectServices, setProjectServices] = useState({});
 
-  const servicosCores = {
-    ...servicosProjeto,
+  const workPackageCatalog = {
+    ...projectServices,
 
     '': SYSTEM_CALENDAR_CODES[''],
     OFF: SYSTEM_CALENDAR_CODES.OFF,
@@ -1422,7 +1422,7 @@ export default function MasterPlanPage() {
         ) || null;
 
       const service =
-        servicosCores[
+        workPackageCatalog[
           pkg.atividade
         ] || null;
 
@@ -1883,7 +1883,7 @@ export default function MasterPlanPage() {
         setZonasColeta([]);
         setLocationStructureSections([]);
         setSecoes([]);
-        setServicosProjeto({});
+        setProjectServices({});
         setScenarios([]);
         setActiveScenarioId(null);
         setSequenceConfigurations([]);
@@ -2176,7 +2176,7 @@ export default function MasterPlanPage() {
         }
       );
 
-      setServicosProjeto(
+      setProjectServices(
         projectWorkPackageMap
       );
 
@@ -3748,7 +3748,7 @@ ${
   const pacotesExistentes = workPackages.map(p => {
     let desc = p.linhaId;
     secoes.forEach(sec => sec.linhas.forEach(l => { if(l.id === p.linhaId) desc = l.descricao; }));
-    const sName = isEn ? (servicosCores[p.atividade]?.labelEn || p.atividade) : (servicosCores[p.atividade]?.labelPt || p.atividade);
+    const sName = isEn ? (workPackageCatalog[p.atividade]?.labelEn || p.atividade) : (workPackageCatalog[p.atividade]?.labelPt || p.atividade);
     return {
       id: p.id,
       label: `${desc} - ${sName}`
@@ -4198,7 +4198,7 @@ ${
 
     selectedLocations.forEach((location, locationIndex) => {
       sequenceActivities.forEach((activity, activityIndex) => {
-        const service = servicosCores[activity.code] || null;
+        const service = workPackageCatalog[activity.code] || null;
         const id =
           `pct_seq_${stamp}_${locationIndex}_${activityIndex}`;
 
@@ -4467,7 +4467,7 @@ ${
     });
 
     const selectedService =
-      servicosCores[
+      workPackageCatalog[
         packageActivity
       ] || null;
 
@@ -4955,7 +4955,7 @@ ${
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', marginBottom: '12px' }}>
                   <select value={sequenceNewActivity} onChange={(e) => setSequenceNewActivity(e.target.value)} style={{ padding: '9px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
                     <option value="">{t.mPkgSelectAct}</option>
-                    {Object.entries(servicosCores).map(([code, service]) => (
+                    {Object.entries(workPackageCatalog).map(([code, service]) => (
                       <option key={code} value={code}>{code} - {isEn ? service.labelEn : service.labelPt}</option>
                     ))}
                   </select>
@@ -4977,7 +4977,7 @@ ${
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', maxHeight: '275px', overflowY: 'auto' }}>
                   {sequenceActivities.map((activity, index) => {
-                    const service = servicosCores[activity.code];
+                    const service = workPackageCatalog[activity.code];
                     return (
                       <div
                         key={activity.id}
@@ -5096,7 +5096,7 @@ ${
                   <div style={{ display: 'flex', gap: '5px' }}>
                     <select required value={packageActivity} onChange={(e) => setPackageActivity(e.target.value)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
                       <option value="">{t.mPkgSelect}</option>
-                      {Object.entries(servicosCores)
+                      {Object.entries(workPackageCatalog)
                         .filter(([sigla]) => sigla !== '' && sigla !== 'OFF' && sigla !== 'FER')
                         .map(([sigla, info]) => (
                           <option key={sigla} value={sigla}>{isEn ? info.labelEn : info.labelPt} ({sigla})</option>
@@ -5353,7 +5353,7 @@ ${
                               valorSalvo !== undefined
                                 ? valorSalvo
                                 : defaultValor;
-                            const configCor = servicosCores[valorEfetivo] || servicosCores[''];
+                            const configCor = workPackageCatalog[valorEfetivo] || workPackageCatalog[''];
 
                             let bgColor = 'transparent';
 
@@ -5508,7 +5508,7 @@ ${
                                         style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: configCor.color, color: configCor.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: inputBloqueado ? 'default' : 'pointer', borderRadius: '2px', opacity: (modoControle && !isRealizado && valorEfetivo) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
                                       >
                                         <option value=""></option>
-                                        {Object.keys(servicosCores).filter(k => k !== '').map(sigla => (
+                                        {Object.keys(workPackageCatalog).filter(k => k !== '').map(sigla => (
                                           <option key={sigla} value={sigla}>{sigla}</option>
                                         ))}
                                       </select>
@@ -5607,7 +5607,7 @@ ${
           
           <div style={{ marginTop: '15px', padding: '10px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #cbd5e0', display: 'flex', gap: '15px', flexWrap: 'wrap', fontSize: '0.75rem' }}>
             <span style={{ fontWeight: 'bold', color: '#1a365d' }}>{t.legend}</span>
-            {Object.entries(servicosCores).filter(([sigla]) => sigla !== '').map(([sigla, info]) => (
+            {Object.entries(workPackageCatalog).filter(([sigla]) => sigla !== '').map(([sigla, info]) => (
               <div key={sigla} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <div style={{ width: '12px', height: '12px', backgroundColor: info.color, borderRadius: '2px', border: '1px solid #cbd5e0' }}></div>
                 <span><b>{sigla}</b> - {isEn ? info.labelEn : info.labelPt}</span>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
