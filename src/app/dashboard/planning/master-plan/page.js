@@ -2243,7 +2243,7 @@ export default function MasterPlanPage() {
         const diaSemanaIndex = dataClonada.getDay();
         
         const dataIso = `${ano}-${mes}-${dia}`;
-        const isFeriado = holidays.some(f => f.data === dataIso);
+        const isFeriado = holidays.some(f => f.date === dataIso);
 
         datas.push({
           dataCompleta: dataClonada,
@@ -3655,9 +3655,9 @@ ${
   const handleAddHoliday = (e) => {
     e.preventDefault();
     if (newHolidayDate && newHolidayDescription) {
-      if (holidays.find(f => f.data === newHolidayDate)) return alert(t.errHolidayExists);
+      if (holidays.find(f => f.date === newHolidayDate)) return alert(t.errHolidayExists);
       saveHistory();
-      setHolidays([...holidays, { data: newHolidayDate, descricao: newHolidayDescription }]);
+      setHolidays([...holidays, { date: newHolidayDate, description: newHolidayDescription }]);
       setNewHolidayDate(''); 
       setNewHolidayDescription('');
     }
@@ -3665,7 +3665,7 @@ ${
   
   const handleRemoveHoliday = (data) => {
     saveHistory();
-    setHolidays(holidays.filter(f => f.data !== data));
+    setHolidays(holidays.filter(f => f.date !== data));
   };
 
   const handleAddSection = () => {
@@ -5193,14 +5193,14 @@ ${
                     <tr><td colSpan={3} style={{ padding: '15px', textAlign: 'center', color: '#a0aec0' }}>{t.mHolEmpty}</td></tr>
                   ) : (
                     holidays.sort((a, b) => new Date(a.data) - new Date(b.data)).map((f, i) => {
-                      const parts = f.data.split('-');
+                      const parts = f.date.split('-');
                       const displayDate = isEn ? `${parts[1]}/${parts[2]}/${parts[0]}` : `${parts[2]}/${parts[1]}/${parts[0]}`;
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid #edf2f7' }}>
                           <td style={{ padding: '8px' }}>{displayDate}</td>
-                          <td style={{ padding: '8px', fontWeight: 'bold', color: '#2d3748' }}>{f.descricao}</td>
+                          <td style={{ padding: '8px', fontWeight: 'bold', color: '#2d3748' }}>{f.description}</td>
                           <td style={{ padding: '8px', textAlign: 'center' }}>
-                            <button onClick={() => handleRemoveHoliday(f.data)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolDel}</button>
+                            <button onClick={() => handleRemoveHoliday(f.date)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolDel}</button>
                           </td>
                         </tr>
                       );
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
