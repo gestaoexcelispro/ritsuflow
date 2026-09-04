@@ -373,7 +373,7 @@ export default function MasterPlanPage() {
   const [workPackages, setWorkPackages] = useState([]); 
   const [showWorkPackageModal, setShowWorkPackageModal] = useState(false);
   const [tipoInicio, setTipoInicio] = useState('data'); 
-  const [pacotePredecessora, setPacotePredecessora] = useState('');
+  const [predecessorPackageId, setPredecessorPackageId] = useState('');
   const [packageActivity, setPackageActivity] = useState('');
   const [packageRowId, setPackageRowId] = useState('');
   const [packageStartDate, setPackageStartDate] = useState('');
@@ -512,7 +512,7 @@ export default function MasterPlanPage() {
     setHistory([]);
   };
 
-  const obterDependenciasPacote = (pacote) => {
+  const getPackageDependencies = (pacote) => {
     if (
       Array.isArray(
         pacote?.dependencies
@@ -573,7 +573,7 @@ export default function MasterPlanPage() {
   // ----------------------------------------------------
   // This is intentionally calculated ONCE with useMemo below.
   // Never call this helper from individual calendar cells.
-  const obterConfiguracaoSequenciaPacote = (
+  const getPackageSequenceConfig = (
     pacote
   ) => {
     if (!pacote) return null;
@@ -603,11 +603,11 @@ export default function MasterPlanPage() {
     return null;
   };
 
-  const isPacoteAncoraSequencia = (
+  const isSequenceAnchorPackage = (
     pacote
   ) => {
     const config =
-      obterConfiguracaoSequenciaPacote(
+      getPackageSequenceConfig(
         pacote
       );
 
@@ -775,14 +775,14 @@ export default function MasterPlanPage() {
     return packages.map(
       (pkg) => {
         const isSequenceAnchor =
-          isPacoteAncoraSequencia(
+          isSequenceAnchorPackage(
             pkg
           );
 
         const existing =
           isSequenceAnchor
             ? []
-            : obterDependenciasPacote(
+            : getPackageDependencies(
                 pkg
               );
 
@@ -1055,7 +1055,7 @@ export default function MasterPlanPage() {
     sequenceConfigurations
   });
 
-  const obterDatasPacoteDaGradeVisivel = (
+  const getPackageDatesInVisibleGrid = (
     pacote
   ) => {
     if (
@@ -1165,7 +1165,7 @@ export default function MasterPlanPage() {
 
             sequenceGroupId:
               pkg.sequenceGroupId ||
-              obterConfiguracaoSequenciaPacote(
+              getPackageSequenceConfig(
                 pkg
               )?.id ||
               null
@@ -1366,7 +1366,7 @@ export default function MasterPlanPage() {
       );
 
       const dependencies =
-        obterDependenciasPacote(
+        getPackageDependencies(
           pkg
         );
 
@@ -1700,7 +1700,7 @@ export default function MasterPlanPage() {
         return;
       }
 
-      obterDependenciasPacote(
+      getPackageDependencies(
         pkg
       ).forEach(
         (dependency) => {
@@ -2414,7 +2414,7 @@ export default function MasterPlanPage() {
       );
 
       const dependencies =
-        obterDependenciasPacote(
+        getPackageDependencies(
           pacote
         );
 
@@ -2733,7 +2733,7 @@ export default function MasterPlanPage() {
       ]
     );
 
-  const pacotePorCelula =
+  const packageByCell =
     React.useMemo(
       () => {
         const map =
@@ -2793,7 +2793,7 @@ export default function MasterPlanPage() {
       ]
     );
 
-  const iniciarDragPacote = (
+  const startPackageDrag = (
     event,
     pacote,
     sourceDataIso
@@ -2859,7 +2859,7 @@ export default function MasterPlanPage() {
     });
   };
 
-  const atualizarDestinoDragPacote = (
+  const updatePackageDragTarget = (
     event,
     rowId,
     dataIso
@@ -2898,7 +2898,7 @@ export default function MasterPlanPage() {
     );
   };
 
-  const finalizarDragPacote = (
+  const finishPackageDrag = (
     event,
     rowId,
     dataIso
@@ -2977,14 +2977,14 @@ export default function MasterPlanPage() {
     saveHistory();
 
     const isSequenceAnchor =
-      isPacoteAncoraSequencia(
+      isSequenceAnchorPackage(
         pacote
       );
 
     const dependencies =
       isSequenceAnchor
         ? []
-        : obterDependenciasPacote(
+        : getPackageDependencies(
             pacote
           );
 
@@ -3018,7 +3018,7 @@ export default function MasterPlanPage() {
                 item.dataInicio;
 
               const sequenceConfig =
-                obterConfiguracaoSequenciaPacote(
+                getPackageSequenceConfig(
                   item
                 );
 
@@ -3745,7 +3745,7 @@ ${
     setSecoes(secoes.map(s => s.id === secId ? { ...s, linhas: s.linhas.filter(l => l.id !== linhaId) } : s));
   };
 
-  const pacotesExistentes = workPackages.map(p => {
+  const existingPackages = workPackages.map(p => {
     let desc = p.linhaId;
     secoes.forEach(sec => sec.linhas.forEach(l => { if(l.id === p.linhaId) desc = l.descricao; }));
     const sName = isEn ? (workPackageCatalog[p.atividade]?.labelEn || p.atividade) : (workPackageCatalog[p.atividade]?.labelPt || p.atividade);
@@ -4434,7 +4434,7 @@ ${
     );
   };
 
-  const handleInserirPacoteAutomacao = (e) => {
+  const handleInsertAutomationPackage = (e) => {
     e.preventDefault();
     if (!packageActivity || !packageRowId || packageDuration < 1) {
       alert(t.errFillFields);
@@ -4442,7 +4442,7 @@ ${
     }
 
     if (tipoInicio === 'data' && !packageStartDate) return alert(t.errSelectDate);
-    if (tipoInicio === 'predecessora' && !pacotePredecessora) return alert(t.errSelectPred);
+    if (tipoInicio === 'predecessora' && !predecessorPackageId) return alert(t.errSelectPred);
 
     saveHistory();
 
@@ -4473,12 +4473,12 @@ ${
 
     const manualDependencies =
       tipoInicio === 'predecessora' &&
-      pacotePredecessora
+      predecessorPackageId
         ? [
             {
               type: 'external',
               predecessorId:
-                pacotePredecessora,
+                predecessorPackageId,
               lagWorkingDays: 0
             }
           ]
@@ -4509,7 +4509,7 @@ ${
 
       tipoInicio: tipoInicio,
       dataInicio: packageStartDate,
-      predecessoraId: pacotePredecessora,
+      predecessoraId: predecessorPackageId,
       lagWorkingDays: 0,
       dependencies:
         manualDependencies,
@@ -4521,7 +4521,7 @@ ${
 
     setShowWorkPackageModal(false);
     setPackageStartDate('');
-    setPacotePredecessora('');
+    setPredecessorPackageId('');
     setPackageDuration(1);
     
     // Desconecta da versÃ£o ativa se um novo pacote for inserido, ativando estado de rascunho
@@ -5044,7 +5044,7 @@ ${
                   </label>
                   <select disabled={sequenceStartType !== 'predecessora'} value={sequencePredecessor} onChange={(e) => setSequencePredecessor(e.target.value)} style={{ minWidth: '260px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
                     <option value="">{t.mPkgSelectPred}</option>
-                    {pacotesExistentes.map((pkg) => (
+                    {existingPackages.map((pkg) => (
                       <option key={pkg.id} value={pkg.id}>{pkg.label}</option>
                     ))}
                   </select>
@@ -5088,7 +5088,7 @@ ${
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '10px', width: '550px', fontFamily: 'sans-serif' }}>
             <h2 style={{ color: '#1a365d', marginBottom: '20px' }}>{t.mPkgTitle}</h2>
             
-            <form onSubmit={handleInserirPacoteAutomacao} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <form onSubmit={handleInsertAutomationPackage} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               
               <div style={{ display: 'flex', gap: '15px' }}>
                 <div style={{ flex: 1 }}>
@@ -5140,13 +5140,13 @@ ${
                 ) : (
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgLinkPred}</label>
-                    <select required={tipoInicio === 'predecessora'} value={pacotePredecessora} onChange={(e) => setPacotePredecessora(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
+                    <select required={tipoInicio === 'predecessora'} value={predecessorPackageId} onChange={(e) => setPredecessorPackageId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
                       <option value="">{t.mPkgSelectPred}</option>
-                      {pacotesExistentes.map(p => (
+                      {existingPackages.map(p => (
                         <option key={p.id} value={p.id}>{p.label}</option>
                       ))}
                     </select>
-                    {pacotesExistentes.length === 0 && (
+                    {existingPackages.length === 0 && (
                       <p style={{ fontSize: '0.75rem', color: '#e53e3e', marginTop: '5px' }}>{t.mPkgNoPred}</p>
                     )}
                   </div>
@@ -5369,7 +5369,7 @@ ${
 
                             const pacoteCelula =
                               !isActual
-                                ? pacotePorCelula.get(
+                                ? packageByCell.get(
                                     cellKey
                                   ) || null
                                 : null;
@@ -5422,14 +5422,14 @@ ${
                               <td
                                 key={cellKey}
                                 onDragOver={(event) =>
-                                  atualizarDestinoDragPacote(
+                                  updatePackageDragTarget(
                                     event,
                                     linha.id,
                                     d.dataIso
                                   )
                                 }
                                 onDrop={(event) =>
-                                  finalizarDragPacote(
+                                  finishPackageDrag(
                                     event,
                                     linha.id,
                                     d.dataIso
@@ -5461,7 +5461,7 @@ ${
                                     <div
                                       draggable={!isInputLocked}
                                       onDragStart={(event) =>
-                                        iniciarDragPacote(
+                                        startPackageDrag(
                                           event,
                                           pacoteCelula,
                                           d.dataIso
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
