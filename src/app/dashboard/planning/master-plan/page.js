@@ -334,7 +334,7 @@ export default function MasterPlanPage() {
 
   const [dataInicio, setDataInicio] = useState('2026-08-03');
   const [dataFim, setDataFim] = useState('2026-10-31');
-  const [ocultarFinaisDeSemana, setOcultarFinaisDeSemana] = useState(false);
+  const [hideWeekends, setHideWeekends] = useState(false);
 
   // ============================================================
   // SHARED PROJECT WORK PACKAGE CATALOG
@@ -396,7 +396,7 @@ export default function MasterPlanPage() {
   const [sequenceDragOver, setSequenceDragOver] = useState(null);
   const [packageDrag, setPackageDrag] = useState(null);
 
-  const [datasPlanilha, setDatasPlanilha] = useState([]);
+  const [calendarDates, setCalendarDates] = useState([]);
   const [plannedCellData, setPlannedCellData] = useState({});
   const [actualCellData, setActualCellData] = useState({});
   const [zonasColeta, setZonasColeta] = useState([]);
@@ -492,7 +492,7 @@ export default function MasterPlanPage() {
         : {}
     );
 
-    setOcultarFinaisDeSemana(Boolean(plano.hideWeekends));
+    setHideWeekends(Boolean(plano.hideWeekends));
 
     const savedSequenceConfigurations =
       Array.isArray(plano.sequenceConfigurations)
@@ -1045,13 +1045,13 @@ export default function MasterPlanPage() {
       ]
     );
 
-  const montarPlanData = () => ({
+  const buildPlanData = () => ({
     sections: secoes,
     packages: workPackages,
     plannedCells: plannedCellData,
     actualCells: actualCellData,
     holidays: holidays,
-    hideWeekends: ocultarFinaisDeSemana,
+    hideWeekends: hideWeekends,
     sequenceConfigurations
   });
 
@@ -1069,7 +1069,7 @@ export default function MasterPlanPage() {
     }
 
     const matchingDates =
-      datasPlanilha
+      calendarDates
         .filter(
           (day) => {
             if (
@@ -1146,7 +1146,7 @@ export default function MasterPlanPage() {
             scheduledStartDate:
               schedule
                 ? (
-                    datasPlanilha[
+                    calendarDates[
                       schedule.startIndex
                     ]?.dataIso ||
                     null
@@ -1156,7 +1156,7 @@ export default function MasterPlanPage() {
             scheduledFinishDate:
               schedule
                 ? (
-                    datasPlanilha[
+                    calendarDates[
                       schedule.endIndex
                     ]?.dataIso ||
                     null
@@ -2215,18 +2215,18 @@ export default function MasterPlanPage() {
 
   // GERAÃ‡ÃƒO DO CALENDÃRIO COM DATAS INTERNACIONAIS
   useEffect(() => {
-    const gerarDatas = () => {
+    const generateCalendarDates = () => {
       if (!dataInicio || !dataFim || !selectedProjectId) return;
 
-      const parseDataSemFuso = (dataStr) => {
+      const parseLocalDate = (dataStr) => {
         const [ano, mes, dia] = dataStr.split('-');
         return new Date(ano, mes - 1, dia);
       };
 
-      const inicio = parseDataSemFuso(dataInicio);
-      const fim = parseDataSemFuso(dataFim);
+      const inicio = parseLocalDate(dataInicio);
+      const fim = parseLocalDate(dataFim);
 
-      if (fim < inicio) { setDatasPlanilha([]); return; }
+      if (fim < inicio) { setCalendarDates([]); return; }
 
       const datas = [];
       let dataAtual = new Date(inicio);
@@ -2256,12 +2256,12 @@ export default function MasterPlanPage() {
         
         dataAtual.setDate(dataAtual.getDate() + 1);
       }
-      setDatasPlanilha(datas);
+      setCalendarDates(datas);
     };
-    gerarDatas();
+    generateCalendarDates();
   }, [dataInicio, dataFim, holidays, selectedProjectId, isEn]);
 
-  const datasVisiveis = datasPlanilha.filter(d => ocultarFinaisDeSemana ? !d.isFimDeSemana : true);
+  const visibleDates = calendarDates.filter(d => hideWeekends ? !d.isFimDeSemana : true);
 
   // ----------------------------------------------------
   // DYNAMIC FLOW SCHEDULING ENGINE
@@ -2298,7 +2298,7 @@ export default function MasterPlanPage() {
       index
     ) => {
       const day =
-        datasPlanilha[index];
+        calendarDates[index];
 
       return Boolean(
         day &&
@@ -2321,7 +2321,7 @@ export default function MasterPlanPage() {
 
       while (
         current <
-          datasPlanilha.length &&
+          calendarDates.length &&
         !isWorkingDay(
           current
         )
@@ -2353,7 +2353,7 @@ export default function MasterPlanPage() {
       while (
         remaining > 0 &&
         current + 1 <
-          datasPlanilha.length
+          calendarDates.length
       ) {
         current += 1;
 
@@ -2425,7 +2425,7 @@ export default function MasterPlanPage() {
         dependencies.length === 0
       ) {
         earliestLegalStart =
-          datasPlanilha.findIndex(
+          calendarDates.findIndex(
             (day) =>
               day.dataIso ===
               pacote.dataInicio
@@ -2480,7 +2480,7 @@ export default function MasterPlanPage() {
             while (
               remainingLag > 0 &&
               readyIndex + 1 <
-                datasPlanilha.length
+                calendarDates.length
             ) {
               readyIndex += 1;
 
@@ -2511,7 +2511,7 @@ export default function MasterPlanPage() {
       if (
         earliestLegalStart < 0 ||
         earliestLegalStart >=
-          datasPlanilha.length
+          calendarDates.length
       ) {
         return null;
       }
@@ -2534,7 +2534,7 @@ export default function MasterPlanPage() {
       if (
         startIndex < 0 ||
         startIndex >=
-          datasPlanilha.length
+          calendarDates.length
       ) {
         return null;
       }
@@ -2546,7 +2546,7 @@ export default function MasterPlanPage() {
       for (
         let index = startIndex;
         index <
-          datasPlanilha.length &&
+          calendarDates.length &&
         allocatedDays <
           Math.max(
             1,
@@ -2595,7 +2595,7 @@ export default function MasterPlanPage() {
     return scheduleCache;
   };
 
-  const contarDiasUteisEntreIndices = (
+  const countWorkingDaysBetweenIndices = (
     fromIndex,
     toIndex
   ) => {
@@ -2616,7 +2616,7 @@ export default function MasterPlanPage() {
       index += 1
     ) {
       const day =
-        datasPlanilha[index];
+        calendarDates[index];
 
       if (
         day &&
@@ -2644,7 +2644,7 @@ export default function MasterPlanPage() {
           ),
           Math.max(
             0,
-            datasPlanilha.length -
+            calendarDates.length -
               1
           )
         )
@@ -2658,12 +2658,12 @@ export default function MasterPlanPage() {
     while (
       index >= 0 &&
       index <
-        datasPlanilha.length &&
+        calendarDates.length &&
       (
-        datasPlanilha[
+        calendarDates[
           index
         ]?.isFimDeSemana ||
-        datasPlanilha[
+        calendarDates[
           index
         ]?.isFeriado
       )
@@ -2678,12 +2678,12 @@ export default function MasterPlanPage() {
 
       while (
         index <
-          datasPlanilha.length &&
+          calendarDates.length &&
         (
-          datasPlanilha[
+          calendarDates[
             index
           ]?.isFimDeSemana ||
-          datasPlanilha[
+          calendarDates[
             index
           ]?.isFeriado
         )
@@ -2694,19 +2694,19 @@ export default function MasterPlanPage() {
 
     if (
       index >=
-      datasPlanilha.length
+      calendarDates.length
     ) {
       index =
-        datasPlanilha.length -
+        calendarDates.length -
         1;
 
       while (
         index >= 0 &&
         (
-          datasPlanilha[
+          calendarDates[
             index
           ]?.isFimDeSemana ||
-          datasPlanilha[
+          calendarDates[
             index
           ]?.isFeriado
         )
@@ -2729,7 +2729,7 @@ export default function MasterPlanPage() {
         ),
       [
         networkPackages,
-        datasPlanilha
+        calendarDates
       ]
     );
 
@@ -2754,7 +2754,7 @@ export default function MasterPlanPage() {
               let index =
                 schedule.startIndex;
               index <
-                datasPlanilha.length &&
+                calendarDates.length &&
               allocatedDays <
                 Math.max(
                   1,
@@ -2766,7 +2766,7 @@ export default function MasterPlanPage() {
               index += 1
             ) {
               const day =
-                datasPlanilha[index];
+                calendarDates[index];
 
               if (
                 day &&
@@ -2789,7 +2789,7 @@ export default function MasterPlanPage() {
       [
         networkPackages,
         packageSchedule,
-        datasPlanilha
+        calendarDates
       ]
     );
 
@@ -2813,7 +2813,7 @@ export default function MasterPlanPage() {
     if (!schedule) return;
 
     const sourceIndex =
-      datasPlanilha.findIndex(
+      calendarDates.findIndex(
         (day) =>
           day.dataIso ===
           sourceDataIso
@@ -2878,7 +2878,7 @@ export default function MasterPlanPage() {
       'move';
 
     const index =
-      datasPlanilha.findIndex(
+      calendarDates.findIndex(
         (day) =>
           day.dataIso ===
           dataIso
@@ -2919,7 +2919,7 @@ export default function MasterPlanPage() {
     event.preventDefault();
 
     const rawTargetIndex =
-      datasPlanilha.findIndex(
+      calendarDates.findIndex(
         (day) =>
           day.dataIso ===
           dataIso
@@ -3012,7 +3012,7 @@ export default function MasterPlanPage() {
                 );
 
               const newStartDate =
-                datasPlanilha[
+                calendarDates[
                   legalTarget
                 ]?.dataIso ||
                 item.dataInicio;
@@ -3084,7 +3084,7 @@ export default function MasterPlanPage() {
               );
 
             const manualDelay =
-              contarDiasUteisEntreIndices(
+              countWorkingDaysBetweenIndices(
                 earliestLegalStart,
                 legalTarget
               );
@@ -3116,7 +3116,7 @@ export default function MasterPlanPage() {
   // MOTOR DE RECÃLCULO AUTOMÃTICO
   useEffect(() => {
     if (
-      datasPlanilha.length === 0
+      calendarDates.length === 0
     ) {
       return;
     }
@@ -3147,7 +3147,7 @@ export default function MasterPlanPage() {
           let index =
             schedule.startIndex;
           index <
-            datasPlanilha.length &&
+            calendarDates.length &&
           allocatedDays <
             Math.max(
               1,
@@ -3159,7 +3159,7 @@ export default function MasterPlanPage() {
           index += 1
         ) {
           const day =
-            datasPlanilha[index];
+            calendarDates[index];
 
           if (
             day &&
@@ -3182,19 +3182,19 @@ export default function MasterPlanPage() {
     );
   }, [
     networkPackages,
-    datasPlanilha,
+    calendarDates,
     packageSchedule
   ]);
 
   const calculateSuggestedRole = () => {
-    const colunasDeData = datasVisiveis.length;
-    const larguraEstimadaPx = 320 + (colunasDeData * 45);
+    const dateColumnCount = visibleDates.length;
+    const estimatedWidthPx = 320 + (dateColumnCount * 45);
 
-    if (larguraEstimadaPx <= 1047) return 'a4';
-    if (larguraEstimadaPx <= 1512) return 'a3';
-    if (larguraEstimadaPx <= 2170) return 'a2';
-    if (larguraEstimadaPx <= 3103) return 'a1';
-    if (larguraEstimadaPx <= 4418) return 'a0';
+    if (estimatedWidthPx <= 1047) return 'a4';
+    if (estimatedWidthPx <= 1512) return 'a3';
+    if (estimatedWidthPx <= 2170) return 'a2';
+    if (estimatedWidthPx <= 3103) return 'a1';
+    if (estimatedWidthPx <= 4418) return 'a0';
     return 'unica';
   };
   
@@ -3228,7 +3228,7 @@ export default function MasterPlanPage() {
           status: 'draft',
           planned_start_date: dataInicio || null,
           planned_finish_date: dataFim || null,
-          plan_data: montarPlanData()
+          plan_data: buildPlanData()
         })
         .select(`
           id,
@@ -3285,7 +3285,7 @@ export default function MasterPlanPage() {
         status: 'baseline',
         planned_start_date: dataInicio || null,
         planned_finish_date: dataFim || null,
-        plan_data: montarPlanData()
+        plan_data: buildPlanData()
       })
       .eq('id', targetScenarioId)
       .eq('project_id', selectedProjectId)
@@ -3363,7 +3363,7 @@ ${
         .update({
           is_baseline: false,
           status: 'active',
-          plan_data: montarPlanData(),
+          plan_data: buildPlanData(),
           planned_start_date: dataInicio || null,
           planned_finish_date: dataFim || null
         })
@@ -3418,7 +3418,7 @@ ${
         status: 'draft',
         planned_start_date: dataInicio || null,
         planned_finish_date: dataFim || null,
-        plan_data: montarPlanData()
+        plan_data: buildPlanData()
       })
       .select(`
         id,
@@ -3483,7 +3483,7 @@ ${
       .update({
         planned_start_date: dataInicio || null,
         planned_finish_date: dataFim || null,
-        plan_data: montarPlanData()
+        plan_data: buildPlanData()
       })
       .eq('id', activeScenarioId)
       .eq('project_id', selectedProjectId)
@@ -3556,7 +3556,7 @@ ${
         planned_start_date: dataInicio || null,
         planned_finish_date: dataFim || null,
         is_baseline: false,
-        plan_data: montarPlanData()
+        plan_data: buildPlanData()
       })
       .select(`
         id,
@@ -3913,7 +3913,7 @@ ${
     setSequenceNewActivity('');
   };
 
-  const avancarDiasUteisGerador = (
+  const advanceGeneratorWorkingDays = (
     startIndex,
     workingDays
   ) => {
@@ -3928,12 +3928,12 @@ ${
 
     while (
       remaining > 0 &&
-      index + 1 < datasPlanilha.length
+      index + 1 < calendarDates.length
     ) {
       index += 1;
 
       const day =
-        datasPlanilha[index];
+        calendarDates[index];
 
       if (
         !day.isFimDeSemana &&
@@ -3967,7 +3967,7 @@ ${
     let startIndex = -1;
 
     if (pacote.tipoInicio === 'data') {
-      startIndex = datasPlanilha.findIndex(
+      startIndex = calendarDates.findIndex(
         (day) =>
           day.dataIso ===
           pacote.dataInicio
@@ -3994,7 +3994,7 @@ ${
 
         if (predecessorEnd >= 0) {
           const lagEndIndex =
-            avancarDiasUteisGerador(
+            advanceGeneratorWorkingDays(
               predecessorEnd,
               Math.max(
                 0,
@@ -4022,7 +4022,7 @@ ${
 
     for (
       let index = startIndex;
-      index < datasPlanilha.length &&
+      index < calendarDates.length &&
       allocatedDays <
         Math.max(
           1,
@@ -4034,7 +4034,7 @@ ${
       index += 1
     ) {
       const day =
-        datasPlanilha[index];
+        calendarDates[index];
 
       if (
         !day.isFimDeSemana &&
@@ -4293,7 +4293,7 @@ ${
                 );
 
               const ready =
-                avancarDiasUteisGerador(
+                advanceGeneratorWorkingDays(
                   finish,
                   dependency.lagWorkingDays
                 );
@@ -4829,8 +4829,8 @@ ${
               â†© {t.undoBtn}
             </button>
 
-            <button onClick={() => setOcultarFinaisDeSemana(!ocultarFinaisDeSemana)} style={{ backgroundColor: ocultarFinaisDeSemana ? '#2a4365' : '#edf2f7', color: ocultarFinaisDeSemana ? 'white' : '#4a5568', border: '1px solid #cbd5e0', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
-              {ocultarFinaisDeSemana ? t.showWeekends : t.hideWeekends}
+            <button onClick={() => setHideWeekends(!hideWeekends)} style={{ backgroundColor: hideWeekends ? '#2a4365' : '#edf2f7', color: hideWeekends ? 'white' : '#4a5568', border: '1px solid #cbd5e0', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
+              {hideWeekends ? t.showWeekends : t.hideWeekends}
             </button>
             <button onClick={() => setShowHolidaysModal(true)} style={{ backgroundColor: '#dd6b20', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
               {t.holidaysBtn}
@@ -5225,7 +5225,7 @@ ${
             
             <div style={{ backgroundColor: '#ebf8ff', padding: '12px', borderRadius: '6px', border: '1px solid #90cdf4', marginBottom: '20px' }}>
               <p style={{ margin: 0, fontSize: '0.85rem', color: '#2b6cb0', lineHeight: '1.4' }}>
-                ðŸ’¡ <strong>{t.mPdfSugest}</strong> {t.mPdfSugestText(datasVisiveis.length)} <strong>{formatoIdealCode.toUpperCase()}</strong>.
+                ðŸ’¡ <strong>{t.mPdfSugest}</strong> {t.mPdfSugestText(visibleDates.length)} <strong>{formatoIdealCode.toUpperCase()}</strong>.
               </p>
             </div>
 
@@ -5270,14 +5270,14 @@ ${
                   <tr>
                     <th rowSpan={2} style={{ position: 'sticky', left: 0, zIndex: 11, backgroundColor: '#1a365d', color: 'white', padding: '8px', borderRight: '1px solid #2a4365', width: '40px' }}>ID</th>
                     <th rowSpan={2} style={{ position: 'sticky', left: '40px', zIndex: 11, backgroundColor: '#1a365d', color: 'white', padding: '8px 15px', borderRight: '1px solid #2a4365', textAlign: 'left', minWidth: '320px' }}>{t.descHeader}</th>
-                    {datasVisiveis.map((d, i) => (
+                    {visibleDates.map((d, i) => (
                       <th key={`data-${i}`} style={{ backgroundColor: '#1a365d', borderRight: '1px solid #2a4365', borderBottom: '1px solid #2a4365', padding: '4px 2px', fontSize: '0.8rem', color: 'white', textAlign: 'center' }}>
                         {d.labelData}
                       </th>
                     ))}
                   </tr>
                   <tr>
-                    {datasVisiveis.map((d, i) => (
+                    {visibleDates.map((d, i) => (
                       <th key={`sem-${i}`} style={{ backgroundColor: d.isFeriado ? '#c53030' : (d.isFimDeSemana ? '#718096' : '#edf2f7'), borderRight: '1px solid #cbd5e0', borderBottom: '1px solid #cbd5e0', padding: '4px 2px', fontSize: '0.75rem', color: (d.isFeriado || d.isFimDeSemana) ? 'white' : '#1a365d', fontWeight: 'bold', textAlign: 'center' }}>
                         {d.labelSemana}
                       </th>
@@ -5325,7 +5325,7 @@ ${
                             )}
                           </div>
                         </td>
-                        {datasVisiveis.map((d, i) => (
+                        {visibleDates.map((d, i) => (
                           <td key={`g-${secao.id}-${i}`} style={{ borderBottom: '2px solid #2a4365', borderTop: '2px solid #2a4365', backgroundColor: d.isFeriado ? '#fed7d7' : (d.isFimDeSemana ? '#e2e8f0' : '#edf2f7'), minWidth: '45px' }}></td>
                         ))}
                       </tr>
@@ -5334,7 +5334,7 @@ ${
                         const currentId = globalIdCounter++;
                         
                         const renderCells = (isActual) => {
-                          return datasVisiveis.map((d) => {
+                          return visibleDates.map((d) => {
                             const cellKey = `${linha.id}___${d.dataIso}`;
                             const cellData = isActual ? actualCellData : plannedCellData;
                             const valorSalvo = cellData[cellKey];
@@ -5375,7 +5375,7 @@ ${
                                 : null;
 
                             const currentCellIndex =
-                              datasPlanilha.findIndex(
+                              calendarDates.findIndex(
                                 (day) =>
                                   day.dataIso ===
                                   d.dataIso
@@ -5582,7 +5582,7 @@ ${
                           <td colSpan={2} style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', padding: '5px 15px', borderBottom: '1px solid #cbd5e0' }}>
                             <button onClick={() => handleAddRow(secao.id)} style={btnAdicionarStyle}>{t.addRow}</button>
                           </td>
-                          {datasVisiveis.map((d, i) => (
+                          {visibleDates.map((d, i) => (
                             <td key={`add-${secao.id}-${i}`} style={{ borderBottom: '1px solid #cbd5e0', backgroundColor: d.isFeriado ? '#fed7d7' : (d.isFimDeSemana ? '#e2e8f0' : 'white') }}></td>
                           ))}
                         </tr>
@@ -5593,7 +5593,7 @@ ${
 
                   {!isBaselineFrozen && (
                     <tr>
-                      <td colSpan={2 + datasVisiveis.length} style={{ padding: '20px', backgroundColor: '#f4f7f6', textAlign: 'left' }}>
+                      <td colSpan={2 + visibleDates.length} style={{ padding: '20px', backgroundColor: '#f4f7f6', textAlign: 'left' }}>
                         <button onClick={handleAddSection} style={{ backgroundColor: '#2a4365', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
                           {t.addSection}
                         </button>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
