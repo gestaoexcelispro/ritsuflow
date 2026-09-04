@@ -512,14 +512,14 @@ export default function MasterPlanPage() {
     setHistory([]);
   };
 
-  const getPackageDependencies = (pacote) => {
+  const getPackageDependencies = (packageItem) => {
     if (
       Array.isArray(
-        pacote?.dependencies
+        packageItem?.dependencies
       ) &&
-      pacote.dependencies.length > 0
+      packageItem.dependencies.length > 0
     ) {
-      return pacote.dependencies
+      return packageItem.dependencies
         .filter(
           (dependency) =>
             dependency?.predecessorId
@@ -544,20 +544,20 @@ export default function MasterPlanPage() {
     }
 
     if (
-      pacote?.packageStartType ===
+      packageItem?.packageStartType ===
         'predecessor' &&
-      pacote?.predecessorId
+      packageItem?.predecessorId
     ) {
       return [
         {
           type: 'external',
           predecessorId:
-            pacote.predecessorId,
+            packageItem.predecessorId,
           lagWorkingDays:
             Math.max(
               0,
               Number(
-                pacote.lagWorkingDays ||
+                packageItem.lagWorkingDays ||
                 0
               )
             )
@@ -574,16 +574,16 @@ export default function MasterPlanPage() {
   // This is intentionally calculated ONCE with useMemo below.
   // Never call this helper from individual calendar cells.
   const getPackageSequenceConfig = (
-    pacote
+    packageItem
   ) => {
-    if (!pacote) return null;
+    if (!packageItem) return null;
 
-    if (pacote.sequenceGroupId) {
+    if (packageItem.sequenceGroupId) {
       const directConfig =
         sequenceConfigurations.find(
           (config) =>
             config.id ===
-            pacote.sequenceGroupId
+            packageItem.sequenceGroupId
         );
 
       if (directConfig) {
@@ -594,7 +594,7 @@ export default function MasterPlanPage() {
     // Legacy fallback for a generated package created before
     // sequenceGroupId was persisted.
     if (
-      pacote.generatedBySequence &&
+      packageItem.generatedBySequence &&
       sequenceConfigurations.length === 1
     ) {
       return sequenceConfigurations[0];
@@ -604,11 +604,11 @@ export default function MasterPlanPage() {
   };
 
   const isSequenceAnchorPackage = (
-    pacote
+    packageItem
   ) => {
     const config =
       getPackageSequenceConfig(
-        pacote
+        packageItem
       );
 
     if (!config) return false;
@@ -636,9 +636,9 @@ export default function MasterPlanPage() {
     }
 
     return (
-      pacote.rowId ===
+      packageItem.rowId ===
         firstLocation.rowId &&
-      pacote.activity ===
+      packageItem.activity ===
         firstActivity.code
     );
   };
@@ -1056,11 +1056,11 @@ export default function MasterPlanPage() {
   });
 
   const getPackageDatesInVisibleGrid = (
-    pacote
+    packageItem
   ) => {
     if (
-      !pacote?.rowId ||
-      !pacote?.activity
+      !packageItem?.rowId ||
+      !packageItem?.activity
     ) {
       return {
         scheduledStartDate: null,
@@ -1080,13 +1080,13 @@ export default function MasterPlanPage() {
             }
 
             const cellKey =
-              `${pacote.rowId}___${day.isoDate}`;
+              `${packageItem.rowId}___${day.isoDate}`;
 
             return (
               plannedCellData[
                 cellKey
               ] ===
-              pacote.activity
+              packageItem.activity
             );
           }
         )
@@ -2284,9 +2284,9 @@ export default function MasterPlanPage() {
     const packageById =
       new Map(
         packages.map(
-          (pacote) => [
-            pacote.id,
-            pacote
+          (packageItem) => [
+            packageItem.id,
+            packageItem
           ]
         )
       );
@@ -2372,33 +2372,33 @@ export default function MasterPlanPage() {
     };
 
     const calculate = (
-      pacote,
+      packageItem,
       stack = new Set()
     ) => {
       if (
-        !pacote?.id
+        !packageItem?.id
       ) {
         return null;
       }
 
       if (
         scheduleCache.has(
-          pacote.id
+          packageItem.id
         )
       ) {
         return scheduleCache.get(
-          pacote.id
+          packageItem.id
         );
       }
 
       if (
         stack.has(
-          pacote.id
+          packageItem.id
         )
       ) {
         console.error(
           'Master Plan - circular dependency detected:',
-          pacote.id
+          packageItem.id
         );
 
         return null;
@@ -2410,12 +2410,12 @@ export default function MasterPlanPage() {
         );
 
       nextStack.add(
-        pacote.id
+        packageItem.id
       );
 
       const dependencies =
         getPackageDependencies(
-          pacote
+          packageItem
         );
 
       let earliestLegalStart =
@@ -2428,7 +2428,7 @@ export default function MasterPlanPage() {
           calendarDates.findIndex(
             (day) =>
               day.isoDate ===
-              pacote.startDate
+              packageItem.startDate
           );
 
         earliestLegalStart =
@@ -2523,7 +2523,7 @@ export default function MasterPlanPage() {
               Math.max(
                 0,
                 Number(
-                  pacote
+                  packageItem
                     .manualDelayWorkingDays ||
                   0
                 )
@@ -2551,7 +2551,7 @@ export default function MasterPlanPage() {
           Math.max(
             1,
             Number(
-              pacote.duration ||
+              packageItem.duration ||
               1
             )
           );
@@ -2577,7 +2577,7 @@ export default function MasterPlanPage() {
       };
 
       scheduleCache.set(
-        pacote.id,
+        packageItem.id,
         result
       );
 
@@ -2585,9 +2585,9 @@ export default function MasterPlanPage() {
     };
 
     packages.forEach(
-      (pacote) => {
+      (packageItem) => {
         calculate(
-          pacote
+          packageItem
         );
       }
     );
@@ -2740,10 +2740,10 @@ export default function MasterPlanPage() {
           new Map();
 
         networkPackages.forEach(
-          (pacote) => {
+          (packageItem) => {
             const schedule =
               packageSchedule.get(
-                pacote.id
+                packageItem.id
               );
 
             if (!schedule) return;
@@ -2759,7 +2759,7 @@ export default function MasterPlanPage() {
                 Math.max(
                   1,
                   Number(
-                    pacote.duration ||
+                    packageItem.duration ||
                     1
                   )
                 );
@@ -2774,8 +2774,8 @@ export default function MasterPlanPage() {
                 !day.isHoliday
               ) {
                 map.set(
-                  `${pacote.rowId}___${day.isoDate}`,
-                  pacote
+                  `${packageItem.rowId}___${day.isoDate}`,
+                  packageItem
                 );
 
                 allocatedDays += 1;
@@ -2795,11 +2795,11 @@ export default function MasterPlanPage() {
 
   const startPackageDrag = (
     event,
-    pacote,
+    packageItem,
     sourceDataIso
   ) => {
     if (
-      !pacote ||
+      !packageItem ||
       isBaselineFrozen
     ) {
       return;
@@ -2807,7 +2807,7 @@ export default function MasterPlanPage() {
 
     const schedule =
       packageSchedule.get(
-        pacote.id
+        packageItem.id
       );
 
     if (!schedule) return;
@@ -2842,14 +2842,14 @@ export default function MasterPlanPage() {
 
     event.dataTransfer.setData(
       'text/plain',
-      pacote.id
+      packageItem.id
     );
 
     setPackageDrag({
       packageId:
-        pacote.id,
+        packageItem.id,
       rowId:
-        pacote.rowId,
+        packageItem.rowId,
       startIndex:
         schedule.startIndex,
       sourceIndex,
@@ -2954,19 +2954,19 @@ export default function MasterPlanPage() {
         dragDirection
       );
 
-    const pacote =
+    const packageItem =
       networkPackageById.get(
         packageDrag.packageId
       ) || null;
 
-    if (!pacote) {
+    if (!packageItem) {
       setPackageDrag(null);
       return;
     }
 
     const schedule =
       packageSchedule.get(
-        pacote.id
+        packageItem.id
       );
 
     if (!schedule) {
@@ -2978,14 +2978,14 @@ export default function MasterPlanPage() {
 
     const isSequenceAnchor =
       isSequenceAnchorPackage(
-        pacote
+        packageItem
       );
 
     const dependencies =
       isSequenceAnchor
         ? []
         : getPackageDependencies(
-            pacote
+            packageItem
           );
 
     setWorkPackages(
@@ -2994,7 +2994,7 @@ export default function MasterPlanPage() {
           (item) => {
             if (
               item.id !==
-              pacote.id
+              packageItem.id
             ) {
               return item;
             }
@@ -3133,10 +3133,10 @@ export default function MasterPlanPage() {
     const newGrid = {};
 
     networkPackages.forEach(
-      (pacote) => {
+      (packageItem) => {
         const schedule =
           packageSchedule.get(
-            pacote.id
+            packageItem.id
           );
 
         if (!schedule) return;
@@ -3152,7 +3152,7 @@ export default function MasterPlanPage() {
             Math.max(
               1,
               Number(
-                pacote.duration ||
+                packageItem.duration ||
                 1
               )
             );
@@ -3167,9 +3167,9 @@ export default function MasterPlanPage() {
             !day.isHoliday
           ) {
             newGrid[
-              `${pacote.rowId}___${day.isoDate}`
+              `${packageItem.rowId}___${day.isoDate}`
             ] =
-              pacote.activity;
+              packageItem.activity;
 
             allocatedDays += 1;
           }
@@ -3947,40 +3947,40 @@ ${
   };
 
   const calculateGeneratingPackageEnd = (
-    pacote,
+    packageItem,
     packagePool,
     cache = new Map(),
     stack = new Set()
   ) => {
-    if (!pacote?.id) return -1;
+    if (!packageItem?.id) return -1;
 
-    if (cache.has(pacote.id)) {
-      return cache.get(pacote.id);
+    if (cache.has(packageItem.id)) {
+      return cache.get(packageItem.id);
     }
 
-    if (stack.has(pacote.id)) {
+    if (stack.has(packageItem.id)) {
       return -1;
     }
 
-    stack.add(pacote.id);
+    stack.add(packageItem.id);
 
     let startIndex = -1;
 
-    if (pacote.packageStartType === 'date') {
+    if (packageItem.packageStartType === 'date') {
       startIndex = calendarDates.findIndex(
         (day) =>
           day.isoDate ===
-          pacote.startDate
+          packageItem.startDate
       );
     } else if (
-      pacote.packageStartType === 'predecessor' &&
-      pacote.predecessorId
+      packageItem.packageStartType === 'predecessor' &&
+      packageItem.predecessorId
     ) {
       const predecessor =
         packagePool.find(
           (item) =>
             item.id ===
-            pacote.predecessorId
+            packageItem.predecessorId
         );
 
       if (predecessor) {
@@ -3999,7 +3999,7 @@ ${
               Math.max(
                 0,
                 Number(
-                  pacote.lagWorkingDays ||
+                  packageItem.lagWorkingDays ||
                   0
                 )
               )
@@ -4012,8 +4012,8 @@ ${
     }
 
     if (startIndex < 0) {
-      stack.delete(pacote.id);
-      cache.set(pacote.id, -1);
+      stack.delete(packageItem.id);
+      cache.set(packageItem.id, -1);
       return -1;
     }
 
@@ -4027,7 +4027,7 @@ ${
         Math.max(
           1,
           Number(
-            pacote.duration ||
+            packageItem.duration ||
             1
           )
         );
@@ -4050,9 +4050,9 @@ ${
         ? lastIndex
         : -1;
 
-    stack.delete(pacote.id);
+    stack.delete(packageItem.id);
     cache.set(
-      pacote.id,
+      packageItem.id,
       endIndex
     );
 
@@ -5620,6 +5620,8 @@ ${
     </div>
   );
 }
+
+
 
 
 
