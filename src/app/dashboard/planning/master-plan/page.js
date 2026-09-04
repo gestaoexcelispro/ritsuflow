@@ -372,7 +372,7 @@ export default function MasterPlanPage() {
   // MOTOR DE AGENDAMENTO (SCHEDULING ENGINE)
   const [workPackages, setWorkPackages] = useState([]); 
   const [showWorkPackageModal, setShowWorkPackageModal] = useState(false);
-  const [tipoInicio, setTipoInicio] = useState('data'); 
+  const [packageStartType, setPackageStartType] = useState('date'); 
   const [predecessorPackageId, setPredecessorPackageId] = useState('');
   const [packageActivity, setPackageActivity] = useState('');
   const [packageRowId, setPackageRowId] = useState('');
@@ -384,7 +384,7 @@ export default function MasterPlanPage() {
   const [sequenceLocations, setSequenceLocations] = useState([]);
   const [sequenceActivities, setSequenceActivities] = useState([]);
   const [sequenceNewActivity, setSequenceNewActivity] = useState('');
-  const [sequenceStartType, setSequenceStartType] = useState('data');
+  const [sequenceStartType, setSequenceStartType] = useState('date');
   const [sequenceStartDate, setSequenceStartDate] = useState('');
   const [sequencePredecessor, setSequencePredecessor] = useState('');
   const [sequenceStartLag, setSequenceStartLag] = useState(0);
@@ -544,8 +544,8 @@ export default function MasterPlanPage() {
     }
 
     if (
-      pacote?.tipoInicio ===
-        'predecessora' &&
+      pacote?.packageStartType ===
+        'predecessor' &&
       pacote?.predecessoraId
     ) {
       return [
@@ -3051,7 +3051,7 @@ export default function MasterPlanPage() {
 
               return {
                 ...item,
-                tipoInicio:
+                packageStartType:
                   'data',
                 dataInicio:
                   newStartDate,
@@ -3774,7 +3774,7 @@ ${
     setSequenceLocations(rows);
     setSequenceActivities([]);
     setSequenceNewActivity('');
-    setSequenceStartType('data');
+    setSequenceStartType('date');
     setSequenceStartDate('');
     setSequencePredecessor('');
     setSequenceStartLag(0);
@@ -3840,7 +3840,7 @@ ${
     setSequenceLocations(restoredLocations);
     setSequenceActivities(restoredActivities);
     setSequenceNewActivity('');
-    setSequenceStartType(config.startType || 'data');
+    setSequenceStartType(config.startType || 'date');
     setSequenceStartDate(config.startDate || '');
     setSequencePredecessor(config.predecessorId || '');
     setSequenceStartLag(Math.max(0, Number(config.startLag || 0)));
@@ -3966,14 +3966,14 @@ ${
 
     let startIndex = -1;
 
-    if (pacote.tipoInicio === 'data') {
+    if (pacote.packageStartType === 'date') {
       startIndex = calendarDates.findIndex(
         (day) =>
           day.dataIso ===
           pacote.dataInicio
       );
     } else if (
-      pacote.tipoInicio === 'predecessora' &&
+      pacote.packageStartType === 'predecessor' &&
       pacote.predecessoraId
     ) {
       const predecessor =
@@ -4073,13 +4073,13 @@ ${
       return;
     }
 
-    if (sequenceStartType === 'data' && !sequenceStartDate) {
+    if (sequenceStartType === 'date' && !sequenceStartDate) {
       alert(t.errSelectDate);
       return;
     }
 
     if (
-      sequenceStartType === 'predecessora' &&
+      sequenceStartType === 'predecessor' &&
       !sequencePredecessor
     ) {
       alert(t.errSelectPred);
@@ -4098,7 +4098,7 @@ ${
     saveHistory();
 
     if (
-      sequenceStartType === 'data' &&
+      sequenceStartType === 'date' &&
       sequenceStartDate &&
       (
         !dataInicio ||
@@ -4202,14 +4202,14 @@ ${
         const id =
           `pct_seq_${stamp}_${locationIndex}_${activityIndex}`;
 
-        let tipo = 'predecessora';
+        let startType = 'predecessor';
         let predecessorId = '';
         let startDate = '';
         let relationshipLag = 0;
         let dependencies = [];
 
         if (locationIndex === 0 && activityIndex === 0) {
-          if (sequenceStartType === 'predecessora') {
+          if (sequenceStartType === 'predecessor') {
             predecessorId = sequencePredecessor;
             relationshipLag = Math.max(
               0,
@@ -4224,7 +4224,7 @@ ${
               }
             ];
           } else {
-            tipo = 'data';
+            startType = 'date';
             startDate = sequenceStartDate;
             dependencies = [];
           }
@@ -4307,7 +4307,7 @@ ${
             predecessorId = controlling.predecessorId;
             relationshipLag = controlling.lagWorkingDays;
           } else {
-            tipo = 'data';
+            startType = 'date';
             startDate = sequenceStartDate;
           }
         }
@@ -4324,28 +4324,28 @@ ${
           locationPath: location.label || '',
           projectServiceId: service?.projectServiceId || null,
           projectWorkPackageId: service?.projectWorkPackageId || null,
-          tipoInicio:
+          packageStartType:
             isFirstGeneratedPackage &&
-            sequenceStartType === 'data'
+            sequenceStartType === 'date'
               ? 'data'
-              : tipo,
+              : startType,
           dataInicio:
             isFirstGeneratedPackage &&
-            sequenceStartType === 'data'
+            sequenceStartType === 'date'
               ? sequenceStartDate
               : startDate,
           predecessoraId:
             isFirstGeneratedPackage &&
-            sequenceStartType === 'data'
+            sequenceStartType === 'date'
               ? ''
               : predecessorId,
           lagWorkingDays:
-            tipo === 'predecessora'
+            startType === 'predecessor'
               ? relationshipLag
               : 0,
           dependencies:
             isFirstGeneratedPackage &&
-            sequenceStartType === 'data'
+            sequenceStartType === 'date'
               ? []
               : dependencies,
           manualDelayWorkingDays: 0,
@@ -4383,15 +4383,15 @@ ${
         })),
       startType: sequenceStartType,
       startDate:
-        sequenceStartType === 'data'
+        sequenceStartType === 'date'
           ? sequenceStartDate
           : '',
       predecessorId:
-        sequenceStartType === 'predecessora'
+        sequenceStartType === 'predecessor'
           ? sequencePredecessor
           : '',
       startLag:
-        sequenceStartType === 'predecessora'
+        sequenceStartType === 'predecessor'
           ? Math.max(0, Number(sequenceStartLag || 0))
           : 0,
       flowRule: 'continuous',
@@ -4441,8 +4441,8 @@ ${
       return;
     }
 
-    if (tipoInicio === 'data' && !packageStartDate) return alert(t.errSelectDate);
-    if (tipoInicio === 'predecessora' && !predecessorPackageId) return alert(t.errSelectPred);
+    if (packageStartType === 'date' && !packageStartDate) return alert(t.errSelectDate);
+    if (packageStartType === 'predecessor' && !predecessorPackageId) return alert(t.errSelectPred);
 
     saveHistory();
 
@@ -4472,7 +4472,7 @@ ${
       ] || null;
 
     const manualDependencies =
-      tipoInicio === 'predecessora' &&
+      packageStartType === 'predecessor' &&
       predecessorPackageId
         ? [
             {
@@ -4507,7 +4507,7 @@ ${
         selectedService?.projectWorkPackageId ||
         null,
 
-      tipoInicio: tipoInicio,
+      packageStartType: packageStartType,
       dataInicio: packageStartDate,
       predecessoraId: predecessorPackageId,
       lagWorkingDays: 0,
@@ -5033,28 +5033,28 @@ ${
                 <h3 style={{ margin: '0 0 12px', color: '#0b2239' }}>{t.sequenceStart}</h3>
                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
-                    <input type="radio" checked={sequenceStartType === 'data'} onChange={() => setSequenceStartType('data')} />
+                    <input type="radio" checked={sequenceStartType === 'date'} onChange={() => setSequenceStartType('date')} />
                     {t.specificStartDate}
                   </label>
-                  <input type="date" disabled={sequenceStartType !== 'data'} value={sequenceStartDate} onChange={(e) => setSequenceStartDate(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }} />
+                  <input type="date" disabled={sequenceStartType !== 'date'} value={sequenceStartDate} onChange={(e) => setSequenceStartDate(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }} />
 
                   <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
-                    <input type="radio" checked={sequenceStartType === 'predecessora'} onChange={() => setSequenceStartType('predecessora')} />
+                    <input type="radio" checked={sequenceStartType === 'predecessor'} onChange={() => setSequenceStartType('predecessor')} />
                     {t.existingPredecessor}
                   </label>
-                  <select disabled={sequenceStartType !== 'predecessora'} value={sequencePredecessor} onChange={(e) => setSequencePredecessor(e.target.value)} style={{ minWidth: '260px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+                  <select disabled={sequenceStartType !== 'predecessor'} value={sequencePredecessor} onChange={(e) => setSequencePredecessor(e.target.value)} style={{ minWidth: '260px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
                     <option value="">{t.mPkgSelectPred}</option>
                     {existingPackages.map((pkg) => (
                       <option key={pkg.id} value={pkg.id}>{pkg.label}</option>
                     ))}
                   </select>
 
-                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, opacity: sequenceStartType === 'predecessora' ? 1 : 0.5 }}>
+                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, opacity: sequenceStartType === 'predecessor' ? 1 : 0.5 }}>
                     {t.startLag}
                     <input
                       type="number"
                       min="0"
-                      disabled={sequenceStartType !== 'predecessora'}
+                      disabled={sequenceStartType !== 'predecessor'}
                       value={sequenceStartLag}
                       onChange={(e) => setSequenceStartLag(Math.max(0, Number(e.target.value || 0)))}
                       style={{ width: '72px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
@@ -5123,24 +5123,24 @@ ${
               <div style={{ backgroundColor: '#f7fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', color: '#2d3748', cursor: 'pointer', fontWeight: 'bold' }}>
-                    <input type="radio" name="tipoInicio" value="data" checked={tipoInicio === 'data'} onChange={() => setTipoInicio('data')} />
+                    <input type="radio" name="packageStartType" value="date" checked={packageStartType === 'date'} onChange={() => setPackageStartType('date')} />
                     {t.mPkgRadioDate}
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', color: '#2d3748', cursor: 'pointer', fontWeight: 'bold' }}>
-                    <input type="radio" name="tipoInicio" value="predecessora" checked={tipoInicio === 'predecessora'} onChange={() => setTipoInicio('predecessora')} />
+                    <input type="radio" name="packageStartType" value="predecessor" checked={packageStartType === 'predecessor'} onChange={() => setPackageStartType('predecessor')} />
                     {t.mPkgRadioPred}
                   </label>
                 </div>
 
-                {tipoInicio === 'data' ? (
+                {packageStartType === 'date' ? (
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgStartDate}</label>
-                    <input type="date" required={tipoInicio === 'data'} value={packageStartDate} onChange={(e) => setPackageStartDate(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
+                    <input type="date" required={packageStartType === 'date'} value={packageStartDate} onChange={(e) => setPackageStartDate(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
                   </div>
                 ) : (
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgLinkPred}</label>
-                    <select required={tipoInicio === 'predecessora'} value={predecessorPackageId} onChange={(e) => setPredecessorPackageId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
+                    <select required={packageStartType === 'predecessor'} value={predecessorPackageId} onChange={(e) => setPredecessorPackageId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
                       <option value="">{t.mPkgSelectPred}</option>
                       {existingPackages.map(p => (
                         <option key={p.id} value={p.id}>{p.label}</option>
@@ -5620,6 +5620,8 @@ ${
     </div>
   );
 }
+
+
 
 
 
