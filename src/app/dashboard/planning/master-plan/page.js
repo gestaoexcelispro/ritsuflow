@@ -5333,11 +5333,11 @@ ${
                       {secao.linhas.map((linha) => {
                         const currentId = globalIdCounter++;
                         
-                        const renderizarCelulas = (isRealizado) => {
+                        const renderizarCelulas = (isActual) => {
                           return datasVisiveis.map((d) => {
                             const cellKey = `${linha.id}___${d.dataIso}`;
-                            const baseDados = isRealizado ? actualCellData : plannedCellData;
-                            const valorSalvo = baseDados[cellKey];
+                            const cellData = isActual ? actualCellData : plannedCellData;
+                            const valorSalvo = cellData[cellKey];
                             
                             let defaultValor = '';
                             if (d.isFeriado) defaultValor = 'FER';
@@ -5365,10 +5365,10 @@ ${
                               bgColor = '#e2e8f0';
                             }
 
-                            const inputBloqueado = isRealizado ? false : isBaselineFrozen;
+                            const isInputLocked = isActual ? false : isBaselineFrozen;
 
                             const pacoteCelula =
-                              !isRealizado
+                              !isActual
                                 ? pacotePorCelula.get(
                                     cellKey
                                   ) || null
@@ -5459,7 +5459,7 @@ ${
                                 <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                   {pacoteCelula ? (
                                     <div
-                                      draggable={!inputBloqueado}
+                                      draggable={!isInputLocked}
                                       onDragStart={(event) =>
                                         iniciarDragPacote(
                                           event,
@@ -5487,7 +5487,7 @@ ${
                                         fontSize: '0.7rem',
                                         fontWeight: 'bold',
                                         cursor:
-                                          inputBloqueado
+                                          isInputLocked
                                             ? 'default'
                                             : 'ew-resize',
                                         userSelect: 'none',
@@ -5503,9 +5503,9 @@ ${
                                     <>
                                       <select
                                         value={valorEfetivo}
-                                        onChange={(e) => isRealizado ? handleActualCellChange(linha.id, d.dataIso, e.target.value) : handleCellChange(linha.id, d.dataIso, e.target.value)}
-                                        disabled={inputBloqueado}
-                                        style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: configCor.color, color: configCor.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: inputBloqueado ? 'default' : 'pointer', borderRadius: '2px', opacity: (controlMode && !isRealizado && valorEfetivo) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
+                                        onChange={(e) => isActual ? handleActualCellChange(linha.id, d.dataIso, e.target.value) : handleCellChange(linha.id, d.dataIso, e.target.value)}
+                                        disabled={isInputLocked}
+                                        style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: configCor.color, color: configCor.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: isInputLocked ? 'default' : 'pointer', borderRadius: '2px', opacity: (controlMode && !isActual && valorEfetivo) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
                                       >
                                         <option value=""></option>
                                         {Object.keys(workPackageCatalog).filter(k => k !== '').map(sigla => (
@@ -5513,7 +5513,7 @@ ${
                                         ))}
                                       </select>
 
-                                      {!inputBloqueado && (
+                                      {!isInputLocked && (
                                         <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '0.45rem', color: configCor.text === '#fff' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)' }}>â–¼</div>
                                       )}
                                     </>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
