@@ -1073,14 +1073,14 @@ export default function MasterPlanPage() {
         .filter(
           (day) => {
             if (
-              day.isFimDeSemana ||
-              day.isFeriado
+              day.isWeekend ||
+              day.isHoliday
             ) {
               return false;
             }
 
             const cellKey =
-              `${pacote.rowId}___${day.dataIso}`;
+              `${pacote.rowId}___${day.isoDate}`;
 
             return (
               plannedCellData[
@@ -1092,7 +1092,7 @@ export default function MasterPlanPage() {
         )
         .map(
           (day) =>
-            day.dataIso
+            day.isoDate
         );
 
     return {
@@ -1148,7 +1148,7 @@ export default function MasterPlanPage() {
                 ? (
                     calendarDates[
                       schedule.startIndex
-                    ]?.dataIso ||
+                    ]?.isoDate ||
                     null
                   )
                 : null,
@@ -1158,7 +1158,7 @@ export default function MasterPlanPage() {
                 ? (
                     calendarDates[
                       schedule.endIndex
-                    ]?.dataIso ||
+                    ]?.isoDate ||
                     null
                   )
                 : null,
@@ -2247,11 +2247,11 @@ export default function MasterPlanPage() {
 
         datas.push({
           dataCompleta: dataClonada,
-          labelData: isEn ? `${mes}/${dia}` : `${dia}/${mes}`, // MM/DD ou DD/MM para VisualizaÃ§Ã£o
-          labelSemana: diasSemana[diaSemanaIndex],
-          isFimDeSemana: diaSemanaIndex === 0 || diaSemanaIndex === 6,
-          isFeriado: isFeriado,
-          dataIso: dataIso // CHAVE INVARIANTE USADA NO BANCO DE DADOS/MEMÃ“RIA
+          dateLabel: isEn ? `${mes}/${dia}` : `${dia}/${mes}`, // MM/DD ou DD/MM para VisualizaÃ§Ã£o
+          weekLabel: diasSemana[diaSemanaIndex],
+          isWeekend: diaSemanaIndex === 0 || diaSemanaIndex === 6,
+          isHoliday: isFeriado,
+          isoDate: dataIso // CHAVE INVARIANTE USADA NO BANCO DE DADOS/MEMÃ“RIA
         });
         
         dataAtual.setDate(dataAtual.getDate() + 1);
@@ -2261,7 +2261,7 @@ export default function MasterPlanPage() {
     generateCalendarDates();
   }, [dataInicio, dataFim, holidays, selectedProjectId, isEn]);
 
-  const visibleDates = calendarDates.filter(d => hideWeekends ? !d.isFimDeSemana : true);
+  const visibleDates = calendarDates.filter(d => hideWeekends ? !d.isWeekend : true);
 
   // ----------------------------------------------------
   // DYNAMIC FLOW SCHEDULING ENGINE
@@ -2302,8 +2302,8 @@ export default function MasterPlanPage() {
 
       return Boolean(
         day &&
-        !day.isFimDeSemana &&
-        !day.isFeriado
+        !day.isWeekend &&
+        !day.isHoliday
       );
     };
 
@@ -2427,7 +2427,7 @@ export default function MasterPlanPage() {
         earliestLegalStart =
           calendarDates.findIndex(
             (day) =>
-              day.dataIso ===
+              day.isoDate ===
               pacote.startDate
           );
 
@@ -2620,8 +2620,8 @@ export default function MasterPlanPage() {
 
       if (
         day &&
-        !day.isFimDeSemana &&
-        !day.isFeriado
+        !day.isWeekend &&
+        !day.isHoliday
       ) {
         count += 1;
       }
@@ -2662,10 +2662,10 @@ export default function MasterPlanPage() {
       (
         calendarDates[
           index
-        ]?.isFimDeSemana ||
+        ]?.isWeekend ||
         calendarDates[
           index
-        ]?.isFeriado
+        ]?.isHoliday
       )
     ) {
       index += step;
@@ -2682,10 +2682,10 @@ export default function MasterPlanPage() {
         (
           calendarDates[
             index
-          ]?.isFimDeSemana ||
+          ]?.isWeekend ||
           calendarDates[
             index
-          ]?.isFeriado
+          ]?.isHoliday
         )
       ) {
         index += 1;
@@ -2705,10 +2705,10 @@ export default function MasterPlanPage() {
         (
           calendarDates[
             index
-          ]?.isFimDeSemana ||
+          ]?.isWeekend ||
           calendarDates[
             index
-          ]?.isFeriado
+          ]?.isHoliday
         )
       ) {
         index -= 1;
@@ -2770,11 +2770,11 @@ export default function MasterPlanPage() {
 
               if (
                 day &&
-                !day.isFimDeSemana &&
-                !day.isFeriado
+                !day.isWeekend &&
+                !day.isHoliday
               ) {
                 map.set(
-                  `${pacote.rowId}___${day.dataIso}`,
+                  `${pacote.rowId}___${day.isoDate}`,
                   pacote
                 );
 
@@ -2815,7 +2815,7 @@ export default function MasterPlanPage() {
     const sourceIndex =
       calendarDates.findIndex(
         (day) =>
-          day.dataIso ===
+          day.isoDate ===
           sourceDataIso
       );
 
@@ -2880,7 +2880,7 @@ export default function MasterPlanPage() {
     const index =
       calendarDates.findIndex(
         (day) =>
-          day.dataIso ===
+          day.isoDate ===
           dataIso
       );
 
@@ -2921,7 +2921,7 @@ export default function MasterPlanPage() {
     const rawTargetIndex =
       calendarDates.findIndex(
         (day) =>
-          day.dataIso ===
+          day.isoDate ===
           dataIso
       );
 
@@ -3014,7 +3014,7 @@ export default function MasterPlanPage() {
               const newStartDate =
                 calendarDates[
                   legalTarget
-                ]?.dataIso ||
+                ]?.isoDate ||
                 item.startDate;
 
               const sequenceConfig =
@@ -3163,11 +3163,11 @@ export default function MasterPlanPage() {
 
           if (
             day &&
-            !day.isFimDeSemana &&
-            !day.isFeriado
+            !day.isWeekend &&
+            !day.isHoliday
           ) {
             newGrid[
-              `${pacote.rowId}___${day.dataIso}`
+              `${pacote.rowId}___${day.isoDate}`
             ] =
               pacote.activity;
 
@@ -3936,8 +3936,8 @@ ${
         calendarDates[index];
 
       if (
-        !day.isFimDeSemana &&
-        !day.isFeriado
+        !day.isWeekend &&
+        !day.isHoliday
       ) {
         remaining -= 1;
       }
@@ -3969,7 +3969,7 @@ ${
     if (pacote.packageStartType === 'date') {
       startIndex = calendarDates.findIndex(
         (day) =>
-          day.dataIso ===
+          day.isoDate ===
           pacote.startDate
       );
     } else if (
@@ -4037,8 +4037,8 @@ ${
         calendarDates[index];
 
       if (
-        !day.isFimDeSemana &&
-        !day.isFeriado
+        !day.isWeekend &&
+        !day.isHoliday
       ) {
         allocatedDays += 1;
         lastIndex = index;
@@ -5272,14 +5272,14 @@ ${
                     <th rowSpan={2} style={{ position: 'sticky', left: '40px', zIndex: 11, backgroundColor: '#1a365d', color: 'white', padding: '8px 15px', borderRight: '1px solid #2a4365', textAlign: 'left', minWidth: '320px' }}>{t.descHeader}</th>
                     {visibleDates.map((d, i) => (
                       <th key={`data-${i}`} style={{ backgroundColor: '#1a365d', borderRight: '1px solid #2a4365', borderBottom: '1px solid #2a4365', padding: '4px 2px', fontSize: '0.8rem', color: 'white', textAlign: 'center' }}>
-                        {d.labelData}
+                        {d.dateLabel}
                       </th>
                     ))}
                   </tr>
                   <tr>
                     {visibleDates.map((d, i) => (
-                      <th key={`sem-${i}`} style={{ backgroundColor: d.isFeriado ? '#c53030' : (d.isFimDeSemana ? '#718096' : '#edf2f7'), borderRight: '1px solid #cbd5e0', borderBottom: '1px solid #cbd5e0', padding: '4px 2px', fontSize: '0.75rem', color: (d.isFeriado || d.isFimDeSemana) ? 'white' : '#1a365d', fontWeight: 'bold', textAlign: 'center' }}>
-                        {d.labelSemana}
+                      <th key={`sem-${i}`} style={{ backgroundColor: d.isHoliday ? '#c53030' : (d.isWeekend ? '#718096' : '#edf2f7'), borderRight: '1px solid #cbd5e0', borderBottom: '1px solid #cbd5e0', padding: '4px 2px', fontSize: '0.75rem', color: (d.isHoliday || d.isWeekend) ? 'white' : '#1a365d', fontWeight: 'bold', textAlign: 'center' }}>
+                        {d.weekLabel}
                       </th>
                     ))}
                   </tr>
@@ -5326,7 +5326,7 @@ ${
                           </div>
                         </td>
                         {visibleDates.map((d, i) => (
-                          <td key={`g-${secao.id}-${i}`} style={{ borderBottom: '2px solid #2a4365', borderTop: '2px solid #2a4365', backgroundColor: d.isFeriado ? '#fed7d7' : (d.isFimDeSemana ? '#e2e8f0' : '#edf2f7'), minWidth: '45px' }}></td>
+                          <td key={`g-${secao.id}-${i}`} style={{ borderBottom: '2px solid #2a4365', borderTop: '2px solid #2a4365', backgroundColor: d.isHoliday ? '#fed7d7' : (d.isWeekend ? '#e2e8f0' : '#edf2f7'), minWidth: '45px' }}></td>
                         ))}
                       </tr>
 
@@ -5335,13 +5335,13 @@ ${
                         
                         const renderCells = (isActual) => {
                           return visibleDates.map((d) => {
-                            const cellKey = `${linha.id}___${d.dataIso}`;
+                            const cellKey = `${linha.id}___${d.isoDate}`;
                             const cellData = isActual ? actualCellData : plannedCellData;
                             const savedValue = cellData[cellKey];
                             
                             let defaultValue = '';
-                            if (d.isFeriado) defaultValue = 'FER';
-                            else if (d.isFimDeSemana) defaultValue = 'OFF';
+                            if (d.isHoliday) defaultValue = 'FER';
+                            else if (d.isWeekend) defaultValue = 'OFF';
 
                             // Project calendar markers belong to both
                             // Planning and Control. A holiday remains a
@@ -5359,9 +5359,9 @@ ${
 
                             if (colorConfig.color !== 'transparent') {
                               bgColor = colorConfig.color;
-                            } else if (d.isFeriado) {
+                            } else if (d.isHoliday) {
                               bgColor = '#fed7d7';
-                            } else if (d.isFimDeSemana) {
+                            } else if (d.isWeekend) {
                               bgColor = '#e2e8f0';
                             }
 
@@ -5377,8 +5377,8 @@ ${
                             const currentCellIndex =
                               calendarDates.findIndex(
                                 (day) =>
-                                  day.dataIso ===
-                                  d.dataIso
+                                  day.isoDate ===
+                                  d.isoDate
                               );
 
                             const proposedDragStart =
@@ -5425,14 +5425,14 @@ ${
                                   updatePackageDragTarget(
                                     event,
                                     linha.id,
-                                    d.dataIso
+                                    d.isoDate
                                   )
                                 }
                                 onDrop={(event) =>
                                   finishPackageDrag(
                                     event,
                                     linha.id,
-                                    d.dataIso
+                                    d.isoDate
                                   )
                                 }
                                 style={{
@@ -5464,7 +5464,7 @@ ${
                                         startPackageDrag(
                                           event,
                                           cellPackage,
-                                          d.dataIso
+                                          d.isoDate
                                         )
                                       }
                                       onDragEnd={() =>
@@ -5503,7 +5503,7 @@ ${
                                     <>
                                       <select
                                         value={effectiveValue}
-                                        onChange={(e) => isActual ? handleActualCellChange(linha.id, d.dataIso, e.target.value) : handleCellChange(linha.id, d.dataIso, e.target.value)}
+                                        onChange={(e) => isActual ? handleActualCellChange(linha.id, d.isoDate, e.target.value) : handleCellChange(linha.id, d.isoDate, e.target.value)}
                                         disabled={isInputLocked}
                                         style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: colorConfig.color, color: colorConfig.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: isInputLocked ? 'default' : 'pointer', borderRadius: '2px', opacity: (controlMode && !isActual && effectiveValue) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
                                       >
@@ -5583,7 +5583,7 @@ ${
                             <button onClick={() => handleAddRow(secao.id)} style={btnAdicionarStyle}>{t.addRow}</button>
                           </td>
                           {visibleDates.map((d, i) => (
-                            <td key={`add-${secao.id}-${i}`} style={{ borderBottom: '1px solid #cbd5e0', backgroundColor: d.isFeriado ? '#fed7d7' : (d.isFimDeSemana ? '#e2e8f0' : 'white') }}></td>
+                            <td key={`add-${secao.id}-${i}`} style={{ borderBottom: '1px solid #cbd5e0', backgroundColor: d.isHoliday ? '#fed7d7' : (d.isWeekend ? '#e2e8f0' : 'white') }}></td>
                           ))}
                         </tr>
                       )}
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
