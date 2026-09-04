@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../../lib/supabase';
 
@@ -197,9 +197,9 @@ export default function MasterPlanPage() {
     unsavedEdit: '* Unsaved edit...',
     newBlank: 'New Blank Scenario',
     
-    saveScenario: '💾 Save',
-    updateScenario: '💾 Update',
-    duplicateScenario: '📑 Duplicate',
+    saveScenario: ' Save',
+    updateScenario: ' Update',
+    duplicateScenario: ' Duplicate',
     promptDuplicate: 'Enter a name for the copied Scenario:',
     scenarioUpdated: 'Scenario updated successfully!',
     scenarioSaveError: 'The scenario could not be saved.',
@@ -208,7 +208,7 @@ export default function MasterPlanPage() {
     
     freezeBase: '🔒 Freeze Baseline',
     editBase: '🔓 Edit Baseline',
-    planning: '📋 Planning',
+    planning: ' Planning',
     control: 'Control (Actual)',
     insertPackage: 'Insert Package',
     generateSequence: 'Generate Work Sequence',
@@ -243,8 +243,8 @@ export default function MasterPlanPage() {
     undoBtn: 'Undo',
     showWeekends: 'Show Weekends',
     hideWeekends: 'Hide Weekends',
-    holidaysBtn: '📅 Holidays',
-    exportPdf: '📊 Export PDF',
+    holidaysBtn: ' Holidays',
+    exportPdf: ' Export PDF',
     startPrev: 'Expected Start',
     endPrev: 'Expected Finish',
     noProject: 'No Project Selected',
@@ -279,8 +279,8 @@ export default function MasterPlanPage() {
     mPkgService: 'Service / Activity',
     mPkgSelect: '-- Select --',
     mPkgZone: 'Location / Zone',
-    mPkgRadioDate: '📅 Start on Specific Date',
-    mPkgRadioPred: '🔗 Start after Predecessor',
+    mPkgRadioDate: ' Start on Specific Date',
+    mPkgRadioPred: ' Start after Predecessor',
     mPkgStartDate: 'Start Date',
     mPkgLinkPred: 'Link to Finish of:',
     mPkgSelectPred: '-- Select Completed Package --',
@@ -4825,7 +4825,7 @@ ${
       {!selectedProjectId && (
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f7fafc', borderRadius: '8px', border: '2px dashed #cbd5e0' }}>
           <div style={{ textAlign: 'center', color: '#718096' }}>
-            <span style={{ fontSize: '3rem', display: 'block', marginBottom: '10px' }}>🏗️</span>
+            <span style={{ fontSize: '3rem', display: 'block', marginBottom: '10px' }}></span>
             <h2>{t.noProject}</h2>
             <p>{t.noProjectDesc}</p>
           </div>
@@ -5194,7 +5194,7 @@ ${
             
             <div style={{ backgroundColor: '#ebf8ff', padding: '12px', borderRadius: '6px', border: '1px solid #90cdf4', marginBottom: '20px' }}>
               <p style={{ margin: 0, fontSize: '0.85rem', color: '#2b6cb0', lineHeight: '1.4' }}>
-                💡 <strong>{t.mPdfSugest}</strong> {t.mPdfSugestText(visibleDates.length)} <strong>{formatoIdealCode.toUpperCase()}</strong>.
+                 <strong>{t.mPdfSugest}</strong> {t.mPdfSugestText(visibleDates.length)} <strong>{formatoIdealCode.toUpperCase()}</strong>.
               </p>
             </div>
 

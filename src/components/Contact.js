@@ -9,7 +9,7 @@ export default function Contact() {
           Fill out the form below to discuss your project or request a custom quote. We usually respond within 24 hours.
         </p>
         
-        {/* Informações de Contato Direto */}
+        {/* Direct Contact Information */}
         <div style={{ 
           display: 'flex', 
           justifyContent: 'center', 
@@ -23,7 +23,7 @@ export default function Contact() {
             <span>📞</span> +55 42 98406-6238
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>✉️</span> gestao.excelispro@gmail.com
+            <span>✉</span> gestao.excelispro@gmail.com
           </div>
         </div>
         

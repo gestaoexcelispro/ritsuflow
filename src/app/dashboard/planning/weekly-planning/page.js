@@ -2564,7 +2564,7 @@ export default function WeeklyPlanningPage() {
                 '10px',
             }}
           >
-            📅
+            
           </div>
 
           <h2

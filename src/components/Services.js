@@ -23,7 +23,7 @@ export default function Services() {
         maxWidth: '1200px', 
         margin: '0 auto' 
       }}>
-        {/* Cartão 1: Construction Takeoff */}
+        {/* Card 1: Construction Takeoff */}
         <div style={{ 
           backgroundColor: '#ffffff', 
           padding: '40px', 
@@ -40,7 +40,7 @@ export default function Services() {
           </p>
         </div>
 
-        {/* Cartão 2: Lean Planning */}
+        {/* Card 2: Lean Planning */}
         <div style={{ 
           backgroundColor: '#ffffff', 
           padding: '40px', 

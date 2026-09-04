@@ -11,7 +11,7 @@ export default function Header() {
       borderBottom: '1px solid #eaeaea',
       backgroundColor: '#ffffff'
     }}>
-      {/* Espaço da Logomarca (Agora clicável para voltar ao início) */}
+      {/* Logo Area (now clickable to return to the home page) */}
       <div>
         <a href="/">
           <img 
@@ -30,10 +30,10 @@ export default function Header() {
           <a href="/#contact" style={{ textDecoration: 'none', color: 'inherit' }}>Contact</a>
         </nav>
         
-        {/* Área de Ações Secundárias (Login e Idioma) */}
+        {/* Secondary Actions Area (Login and Language) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', borderLeft: '2px solid #eaeaea', paddingLeft: '15px' }}>
           
-          {/* Novo Botão de Login */}
+          {/* New Login Button */}
           <a href="/login" style={{ 
             textDecoration: 'none', 
             color: '#3182ce', 
@@ -43,7 +43,7 @@ export default function Header() {
             Login
           </a>
 
-          {/* Botão de Idioma */}
+          {/* Language Button */}
           <button style={{ 
             background: 'none', 
             border: 'none', 
@@ -51,7 +51,7 @@ export default function Header() {
             fontSize: '24px',
             padding: '5px'
           }} title="Mudar Idioma (EUA/CAN/BRA)">
-            ⚙️
+            ⚙
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, {
   useCallback,
@@ -4197,8 +4197,8 @@ Continue?`
           }
         >
           {savingLookahead
-            ? '💾 Saving...'
-            : '💾 Save'}
+            ? ' Saving...'
+            : ' Save'}
         </button>
 
 
@@ -4287,7 +4287,7 @@ Continue?`
           }
         >
 
-          📅 Holidays
+           Holidays
 
           {masterPlanHolidays.length >
           0
@@ -4499,7 +4499,7 @@ Continue?`
               : tabStyle
           }
         >
-          📅 Lookahead &amp; Koskela Sheet
+           Lookahead &amp; Koskela Sheet
         </button>
 
 

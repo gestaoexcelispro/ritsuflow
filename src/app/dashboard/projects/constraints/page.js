@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, {
   useCallback,
@@ -5302,7 +5302,7 @@ export default function ConstraintLogPage() {
                       closeButtonStyle
                     }
                   >
-                    ├ù
+                    ×
                   </button>
 
                 </div>
@@ -7110,7 +7110,7 @@ export default function ConstraintLogPage() {
                   closeButtonStyle
                 }
               >
-                ├ù
+                ×
               </button>
 
             </div>
