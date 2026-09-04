@@ -370,14 +370,14 @@ export default function MasterPlanPage() {
   const [activeScenarioId, setActiveScenarioId] = useState(null);
 
   // MOTOR DE AGENDAMENTO (SCHEDULING ENGINE)
-  const [pacotesLancados, setPacotesLancados] = useState([]); 
-  const [showPacoteModal, setShowPacoteModal] = useState(false);
+  const [workPackages, setWorkPackages] = useState([]); 
+  const [showWorkPackageModal, setShowWorkPackageModal] = useState(false);
   const [tipoInicio, setTipoInicio] = useState('data'); 
   const [pacotePredecessora, setPacotePredecessora] = useState('');
-  const [pacoteAtividade, setPacoteAtividade] = useState('');
-  const [pacoteLinhaId, setPacoteLinhaId] = useState('');
-  const [pacoteDataInicio, setPacoteDataInicio] = useState('');
-  const [pacoteDuracao, setPacoteDuracao] = useState(1);
+  const [packageActivity, setPackageActivity] = useState('');
+  const [packageRowId, setPackageRowId] = useState('');
+  const [packageStartDate, setPackageStartDate] = useState('');
+  const [packageDuration, setPackageDuration] = useState(1);
 
   // WORK SEQUENCE GENERATOR
   const [showSequenceModal, setShowSequenceModal] = useState(false);
@@ -418,7 +418,7 @@ export default function MasterPlanPage() {
 
   const salvarHistorico = () => {
     setHistorico(prev => [...prev, {
-      pacotes: JSON.stringify(pacotesLancados),
+      pacotes: JSON.stringify(workPackages),
       celulas: JSON.stringify(dadosCelulas),
       realizado: JSON.stringify(dadosRealizado),
       feriados: JSON.stringify(feriados),
@@ -436,7 +436,7 @@ export default function MasterPlanPage() {
     const snapshot = novoHistorico.pop();
     setHistorico(novoHistorico);
 
-    setPacotesLancados(JSON.parse(snapshot.pacotes));
+    setWorkPackages(JSON.parse(snapshot.pacotes));
     setDadosCelulas(JSON.parse(snapshot.celulas));
     setDadosRealizado(JSON.parse(snapshot.realizado));
     setFeriados(JSON.parse(snapshot.feriados));
@@ -473,7 +473,7 @@ export default function MasterPlanPage() {
   const applySavedPlan = (versao) => {
     const plano = versao?.planData || {};
 
-    setPacotesLancados(Array.isArray(plano.packages) ? plano.packages : []);
+    setWorkPackages(Array.isArray(plano.packages) ? plano.packages : []);
     setFeriados(Array.isArray(plano.holidays) ? plano.holidays : []);
 
     if (Array.isArray(plano.sections) && plano.sections.length > 0) {
@@ -665,7 +665,7 @@ export default function MasterPlanPage() {
     // locations inside the Work Sequence Generator, and the execution
     // direction may be bottom-to-top.
     //
-    // pacotesLancados preserves the original generator order, because
+    // workPackages preserves the original generator order, because
     // the generator creates every activity for Location 1, then every
     // activity for Location 2, and so on.
     //
@@ -1021,10 +1021,10 @@ export default function MasterPlanPage() {
     React.useMemo(
       () =>
         reconstruirRedeDependencias(
-          pacotesLancados
+          workPackages
         ),
       [
-        pacotesLancados,
+        workPackages,
         secoes
       ]
     );
@@ -1047,7 +1047,7 @@ export default function MasterPlanPage() {
 
   const montarPlanData = () => ({
     sections: secoes,
-    packages: pacotesLancados,
+    packages: workPackages,
     plannedCells: dadosCelulas,
     actualCells: dadosRealizado,
     holidays: feriados,
@@ -1183,7 +1183,7 @@ export default function MasterPlanPage() {
 
   const sincronizarPacotesNormalizados = async (
     scenarioId,
-    packagesSnapshot = pacotesLancados,
+    packagesSnapshot = workPackages,
     immutableScheduleSnapshot = null
   ) => {
     if (!scenarioId || !selectedProjectId) {
@@ -2197,7 +2197,7 @@ export default function MasterPlanPage() {
         setSequenceConfigurations([]);
         setActiveSequenceConfigId(null);
         setSequenceEditingId(null);
-        setPacotesLancados([]);
+        setWorkPackages([]);
         setFeriados([]);
         setDadosCelulas({});
         setDadosRealizado({});
@@ -2274,7 +2274,7 @@ export default function MasterPlanPage() {
   // this offset, never the package's Location or dependency
   // identity.
   const calcularAgendaPacotesCompleta = (
-    packagesSnapshot = pacotesLancados
+    packagesSnapshot = workPackages
   ) => {
     const packages =
       Array.isArray(packagesSnapshot)
@@ -2988,7 +2988,7 @@ export default function MasterPlanPage() {
             pacote
           );
 
-    setPacotesLancados(
+    setWorkPackages(
       (current) =>
         current.map(
           (item) => {
@@ -3333,13 +3333,13 @@ export default function MasterPlanPage() {
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
-        pacotesLancados
+        workPackages
       );
 
     const packageSync =
       await sincronizarPacotesNormalizados(
         frozenVersion.id,
-        pacotesLancados,
+        workPackages,
         immutableScheduleSnapshot
       );
 
@@ -3451,13 +3451,13 @@ ${
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
-        pacotesLancados
+        workPackages
       );
 
     const packageSync =
       await sincronizarPacotesNormalizados(
         novaVersao.id,
-        pacotesLancados,
+        workPackages,
         immutableScheduleSnapshot
       );
 
@@ -3517,13 +3517,13 @@ ${
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
-        pacotesLancados
+        workPackages
       );
 
     const packageSync =
       await sincronizarPacotesNormalizados(
         versaoAtualizada.id,
-        pacotesLancados,
+        workPackages,
         immutableScheduleSnapshot
       );
 
@@ -3587,13 +3587,13 @@ ${
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
-        pacotesLancados
+        workPackages
       );
 
     const packageSync =
       await sincronizarPacotesNormalizados(
         novaVersao.id,
-        pacotesLancados,
+        workPackages,
         immutableScheduleSnapshot
       );
 
@@ -3615,7 +3615,7 @@ ${
     if (!versaoId) {
       if (window.confirm(t.confirmClear)) {
         salvarHistorico();
-        setPacotesLancados([]);
+        setWorkPackages([]);
         setFeriados([]);
         setDadosCelulas({});
         setDadosRealizado({});
@@ -3745,7 +3745,7 @@ ${
     setSecoes(secoes.map(s => s.id === secId ? { ...s, linhas: s.linhas.filter(l => l.id !== linhaId) } : s));
   };
 
-  const pacotesExistentes = pacotesLancados.map(p => {
+  const pacotesExistentes = workPackages.map(p => {
     let desc = p.linhaId;
     secoes.forEach(sec => sec.linhas.forEach(l => { if(l.id === p.linhaId) desc = l.descricao; }));
     const sName = isEn ? (servicosCores[p.atividade]?.labelEn || p.atividade) : (servicosCores[p.atividade]?.labelPt || p.atividade);
@@ -4184,13 +4184,13 @@ ${
 
     const basePackages =
       isRegenerating
-        ? pacotesLancados.filter(
+        ? workPackages.filter(
             (pkg) =>
               !belongsToEditedSequence(
                 pkg
               )
           )
-        : pacotesLancados;
+        : workPackages;
 
     const generated = [];
     const generatedByCell = new Map();
@@ -4398,7 +4398,7 @@ ${
       updatedAt: new Date().toISOString()
     };
 
-    setPacotesLancados([
+    setWorkPackages([
       ...basePackages,
       ...generated
     ]);
@@ -4436,12 +4436,12 @@ ${
 
   const handleInserirPacoteAutomacao = (e) => {
     e.preventDefault();
-    if (!pacoteAtividade || !pacoteLinhaId || pacoteDuracao < 1) {
+    if (!packageActivity || !packageRowId || packageDuration < 1) {
       alert(t.errFillFields);
       return;
     }
 
-    if (tipoInicio === 'data' && !pacoteDataInicio) return alert(t.errSelectDate);
+    if (tipoInicio === 'data' && !packageStartDate) return alert(t.errSelectDate);
     if (tipoInicio === 'predecessora' && !pacotePredecessora) return alert(t.errSelectPred);
 
     salvarHistorico();
@@ -4453,7 +4453,7 @@ ${
         section.linhas.find(
           (row) =>
             row.id ===
-            pacoteLinhaId
+            packageRowId
         );
 
       if (foundRow) {
@@ -4468,7 +4468,7 @@ ${
 
     const selectedService =
       servicosCores[
-        pacoteAtividade
+        packageActivity
       ] || null;
 
     const manualDependencies =
@@ -4486,8 +4486,8 @@ ${
 
     const novoPacote = {
       id: `pct_${Date.now()}`,
-      atividade: pacoteAtividade,
-      linhaId: pacoteLinhaId,
+      atividade: packageActivity,
+      linhaId: packageRowId,
 
       // Canonical links are persisted inside the scenario snapshot.
       // They prepare Master Plan -> Lookahead -> Weekly -> Production
@@ -4508,21 +4508,21 @@ ${
         null,
 
       tipoInicio: tipoInicio,
-      dataInicio: pacoteDataInicio,
+      dataInicio: packageStartDate,
       predecessoraId: pacotePredecessora,
       lagWorkingDays: 0,
       dependencies:
         manualDependencies,
       manualDelayWorkingDays: 0,
-      duracao: pacoteDuracao
+      duracao: packageDuration
     };
 
-    setPacotesLancados([...pacotesLancados, novoPacote]);
+    setWorkPackages([...workPackages, novoPacote]);
 
-    setShowPacoteModal(false);
-    setPacoteDataInicio('');
+    setShowWorkPackageModal(false);
+    setPackageStartDate('');
     setPacotePredecessora('');
-    setPacoteDuracao(1);
+    setPackageDuration(1);
     
     // Desconecta da versÃ£o ativa se um novo pacote for inserido, ativando estado de rascunho
     setActiveScenarioId(null); 
@@ -4708,7 +4708,7 @@ ${
                         onChange={(e) => handleLoadScenario(e.target.value)}
                         style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0', fontSize: '0.85rem', outline: 'none', minWidth: '200px', backgroundColor: activeScenarioId ? '#ebf8ff' : '#fff' }}
                       >
-                        <option value="">{activeScenarioId === null && pacotesLancados.length > 0 ? t.unsavedEdit : t.newBlank}</option>
+                        <option value="">{activeScenarioId === null && workPackages.length > 0 ? t.unsavedEdit : t.newBlank}</option>
                         {scenarios.map(v => <option key={v.id} value={v.id}>{v.nome} ({v.data})</option>)}
                       </select>
                     </div>
@@ -4717,8 +4717,8 @@ ${
                     {activeScenarioId === null ? (
                       <button 
                         onClick={handleSaveScenario} 
-                        disabled={pacotesLancados.length === 0}
-                        style={{ backgroundColor: '#4a5568', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: pacotesLancados.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.8rem', opacity: pacotesLancados.length === 0 ? 0.5 : 1, marginTop: '14px' }}
+                        disabled={workPackages.length === 0}
+                        style={{ backgroundColor: '#4a5568', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: workPackages.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.8rem', opacity: workPackages.length === 0 ? 0.5 : 1, marginTop: '14px' }}
                       >
                         {t.saveScenario}
                       </button>
@@ -4816,7 +4816,7 @@ ${
               âš™ {t.sequenceSettings}
             </button>
 
-            <button onClick={() => setShowPacoteModal(true)} disabled={isBaselineFrozen} style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.6 : 1 }}>
+            <button onClick={() => setShowWorkPackageModal(true)} disabled={isBaselineFrozen} style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.6 : 1 }}>
               {t.insertPackage}
             </button>
 
@@ -5083,7 +5083,7 @@ ${
       )}
 
       {/* MODAL: INSERIR PACOTE DE TRABALHO */}
-      {showPacoteModal && (
+      {showWorkPackageModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '10px', width: '550px', fontFamily: 'sans-serif' }}>
             <h2 style={{ color: '#1a365d', marginBottom: '20px' }}>{t.mPkgTitle}</h2>
@@ -5094,7 +5094,7 @@ ${
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgService}</label>
                   <div style={{ display: 'flex', gap: '5px' }}>
-                    <select required value={pacoteAtividade} onChange={(e) => setPacoteAtividade(e.target.value)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
+                    <select required value={packageActivity} onChange={(e) => setPackageActivity(e.target.value)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
                       <option value="">{t.mPkgSelect}</option>
                       {Object.entries(servicosCores)
                         .filter(([sigla]) => sigla !== '' && sigla !== 'OFF' && sigla !== 'FER')
@@ -5107,7 +5107,7 @@ ${
 
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgZone}</label>
-                  <select required value={pacoteLinhaId} onChange={(e) => setPacoteLinhaId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
+                  <select required value={packageRowId} onChange={(e) => setPackageRowId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
                     <option value="">{t.mPkgSelect}</option>
                     {secoes.map(sec => (
                       <optgroup key={sec.id} label={sec.titulo === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (sec.titulo === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : sec.titulo)}>
@@ -5135,7 +5135,7 @@ ${
                 {tipoInicio === 'data' ? (
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgStartDate}</label>
-                    <input type="date" required={tipoInicio === 'data'} value={pacoteDataInicio} onChange={(e) => setPacoteDataInicio(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
+                    <input type="date" required={tipoInicio === 'data'} value={packageStartDate} onChange={(e) => setPackageStartDate(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
                   </div>
                 ) : (
                   <div>
@@ -5155,11 +5155,11 @@ ${
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgDuration}</label>
-                <input type="number" required min="1" value={pacoteDuracao} onChange={(e) => setPacoteDuracao(Number(e.target.value))} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
+                <input type="number" required min="1" value={packageDuration} onChange={(e) => setPackageDuration(Number(e.target.value))} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px' }}>
-                <button type="button" onClick={() => setShowPacoteModal(false)} style={{ backgroundColor: '#cbd5e0', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', color: '#4a5568', fontWeight: 'bold' }}>{t.mPkgCancel}</button>
+                <button type="button" onClick={() => setShowWorkPackageModal(false)} style={{ backgroundColor: '#cbd5e0', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', color: '#4a5568', fontWeight: 'bold' }}>{t.mPkgCancel}</button>
                 <button type="submit" style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mPkgAddGrid}</button>
               </div>
             </form>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
