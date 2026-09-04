@@ -357,10 +357,10 @@ export default function MasterPlanPage() {
   };
 
 
-  const [showFeriadosModal, setShowFeriadosModal] = useState(false);
-  const [feriados, setFeriados] = useState([]);
-  const [novoFeriadoData, setNovoFeriadoData] = useState('');
-  const [novoFeriadoDesc, setNovoFeriadoDesc] = useState('');
+  const [showHolidaysModal, setShowHolidaysModal] = useState(false);
+  const [holidays, setHolidays] = useState([]);
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayDescription, setNewHolidayDescription] = useState('');
 
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfConfig, setPdfConfig] = useState({ formato: 'a3', orientacao: 'landscape' });
@@ -421,7 +421,7 @@ export default function MasterPlanPage() {
       pacotes: JSON.stringify(workPackages),
       celulas: JSON.stringify(dadosCelulas),
       realizado: JSON.stringify(dadosRealizado),
-      feriados: JSON.stringify(feriados),
+      holidays: JSON.stringify(holidays),
       secoes: JSON.stringify(secoes)
     }]);
   };
@@ -439,7 +439,7 @@ export default function MasterPlanPage() {
     setWorkPackages(JSON.parse(snapshot.pacotes));
     setDadosCelulas(JSON.parse(snapshot.celulas));
     setDadosRealizado(JSON.parse(snapshot.realizado));
-    setFeriados(JSON.parse(snapshot.feriados));
+    setHolidays(JSON.parse(snapshot.holidays));
     setSecoes(JSON.parse(snapshot.secoes));
     setActiveScenarioId(null);
   };
@@ -474,7 +474,7 @@ export default function MasterPlanPage() {
     const plano = versao?.planData || {};
 
     setWorkPackages(Array.isArray(plano.packages) ? plano.packages : []);
-    setFeriados(Array.isArray(plano.holidays) ? plano.holidays : []);
+    setHolidays(Array.isArray(plano.holidays) ? plano.holidays : []);
 
     if (Array.isArray(plano.sections) && plano.sections.length > 0) {
       setSecoes(plano.sections);
@@ -1050,7 +1050,7 @@ export default function MasterPlanPage() {
     packages: workPackages,
     plannedCells: dadosCelulas,
     actualCells: dadosRealizado,
-    holidays: feriados,
+    holidays: holidays,
     hideWeekends: ocultarFinaisDeSemana,
     sequenceConfigurations
   });
@@ -2198,7 +2198,7 @@ export default function MasterPlanPage() {
         setActiveSequenceConfigId(null);
         setSequenceEditingId(null);
         setWorkPackages([]);
-        setFeriados([]);
+        setHolidays([]);
         setDadosCelulas({});
         setDadosRealizado({});
 
@@ -2243,7 +2243,7 @@ export default function MasterPlanPage() {
         const diaSemanaIndex = dataClonada.getDay();
         
         const dataIso = `${ano}-${mes}-${dia}`;
-        const isFeriado = feriados.some(f => f.data === dataIso);
+        const isFeriado = holidays.some(f => f.data === dataIso);
 
         datas.push({
           dataCompleta: dataClonada,
@@ -2259,7 +2259,7 @@ export default function MasterPlanPage() {
       setDatasPlanilha(datas);
     };
     gerarDatas();
-  }, [dataInicio, dataFim, feriados, selectedProjectId, isEn]);
+  }, [dataInicio, dataFim, holidays, selectedProjectId, isEn]);
 
   const datasVisiveis = datasPlanilha.filter(d => ocultarFinaisDeSemana ? !d.isFimDeSemana : true);
 
@@ -3616,7 +3616,7 @@ ${
       if (window.confirm(t.confirmClear)) {
         salvarHistorico();
         setWorkPackages([]);
-        setFeriados([]);
+        setHolidays([]);
         setDadosCelulas({});
         setDadosRealizado({});
         setSequenceConfigurations([]);
@@ -3652,20 +3652,20 @@ ${
   };
   // ----------------------------------------------------
 
-  const handleAdicionarFeriado = (e) => {
+  const handleAddHoliday = (e) => {
     e.preventDefault();
-    if (novoFeriadoData && novoFeriadoDesc) {
-      if (feriados.find(f => f.data === novoFeriadoData)) return alert(t.errHolidayExists);
+    if (newHolidayDate && newHolidayDescription) {
+      if (holidays.find(f => f.data === newHolidayDate)) return alert(t.errHolidayExists);
       salvarHistorico();
-      setFeriados([...feriados, { data: novoFeriadoData, descricao: novoFeriadoDesc }]);
-      setNovoFeriadoData(''); 
-      setNovoFeriadoDesc('');
+      setHolidays([...holidays, { data: newHolidayDate, descricao: newHolidayDescription }]);
+      setNewHolidayDate(''); 
+      setNewHolidayDescription('');
     }
   };
   
-  const handleRemoverFeriado = (data) => {
+  const handleRemoveHoliday = (data) => {
     salvarHistorico();
-    setFeriados(feriados.filter(f => f.data !== data));
+    setHolidays(holidays.filter(f => f.data !== data));
   };
 
   const handleAdicionarSecao = () => {
@@ -4832,7 +4832,7 @@ ${
             <button onClick={() => setOcultarFinaisDeSemana(!ocultarFinaisDeSemana)} style={{ backgroundColor: ocultarFinaisDeSemana ? '#2a4365' : '#edf2f7', color: ocultarFinaisDeSemana ? 'white' : '#4a5568', border: '1px solid #cbd5e0', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
               {ocultarFinaisDeSemana ? t.showWeekends : t.hideWeekends}
             </button>
-            <button onClick={() => setShowFeriadosModal(true)} style={{ backgroundColor: '#dd6b20', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
+            <button onClick={() => setShowHolidaysModal(true)} style={{ backgroundColor: '#dd6b20', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
               {t.holidaysBtn}
             </button>
             <button onClick={() => { setPdfConfig(prev => ({ ...prev, formato: formatoIdealCode })); setShowPdfModal(true); }} style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
@@ -5168,14 +5168,14 @@ ${
       )}
 
       {/* MODAL: FERIADOS */}
-      {showFeriadosModal && (
+      {showHolidaysModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '10px', width: '500px', fontFamily: 'sans-serif' }}>
             <h2 style={{ color: '#1a365d', marginBottom: '20px' }}>{t.mHolTitle}</h2>
             
-            <form onSubmit={handleAdicionarFeriado} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-              <input type="date" required value={novoFeriadoData} onChange={(e) => setNovoFeriadoData(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none' }} />
-              <input type="text" required placeholder={t.mHolDescPlace} value={novoFeriadoDesc} onChange={(e) => setNovoFeriadoDesc(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none' }} />
+            <form onSubmit={handleAddHoliday} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+              <input type="date" required value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none' }} />
+              <input type="text" required placeholder={t.mHolDescPlace} value={newHolidayDescription} onChange={(e) => setNewHolidayDescription(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none' }} />
               <button type="submit" style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolAdd}</button>
             </form>
 
@@ -5189,10 +5189,10 @@ ${
                   </tr>
                 </thead>
                 <tbody>
-                  {feriados.length === 0 ? (
+                  {holidays.length === 0 ? (
                     <tr><td colSpan={3} style={{ padding: '15px', textAlign: 'center', color: '#a0aec0' }}>{t.mHolEmpty}</td></tr>
                   ) : (
-                    feriados.sort((a, b) => new Date(a.data) - new Date(b.data)).map((f, i) => {
+                    holidays.sort((a, b) => new Date(a.data) - new Date(b.data)).map((f, i) => {
                       const parts = f.data.split('-');
                       const displayDate = isEn ? `${parts[1]}/${parts[2]}/${parts[0]}` : `${parts[2]}/${parts[1]}/${parts[0]}`;
                       return (
@@ -5200,7 +5200,7 @@ ${
                           <td style={{ padding: '8px' }}>{displayDate}</td>
                           <td style={{ padding: '8px', fontWeight: 'bold', color: '#2d3748' }}>{f.descricao}</td>
                           <td style={{ padding: '8px', textAlign: 'center' }}>
-                            <button onClick={() => handleRemoverFeriado(f.data)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolDel}</button>
+                            <button onClick={() => handleRemoveHoliday(f.data)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolDel}</button>
                           </td>
                         </tr>
                       );
@@ -5211,7 +5211,7 @@ ${
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowFeriadosModal(false)} style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolDone}</button>
+              <button onClick={() => setShowHolidaysModal(false)} style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolDone}</button>
             </div>
           </div>
         </div>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
