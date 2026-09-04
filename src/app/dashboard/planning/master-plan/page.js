@@ -3186,7 +3186,7 @@ export default function MasterPlanPage() {
     packageSchedule
   ]);
 
-  const calcularPapelSugerido = () => {
+  const calculateSuggestedRole = () => {
     const colunasDeData = datasVisiveis.length;
     const larguraEstimadaPx = 320 + (colunasDeData * 45);
 
@@ -3198,7 +3198,7 @@ export default function MasterPlanPage() {
     return 'unica';
   };
   
-  const formatoIdealCode = calcularPapelSugerido();
+  const formatoIdealCode = calculateSuggestedRole();
 
   const handleCellChange = (linhaId, dataIso, valor) => {
     saveHistory();
@@ -3210,7 +3210,7 @@ export default function MasterPlanPage() {
     setActualCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
   };
 
-  const handleCongelarLinhaDeBase = async () => {
+  const handleFreezeBaseline = async () => {
     if (!window.confirm(t.confirmFreeze)) return;
     if (!selectedProjectId) return;
 
@@ -3354,7 +3354,7 @@ ${
     }
   };
 
-  const handleDescongelar = async () => {
+  const handleUnfreeze = async () => {
     if (!window.confirm(t.confirmUnfreeze)) return;
 
     if (activeScenarioId) {
@@ -3668,21 +3668,21 @@ ${
     setHolidays(holidays.filter(f => f.data !== data));
   };
 
-  const handleAdicionarSecao = () => {
+  const handleAddSection = () => {
     saveHistory();
     setSecoes([...secoes, { id: `sec_${Date.now()}`, titulo: t.newSecTitle, linhas: [] }]);
   };
   
-  const handleAtualizarTituloSecao = (secId, novoTitulo) => setSecoes(secoes.map(s => s.id === secId ? { ...s, titulo: novoTitulo } : s));
+  const handleUpdateSectionTitle = (secId, novoTitulo) => setSecoes(secoes.map(s => s.id === secId ? { ...s, titulo: novoTitulo } : s));
   
-  const handleRemoverSecao = (secId) => { 
+  const handleRemoveSection = (secId) => { 
     if(window.confirm(t.confirmDelSection)) {
       saveHistory();
       setSecoes(secoes.filter(s => s.id !== secId)); 
     }
   };
   
-  const handleAdicionarLinha = (secId) => {
+  const handleAddRow = (secId) => {
     saveHistory();
 
     setSecoes(
@@ -3706,7 +3706,7 @@ ${
     );
   };
 
-  const handleAtualizarLinha = (secId, linhaId, valor) =>
+  const handleUpdateRow = (secId, linhaId, valor) =>
     setSecoes(
       secoes.map((section) =>
         section.id === secId
@@ -3740,7 +3740,7 @@ ${
       )
     );
   
-  const handleRemoverLinha = (secId, linhaId) => {
+  const handleRemoveRow = (secId, linhaId) => {
     saveHistory();
     setSecoes(secoes.map(s => s.id === secId ? { ...s, linhas: s.linhas.filter(l => l.id !== linhaId) } : s));
   };
@@ -3899,7 +3899,7 @@ ${
     setSequenceDragOver(null);
   };
 
-  const adicionarAtividadeSequencia = () => {
+  const addSequenceActivity = () => {
     if (!sequenceNewActivity) return;
     setSequenceActivities((current) => [
       ...current,
@@ -4745,12 +4745,12 @@ ${
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                   {!isBaselineFrozen ? (
-                    <button onClick={handleCongelarLinhaDeBase} style={{ backgroundColor: '#1a365d', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginTop: '14px' }}>
+                    <button onClick={handleFreezeBaseline} style={{ backgroundColor: '#1a365d', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginTop: '14px' }}>
                       {t.freezeBase}
                     </button>
                   ) : (
                     <>
-                      <button onClick={handleDescongelar} style={{ backgroundColor: '#e2e8f0', color: '#4a5568', border: '1px solid #cbd5e0', padding: '8px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                      <button onClick={handleUnfreeze} style={{ backgroundColor: '#e2e8f0', color: '#4a5568', border: '1px solid #cbd5e0', padding: '8px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>
                         {t.editBase}
                       </button>
                       <div style={{ display: 'flex', backgroundColor: '#edf2f7', borderRadius: '6px', border: '1px solid #cbd5e0', overflow: 'hidden' }}>
@@ -4959,7 +4959,7 @@ ${
                       <option key={code} value={code}>{code} - {isEn ? service.labelEn : service.labelPt}</option>
                     ))}
                   </select>
-                  <button type="button" onClick={adicionarAtividadeSequencia} style={{ padding: '9px 12px', border: 'none', borderRadius: '6px', backgroundColor: '#0b2239', color: 'white', fontWeight: 800, cursor: 'pointer' }}>{t.addActivity}</button>
+                  <button type="button" onClick={addSequenceActivity} style={{ padding: '9px 12px', border: 'none', borderRadius: '6px', backgroundColor: '#0b2239', color: 'white', fontWeight: 800, cursor: 'pointer' }}>{t.addActivity}</button>
                 </div>
 
                 {sequenceActivities.length > 0 && (
@@ -5297,7 +5297,7 @@ ${
                               <input 
                                 type="text"
                                 value={displayTitle}
-                                onChange={(e) => handleAtualizarTituloSecao(secao.id, e.target.value)}
+                                onChange={(e) => handleUpdateSectionTitle(secao.id, e.target.value)}
                                 disabled={isBaselineFrozen}
                                 style={{ fontWeight: 'bold', fontStyle: 'italic', color: '#2a4365', background: 'transparent', border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: '0.9rem' }}
                               />
@@ -5321,7 +5321,7 @@ ${
                               )}
                             </div>
                             {!isBaselineFrozen && (
-                              <button onClick={() => handleRemoverSecao(secao.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
+                              <button onClick={() => handleRemoveSection(secao.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
                             )}
                           </div>
                         </td>
@@ -5333,7 +5333,7 @@ ${
                       {secao.linhas.map((linha) => {
                         const currentId = globalIdCounter++;
                         
-                        const renderizarCelulas = (isActual) => {
+                        const renderCells = (isActual) => {
                           return datasVisiveis.map((d) => {
                             const cellKey = `${linha.id}___${d.dataIso}`;
                             const cellData = isActual ? actualCellData : plannedCellData;
@@ -5536,7 +5536,7 @@ ${
                                     <input 
                                       type="text" 
                                       value={linha.descricao} 
-                                      onChange={(e) => handleAtualizarLinha(secao.id, linha.id, e.target.value)} 
+                                      onChange={(e) => handleUpdateRow(secao.id, linha.id, e.target.value)} 
                                       disabled={isBaselineFrozen}
                                       list="lista-zonas-coleta"
                                       placeholder={t.selectOrType}
@@ -5550,11 +5550,11 @@ ${
                                     {controlMode && <span style={{ fontSize: '0.65rem', backgroundColor: '#cbd5e0', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: '#4a5568' }}>{t.plannedBadge}</span>}
                                   </div>
                                   {!isBaselineFrozen && (
-                                    <button onClick={() => handleRemoverLinha(secao.id, linha.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
+                                    <button onClick={() => handleRemoveRow(secao.id, linha.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
                                   )}
                                 </div>
                               </td>
-                              {renderizarCelulas(false)}
+                              {renderCells(false)}
                             </tr>
 
                             {controlMode && (
@@ -5570,7 +5570,7 @@ ${
                                     </div>
                                   </div>
                                 </td>
-                                {renderizarCelulas(true)}
+                                {renderCells(true)}
                               </tr>
                             )}
                           </React.Fragment>
@@ -5580,7 +5580,7 @@ ${
                       {!isBaselineFrozen && (
                         <tr>
                           <td colSpan={2} style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', padding: '5px 15px', borderBottom: '1px solid #cbd5e0' }}>
-                            <button onClick={() => handleAdicionarLinha(secao.id)} style={btnAdicionarStyle}>{t.addRow}</button>
+                            <button onClick={() => handleAddRow(secao.id)} style={btnAdicionarStyle}>{t.addRow}</button>
                           </td>
                           {datasVisiveis.map((d, i) => (
                             <td key={`add-${secao.id}-${i}`} style={{ borderBottom: '1px solid #cbd5e0', backgroundColor: d.isFeriado ? '#fed7d7' : (d.isFimDeSemana ? '#e2e8f0' : 'white') }}></td>
@@ -5594,7 +5594,7 @@ ${
                   {!isBaselineFrozen && (
                     <tr>
                       <td colSpan={2 + datasVisiveis.length} style={{ padding: '20px', backgroundColor: '#f4f7f6', textAlign: 'left' }}>
-                        <button onClick={handleAdicionarSecao} style={{ backgroundColor: '#2a4365', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                        <button onClick={handleAddSection} style={{ backgroundColor: '#2a4365', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
                           {t.addSection}
                         </button>
                       </td>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
