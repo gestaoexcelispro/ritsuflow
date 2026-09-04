@@ -24,13 +24,6 @@ const planningCycle = [
       'Convert ready work into reliable field commitments.',
     href: '/dashboard/planning/weekly-planning',
   },
-  {
-    number: '04',
-    title: 'Flow Control',
-    description:
-      'Monitor progress, rhythm, deviations, and production reliability.',
-    href: '/dashboard/projetos/matriz-status',
-  },
 ]
 
 function formatProjectDetail({
@@ -529,6 +522,7 @@ export default async function DashboardHome() {
     </div>
   )
 }
+
 
 
 

@@ -383,12 +383,6 @@ const baseNavigationGroups = [
         icon: 'production',
       },
 
-      {
-        label: 'Status Matrix',
-        href: '/dashboard/projetos/matriz-status',
-        icon: 'matrix',
-      },
-
     ],
   },
 
@@ -1883,6 +1877,8 @@ export default function DashboardLayout({
 
   )
 }
+
+
 
 
 
