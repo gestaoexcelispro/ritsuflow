@@ -324,10 +324,10 @@ export default function MasterPlanPage() {
     mPdfConfirm: isEn ? 'Confirm and Download PDF' : 'Confirmar e Baixar PDF',
   };
 
-  const [projetosLista, setProjetosLista] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [projectCoverUrls, setProjectCoverUrls] = useState({});
   const [projectProgressMap, setProjectProgressMap] = useState({});
-  const [projetoSelecionado, setProjetoSelecionado] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
 
   const [linhaDeBaseCongelada, setLinhaDeBaseCongelada] = useState(false);
   const [modoControle, setModoControle] = useState(false);
@@ -1186,7 +1186,7 @@ export default function MasterPlanPage() {
     packagesSnapshot = pacotesLancados,
     immutableScheduleSnapshot = null
   ) => {
-    if (!scenarioId || !projetoSelecionado) {
+    if (!scenarioId || !selectedProjectId) {
       return {
         ok: false,
         error: new Error(
@@ -1236,7 +1236,7 @@ export default function MasterPlanPage() {
       )
       .eq(
         'project_id',
-        projetoSelecionado
+        selectedProjectId
       );
 
     if (dependencyDeleteError) {
@@ -1264,7 +1264,7 @@ export default function MasterPlanPage() {
       )
       .eq(
         'project_id',
-        projetoSelecionado
+        selectedProjectId
       );
 
     if (deleteError) {
@@ -1479,7 +1479,7 @@ export default function MasterPlanPage() {
           scenarioId,
 
         project_id:
-          projetoSelecionado,
+          selectedProjectId,
 
         location_id:
           pkg.locationId ||
@@ -1721,7 +1721,7 @@ export default function MasterPlanPage() {
               scenarioId,
 
             project_id:
-              projetoSelecionado,
+              selectedProjectId,
 
             package_id:
               packageDbId,
@@ -1787,7 +1787,7 @@ export default function MasterPlanPage() {
   };
 
   useEffect(() => {
-    const fetchProjetos = async () => {
+    const fetchProjects = async () => {
       const { data, error } = await supabase
         .from('projects')
         .select(`
@@ -1811,13 +1811,13 @@ export default function MasterPlanPage() {
       }
 
       const projects = data || [];
-      setProjetosLista(projects);
+      setProjects(projects);
 
       // If the user opened a project card, restore that project directly
       // from the URL while keeping the sidebar route unchanged.
       const projectIdFromUrl = new URLSearchParams(window.location.search).get('projectId');
       if (projectIdFromUrl && projects.some((project) => project.id === projectIdFromUrl)) {
-        setProjetoSelecionado(projectIdFromUrl);
+        setSelectedProjectId(projectIdFromUrl);
       }
 
       // Project covers use the same private Storage bucket already used by
@@ -1874,12 +1874,12 @@ export default function MasterPlanPage() {
       }
     };
 
-    fetchProjetos();
+    fetchProjects();
   }, []);
 
   useEffect(() => {
-    const carregarMasterPlanProjeto = async () => {
-      if (!projetoSelecionado) {
+    const loadProjectMasterPlan = async () => {
+      if (!selectedProjectId) {
         setZonasColeta([]);
         setLocationStructureSections([]);
         setSecoes([]);
@@ -1912,7 +1912,7 @@ export default function MasterPlanPage() {
             environment_type,
             sequence_number
           `)
-          .eq('project_id', projetoSelecionado)
+          .eq('project_id', selectedProjectId)
           .order('sequence_number', { ascending: true })
           .order('name', { ascending: true }),
 
@@ -1925,7 +1925,7 @@ export default function MasterPlanPage() {
           'get_project_work_packages',
           {
             target_project_id:
-              projetoSelecionado
+              selectedProjectId
           }
         ),
 
@@ -1948,7 +1948,7 @@ export default function MasterPlanPage() {
             sequence_number,
             is_active
           `)
-          .eq('project_id', projetoSelecionado)
+          .eq('project_id', selectedProjectId)
           .eq('is_active', true)
           .order('sequence_number', { ascending: true })
           .order('service_name', { ascending: true }),
@@ -1967,7 +1967,7 @@ export default function MasterPlanPage() {
             created_at,
             updated_at
           `)
-          .eq('project_id', projetoSelecionado)
+          .eq('project_id', selectedProjectId)
           .order('is_baseline', { ascending: false })
           .order('updated_at', { ascending: false })
       ]);
@@ -2210,13 +2210,13 @@ export default function MasterPlanPage() {
       }
     };
 
-    carregarMasterPlanProjeto();
-  }, [projetoSelecionado, isEn]);
+    loadProjectMasterPlan();
+  }, [selectedProjectId, isEn]);
 
   // GERAÃ‡ÃƒO DO CALENDÃRIO COM DATAS INTERNACIONAIS
   useEffect(() => {
     const gerarDatas = () => {
-      if (!dataInicio || !dataFim || !projetoSelecionado) return;
+      if (!dataInicio || !dataFim || !selectedProjectId) return;
 
       const parseDataSemFuso = (dataStr) => {
         const [ano, mes, dia] = dataStr.split('-');
@@ -2259,7 +2259,7 @@ export default function MasterPlanPage() {
       setDatasPlanilha(datas);
     };
     gerarDatas();
-  }, [dataInicio, dataFim, feriados, projetoSelecionado, isEn]);
+  }, [dataInicio, dataFim, feriados, selectedProjectId, isEn]);
 
   const datasVisiveis = datasPlanilha.filter(d => ocultarFinaisDeSemana ? !d.isFimDeSemana : true);
 
@@ -3212,7 +3212,7 @@ export default function MasterPlanPage() {
 
   const handleCongelarLinhaDeBase = async () => {
     if (!window.confirm(t.confirmFreeze)) return;
-    if (!projetoSelecionado) return;
+    if (!selectedProjectId) return;
 
     let targetScenarioId = versaoAtivaId;
 
@@ -3223,7 +3223,7 @@ export default function MasterPlanPage() {
       const { data: createdScenario, error: createError } = await supabase
         .from('master_plan_scenarios')
         .insert({
-          project_id: projetoSelecionado,
+          project_id: selectedProjectId,
           name: nomeCenario.trim(),
           status: 'draft',
           planned_start_date: dataInicio || null,
@@ -3269,7 +3269,7 @@ export default function MasterPlanPage() {
           status: 'active'
         })
         .eq('id', baseline.id)
-        .eq('project_id', projetoSelecionado);
+        .eq('project_id', selectedProjectId);
 
       if (clearError) {
         console.error('Master Plan - clear previous baseline:', clearError);
@@ -3288,7 +3288,7 @@ export default function MasterPlanPage() {
         plan_data: montarPlanData()
       })
       .eq('id', targetScenarioId)
-      .eq('project_id', projetoSelecionado)
+      .eq('project_id', selectedProjectId)
       .select(`
         id,
         project_id,
@@ -3368,7 +3368,7 @@ ${
           planned_finish_date: dataFim || null
         })
         .eq('id', versaoAtivaId)
-        .eq('project_id', projetoSelecionado)
+        .eq('project_id', selectedProjectId)
         .select(`
           id,
           project_id,
@@ -3405,7 +3405,7 @@ ${
   // SISTEMA DE VERSÃ•ES: SUPABASE
   // ----------------------------------------------------
   const handleSalvarVersao = async () => {
-    if (!projetoSelecionado) return;
+    if (!selectedProjectId) return;
 
     const nomeCenario = prompt(t.promptScenario);
     if (!nomeCenario?.trim()) return;
@@ -3413,7 +3413,7 @@ ${
     const { data, error } = await supabase
       .from('master_plan_scenarios')
       .insert({
-        project_id: projetoSelecionado,
+        project_id: selectedProjectId,
         name: nomeCenario.trim(),
         status: 'draft',
         planned_start_date: dataInicio || null,
@@ -3486,7 +3486,7 @@ ${
         plan_data: montarPlanData()
       })
       .eq('id', versaoAtivaId)
-      .eq('project_id', projetoSelecionado)
+      .eq('project_id', selectedProjectId)
       .select(`
         id,
         project_id,
@@ -3542,7 +3542,7 @@ ${
   };
 
   const handleDuplicarVersao = async () => {
-    if (!projetoSelecionado) return;
+    if (!selectedProjectId) return;
 
     const nomeCopia = prompt(t.promptDuplicate);
     if (!nomeCopia?.trim()) return;
@@ -3550,7 +3550,7 @@ ${
     const { data, error } = await supabase
       .from('master_plan_scenarios')
       .insert({
-        project_id: projetoSelecionado,
+        project_id: selectedProjectId,
         name: nomeCopia.trim(),
         status: 'draft',
         planned_start_date: dataInicio || null,
@@ -4536,7 +4536,7 @@ ${
         const rect = elemento.getBoundingClientRect();
         configuracaoPdf = { unit: 'px', format: [rect.height + 40, rect.width + 40], orientation: 'landscape' };
       }
-      const opcoes = { margin: 10, filename: `master-plan-${projetoSelecionado}-${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: configuracaoPdf };
+      const opcoes = { margin: 10, filename: `master-plan-${selectedProjectId}-${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: configuracaoPdf };
       html2pdf.default().from(elemento).set(opcoes).save();
       setShowPdfModal(false);
     });
@@ -4555,7 +4555,7 @@ ${
   // ----------------------------------------------------
   // The sidebar opens this portfolio view first. Selecting a project keeps
   // the existing Master Plan workspace on the same route using ?projectId=.
-  if (!projetoSelecionado) {
+  if (!selectedProjectId) {
     return (
       <main style={{ minHeight: 'calc(100vh - 80px)', padding: '24px 22px 50px', background: 'radial-gradient(circle at top right, rgba(8, 170, 150, 0.06), transparent 28%), #f8fafc', fontFamily: 'sans-serif' }}>
         <section style={{ marginBottom: '30px' }}>
@@ -4570,13 +4570,13 @@ ${
           </p>
         </section>
 
-        {projetosLista.length === 0 ? (
+        {projects.length === 0 ? (
           <div style={{ maxWidth: '620px', padding: '28px', border: '1px dashed #cbd5e1', borderRadius: '14px', background: '#fff', color: '#64748b' }}>
             No projects are available for Master Plan.
           </div>
         ) : (
           <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 365px))', gap: '22px', alignItems: 'start' }}>
-            {projetosLista.map((project) => {
+            {projects.map((project) => {
               const locationText = [project.city, project.state_region].filter(Boolean).join(', ');
               const coverUrl = projectCoverUrls[project.id];
               const progressRecord = projectProgressMap[project.id] || null;
@@ -4683,12 +4683,12 @@ ${
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <select
-                value={projetoSelecionado}
-                onChange={(e) => { const projectId = e.target.value; setProjetoSelecionado(projectId); if (projectId) window.history.replaceState({}, '', `/dashboard/planning/master-plan?projectId=${projectId}`); }}
+                value={selectedProjectId}
+                onChange={(e) => { const projectId = e.target.value; setSelectedProjectId(projectId); if (projectId) window.history.replaceState({}, '', `/dashboard/planning/master-plan?projectId=${projectId}`); }}
                 style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e0', minWidth: '300px', fontSize: '0.9rem', outline: 'none' }}
               >
                 <option value="">{t.selectProject}</option>
-                {projetosLista.map(p => (
+                {projects.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.code ? `${p.code} - ` : ''}{p.name}
                   </option>
@@ -4696,7 +4696,7 @@ ${
               </select>
             </div>
 
-            {projetoSelecionado && (
+            {selectedProjectId && (
               <>
                 {/* BLOCO DE GERENCIAMENTO DE VERSÃ•ES (CENÃRIOS) */}
                 {!linhaDeBaseCongelada && (
@@ -4775,7 +4775,7 @@ ${
           </div>
         </div>
 
-        {projetoSelecionado && (
+        {selectedProjectId && (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={abrirGeradorSequencia} disabled={linhaDeBaseCongelada} style={{ backgroundColor: '#008f8c', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: linhaDeBaseCongelada ? 0.6 : 1 }}>
               {t.generateSequence}
@@ -4853,7 +4853,7 @@ ${
         )}
       </div>
 
-      {!projetoSelecionado && (
+      {!selectedProjectId && (
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f7fafc', borderRadius: '8px', border: '2px dashed #cbd5e0' }}>
           <div style={{ textAlign: 'center', color: '#718096' }}>
             <span style={{ fontSize: '3rem', display: 'block', marginBottom: '10px' }}>ðŸ—ï¸</span>
@@ -5260,7 +5260,7 @@ ${
       )}
 
       {/* TABELA GRÃFICA DA LINHA DE BALANÃ‡O */}
-      {projetoSelecionado && (
+      {selectedProjectId && (
         <>
           <div style={{ flex: 1, overflow: 'auto', backgroundColor: 'white', border: '1px solid #cbd5e0', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
             <div id="conteudo-masterplan-pdf" style={{ minWidth: 'max-content', paddingBottom: '20px' }}>
@@ -5620,5 +5620,6 @@ ${
     </div>
   );
 }
+
 
 
