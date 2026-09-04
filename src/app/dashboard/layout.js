@@ -377,11 +377,6 @@ const baseNavigationGroups = [
 
     items: [
 
-      {
-        label: 'Production Map',
-        href: '/dashboard/diretoria/mapa',
-        icon: 'production',
-      },
 
     ],
   },
