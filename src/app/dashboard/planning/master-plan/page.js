@@ -330,7 +330,7 @@ export default function MasterPlanPage() {
   const [selectedProjectId, setSelectedProjectId] = useState('');
 
   const [isBaselineFrozen, setIsBaselineFrozen] = useState(false);
-  const [modoControle, setModoControle] = useState(false);
+  const [controlMode, setControlMode] = useState(false);
 
   const [dataInicio, setDataInicio] = useState('2026-08-03');
   const [dataFim, setDataFim] = useState('2026-10-31');
@@ -397,8 +397,8 @@ export default function MasterPlanPage() {
   const [packageDrag, setPackageDrag] = useState(null);
 
   const [datasPlanilha, setDatasPlanilha] = useState([]);
-  const [dadosCelulas, setDadosCelulas] = useState({});
-  const [dadosRealizado, setDadosRealizado] = useState({});
+  const [plannedCellData, setPlannedCellData] = useState({});
+  const [actualCellData, setActualCellData] = useState({});
   const [zonasColeta, setZonasColeta] = useState([]);
 
   // Canonical Location Structure template used by new / blank scenarios.
@@ -419,8 +419,8 @@ export default function MasterPlanPage() {
   const saveHistory = () => {
     setHistory(prev => [...prev, {
       pacotes: JSON.stringify(workPackages),
-      celulas: JSON.stringify(dadosCelulas),
-      realizado: JSON.stringify(dadosRealizado),
+      celulas: JSON.stringify(plannedCellData),
+      realizado: JSON.stringify(actualCellData),
       holidays: JSON.stringify(holidays),
       secoes: JSON.stringify(secoes)
     }]);
@@ -437,8 +437,8 @@ export default function MasterPlanPage() {
     setHistory(newHistory);
 
     setWorkPackages(JSON.parse(snapshot.pacotes));
-    setDadosCelulas(JSON.parse(snapshot.celulas));
-    setDadosRealizado(JSON.parse(snapshot.realizado));
+    setPlannedCellData(JSON.parse(snapshot.celulas));
+    setActualCellData(JSON.parse(snapshot.realizado));
     setHolidays(JSON.parse(snapshot.holidays));
     setSecoes(JSON.parse(snapshot.secoes));
     setActiveScenarioId(null);
@@ -480,13 +480,13 @@ export default function MasterPlanPage() {
       setSecoes(plano.sections);
     }
 
-    setDadosCelulas(
+    setPlannedCellData(
       plano.plannedCells && typeof plano.plannedCells === 'object'
         ? plano.plannedCells
         : {}
     );
 
-    setDadosRealizado(
+    setActualCellData(
       plano.actualCells && typeof plano.actualCells === 'object'
         ? plano.actualCells
         : {}
@@ -507,7 +507,7 @@ export default function MasterPlanPage() {
     if (versao?.plannedFinishDate) setDataFim(versao.plannedFinishDate);
 
     setIsBaselineFrozen(Boolean(versao?.isBaseline));
-    setModoControle(Boolean(versao?.isBaseline));
+    setControlMode(Boolean(versao?.isBaseline));
     setActiveScenarioId(versao?.id || null);
     setHistory([]);
   };
@@ -1048,8 +1048,8 @@ export default function MasterPlanPage() {
   const montarPlanData = () => ({
     sections: secoes,
     packages: workPackages,
-    plannedCells: dadosCelulas,
-    actualCells: dadosRealizado,
+    plannedCells: plannedCellData,
+    actualCells: actualCellData,
     holidays: holidays,
     hideWeekends: ocultarFinaisDeSemana,
     sequenceConfigurations
@@ -1083,7 +1083,7 @@ export default function MasterPlanPage() {
               `${pacote.linhaId}___${day.dataIso}`;
 
             return (
-              dadosCelulas[
+              plannedCellData[
                 cellKey
               ] ===
               pacote.atividade
@@ -1890,7 +1890,7 @@ export default function MasterPlanPage() {
         setActiveSequenceConfigId(null);
         setSequenceEditingId(null);
         setIsBaselineFrozen(false);
-        setModoControle(false);
+        setControlMode(false);
         setHistory([]);
         return;
       }
@@ -2193,14 +2193,14 @@ export default function MasterPlanPage() {
       } else {
         setActiveScenarioId(null);
         setIsBaselineFrozen(false);
-        setModoControle(false);
+        setControlMode(false);
         setSequenceConfigurations([]);
         setActiveSequenceConfigId(null);
         setSequenceEditingId(null);
         setWorkPackages([]);
         setHolidays([]);
-        setDadosCelulas({});
-        setDadosRealizado({});
+        setPlannedCellData({});
+        setActualCellData({});
 
         // New Master Plans start from the project's canonical
         // Location Structure instead of the old hard-coded rows.
@@ -3177,7 +3177,7 @@ export default function MasterPlanPage() {
       }
     );
 
-    setDadosCelulas(
+    setPlannedCellData(
       novaGrade
     );
   }, [
@@ -3202,12 +3202,12 @@ export default function MasterPlanPage() {
 
   const handleCellChange = (linhaId, dataIso, valor) => {
     saveHistory();
-    setDadosCelulas(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
+    setPlannedCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
   };
 
-  const handleCellRealizadoChange = (linhaId, dataIso, valor) => {
+  const handleActualCellChange = (linhaId, dataIso, valor) => {
     saveHistory();
-    setDadosRealizado(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
+    setActualCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
   };
 
   const handleCongelarLinhaDeBase = async () => {
@@ -3329,7 +3329,7 @@ export default function MasterPlanPage() {
 
     setActiveScenarioId(frozenVersion.id);
     setIsBaselineFrozen(true);
-    setModoControle(true);
+    setControlMode(true);
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
@@ -3399,7 +3399,7 @@ ${
     }
 
     setIsBaselineFrozen(false);
-    setModoControle(false);
+    setControlMode(false);
   };
 
   // SISTEMA DE VERSÃ•ES: SUPABASE
@@ -3583,7 +3583,7 @@ ${
     setScenarios((prev) => [novaVersao, ...prev]);
     setActiveScenarioId(novaVersao.id);
     setIsBaselineFrozen(false);
-    setModoControle(false);
+    setControlMode(false);
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
@@ -3617,8 +3617,8 @@ ${
         saveHistory();
         setWorkPackages([]);
         setHolidays([]);
-        setDadosCelulas({});
-        setDadosRealizado({});
+        setPlannedCellData({});
+        setActualCellData({});
         setSequenceConfigurations([]);
         setActiveSequenceConfigId(null);
         setSequenceEditingId(null);
@@ -3637,7 +3637,7 @@ ${
 
         setActiveScenarioId(null);
         setIsBaselineFrozen(false);
-        setModoControle(false);
+        setControlMode(false);
       }
       return;
     }
@@ -4755,14 +4755,14 @@ ${
                       </button>
                       <div style={{ display: 'flex', backgroundColor: '#edf2f7', borderRadius: '6px', border: '1px solid #cbd5e0', overflow: 'hidden' }}>
                         <button 
-                          onClick={() => setModoControle(false)} 
-                          style={{ backgroundColor: !modoControle ? '#3182ce' : 'transparent', color: !modoControle ? 'white' : '#4a5568', border: 'none', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+                          onClick={() => setControlMode(false)} 
+                          style={{ backgroundColor: !controlMode ? '#3182ce' : 'transparent', color: !controlMode ? 'white' : '#4a5568', border: 'none', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
                         >
                           {t.planning}
                         </button>
                         <button 
-                          onClick={() => setModoControle(true)} 
-                          style={{ backgroundColor: modoControle ? '#dd6b20' : 'transparent', color: modoControle ? 'white' : '#4a5568', border: 'none', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+                          onClick={() => setControlMode(true)} 
+                          style={{ backgroundColor: controlMode ? '#dd6b20' : 'transparent', color: controlMode ? 'white' : '#4a5568', border: 'none', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
                         >
                           {t.control}
                         </button>
@@ -5336,7 +5336,7 @@ ${
                         const renderizarCelulas = (isRealizado) => {
                           return datasVisiveis.map((d) => {
                             const cellKey = `${linha.id}___${d.dataIso}`;
-                            const baseDados = isRealizado ? dadosRealizado : dadosCelulas;
+                            const baseDados = isRealizado ? actualCellData : plannedCellData;
                             const valorSalvo = baseDados[cellKey];
                             
                             let defaultValor = '';
@@ -5492,7 +5492,7 @@ ${
                                             : 'ew-resize',
                                         userSelect: 'none',
                                         opacity:
-                                          modoControle
+                                          controlMode
                                             ? 0.6
                                             : 1
                                       }}
@@ -5503,9 +5503,9 @@ ${
                                     <>
                                       <select
                                         value={valorEfetivo}
-                                        onChange={(e) => isRealizado ? handleCellRealizadoChange(linha.id, d.dataIso, e.target.value) : handleCellChange(linha.id, d.dataIso, e.target.value)}
+                                        onChange={(e) => isRealizado ? handleActualCellChange(linha.id, d.dataIso, e.target.value) : handleCellChange(linha.id, d.dataIso, e.target.value)}
                                         disabled={inputBloqueado}
-                                        style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: configCor.color, color: configCor.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: inputBloqueado ? 'default' : 'pointer', borderRadius: '2px', opacity: (modoControle && !isRealizado && valorEfetivo) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
+                                        style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: configCor.color, color: configCor.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: inputBloqueado ? 'default' : 'pointer', borderRadius: '2px', opacity: (controlMode && !isRealizado && valorEfetivo) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
                                       >
                                         <option value=""></option>
                                         {Object.keys(workPackageCatalog).filter(k => k !== '').map(sigla => (
@@ -5526,11 +5526,11 @@ ${
 
                         return (
                           <React.Fragment key={linha.id}>
-                            <tr style={{ borderBottom: modoControle ? 'none' : '1px dotted #cbd5e0', backgroundColor: modoControle ? '#f7fafc' : 'white' }}>
-                              <td style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: modoControle ? '#f7fafc' : 'white', padding: '4px', textAlign: 'center', color: '#4a5568', borderRight: '1px solid #e2e8f0', fontWeight: '500' }}>
+                            <tr style={{ borderBottom: controlMode ? 'none' : '1px dotted #cbd5e0', backgroundColor: controlMode ? '#f7fafc' : 'white' }}>
+                              <td style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: controlMode ? '#f7fafc' : 'white', padding: '4px', textAlign: 'center', color: '#4a5568', borderRight: '1px solid #e2e8f0', fontWeight: '500' }}>
                                 {currentId}
                               </td>
-                              <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: modoControle ? '#f7fafc' : 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: '320px' }}>
+                              <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: controlMode ? '#f7fafc' : 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: '320px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '90%' }}>
                                     <input 
@@ -5547,7 +5547,7 @@ ${
                                       }
                                       style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: '#2d3748', fontSize: '0.85rem' }}
                                     />
-                                    {modoControle && <span style={{ fontSize: '0.65rem', backgroundColor: '#cbd5e0', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: '#4a5568' }}>{t.plannedBadge}</span>}
+                                    {controlMode && <span style={{ fontSize: '0.65rem', backgroundColor: '#cbd5e0', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: '#4a5568' }}>{t.plannedBadge}</span>}
                                   </div>
                                   {!isBaselineFrozen && (
                                     <button onClick={() => handleRemoverLinha(secao.id, linha.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
@@ -5557,7 +5557,7 @@ ${
                               {renderizarCelulas(false)}
                             </tr>
 
-                            {modoControle && (
+                            {controlMode && (
                               <tr style={{ borderBottom: '1px dotted #cbd5e0', backgroundColor: 'white' }}>
                                 <td style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', padding: '4px', borderRight: '1px solid #e2e8f0', color: 'transparent' }}>
                                   {currentId}
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
