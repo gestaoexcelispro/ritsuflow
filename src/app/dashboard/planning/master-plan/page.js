@@ -445,9 +445,9 @@ export default function MasterPlanPage() {
   };
   // ----------------------------------------------------
 
-  const formatScenarioDate = (valor) => {
-    if (!valor) return '';
-    return new Date(valor).toLocaleDateString(
+  const formatScenarioDate = (value) => {
+    if (!value) return '';
+    return new Date(value).toLocaleDateString(
       isEn ? 'en-US' : 'pt-BR',
       {
         year: 'numeric',
@@ -459,56 +459,56 @@ export default function MasterPlanPage() {
     );
   };
 
-  const mapScenarioRecord = (registro) => ({
-    id: registro.id,
-    nome: registro.name,
-    data: formatScenarioDate(registro.updated_at || registro.created_at),
-    status: registro.status,
-    isBaseline: Boolean(registro.is_baseline),
-    plannedStartDate: registro.planned_start_date,
-    plannedFinishDate: registro.planned_finish_date,
-    planData: registro.plan_data || {}
+  const mapScenarioRecord = (record) => ({
+    id: record.id,
+    nome: record.name,
+    data: formatScenarioDate(record.updated_at || record.created_at),
+    status: record.status,
+    isBaseline: Boolean(record.is_baseline),
+    plannedStartDate: record.planned_start_date,
+    plannedFinishDate: record.planned_finish_date,
+    planData: record.plan_data || {}
   });
 
-  const applySavedPlan = (versao) => {
-    const plano = versao?.planData || {};
+  const applySavedPlan = (scenario) => {
+    const plan = scenario?.planData || {};
 
-    setWorkPackages(Array.isArray(plano.packages) ? plano.packages : []);
-    setHolidays(Array.isArray(plano.holidays) ? plano.holidays : []);
+    setWorkPackages(Array.isArray(plan.packages) ? plan.packages : []);
+    setHolidays(Array.isArray(plan.holidays) ? plan.holidays : []);
 
-    if (Array.isArray(plano.sections) && plano.sections.length > 0) {
-      setSecoes(plano.sections);
+    if (Array.isArray(plan.sections) && plan.sections.length > 0) {
+      setSecoes(plan.sections);
     }
 
     setPlannedCellData(
-      plano.plannedCells && typeof plano.plannedCells === 'object'
-        ? plano.plannedCells
+      plan.plannedCells && typeof plan.plannedCells === 'object'
+        ? plan.plannedCells
         : {}
     );
 
     setActualCellData(
-      plano.actualCells && typeof plano.actualCells === 'object'
-        ? plano.actualCells
+      plan.actualCells && typeof plan.actualCells === 'object'
+        ? plan.actualCells
         : {}
     );
 
-    setHideWeekends(Boolean(plano.hideWeekends));
+    setHideWeekends(Boolean(plan.hideWeekends));
 
     const savedSequenceConfigurations =
-      Array.isArray(plano.sequenceConfigurations)
-        ? plano.sequenceConfigurations
+      Array.isArray(plan.sequenceConfigurations)
+        ? plan.sequenceConfigurations
         : [];
 
     setSequenceConfigurations(savedSequenceConfigurations);
     setActiveSequenceConfigId(savedSequenceConfigurations[0]?.id || null);
     setSequenceEditingId(null);
 
-    if (versao?.plannedStartDate) setDataInicio(versao.plannedStartDate);
-    if (versao?.plannedFinishDate) setDataFim(versao.plannedFinishDate);
+    if (scenario?.plannedStartDate) setDataInicio(scenario.plannedStartDate);
+    if (scenario?.plannedFinishDate) setDataFim(scenario.plannedFinishDate);
 
-    setIsBaselineFrozen(Boolean(versao?.isBaseline));
-    setControlMode(Boolean(versao?.isBaseline));
-    setActiveScenarioId(versao?.id || null);
+    setIsBaselineFrozen(Boolean(scenario?.isBaseline));
+    setControlMode(Boolean(scenario?.isBaseline));
+    setActiveScenarioId(scenario?.id || null);
     setHistory([]);
   };
 
@@ -3130,7 +3130,7 @@ export default function MasterPlanPage() {
       return;
     }
 
-    const novaGrade = {};
+    const newGrid = {};
 
     networkPackages.forEach(
       (pacote) => {
@@ -3166,7 +3166,7 @@ export default function MasterPlanPage() {
             !day.isFimDeSemana &&
             !day.isFeriado
           ) {
-            novaGrade[
+            newGrid[
               `${pacote.linhaId}___${day.dataIso}`
             ] =
               pacote.atividade;
@@ -3178,7 +3178,7 @@ export default function MasterPlanPage() {
     );
 
     setPlannedCellData(
-      novaGrade
+      newGrid
     );
   }, [
     networkPackages,
@@ -3200,14 +3200,14 @@ export default function MasterPlanPage() {
   
   const formatoIdealCode = calculateSuggestedRole();
 
-  const handleCellChange = (linhaId, dataIso, valor) => {
+  const handleCellChange = (linhaId, dataIso, value) => {
     saveHistory();
-    setPlannedCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
+    setPlannedCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: value }));
   };
 
-  const handleActualCellChange = (linhaId, dataIso, valor) => {
+  const handleActualCellChange = (linhaId, dataIso, value) => {
     saveHistory();
-    setActualCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: valor }));
+    setActualCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: value }));
   };
 
   const handleFreezeBaseline = async () => {
@@ -3440,14 +3440,14 @@ ${
       return;
     }
 
-    const novaVersao = mapScenarioRecord(data);
+    const newScenario = mapScenarioRecord(data);
 
     setScenarios((prev) => [
-      novaVersao,
-      ...prev.filter((item) => item.id !== novaVersao.id)
+      newScenario,
+      ...prev.filter((item) => item.id !== newScenario.id)
     ]);
 
-    setActiveScenarioId(novaVersao.id);
+    setActiveScenarioId(newScenario.id);
 
     const immutableScheduleSnapshot =
       createImmutableScheduleSnapshot(
@@ -3456,7 +3456,7 @@ ${
 
     const packageSync =
       await syncNormalizedPackages(
-        novaVersao.id,
+        newScenario.id,
         workPackages,
         immutableScheduleSnapshot
       );
@@ -3507,11 +3507,11 @@ ${
       return;
     }
 
-    const versaoAtualizada = mapScenarioRecord(data);
+    const updatedScenario = mapScenarioRecord(data);
 
     setScenarios((prev) =>
       prev.map((item) =>
-        item.id === versaoAtualizada.id ? versaoAtualizada : item
+        item.id === updatedScenario.id ? updatedScenario : item
       )
     );
 
@@ -3522,7 +3522,7 @@ ${
 
     const packageSync =
       await syncNormalizedPackages(
-        versaoAtualizada.id,
+        updatedScenario.id,
         workPackages,
         immutableScheduleSnapshot
       );
@@ -3578,10 +3578,10 @@ ${
       return;
     }
 
-    const novaVersao = mapScenarioRecord(data);
+    const newScenario = mapScenarioRecord(data);
 
-    setScenarios((prev) => [novaVersao, ...prev]);
-    setActiveScenarioId(novaVersao.id);
+    setScenarios((prev) => [newScenario, ...prev]);
+    setActiveScenarioId(newScenario.id);
     setIsBaselineFrozen(false);
     setControlMode(false);
 
@@ -3592,7 +3592,7 @@ ${
 
     const packageSync =
       await syncNormalizedPackages(
-        novaVersao.id,
+        newScenario.id,
         workPackages,
         immutableScheduleSnapshot
       );
@@ -3611,8 +3611,8 @@ ${
     alert(t.scenarioSaved);
   };
 
-  const handleLoadScenario = (versaoId) => {
-    if (!versaoId) {
+  const handleLoadScenario = (scenarioId) => {
+    if (!scenarioId) {
       if (window.confirm(t.confirmClear)) {
         saveHistory();
         setWorkPackages([]);
@@ -3646,9 +3646,9 @@ ${
 
     saveHistory();
 
-    const versao = scenarios.find((item) => item.id === versaoId);
+    const scenario = scenarios.find((item) => item.id === scenarioId);
 
-    if (versao) applySavedPlan(versao);
+    if (scenario) applySavedPlan(scenario);
   };
   // ----------------------------------------------------
 
@@ -3706,7 +3706,7 @@ ${
     );
   };
 
-  const handleUpdateRow = (secId, linhaId, valor) =>
+  const handleUpdateRow = (secId, linhaId, value) =>
     setSecoes(
       secoes.map((section) =>
         section.id === secId
@@ -3716,7 +3716,7 @@ ${
                 row.id === linhaId
                   ? {
                       ...row,
-                      descricao: valor,
+                      descricao: value,
                       // Editing a canonical row turns it into a manual row.
                       // This prevents a renamed label from silently pointing
                       // to the wrong Location Structure record.
@@ -4530,14 +4530,14 @@ ${
 
   const gerarPDF = () => {
     import('html2pdf.js').then((html2pdf) => {
-      const elemento = document.getElementById('conteudo-masterplan-pdf');
-      let configuracaoPdf = { unit: 'mm', format: pdfConfig.formato, orientation: pdfConfig.orientacao };
+      const element = document.getElementById('conteudo-masterplan-pdf');
+      let pdfConfiguration = { unit: 'mm', format: pdfConfig.formato, orientation: pdfConfig.orientacao };
       if (pdfConfig.formato === 'unica') {
-        const rect = elemento.getBoundingClientRect();
-        configuracaoPdf = { unit: 'px', format: [rect.height + 40, rect.width + 40], orientation: 'landscape' };
+        const rect = element.getBoundingClientRect();
+        pdfConfiguration = { unit: 'px', format: [rect.height + 40, rect.width + 40], orientation: 'landscape' };
       }
-      const opcoes = { margin: 10, filename: `master-plan-${selectedProjectId}-${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: configuracaoPdf };
-      html2pdf.default().from(elemento).set(opcoes).save();
+      const options = { margin: 10, filename: `master-plan-${selectedProjectId}-${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: pdfConfiguration };
+      html2pdf.default().from(element).set(options).save();
       setShowPdfModal(false);
     });
   };
@@ -5337,11 +5337,11 @@ ${
                           return visibleDates.map((d) => {
                             const cellKey = `${linha.id}___${d.dataIso}`;
                             const cellData = isActual ? actualCellData : plannedCellData;
-                            const valorSalvo = cellData[cellKey];
+                            const savedValue = cellData[cellKey];
                             
-                            let defaultValor = '';
-                            if (d.isFeriado) defaultValor = 'FER';
-                            else if (d.isFimDeSemana) defaultValor = 'OFF';
+                            let defaultValue = '';
+                            if (d.isFeriado) defaultValue = 'FER';
+                            else if (d.isFimDeSemana) defaultValue = 'OFF';
 
                             // Project calendar markers belong to both
                             // Planning and Control. A holiday remains a
@@ -5349,16 +5349,16 @@ ${
                             //
                             // Actual data can still override FER/OFF if work
                             // was genuinely performed on that non-working day.
-                            const valorEfetivo =
-                              valorSalvo !== undefined
-                                ? valorSalvo
-                                : defaultValor;
-                            const configCor = workPackageCatalog[valorEfetivo] || workPackageCatalog[''];
+                            const effectiveValue =
+                              savedValue !== undefined
+                                ? savedValue
+                                : defaultValue;
+                            const colorConfig = workPackageCatalog[effectiveValue] || workPackageCatalog[''];
 
                             let bgColor = 'transparent';
 
-                            if (configCor.color !== 'transparent') {
-                              bgColor = configCor.color;
+                            if (colorConfig.color !== 'transparent') {
+                              bgColor = colorConfig.color;
                             } else if (d.isFeriado) {
                               bgColor = '#fed7d7';
                             } else if (d.isFimDeSemana) {
@@ -5367,7 +5367,7 @@ ${
 
                             const isInputLocked = isActual ? false : isBaselineFrozen;
 
-                            const pacoteCelula =
+                            const cellPackage =
                               !isActual
                                 ? packageByCell.get(
                                     cellKey
@@ -5457,13 +5457,13 @@ ${
                                 }}
                               >
                                 <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {pacoteCelula ? (
+                                  {cellPackage ? (
                                     <div
                                       draggable={!isInputLocked}
                                       onDragStart={(event) =>
                                         startPackageDrag(
                                           event,
-                                          pacoteCelula,
+                                          cellPackage,
                                           d.dataIso
                                         )
                                       }
@@ -5480,9 +5480,9 @@ ${
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         backgroundColor:
-                                          configCor.color,
+                                          colorConfig.color,
                                         color:
-                                          configCor.text,
+                                          colorConfig.text,
                                         borderRadius: '2px',
                                         fontSize: '0.7rem',
                                         fontWeight: 'bold',
@@ -5497,15 +5497,15 @@ ${
                                             : 1
                                       }}
                                     >
-                                      {valorEfetivo}
+                                      {effectiveValue}
                                     </div>
                                   ) : (
                                     <>
                                       <select
-                                        value={valorEfetivo}
+                                        value={effectiveValue}
                                         onChange={(e) => isActual ? handleActualCellChange(linha.id, d.dataIso, e.target.value) : handleCellChange(linha.id, d.dataIso, e.target.value)}
                                         disabled={isInputLocked}
-                                        style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: configCor.color, color: configCor.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: isInputLocked ? 'default' : 'pointer', borderRadius: '2px', opacity: (controlMode && !isActual && valorEfetivo) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
+                                        style={{ width: '43px', minWidth: 0, maxWidth: '43px', height: '100%', backgroundColor: colorConfig.color, color: colorConfig.text, border: 'none', outline: 'none', fontSize: '0.7rem', fontWeight: 'bold', textAlign: 'center', textAlignLast: 'center', appearance: 'none', cursor: isInputLocked ? 'default' : 'pointer', borderRadius: '2px', opacity: (controlMode && !isActual && effectiveValue) ? 0.6 : 1, padding: '0 4px', overflow: 'hidden' }}
                                       >
                                         <option value=""></option>
                                         {Object.keys(workPackageCatalog).filter(k => k !== '').map(sigla => (
@@ -5514,7 +5514,7 @@ ${
                                       </select>
 
                                       {!isInputLocked && (
-                                        <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '0.45rem', color: configCor.text === '#fff' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)' }}>â–¼</div>
+                                        <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '0.45rem', color: colorConfig.text === '#fff' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)' }}>â–¼</div>
                                       )}
                                     </>
                                   )}
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
