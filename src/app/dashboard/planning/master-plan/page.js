@@ -329,7 +329,7 @@ export default function MasterPlanPage() {
   const [projectProgressMap, setProjectProgressMap] = useState({});
   const [selectedProjectId, setSelectedProjectId] = useState('');
 
-  const [linhaDeBaseCongelada, setLinhaDeBaseCongelada] = useState(false);
+  const [isBaselineFrozen, setIsBaselineFrozen] = useState(false);
   const [modoControle, setModoControle] = useState(false);
 
   const [dataInicio, setDataInicio] = useState('2026-08-03');
@@ -366,8 +366,8 @@ export default function MasterPlanPage() {
   const [pdfConfig, setPdfConfig] = useState({ formato: 'a3', orientacao: 'landscape' });
 
   // SISTEMA DE VERSÃ•ES (LAST PLANNER)
-  const [versoes, setVersoes] = useState([]);
-  const [versaoAtivaId, setVersaoAtivaId] = useState(null);
+  const [scenarios, setScenarios] = useState([]);
+  const [activeScenarioId, setActiveScenarioId] = useState(null);
 
   // MOTOR DE AGENDAMENTO (SCHEDULING ENGINE)
   const [pacotesLancados, setPacotesLancados] = useState([]); 
@@ -441,11 +441,11 @@ export default function MasterPlanPage() {
     setDadosRealizado(JSON.parse(snapshot.realizado));
     setFeriados(JSON.parse(snapshot.feriados));
     setSecoes(JSON.parse(snapshot.secoes));
-    setVersaoAtivaId(null);
+    setActiveScenarioId(null);
   };
   // ----------------------------------------------------
 
-  const formatarDataVersao = (valor) => {
+  const formatScenarioDate = (valor) => {
     if (!valor) return '';
     return new Date(valor).toLocaleDateString(
       isEn ? 'en-US' : 'pt-BR',
@@ -459,10 +459,10 @@ export default function MasterPlanPage() {
     );
   };
 
-  const mapearRegistroVersao = (registro) => ({
+  const mapScenarioRecord = (registro) => ({
     id: registro.id,
     nome: registro.name,
-    data: formatarDataVersao(registro.updated_at || registro.created_at),
+    data: formatScenarioDate(registro.updated_at || registro.created_at),
     status: registro.status,
     isBaseline: Boolean(registro.is_baseline),
     plannedStartDate: registro.planned_start_date,
@@ -470,7 +470,7 @@ export default function MasterPlanPage() {
     planData: registro.plan_data || {}
   });
 
-  const aplicarPlanoSalvo = (versao) => {
+  const applySavedPlan = (versao) => {
     const plano = versao?.planData || {};
 
     setPacotesLancados(Array.isArray(plano.packages) ? plano.packages : []);
@@ -506,9 +506,9 @@ export default function MasterPlanPage() {
     if (versao?.plannedStartDate) setDataInicio(versao.plannedStartDate);
     if (versao?.plannedFinishDate) setDataFim(versao.plannedFinishDate);
 
-    setLinhaDeBaseCongelada(Boolean(versao?.isBaseline));
+    setIsBaselineFrozen(Boolean(versao?.isBaseline));
     setModoControle(Boolean(versao?.isBaseline));
-    setVersaoAtivaId(versao?.id || null);
+    setActiveScenarioId(versao?.id || null);
     setHistorico([]);
   };
 
@@ -1884,12 +1884,12 @@ export default function MasterPlanPage() {
         setLocationStructureSections([]);
         setSecoes([]);
         setServicosProjeto({});
-        setVersoes([]);
-        setVersaoAtivaId(null);
+        setScenarios([]);
+        setActiveScenarioId(null);
         setSequenceConfigurations([]);
         setActiveSequenceConfigId(null);
         setSequenceEditingId(null);
-        setLinhaDeBaseCongelada(false);
+        setIsBaselineFrozen(false);
         setModoControle(false);
         setHistorico([]);
         return;
@@ -2180,8 +2180,8 @@ export default function MasterPlanPage() {
         projectWorkPackageMap
       );
 
-      const mappedVersions = (scenariosResult.data || []).map(mapearRegistroVersao);
-      setVersoes(mappedVersions);
+      const mappedVersions = (scenariosResult.data || []).map(mapScenarioRecord);
+      setScenarios(mappedVersions);
 
       const initialVersion =
         mappedVersions.find((item) => item.isBaseline) ||
@@ -2189,10 +2189,10 @@ export default function MasterPlanPage() {
         null;
 
       if (initialVersion) {
-        aplicarPlanoSalvo(initialVersion);
+        applySavedPlan(initialVersion);
       } else {
-        setVersaoAtivaId(null);
-        setLinhaDeBaseCongelada(false);
+        setActiveScenarioId(null);
+        setIsBaselineFrozen(false);
         setModoControle(false);
         setSequenceConfigurations([]);
         setActiveSequenceConfigId(null);
@@ -2800,7 +2800,7 @@ export default function MasterPlanPage() {
   ) => {
     if (
       !pacote ||
-      linhaDeBaseCongelada
+      isBaselineFrozen
     ) {
       return;
     }
@@ -3214,7 +3214,7 @@ export default function MasterPlanPage() {
     if (!window.confirm(t.confirmFreeze)) return;
     if (!selectedProjectId) return;
 
-    let targetScenarioId = versaoAtivaId;
+    let targetScenarioId = activeScenarioId;
 
     if (!targetScenarioId) {
       const nomeCenario = prompt(t.promptScenario);
@@ -3250,14 +3250,14 @@ export default function MasterPlanPage() {
         return;
       }
 
-      const createdVersion = mapearRegistroVersao(createdScenario);
-      setVersoes((prev) => [createdVersion, ...prev]);
+      const createdVersion = mapScenarioRecord(createdScenario);
+      setScenarios((prev) => [createdVersion, ...prev]);
 
       targetScenarioId = createdScenario.id;
-      setVersaoAtivaId(targetScenarioId);
+      setActiveScenarioId(targetScenarioId);
     }
 
-    const previousBaselines = versoes.filter(
+    const previousBaselines = scenarios.filter(
       (item) => item.isBaseline && item.id !== targetScenarioId
     );
 
@@ -3309,9 +3309,9 @@ export default function MasterPlanPage() {
       return;
     }
 
-    const frozenVersion = mapearRegistroVersao(data);
+    const frozenVersion = mapScenarioRecord(data);
 
-    setVersoes((prev) =>
+    setScenarios((prev) =>
       prev.map((item) => {
         if (item.id === frozenVersion.id) return frozenVersion;
 
@@ -3327,8 +3327,8 @@ export default function MasterPlanPage() {
       })
     );
 
-    setVersaoAtivaId(frozenVersion.id);
-    setLinhaDeBaseCongelada(true);
+    setActiveScenarioId(frozenVersion.id);
+    setIsBaselineFrozen(true);
     setModoControle(true);
 
     const immutableScheduleSnapshot =
@@ -3357,7 +3357,7 @@ ${
   const handleDescongelar = async () => {
     if (!window.confirm(t.confirmUnfreeze)) return;
 
-    if (versaoAtivaId) {
+    if (activeScenarioId) {
       const { data, error } = await supabase
         .from('master_plan_scenarios')
         .update({
@@ -3367,7 +3367,7 @@ ${
           planned_start_date: dataInicio || null,
           planned_finish_date: dataFim || null
         })
-        .eq('id', versaoAtivaId)
+        .eq('id', activeScenarioId)
         .eq('project_id', selectedProjectId)
         .select(`
           id,
@@ -3389,22 +3389,22 @@ ${
         return;
       }
 
-      const updatedVersion = mapearRegistroVersao(data);
+      const updatedVersion = mapScenarioRecord(data);
 
-      setVersoes((prev) =>
+      setScenarios((prev) =>
         prev.map((item) =>
           item.id === updatedVersion.id ? updatedVersion : item
         )
       );
     }
 
-    setLinhaDeBaseCongelada(false);
+    setIsBaselineFrozen(false);
     setModoControle(false);
   };
 
   // SISTEMA DE VERSÃ•ES: SUPABASE
   // ----------------------------------------------------
-  const handleSalvarVersao = async () => {
+  const handleSaveScenario = async () => {
     if (!selectedProjectId) return;
 
     const nomeCenario = prompt(t.promptScenario);
@@ -3440,14 +3440,14 @@ ${
       return;
     }
 
-    const novaVersao = mapearRegistroVersao(data);
+    const novaVersao = mapScenarioRecord(data);
 
-    setVersoes((prev) => [
+    setScenarios((prev) => [
       novaVersao,
       ...prev.filter((item) => item.id !== novaVersao.id)
     ]);
 
-    setVersaoAtivaId(novaVersao.id);
+    setActiveScenarioId(novaVersao.id);
 
     const immutableScheduleSnapshot =
       criarSnapshotAgendaImutavel(
@@ -3475,8 +3475,8 @@ ${
     alert(t.scenarioSaved);
   };
 
-  const handleAtualizarVersao = async () => {
-    if (!versaoAtivaId) return;
+  const handleUpdateScenario = async () => {
+    if (!activeScenarioId) return;
 
     const { data, error } = await supabase
       .from('master_plan_scenarios')
@@ -3485,7 +3485,7 @@ ${
         planned_finish_date: dataFim || null,
         plan_data: montarPlanData()
       })
-      .eq('id', versaoAtivaId)
+      .eq('id', activeScenarioId)
       .eq('project_id', selectedProjectId)
       .select(`
         id,
@@ -3507,9 +3507,9 @@ ${
       return;
     }
 
-    const versaoAtualizada = mapearRegistroVersao(data);
+    const versaoAtualizada = mapScenarioRecord(data);
 
-    setVersoes((prev) =>
+    setScenarios((prev) =>
       prev.map((item) =>
         item.id === versaoAtualizada.id ? versaoAtualizada : item
       )
@@ -3541,7 +3541,7 @@ ${
     alert(t.scenarioUpdated);
   };
 
-  const handleDuplicarVersao = async () => {
+  const handleDuplicateScenario = async () => {
     if (!selectedProjectId) return;
 
     const nomeCopia = prompt(t.promptDuplicate);
@@ -3578,11 +3578,11 @@ ${
       return;
     }
 
-    const novaVersao = mapearRegistroVersao(data);
+    const novaVersao = mapScenarioRecord(data);
 
-    setVersoes((prev) => [novaVersao, ...prev]);
-    setVersaoAtivaId(novaVersao.id);
-    setLinhaDeBaseCongelada(false);
+    setScenarios((prev) => [novaVersao, ...prev]);
+    setActiveScenarioId(novaVersao.id);
+    setIsBaselineFrozen(false);
     setModoControle(false);
 
     const immutableScheduleSnapshot =
@@ -3611,7 +3611,7 @@ ${
     alert(t.scenarioSaved);
   };
 
-  const handleCarregarVersao = (versaoId) => {
+  const handleLoadScenario = (versaoId) => {
     if (!versaoId) {
       if (window.confirm(t.confirmClear)) {
         salvarHistorico();
@@ -3635,8 +3635,8 @@ ${
           );
         }
 
-        setVersaoAtivaId(null);
-        setLinhaDeBaseCongelada(false);
+        setActiveScenarioId(null);
+        setIsBaselineFrozen(false);
         setModoControle(false);
       }
       return;
@@ -3646,9 +3646,9 @@ ${
 
     salvarHistorico();
 
-    const versao = versoes.find((item) => item.id === versaoId);
+    const versao = scenarios.find((item) => item.id === versaoId);
 
-    if (versao) aplicarPlanoSalvo(versao);
+    if (versao) applySavedPlan(versao);
   };
   // ----------------------------------------------------
 
@@ -4525,7 +4525,7 @@ ${
     setPacoteDuracao(1);
     
     // Desconecta da versÃ£o ativa se um novo pacote for inserido, ativando estado de rascunho
-    setVersaoAtivaId(null); 
+    setActiveScenarioId(null); 
   };
 
   const gerarPDF = () => {
@@ -4699,24 +4699,24 @@ ${
             {selectedProjectId && (
               <>
                 {/* BLOCO DE GERENCIAMENTO DE VERSÃ•ES (CENÃRIOS) */}
-                {!linhaDeBaseCongelada && (
+                {!isBaselineFrozen && (
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', borderLeft: '2px solid #e2e8f0', paddingLeft: '15px', borderRight: '2px solid #e2e8f0', paddingRight: '15px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: '#718096', marginBottom: '2px', textTransform: 'uppercase' }}>{t.scenarioLabel}</label>
                       <select
-                        value={versaoAtivaId || ''}
-                        onChange={(e) => handleCarregarVersao(e.target.value)}
-                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0', fontSize: '0.85rem', outline: 'none', minWidth: '200px', backgroundColor: versaoAtivaId ? '#ebf8ff' : '#fff' }}
+                        value={activeScenarioId || ''}
+                        onChange={(e) => handleLoadScenario(e.target.value)}
+                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0', fontSize: '0.85rem', outline: 'none', minWidth: '200px', backgroundColor: activeScenarioId ? '#ebf8ff' : '#fff' }}
                       >
-                        <option value="">{versaoAtivaId === null && pacotesLancados.length > 0 ? t.unsavedEdit : t.newBlank}</option>
-                        {versoes.map(v => <option key={v.id} value={v.id}>{v.nome} ({v.data})</option>)}
+                        <option value="">{activeScenarioId === null && pacotesLancados.length > 0 ? t.unsavedEdit : t.newBlank}</option>
+                        {scenarios.map(v => <option key={v.id} value={v.id}>{v.nome} ({v.data})</option>)}
                       </select>
                     </div>
 
                     {/* BOTÃ•ES DE SALVAMENTO DINÃ‚MICOS */}
-                    {versaoAtivaId === null ? (
+                    {activeScenarioId === null ? (
                       <button 
-                        onClick={handleSalvarVersao} 
+                        onClick={handleSaveScenario} 
                         disabled={pacotesLancados.length === 0}
                         style={{ backgroundColor: '#4a5568', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: pacotesLancados.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.8rem', opacity: pacotesLancados.length === 0 ? 0.5 : 1, marginTop: '14px' }}
                       >
@@ -4725,14 +4725,14 @@ ${
                     ) : (
                       <div style={{ display: 'flex', gap: '5px', marginTop: '14px' }}>
                         <button 
-                          onClick={handleAtualizarVersao} 
+                          onClick={handleUpdateScenario} 
                           style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
                           title={isEn ? "Update current scenario" : "Atualizar cenÃ¡rio atual"}
                         >
                           {t.updateScenario}
                         </button>
                         <button 
-                          onClick={handleDuplicarVersao} 
+                          onClick={handleDuplicateScenario} 
                           style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
                           title={isEn ? "Create a copy of this scenario" : "Criar uma cÃ³pia deste cenÃ¡rio"}
                         >
@@ -4744,7 +4744,7 @@ ${
                 )}
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  {!linhaDeBaseCongelada ? (
+                  {!isBaselineFrozen ? (
                     <button onClick={handleCongelarLinhaDeBase} style={{ backgroundColor: '#1a365d', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginTop: '14px' }}>
                       {t.freezeBase}
                     </button>
@@ -4777,14 +4777,14 @@ ${
 
         {selectedProjectId && (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button onClick={abrirGeradorSequencia} disabled={linhaDeBaseCongelada} style={{ backgroundColor: '#008f8c', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: linhaDeBaseCongelada ? 0.6 : 1 }}>
+            <button onClick={abrirGeradorSequencia} disabled={isBaselineFrozen} style={{ backgroundColor: '#008f8c', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.6 : 1 }}>
               {t.generateSequence}
             </button>
 
             <button
               onClick={abrirConfiguracoesSequencia}
               disabled={
-                linhaDeBaseCongelada ||
+                isBaselineFrozen ||
                 sequenceConfigurations.length === 0
               }
               title={
@@ -4794,7 +4794,7 @@ ${
               }
               style={{
                 backgroundColor:
-                  sequenceConfigurations.length === 0 || linhaDeBaseCongelada
+                  sequenceConfigurations.length === 0 || isBaselineFrozen
                     ? '#cbd5e1'
                     : '#475569',
                 color: 'white',
@@ -4802,13 +4802,13 @@ ${
                 padding: '8px 15px',
                 borderRadius: '6px',
                 cursor:
-                  sequenceConfigurations.length === 0 || linhaDeBaseCongelada
+                  sequenceConfigurations.length === 0 || isBaselineFrozen
                     ? 'not-allowed'
                     : 'pointer',
                 fontWeight: 'bold',
                 fontSize: '0.85rem',
                 opacity:
-                  sequenceConfigurations.length === 0 || linhaDeBaseCongelada
+                  sequenceConfigurations.length === 0 || isBaselineFrozen
                     ? 0.65
                     : 1
               }}
@@ -4816,15 +4816,15 @@ ${
               âš™ {t.sequenceSettings}
             </button>
 
-            <button onClick={() => setShowPacoteModal(true)} disabled={linhaDeBaseCongelada} style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: linhaDeBaseCongelada ? 0.6 : 1 }}>
+            <button onClick={() => setShowPacoteModal(true)} disabled={isBaselineFrozen} style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.6 : 1 }}>
               {t.insertPackage}
             </button>
 
             {/* BOTÃƒO DESFAZER */}
             <button 
               onClick={handleDesfazer} 
-              disabled={historico.length === 0 || linhaDeBaseCongelada} 
-              style={{ backgroundColor: historico.length === 0 ? '#e2e8f0' : '#e53e3e', color: historico.length === 0 ? '#a0aec0' : 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: historico.length === 0 || linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+              disabled={historico.length === 0 || isBaselineFrozen} 
+              style={{ backgroundColor: historico.length === 0 ? '#e2e8f0' : '#e53e3e', color: historico.length === 0 ? '#a0aec0' : 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: historico.length === 0 || isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
             >
               â†© {t.undoBtn}
             </button>
@@ -4841,12 +4841,12 @@ ${
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: '#f7fafc', padding: '8px 15px', borderRadius: '8px', border: '1px solid #cbd5e0' }}>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#4a5568', marginBottom: '2px' }}>{t.startPrev}</label>
-                <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} disabled={linhaDeBaseCongelada} style={{ padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none', color: '#2d3748', cursor: linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: linhaDeBaseCongelada ? 0.7 : 1 }} />
+                <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} disabled={isBaselineFrozen} style={{ padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none', color: '#2d3748', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.7 : 1 }} />
               </div>
               <span style={{ color: '#a0aec0', fontWeight: 'bold', marginTop: '12px' }}>âžž</span>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#4a5568', marginBottom: '2px' }}>{t.endPrev}</label>
-                <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} disabled={linhaDeBaseCongelada} style={{ padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none', color: '#2d3748', cursor: linhaDeBaseCongelada ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: linhaDeBaseCongelada ? 0.7 : 1 }} />
+                <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} disabled={isBaselineFrozen} style={{ padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none', color: '#2d3748', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.7 : 1 }} />
               </div>
             </div>
           </div>
@@ -5298,7 +5298,7 @@ ${
                                 type="text"
                                 value={displayTitle}
                                 onChange={(e) => handleAtualizarTituloSecao(secao.id, e.target.value)}
-                                disabled={linhaDeBaseCongelada}
+                                disabled={isBaselineFrozen}
                                 style={{ fontWeight: 'bold', fontStyle: 'italic', color: '#2a4365', background: 'transparent', border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: '0.9rem' }}
                               />
 
@@ -5320,7 +5320,7 @@ ${
                                 </span>
                               )}
                             </div>
-                            {!linhaDeBaseCongelada && (
+                            {!isBaselineFrozen && (
                               <button onClick={() => handleRemoverSecao(secao.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
                             )}
                           </div>
@@ -5365,7 +5365,7 @@ ${
                               bgColor = '#e2e8f0';
                             }
 
-                            const inputBloqueado = isRealizado ? false : linhaDeBaseCongelada;
+                            const inputBloqueado = isRealizado ? false : isBaselineFrozen;
 
                             const pacoteCelula =
                               !isRealizado
@@ -5537,7 +5537,7 @@ ${
                                       type="text" 
                                       value={linha.descricao} 
                                       onChange={(e) => handleAtualizarLinha(secao.id, linha.id, e.target.value)} 
-                                      disabled={linhaDeBaseCongelada}
+                                      disabled={isBaselineFrozen}
                                       list="lista-zonas-coleta"
                                       placeholder={t.selectOrType}
                                       title={
@@ -5549,7 +5549,7 @@ ${
                                     />
                                     {modoControle && <span style={{ fontSize: '0.65rem', backgroundColor: '#cbd5e0', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: '#4a5568' }}>{t.plannedBadge}</span>}
                                   </div>
-                                  {!linhaDeBaseCongelada && (
+                                  {!isBaselineFrozen && (
                                     <button onClick={() => handleRemoverLinha(secao.id, linha.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
                                   )}
                                 </div>
@@ -5577,7 +5577,7 @@ ${
                         );
                       })}
                       
-                      {!linhaDeBaseCongelada && (
+                      {!isBaselineFrozen && (
                         <tr>
                           <td colSpan={2} style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', padding: '5px 15px', borderBottom: '1px solid #cbd5e0' }}>
                             <button onClick={() => handleAdicionarLinha(secao.id)} style={btnAdicionarStyle}>{t.addRow}</button>
@@ -5591,7 +5591,7 @@ ${
                     )
                   })}
 
-                  {!linhaDeBaseCongelada && (
+                  {!isBaselineFrozen && (
                     <tr>
                       <td colSpan={2 + datasVisiveis.length} style={{ padding: '20px', backgroundColor: '#f4f7f6', textAlign: 'left' }}>
                         <button onClick={handleAdicionarSecao} style={{ backgroundColor: '#2a4365', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
