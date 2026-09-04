@@ -669,7 +669,7 @@ export default function MasterPlanPage() {
     // the generator creates every activity for Location 1, then every
     // activity for Location 2, and so on.
     //
-    // Therefore the first appearance of each linhaId is the safest
+    // Therefore the first appearance of each rowId is the safest
     // representation of the actual Location Flow that was saved.
     const orderedRowIds = [];
 
@@ -3200,14 +3200,14 @@ export default function MasterPlanPage() {
   
   const formatoIdealCode = calculateSuggestedRole();
 
-  const handleCellChange = (linhaId, dataIso, value) => {
+  const handleCellChange = (rowId, dataIso, value) => {
     saveHistory();
-    setPlannedCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: value }));
+    setPlannedCellData(prev => ({ ...prev, [`${rowId}___${dataIso}`]: value }));
   };
 
-  const handleActualCellChange = (linhaId, dataIso, value) => {
+  const handleActualCellChange = (rowId, dataIso, value) => {
     saveHistory();
-    setActualCellData(prev => ({ ...prev, [`${linhaId}___${dataIso}`]: value }));
+    setActualCellData(prev => ({ ...prev, [`${rowId}___${dataIso}`]: value }));
   };
 
   const handleFreezeBaseline = async () => {
@@ -3706,14 +3706,14 @@ ${
     );
   };
 
-  const handleUpdateRow = (secId, linhaId, value) =>
+  const handleUpdateRow = (secId, rowId, value) =>
     setSections(
       sections.map((section) =>
         section.id === secId
           ? {
               ...section,
               rows: section.rows.map((row) =>
-                row.id === linhaId
+                row.id === rowId
                   ? {
                       ...row,
                       description: value,
@@ -3740,9 +3740,9 @@ ${
       )
     );
   
-  const handleRemoveRow = (secId, linhaId) => {
+  const handleRemoveRow = (secId, rowId) => {
     saveHistory();
-    setSections(sections.map(s => s.id === secId ? { ...s, rows: s.rows.filter(l => l.id !== linhaId) } : s));
+    setSections(sections.map(s => s.id === secId ? { ...s, rows: s.rows.filter(l => l.id !== rowId) } : s));
   };
 
   const existingPackages = workPackages.map(p => {
@@ -5286,10 +5286,10 @@ ${
                 </thead>
 
                 <tbody>
-                  {sections.map((secao) => {
-                    const displayTitle = secao.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (secao.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : secao.title);
+                  {sections.map((section) => {
+                    const displayTitle = section.title === 'SERVIÃ‡OS INTERNOS' && isEn ? t.intWork : (section.title === 'SERVIÃ‡OS EXTERNOS' && isEn ? t.extWork : section.title);
                     return (
-                    <React.Fragment key={secao.id}>
+                    <React.Fragment key={section.id}>
                       <tr style={{ backgroundColor: '#edf2f7' }}>
                         <td colSpan={2} style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#edf2f7', padding: '6px 15px', borderBottom: '2px solid #2a4365', borderTop: '2px solid #2a4365' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -5297,12 +5297,12 @@ ${
                               <input 
                                 type="text"
                                 value={displayTitle}
-                                onChange={(e) => handleUpdateSectionTitle(secao.id, e.target.value)}
+                                onChange={(e) => handleUpdateSectionTitle(section.id, e.target.value)}
                                 disabled={isBaselineFrozen}
                                 style={{ fontWeight: 'bold', fontStyle: 'italic', color: '#2a4365', background: 'transparent', border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: '0.9rem' }}
                               />
 
-                              {secao.source === 'location_structure' && (
+                              {section.source === 'location_structure' && (
                                 <span
                                   title="Generated from Project Location Structure"
                                   style={{
@@ -5321,16 +5321,16 @@ ${
                               )}
                             </div>
                             {!isBaselineFrozen && (
-                              <button onClick={() => handleRemoveSection(secao.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
+                              <button onClick={() => handleRemoveSection(section.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
                             )}
                           </div>
                         </td>
                         {visibleDates.map((d, i) => (
-                          <td key={`g-${secao.id}-${i}`} style={{ borderBottom: '2px solid #2a4365', borderTop: '2px solid #2a4365', backgroundColor: d.isHoliday ? '#fed7d7' : (d.isWeekend ? '#e2e8f0' : '#edf2f7'), minWidth: '45px' }}></td>
+                          <td key={`g-${section.id}-${i}`} style={{ borderBottom: '2px solid #2a4365', borderTop: '2px solid #2a4365', backgroundColor: d.isHoliday ? '#fed7d7' : (d.isWeekend ? '#e2e8f0' : '#edf2f7'), minWidth: '45px' }}></td>
                         ))}
                       </tr>
 
-                      {secao.rows.map((linha) => {
+                      {section.rows.map((linha) => {
                         const currentId = globalIdCounter++;
                         
                         const renderCells = (isActual) => {
@@ -5536,7 +5536,7 @@ ${
                                     <input 
                                       type="text" 
                                       value={linha.description} 
-                                      onChange={(e) => handleUpdateRow(secao.id, linha.id, e.target.value)} 
+                                      onChange={(e) => handleUpdateRow(section.id, linha.id, e.target.value)} 
                                       disabled={isBaselineFrozen}
                                       list="lista-zonas-coleta"
                                       placeholder={t.selectOrType}
@@ -5550,7 +5550,7 @@ ${
                                     {controlMode && <span style={{ fontSize: '0.65rem', backgroundColor: '#cbd5e0', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', color: '#4a5568' }}>{t.plannedBadge}</span>}
                                   </div>
                                   {!isBaselineFrozen && (
-                                    <button onClick={() => handleRemoveRow(secao.id, linha.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
+                                    <button onClick={() => handleRemoveRow(section.id, linha.id)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>âœ–</button>
                                   )}
                                 </div>
                               </td>
@@ -5580,10 +5580,10 @@ ${
                       {!isBaselineFrozen && (
                         <tr>
                           <td colSpan={2} style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', padding: '5px 15px', borderBottom: '1px solid #cbd5e0' }}>
-                            <button onClick={() => handleAddRow(secao.id)} style={btnAdicionarStyle}>{t.addRow}</button>
+                            <button onClick={() => handleAddRow(section.id)} style={btnAdicionarStyle}>{t.addRow}</button>
                           </td>
                           {visibleDates.map((d, i) => (
-                            <td key={`add-${secao.id}-${i}`} style={{ borderBottom: '1px solid #cbd5e0', backgroundColor: d.isHoliday ? '#fed7d7' : (d.isWeekend ? '#e2e8f0' : 'white') }}></td>
+                            <td key={`add-${section.id}-${i}`} style={{ borderBottom: '1px solid #cbd5e0', backgroundColor: d.isHoliday ? '#fed7d7' : (d.isWeekend ? '#e2e8f0' : 'white') }}></td>
                           ))}
                         </tr>
                       )}
@@ -5620,6 +5620,7 @@ ${
     </div>
   );
 }
+
 
 
 
