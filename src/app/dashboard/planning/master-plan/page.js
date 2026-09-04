@@ -297,12 +297,6 @@ export default function MasterPlanPage() {
     mPkgCancel: isEn ? 'Cancel' : 'Cancelar',
     mPkgAddGrid: isEn ? 'Add to Grid' : 'LanÃ§ar na Grade',
     
-    // Textos do Modal de Nova Atividade
-    newActBtn: isEn ? '+ New Service' : '+ Novo ServiÃ§o',
-    newActTitle: isEn ? 'Register Custom Activity' : 'Cadastrar Nova Atividade',
-    newActAcronym: isEn ? 'Acronym (max 3 letters)' : 'Sigla (mÃ¡x 3 letras)',
-    newActName: isEn ? 'Activity Name' : 'Nome da Atividade',
-    newActColor: isEn ? 'Fill Color' : 'Cor de Preenchimento',
 
     mHolTitle: isEn ? 'Register Holidays (Local/State/Federal)' : 'Cadastrar Feriados (Mun/Est/Fed)',
     mHolDescPlace: isEn ? 'Description (e.g., National Holiday)' : 'DescriÃ§Ã£o (ex: Padroeira)',
@@ -352,51 +346,16 @@ export default function MasterPlanPage() {
   // OFF / FER are calendar markers, not Work Packages, so they remain
   // system-level visual definitions.
   //
-  // servicosCustomizados is kept temporarily as a legacy compatibility
-  // layer for previously saved Master Plan scenarios.
   const [servicosProjeto, setServicosProjeto] = useState({});
-  const [servicosCustomizados, setServicosCustomizados] = useState({});
-
-  // ----------------------------------------------------------
-  // LEGACY SCENARIO FALLBACK
-  // ----------------------------------------------------------
-  //
-  // Old scenarios may still contain plan_data.customServices.
-  // They remain readable during migration, but they can NEVER
-  // override a Work Package registered in the shared database.
-  //
-  // New Work Packages must be registered in:
-  // public.project_work_packages
-  // ----------------------------------------------------------
-  const servicosCustomizadosLegados =
-    Object.fromEntries(
-      Object.entries(
-        servicosCustomizados
-      ).filter(
-        ([code]) =>
-          code !== '' &&
-          code !== 'OFF' &&
-          code !== 'FER' &&
-          !servicosProjeto[
-            code
-          ]
-      )
-    );
 
   const servicosCores = {
     ...servicosProjeto,
-    ...servicosCustomizadosLegados,
 
     '': SYSTEM_CALENDAR_CODES[''],
     OFF: SYSTEM_CALENDAR_CODES.OFF,
     FER: SYSTEM_CALENDAR_CODES.FER
   };
 
-  // MODAL DE NOVA ATIVIDADE
-  const [showNovaAtivModal, setShowNovaAtivModal] = useState(false);
-  const [novaAtivSigla, setNovaAtivSigla] = useState('');
-  const [novaAtivNome, setNovaAtivNome] = useState('');
-  const [novaAtivCor, setNovaAtivCor] = useState('#3182ce');
 
   const [showFeriadosModal, setShowFeriadosModal] = useState(false);
   const [feriados, setFeriados] = useState([]);
@@ -516,11 +475,6 @@ export default function MasterPlanPage() {
 
     setPacotesLancados(Array.isArray(plano.packages) ? plano.packages : []);
     setFeriados(Array.isArray(plano.holidays) ? plano.holidays : []);
-    setServicosCustomizados(
-      plano.customServices && typeof plano.customServices === 'object'
-        ? plano.customServices
-        : {}
-    );
 
     if (Array.isArray(plano.sections) && plano.sections.length > 0) {
       setSecoes(plano.sections);
@@ -1097,7 +1051,6 @@ export default function MasterPlanPage() {
     plannedCells: dadosCelulas,
     actualCells: dadosRealizado,
     holidays: feriados,
-    customServices: servicosCustomizados,
     hideWeekends: ocultarFinaisDeSemana,
     sequenceConfigurations
   });
@@ -1931,7 +1884,6 @@ export default function MasterPlanPage() {
         setLocationStructureSections([]);
         setSecoes([]);
         setServicosProjeto({});
-        setServicosCustomizados({});
         setVersoes([]);
         setVersaoAtivaId(null);
         setSequenceConfigurations([]);
@@ -2242,7 +2194,6 @@ export default function MasterPlanPage() {
         setVersaoAtivaId(null);
         setLinhaDeBaseCongelada(false);
         setModoControle(false);
-        setServicosCustomizados({});
         setSequenceConfigurations([]);
         setActiveSequenceConfigId(null);
         setSequenceEditingId(null);
@@ -3451,41 +3402,6 @@ ${
     setModoControle(false);
   };
 
-  // ----------------------------------------------------
-  // NOVA ATIVIDADE CUSTOMIZADA
-  // A atividade fica dentro do Scenario / Version salvo.
-  // ----------------------------------------------------
-  const handleSalvarNovaAtividade = (e) => {
-    e.preventDefault();
-
-    const siglaUpper = novaAtivSigla
-      .toUpperCase()
-      .trim()
-      .substring(0, 3);
-
-    if (!siglaUpper || !novaAtivNome) return;
-
-    const textColor = getContrastYIQ(novaAtivCor);
-
-    const novoServico = {
-      labelPt: novaAtivNome,
-      labelEn: novaAtivNome,
-      color: novaAtivCor,
-      text: textColor
-    };
-
-    setServicosCustomizados((prev) => ({
-      ...prev,
-      [siglaUpper]: novoServico
-    }));
-
-    setNovaAtivSigla('');
-    setNovaAtivNome('');
-    setNovaAtivCor('#3182ce');
-    setShowNovaAtivModal(false);
-  };
-
-  // ----------------------------------------------------
   // SISTEMA DE VERSÃ•ES: SUPABASE
   // ----------------------------------------------------
   const handleSalvarVersao = async () => {
@@ -3703,7 +3619,6 @@ ${
         setFeriados([]);
         setDadosCelulas({});
         setDadosRealizado({});
-        setServicosCustomizados({});
         setSequenceConfigurations([]);
         setActiveSequenceConfigId(null);
         setSequenceEditingId(null);
@@ -4948,33 +4863,6 @@ ${
         </div>
       )}
 
-      {/* MODAL: NOVA ATIVIDADE CUSTOMIZADA */}
-      {showNovaAtivModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3001 }}>
-          <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '10px', width: '400px', fontFamily: 'sans-serif' }}>
-            <h2 style={{ color: '#1a365d', marginBottom: '20px' }}>{t.newActTitle}</h2>
-            <form onSubmit={handleSalvarNovaAtividade} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.newActAcronym}</label>
-                <input type="text" maxLength="3" required value={novaAtivSigla} onChange={(e) => setNovaAtivSigla(e.target.value.toUpperCase())} placeholder="Ex: DRY" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none', textTransform: 'uppercase' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.newActName}</label>
-                <input type="text" required value={novaAtivNome} onChange={(e) => setNovaAtivNome(e.target.value)} placeholder="Ex: Parede Drywall" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.newActColor}</label>
-                <input type="color" value={novaAtivCor} onChange={(e) => setNovaAtivCor(e.target.value)} style={{ width: '100%', height: '40px', padding: '2px', borderRadius: '6px', border: '1px solid #cbd5e0', cursor: 'pointer' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" onClick={() => setShowNovaAtivModal(false)} style={{ backgroundColor: '#cbd5e0', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', color: '#4a5568', fontWeight: 'bold' }}>{t.mPkgCancel}</button>
-                <button type="submit" style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.saveScenario}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* MODAL: WORK SEQUENCE GENERATOR */}
       {showSequenceModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3500, padding: '20px' }}>
@@ -5214,9 +5102,6 @@ ${
                           <option key={sigla} value={sigla}>{isEn ? info.labelEn : info.labelPt} ({sigla})</option>
                       ))}
                     </select>
-                    <button type="button" onClick={() => setShowNovaAtivModal(true)} style={{ backgroundColor: '#edf2f7', border: '1px solid #cbd5e0', borderRadius: '6px', padding: '0 10px', cursor: 'pointer', fontWeight: 'bold', color: '#2b6cb0', fontSize: '0.75rem' }} title="Criar nova atividade">
-                      {t.newActBtn}
-                    </button>
                   </div>
                 </div>
 
