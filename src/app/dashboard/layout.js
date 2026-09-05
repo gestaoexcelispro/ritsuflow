@@ -11,6 +11,7 @@ import Link from 'next/link'
 
 import {
   usePathname,
+  useSearchParams,
 } from 'next/navigation'
 
 import LogoutButton from '../../components/LogoutButton'
@@ -432,6 +433,40 @@ const projectSetupLegacyRoutes = [
 
 
 // ============================================================
+// PROJECT SETUP HEADER SECTIONS
+// ============================================================
+
+const projectSetupHeaderSections = [
+
+  {
+    id: 'general',
+    label: 'General',
+  },
+
+  {
+    id: 'scope',
+    label: 'Scope',
+  },
+
+  {
+    id: 'locations',
+    label: 'Locations',
+  },
+
+  {
+    id: 'allocation',
+    label: 'Allocation',
+  },
+
+  {
+    id: 'production',
+    label: 'Production Parameters',
+  },
+
+]
+
+
+// ============================================================
 // DASHBOARD
 // ============================================================
 
@@ -441,6 +476,36 @@ export default function DashboardLayout({
 
   const pathname =
     usePathname()
+
+
+  const searchParams =
+    useSearchParams()
+
+
+  const projectSetupProjectId =
+    searchParams.get(
+      'projectId'
+    )
+
+
+  const projectSetupSection =
+    searchParams.get(
+      'section'
+    ) || 'general'
+
+
+  const isProjectSetupPage =
+    pathname ===
+      '/dashboard/projects/setup' ||
+    pathname ===
+      '/dashboard/projects/setup/'
+
+
+  const showProjectSetupHeaderActions =
+    isProjectSetupPage &&
+    Boolean(
+      projectSetupProjectId
+    )
 
 
   const supabase =
@@ -1473,7 +1538,7 @@ export default function DashboardLayout({
                                       position:
                                         'absolute',
 
-                                    left:
+                                      left:
                                         '-5px',
 
                                       top:
@@ -1838,7 +1903,7 @@ export default function DashboardLayout({
                 'flex-end',
 
               gap:
-                '8px',
+                '6px',
 
               flex:
                 '1 1 auto',
@@ -1849,11 +1914,274 @@ export default function DashboardLayout({
               marginLeft:
                 '20px',
 
-              overflow:
-                'visible',
+              overflowX:
+                'auto',
+
+              overflowY:
+                'hidden',
+
+              scrollbarWidth:
+                'none',
 
             }}
-          />
+          >
+
+            {showProjectSetupHeaderActions && (
+
+              <>
+
+                {projectSetupHeaderSections.map(
+                  (
+                    section
+                  ) => {
+
+                    const active =
+                      projectSetupSection ===
+                      section.id
+
+
+                    return (
+
+                      <Link
+                        key={
+                          section.id
+                        }
+                        href={`/dashboard/projects/setup?projectId=${projectSetupProjectId}&section=${section.id}`}
+                        aria-current={
+                          active
+                            ? 'page'
+                            : undefined
+                        }
+                        style={{
+
+                          display:
+                            'inline-flex',
+
+                          alignItems:
+                            'center',
+
+                          justifyContent:
+                            'center',
+
+                          minHeight:
+                            '38px',
+
+                          boxSizing:
+                            'border-box',
+
+                          padding:
+                            '0 10px',
+
+                          border:
+                            active
+                              ? '1px solid #99e6dc'
+                              : '1px solid transparent',
+
+                          borderRadius:
+                            '8px',
+
+                          background:
+                            active
+                              ? '#effcf9'
+                              : 'transparent',
+
+                          color:
+                            active
+                              ? '#087f73'
+                              : '#52677d',
+
+                          fontSize:
+                            '12px',
+
+                          lineHeight:
+                            1,
+
+                          fontWeight:
+                            800,
+
+                          textDecoration:
+                            'none',
+
+                          whiteSpace:
+                            'nowrap',
+
+                          flexShrink:
+                            0,
+
+                          transition:
+                            'background 0.15s ease, border-color 0.15s ease, color 0.15s ease',
+
+                        }}
+                      >
+
+                        {
+                          section.label
+                        }
+
+                      </Link>
+
+                    )
+
+                  }
+                )}
+
+
+                <div
+                  aria-hidden="true"
+                  style={{
+
+                    width:
+                      '1px',
+
+                    height:
+                      '24px',
+
+                    margin:
+                      '0 2px',
+
+                    background:
+                      '#dce5ed',
+
+                    flexShrink:
+                      0,
+
+                  }}
+                />
+
+
+                <Link
+                  href="/dashboard/projects/setup"
+                  style={{
+
+                    display:
+                      'inline-flex',
+
+                    alignItems:
+                      'center',
+
+                    justifyContent:
+                      'center',
+
+                    minHeight:
+                      '38px',
+
+                    boxSizing:
+                      'border-box',
+
+                    padding:
+                      '0 12px',
+
+                    border:
+                      '1px solid #d1dce5',
+
+                    borderRadius:
+                      '8px',
+
+                    background:
+                      '#ffffff',
+
+                    color:
+                      '#425a70',
+
+                    fontSize:
+                      '12px',
+
+                    lineHeight:
+                      1,
+
+                    fontWeight:
+                      800,
+
+                    textDecoration:
+                      'none',
+
+                    whiteSpace:
+                      'nowrap',
+
+                    flexShrink:
+                      0,
+
+                  }}
+                >
+
+                  Change Project
+
+                </Link>
+
+
+                {projectSetupSection ===
+                  'general' && (
+
+                  <button
+                    type="submit"
+                    form="project-general-form"
+                    style={{
+
+                      display:
+                        'inline-flex',
+
+                      alignItems:
+                        'center',
+
+                      justifyContent:
+                        'center',
+
+                      minHeight:
+                        '38px',
+
+                      boxSizing:
+                        'border-box',
+
+                      padding:
+                        '0 13px',
+
+                      border:
+                        '1px solid #052c49',
+
+                      borderRadius:
+                        '8px',
+
+                      background:
+                        '#052c49',
+
+                      color:
+                        '#ffffff',
+
+                      font:
+                        'inherit',
+
+                      fontSize:
+                        '12px',
+
+                      lineHeight:
+                        1,
+
+                      fontWeight:
+                        800,
+
+                      cursor:
+                        'pointer',
+
+                      whiteSpace:
+                        'nowrap',
+
+                      flexShrink:
+                        0,
+
+                    }}
+                  >
+
+                    Save Changes
+
+                  </button>
+
+                )}
+
+              </>
+
+            )}
+
+          </div>
 
         </header>
 
@@ -1872,8 +2200,3 @@ export default function DashboardLayout({
 
   )
 }
-
-
-
-
-
