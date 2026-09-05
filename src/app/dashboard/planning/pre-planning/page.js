@@ -1302,6 +1302,63 @@ export default async function PrePlanningPage({
       : 0
 
 
+  const workPackageCodes =
+    workPackages
+      .map((workPackage) => workPackage.code)
+      .filter(Boolean)
+
+
+  const workPackageDurationRows =
+    locationRows.map((group) => {
+
+      const durations = {}
+
+
+      for (const workPackageCode of workPackageCodes) {
+
+        const packageDurations =
+          group.rows
+            .filter(
+              (row) =>
+                row.workPackageCode ===
+                workPackageCode
+            )
+            .map(
+              (row) =>
+                row.rawDuration
+            )
+            .filter(
+              (value) =>
+                Number.isFinite(value)
+            )
+
+
+        durations[workPackageCode] =
+          packageDurations.length > 0
+            ? Math.max(...packageDurations)
+            : null
+
+      }
+
+
+      return {
+        locationId:
+          group.location.id,
+
+        locationPath:
+          buildLocationPath(
+            group.location,
+            locationMap
+          ),
+
+        durations,
+      }
+
+    })
+
+
+
+
   return (
 
     <section
@@ -2169,6 +2226,392 @@ export default async function PrePlanningPage({
         >
           No positive location allocations are available for this project. Complete Project Setup → Allocation before using Pre-Planning.
         </div>
+
+      )}
+
+
+      {workPackageDurationRows.length > 0 && (
+
+        <section
+          style={{
+            overflow:
+              'hidden',
+
+            border:
+              `1px solid ${BORDER}`,
+
+            borderRadius:
+              '12px',
+
+            background:
+              '#ffffff',
+          }}
+        >
+
+          <div
+            style={{
+              padding:
+                '18px 18px 16px',
+
+              borderBottom:
+                `1px solid ${BORDER}`,
+
+              background:
+                '#f7fafc',
+            }}
+          >
+
+            <div
+              style={{
+                color:
+                  '#64748b',
+
+                fontSize:
+                  '10px',
+
+                lineHeight:
+                  1,
+
+                fontWeight:
+                  900,
+
+                letterSpacing:
+                  '0.08em',
+
+                textTransform:
+                  'uppercase',
+              }}
+            >
+              Production Flow Summary
+            </div>
+
+
+            <h3
+              style={{
+                margin:
+                  '6px 0 0',
+
+                color:
+                  NAVY,
+
+                fontSize:
+                  '17px',
+
+                lineHeight:
+                  1.25,
+
+                fontWeight:
+                  900,
+              }}
+            >
+              Work Package Duration by Location
+            </h3>
+
+
+            <p
+              style={{
+                maxWidth:
+                  '900px',
+
+                margin:
+                  '7px 0 0',
+
+                color:
+                  MUTED,
+
+                fontSize:
+                  '12px',
+
+                lineHeight:
+                  1.5,
+              }}
+            >
+              Scope Item detail is collapsed into Work Package duration. For each location, the Work Package duration is the maximum Raw Duration among its Scope Items.
+            </p>
+
+          </div>
+
+
+          <div
+            style={{
+              overflowX:
+                'auto',
+            }}
+          >
+
+            <table
+              style={{
+                width:
+                  '100%',
+
+                minWidth:
+                  `${Math.max(
+                    900,
+                    250 +
+                    workPackageCodes.length *
+                    105
+                  )}px`,
+
+                borderCollapse:
+                  'collapse',
+
+                tableLayout:
+                  'fixed',
+              }}
+            >
+
+              <thead>
+
+                <tr>
+
+                  <th
+                    style={{
+                      width:
+                        '250px',
+
+                      padding:
+                        '11px 12px',
+
+                      borderBottom:
+                        `1px solid ${BORDER}`,
+
+                      background:
+                        '#eef3f6',
+
+                      color:
+                        '#52677d',
+
+                      fontSize:
+                        '10px',
+
+                      fontWeight:
+                        900,
+
+                      textAlign:
+                        'left',
+
+                      textTransform:
+                        'uppercase',
+
+                      position:
+                        'sticky',
+
+                      left:
+                        0,
+
+                      zIndex:
+                        2,
+                    }}
+                  >
+                    Location
+                  </th>
+
+
+                  {workPackageCodes.map(
+                    (workPackageCode) => (
+
+                      <th
+                        key={
+                          workPackageCode
+                        }
+                        style={{
+                          width:
+                            '105px',
+
+                          padding:
+                            '11px 10px',
+
+                          borderBottom:
+                            `1px solid ${BORDER}`,
+
+                          background:
+                            '#eef3f6',
+
+                          color:
+                            TEAL,
+
+                          fontSize:
+                            '10px',
+
+                          fontWeight:
+                            900,
+
+                          textAlign:
+                            'center',
+
+                          textTransform:
+                            'uppercase',
+                        }}
+                      >
+                        {
+                          workPackageCode
+                        }
+                      </th>
+
+                    )
+                  )}
+
+                </tr>
+
+              </thead>
+
+
+              <tbody>
+
+                {workPackageDurationRows.map(
+                  (row, rowIndex) => (
+
+                    <tr
+                      key={
+                        row.locationId
+                      }
+                    >
+
+                      <td
+                        style={{
+                          padding:
+                            '11px 12px',
+
+                          borderBottom:
+                            '1px solid #edf1f4',
+
+                          background:
+                            rowIndex % 2 === 1
+                              ? '#f8fafc'
+                              : '#ffffff',
+
+                          color:
+                            NAVY,
+
+                          fontSize:
+                            '11px',
+
+                          fontWeight:
+                            900,
+
+                          position:
+                            'sticky',
+
+                          left:
+                            0,
+
+                          zIndex:
+                            1,
+                        }}
+                      >
+                        {
+                          row.locationPath
+                        }
+                      </td>
+
+
+                      {workPackageCodes.map(
+                        (workPackageCode) => {
+
+                          const duration =
+                            row.durations[
+                              workPackageCode
+                            ]
+
+
+                          return (
+
+                            <td
+                              key={
+                                workPackageCode
+                              }
+                              style={{
+                                padding:
+                                  '11px 10px',
+
+                                borderBottom:
+                                  '1px solid #edf1f4',
+
+                                background:
+                                  rowIndex % 2 === 1
+                                    ? '#fbfcfd'
+                                    : '#ffffff',
+
+                                color:
+                                  duration === null
+                                    ? MUTED
+                                    : TEXT,
+
+                                fontSize:
+                                  '11px',
+
+                                fontWeight:
+                                  duration === null
+                                    ? 600
+                                    : 800,
+
+                                textAlign:
+                                  'center',
+
+                                whiteSpace:
+                                  'nowrap',
+                              }}
+                            >
+                              {
+                                duration === null
+                                  ? '—'
+                                  : `${safeNumber(
+                                      duration,
+                                      2
+                                    )} d`
+                              }
+                            </td>
+
+                          )
+
+                        }
+                      )}
+
+                    </tr>
+
+                  )
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+
+          <div
+            style={{
+              padding:
+                '11px 14px',
+
+              borderTop:
+                `1px solid ${BORDER}`,
+
+              background:
+                '#fbfcfd',
+
+              color:
+                MUTED,
+
+              fontSize:
+                '11px',
+
+              lineHeight:
+                1.45,
+            }}
+          >
+            <strong
+              style={{
+                color:
+                  TEXT,
+              }}
+            >
+              Aggregation rule:
+            </strong>{' '}
+            WP Duration per Location = MAX(Raw Duration of the Scope Items assigned to that Work Package).
+          </div>
+
+        </section>
 
       )}
 
