@@ -743,6 +743,100 @@ const styles = StyleSheet.create({
     fontSize: 5.6,
     textAlign: 'center',
   },
+  prePlanningMetricRow: {
+    flexDirection: 'row',
+    marginHorizontal: -3,
+    marginBottom: 10,
+  },
+  prePlanningMetricCard: {
+    width: '25%',
+    paddingHorizontal: 3,
+  },
+  prePlanningMetricInner: {
+    minHeight: 52,
+    paddingVertical: 7,
+    paddingHorizontal: 7,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  prePlanningMetricLabel: {
+    color: MUTED,
+    fontSize: 5.4,
+    fontWeight: 700,
+    letterSpacing: 0.35,
+    textTransform: 'uppercase',
+  },
+  prePlanningMetricValue: {
+    marginTop: 6,
+    color: NAVY,
+    fontSize: 12,
+    fontWeight: 700,
+    textAlign: 'right',
+  },
+  prePlanningMetricDetail: {
+    marginTop: 3,
+    color: MUTED,
+    fontSize: 5.2,
+    lineHeight: 1.25,
+  },
+  prePlanningRule: {
+    marginBottom: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#BAE6E0',
+    borderRadius: 4,
+    backgroundColor: '#F0FDFA',
+    color: '#135E56',
+    fontSize: 5.8,
+    lineHeight: 1.35,
+  },
+  prePlanningLocationHeader: {
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 7,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: SOFT,
+  },
+  prePlanningLocationType: {
+    color: MUTED,
+    fontSize: 5.2,
+    fontWeight: 700,
+    letterSpacing: 0.35,
+    textTransform: 'uppercase',
+  },
+  prePlanningLocationName: {
+    marginTop: 2,
+    color: NAVY,
+    fontSize: 7.2,
+    fontWeight: 700,
+  },
+  prePlanningStatusReady: {
+    color: '#24724D',
+    fontSize: 5.4,
+    fontWeight: 700,
+  },
+  prePlanningStatusMissing: {
+    color: '#996E16',
+    fontSize: 5.4,
+    fontWeight: 700,
+  },
+  prePlanningFlowTitle: {
+    marginTop: 14,
+    marginBottom: 5,
+    color: NAVY,
+    fontSize: 10,
+    fontWeight: 700,
+  },
+  prePlanningFlowSubtitle: {
+    marginBottom: 8,
+    color: MUTED,
+    fontSize: 5.8,
+    lineHeight: 1.35,
+  },
 })
 
 function safe(value, fallback = '—') {
@@ -1296,6 +1390,142 @@ export default function ProjectSetupReportDocument({
       status: allocationStatus(scope, allocated),
     }
   })
+
+  const prePlanningCalculations = allocations
+    .filter((allocation) => Number(allocation.quantity || 0) > 0)
+    .map((allocation) => {
+      const location = locationMap.get(allocation.location_id)
+      const scopeItem = scopeItemMap.get(allocation.service_id)
+
+      if (!location || !scopeItem) {
+        return null
+      }
+
+      const workPackage = workPackageMap.get(
+        scopeItem.project_work_package_id
+      )
+      const parameter = productionMap.get(scopeItem.id)
+      const quantity = Number(allocation.quantity || 0)
+      const productivity = Number(parameter?.productivity_rate)
+      const workforce = Number(parameter?.effective_workforce)
+
+      const hasProductivity =
+        Number.isFinite(productivity) && productivity > 0
+      const hasWorkforce =
+        Number.isFinite(workforce) && workforce > 0
+
+      const productionCapacity =
+        hasProductivity && hasWorkforce
+          ? productivity * workforce
+          : null
+
+      const rawDuration =
+        productionCapacity && quantity > 0
+          ? quantity / productionCapacity
+          : null
+
+      return {
+        id: allocation.id,
+        locationId: location.id,
+        location,
+        locationPath: buildLocationPath(location, locationMap),
+        workPackageCode: workPackage?.code || '—',
+        scopeItemName: scopeItem.service_name || 'Scope Item',
+        unit:
+          scopeItem.unit ||
+          parameter?.quantity_unit ||
+          'unit',
+        quantity,
+        productivity: hasProductivity ? productivity : null,
+        workforce: hasWorkforce ? workforce : null,
+        productionCapacity,
+        rawDuration,
+        complete: Boolean(productionCapacity),
+      }
+    })
+    .filter(Boolean)
+
+  const prePlanningLocationGroups = orderedLocations
+    .map((location) => ({
+      location,
+      rows: prePlanningCalculations
+        .filter((row) => row.locationId === location.id)
+        .sort((first, second) => {
+          const packageDifference =
+            first.workPackageCode.localeCompare(
+              second.workPackageCode
+            )
+
+          if (packageDifference !== 0) {
+            return packageDifference
+          }
+
+          return first.scopeItemName.localeCompare(
+            second.scopeItemName
+          )
+        }),
+    }))
+    .filter((group) => group.rows.length > 0)
+
+  const prePlanningCalculatedCount =
+    prePlanningCalculations.filter((row) => row.complete).length
+
+  const prePlanningMissingCount =
+    prePlanningCalculations.length -
+    prePlanningCalculatedCount
+
+  const prePlanningRawDurations =
+    prePlanningCalculations
+      .map((row) => row.rawDuration)
+      .filter((value) => Number.isFinite(value))
+
+  const prePlanningAverageRawDuration =
+    prePlanningRawDurations.length > 0
+      ? prePlanningRawDurations.reduce(
+          (total, value) => total + value,
+          0
+        ) / prePlanningRawDurations.length
+      : null
+
+  const prePlanningWorkPackageCodes =
+    activeWorkPackages
+      .map((workPackage) => workPackage.code)
+      .filter(Boolean)
+
+  const prePlanningFlowRows =
+    prePlanningLocationGroups.map((group) => {
+      const durations = {}
+
+      prePlanningWorkPackageCodes.forEach((workPackageCode) => {
+        const packageDurations = group.rows
+          .filter(
+            (row) =>
+              row.workPackageCode === workPackageCode
+          )
+          .map((row) => row.rawDuration)
+          .filter((value) => Number.isFinite(value))
+
+        durations[workPackageCode] =
+          packageDurations.length > 0
+            ? Math.max(...packageDurations)
+            : null
+      })
+
+      return {
+        locationId: group.location.id,
+        locationPath: buildLocationPath(
+          group.location,
+          locationMap
+        ),
+        durations,
+      }
+    })
+
+  const prePlanningFlowChunks =
+    splitIntoChunks(
+      prePlanningWorkPackageCodes,
+      7
+    )
 
   return (
     <Document
@@ -2411,6 +2641,363 @@ export default function ProjectSetupReportDocument({
             handled in later planning stages.
           </Text>
         </StandardPage>
+      )}
+
+      {sections.prePlanning && (
+        <>
+          <StandardPage
+            logo={logoDataUri}
+            reportTitle={reportTitle}
+            project={project}
+            landscape
+          >
+            <SectionHeading
+              number="8"
+              title="Pre-Planning"
+              subtitle="Raw activity duration by production location using allocated quantity and project-wide Production Parameters. Takt standardization is intentionally not applied at this stage."
+            />
+
+            <View style={styles.prePlanningMetricRow}>
+              {[
+                [
+                  'Production Locations',
+                  prePlanningLocationGroups.length,
+                  'Locations with allocated quantity',
+                ],
+                [
+                  'Activity Calculations',
+                  prePlanningCalculations.length,
+                  `${prePlanningCalculatedCount} calculated`,
+                ],
+                [
+                  'Missing Parameters',
+                  prePlanningMissingCount,
+                  'Rows without usable capacity',
+                ],
+                [
+                  'Average Raw Duration',
+                  prePlanningAverageRawDuration === null
+                    ? '—'
+                    : `${number(
+                        prePlanningAverageRawDuration,
+                        2
+                      )} d`,
+                  'Informational; no Takt rounding',
+                ],
+              ].map(([label, value, detail]) => (
+                <View
+                  key={label}
+                  style={styles.prePlanningMetricCard}
+                >
+                  <View style={styles.prePlanningMetricInner}>
+                    <Text style={styles.prePlanningMetricLabel}>
+                      {label}
+                    </Text>
+                    <Text style={styles.prePlanningMetricValue}>
+                      {value}
+                    </Text>
+                    <Text style={styles.prePlanningMetricDetail}>
+                      {detail}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <Text style={styles.prePlanningRule}>
+              Calculation rule: Production Capacity = Productivity ×
+              Effective Workforce. Raw Duration = Allocated Quantity ÷
+              Production Capacity.
+            </Text>
+
+            {prePlanningLocationGroups.length > 0 ? (
+              prePlanningLocationGroups.map((group) => {
+                const resolvedRows =
+                  group.rows.filter((row) => row.complete).length
+
+                return (
+                  <View key={group.location.id}>
+                    <View
+                      style={styles.prePlanningLocationHeader}
+                      wrap={false}
+                    >
+                      <Text style={styles.prePlanningLocationType}>
+                        {locationType(group.location.location_type)}
+                      </Text>
+                      <Text style={styles.prePlanningLocationName}>
+                        {buildLocationPath(
+                          group.location,
+                          locationMap
+                        )}
+                      </Text>
+                      <Text
+                        style={
+                          resolvedRows === group.rows.length
+                            ? styles.prePlanningStatusReady
+                            : styles.prePlanningStatusMissing
+                        }
+                      >
+                        {resolvedRows}/{group.rows.length} calculated
+                      </Text>
+                    </View>
+
+                    <View style={styles.table}>
+                      <View style={styles.tableHeader} fixed>
+                        {[
+                          ['WP', '7%'],
+                          ['Scope Item', '25%'],
+                          ['Qty', '11%'],
+                          ['Productivity', '11%'],
+                          ['Workforce', '9%'],
+                          ['Capacity', '15%'],
+                          ['Raw Duration', '12%'],
+                          ['Status', '10%'],
+                        ].map(([label, width]) => (
+                          <View
+                            key={label}
+                            style={[styles.cell, { width }]}
+                          >
+                            <Text style={styles.headerCellText}>
+                              {label}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+
+                      {group.rows.map((row, index) => (
+                        <View
+                          key={row.id}
+                          wrap={false}
+                          style={[
+                            styles.tableRow,
+                            index % 2 === 1
+                              ? styles.tableRowAlt
+                              : null,
+                          ]}
+                        >
+                          <View style={[styles.cell, { width: '7%' }]}>
+                            <Text style={styles.cellText}>
+                              {row.workPackageCode}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, { width: '25%' }]}>
+                            <Text style={styles.cellText}>
+                              {row.scopeItemName}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, { width: '11%' }]}>
+                            <Text style={styles.cellText}>
+                              {number(row.quantity)} {row.unit}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, { width: '11%' }]}>
+                            <Text style={styles.cellText}>
+                              {row.productivity === null
+                                ? '—'
+                                : number(row.productivity)}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, { width: '9%' }]}>
+                            <Text style={styles.cellText}>
+                              {row.workforce === null
+                                ? '—'
+                                : number(row.workforce)}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, { width: '15%' }]}>
+                            <Text style={styles.cellText}>
+                              {row.productionCapacity === null
+                                ? '—'
+                                : `${number(
+                                    row.productionCapacity
+                                  )} ${row.unit}/day`}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, { width: '12%' }]}>
+                            <Text style={styles.cellText}>
+                              {row.rawDuration === null
+                                ? '—'
+                                : `${number(
+                                    row.rawDuration,
+                                    2
+                                  )} d`}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, { width: '10%' }]}>
+                            <Text
+                              style={
+                                row.complete
+                                  ? styles.prePlanningStatusReady
+                                  : styles.prePlanningStatusMissing
+                              }
+                            >
+                              {row.complete
+                                ? 'Calculated'
+                                : 'Missing input'}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )
+              })
+            ) : (
+              <View style={styles.noData}>
+                <Text>
+                  No positive location allocations are available for
+                  Pre-Planning.
+                </Text>
+              </View>
+            )}
+          </StandardPage>
+
+          {prePlanningFlowChunks.map(
+            (workPackageChunk, chunkIndex) => (
+              <StandardPage
+                key={`pre-planning-flow-${chunkIndex}`}
+                logo={logoDataUri}
+                reportTitle={reportTitle}
+                project={project}
+                landscape
+              >
+                <SectionHeading
+                  title={
+                    chunkIndex === 0
+                      ? 'Pre-Planning — Production Flow Summary'
+                      : 'Pre-Planning — Production Flow Summary — Continued'
+                  }
+                  subtitle="Work Package duration by location. For each location, Work Package duration equals the maximum Raw Duration among its Scope Items."
+                />
+
+                <View style={styles.table}>
+                  <View style={styles.tableHeader} fixed>
+                    <View
+                      style={[
+                        styles.cell,
+                        {
+                          width: '30%',
+                        },
+                      ]}
+                    >
+                      <Text style={styles.headerCellText}>
+                        Location
+                      </Text>
+                    </View>
+
+                    {workPackageChunk.map(
+                      (workPackageCode) => (
+                        <View
+                          key={workPackageCode}
+                          style={[
+                            styles.cell,
+                            {
+                              width: `${70 / Math.max(
+                                workPackageChunk.length,
+                                1
+                              )}%`,
+                              textAlign: 'center',
+                            },
+                          ]}
+                        >
+                          <Text style={styles.headerCellText}>
+                            {workPackageCode}
+                          </Text>
+                        </View>
+                      )
+                    )}
+                  </View>
+
+                  {prePlanningFlowRows.length > 0 ? (
+                    prePlanningFlowRows.map((row, rowIndex) => (
+                      <View
+                        key={row.locationId}
+                        wrap={false}
+                        style={[
+                          styles.tableRow,
+                          rowIndex % 2 === 1
+                            ? styles.tableRowAlt
+                            : null,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.cell,
+                            {
+                              width: '30%',
+                            },
+                          ]}
+                        >
+                          <Text style={styles.cellText}>
+                            {row.locationPath}
+                          </Text>
+                        </View>
+
+                        {workPackageChunk.map(
+                          (workPackageCode) => {
+                            const duration =
+                              row.durations[workPackageCode]
+
+                            return (
+                              <View
+                                key={workPackageCode}
+                                style={[
+                                  styles.cell,
+                                  {
+                                    width: `${70 / Math.max(
+                                      workPackageChunk.length,
+                                      1
+                                    )}%`,
+                                    textAlign: 'center',
+                                  },
+                                ]}
+                              >
+                                <Text style={styles.cellText}>
+                                  {duration === null
+                                    ? '—'
+                                    : `${number(
+                                        duration,
+                                        2
+                                      )} d`}
+                                </Text>
+                              </View>
+                            )
+                          }
+                        )}
+                      </View>
+                    ))
+                  ) : (
+                    <View style={styles.noData}>
+                      <Text>
+                        No Pre-Planning flow summary is available.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <Text
+                  style={{
+                    marginTop: 8,
+                    color: MUTED,
+                    fontSize: 5.8,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  Aggregation rule: WP Duration per Location =
+                  MAX(Raw Duration of the Scope Items assigned to that
+                  Work Package).
+                </Text>
+              </StandardPage>
+            )
+          )}
+        </>
       )}
     </Document>
   )
