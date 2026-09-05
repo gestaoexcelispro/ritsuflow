@@ -360,6 +360,155 @@ const styles = StyleSheet.create({
     width: '37%',
     textAlign: 'right',
   },
+  locationSummaryRow: {
+    flexDirection: 'row',
+    marginHorizontal: -3,
+    marginBottom: 12,
+  },
+  locationSummaryCard: {
+    width: '25%',
+    paddingHorizontal: 3,
+  },
+  locationSummaryCardInner: {
+    minHeight: 58,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  locationSummaryLabel: {
+    color: MUTED,
+    fontSize: 5.8,
+    fontWeight: 700,
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+  },
+  locationSummaryDescription: {
+    marginTop: 3,
+    color: MUTED,
+    fontSize: 5.4,
+  },
+  locationSummaryValue: {
+    marginTop: 7,
+    color: NAVY,
+    fontSize: 16,
+    fontWeight: 700,
+    textAlign: 'right',
+  },
+  locationProjectCard: {
+    marginBottom: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 11,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  locationProjectIdentity: {
+    width: '66%',
+  },
+  locationEyebrow: {
+    color: MUTED,
+    fontSize: 5.8,
+    fontWeight: 700,
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+  },
+  locationProjectName: {
+    marginTop: 3,
+    color: NAVY,
+    fontSize: 10,
+    fontWeight: 700,
+    lineHeight: 1.2,
+  },
+  locationBadgeRow: {
+    width: '34%',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  locationCountBadge: {
+    marginLeft: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 9,
+    backgroundColor: '#EEF4F7',
+    color: NAVY,
+    fontSize: 5.6,
+    fontWeight: 700,
+  },
+  locationDivisionCard: {
+    marginBottom: 9,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  locationDivisionHeader: {
+    paddingVertical: 8,
+    paddingHorizontal: 9,
+    backgroundColor: SOFT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  locationDivisionIdentity: {
+    width: '62%',
+  },
+  locationDivisionName: {
+    marginTop: 2,
+    color: NAVY,
+    fontSize: 9.5,
+    fontWeight: 700,
+  },
+  locationZoneRow: {
+    flexDirection: 'row',
+    paddingVertical: 7,
+    paddingHorizontal: 7,
+    marginHorizontal: -3,
+  },
+  locationZoneColumn: {
+    paddingHorizontal: 3,
+  },
+  locationZoneCard: {
+    minHeight: 58,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 3,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  locationZoneHeader: {
+    paddingVertical: 6,
+    paddingHorizontal: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9EEF2',
+  },
+  locationZoneName: {
+    marginTop: 2,
+    color: NAVY,
+    fontSize: 8,
+    fontWeight: 700,
+  },
+  locationZoneBody: {
+    paddingVertical: 7,
+    paddingHorizontal: 7,
+  },
+  locationChildText: {
+    color: TEXT,
+    fontSize: 5.8,
+    lineHeight: 1.35,
+  },
+  locationEmptyText: {
+    color: MUTED,
+    fontSize: 5.6,
+    textAlign: 'center',
+  },
 })
 
 function safe(value, fallback = '—') {
@@ -1073,82 +1222,268 @@ export default function ProjectSetupReportDocument({
         </StandardPage>
       )}
 
-      {sections.locationStructure && (
-        <StandardPage
-          logo={logoDataUri}
-          reportTitle={reportTitle}
-          project={project}
-        >
-          <SectionHeading
-            number="3"
-            title="Location Structure"
-            subtitle="Physical production hierarchy used by planning and quantity allocation."
-          />
+      {sections.locationStructure && (() => {
+        const childrenByParent = new Map()
 
-          <View style={styles.table}>
-            <View style={styles.tableHeader} fixed>
-              <View style={[styles.cell, { width: '64%' }]}>
-                <Text style={styles.headerCellText}>Location</Text>
-              </View>
+        locations.forEach((location) => {
+          const parentKey = location.parent_id || '__root__'
 
-              <View style={[styles.cell, { width: '18%' }]}>
-                <Text style={styles.headerCellText}>Type</Text>
-              </View>
+          if (!childrenByParent.has(parentKey)) {
+            childrenByParent.set(parentKey, [])
+          }
 
-              <View style={[styles.cell, { width: '18%' }]}>
-                <Text style={styles.headerCellText}>Sequence</Text>
-              </View>
-            </View>
+          childrenByParent.get(parentKey).push(location)
+        })
 
-            {orderedLocations.length > 0 ? (
-              orderedLocations.map((location, index) => {
-                const depth = buildLocationDepth(location, locationMap)
+        childrenByParent.forEach((children) => {
+          children.sort(
+            (a, b) =>
+              Number(a.sequence_number || 0) -
+                Number(b.sequence_number || 0) ||
+              safe(a.name).localeCompare(safe(b.name))
+          )
+        })
 
-                return (
-                  <View
-                    key={location.id}
-                    wrap={false}
-                    style={[
-                      styles.treeRow,
-                      index % 2 === 1 ? styles.tableRowAlt : null,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.treeName,
-                        {
-                          paddingLeft: 6 + Math.min(depth, 6) * 12,
-                        },
-                      ]}
-                    >
-                      <Text style={styles.cellText}>
-                        {depth > 0 ? '› ' : ''}
-                        {safe(location.name)}
-                      </Text>
+        const buildingLocations = locations.filter(
+          (location) => location.location_type === 'building'
+        )
+
+        const divisionLocations = locations.filter((location) =>
+          ['floor', 'division'].includes(location.location_type)
+        )
+
+        const zoneLocations = locations.filter((location) =>
+          ['zone', 'area'].includes(location.location_type)
+        )
+
+        const explicitProductionLocations = locations.filter(
+          (location) =>
+            ![
+              'project',
+              'building',
+              'floor',
+              'division',
+              'zone',
+              'area',
+            ].includes(location.location_type)
+        )
+
+        const getDescendants = (locationId) => {
+          const descendants = []
+          const stack = [...(childrenByParent.get(locationId) || [])]
+
+          while (stack.length > 0) {
+            const current = stack.shift()
+            descendants.push(current)
+            stack.push(...(childrenByParent.get(current.id) || []))
+          }
+
+          return descendants
+        }
+
+        const getZonesForDivision = (division) =>
+          getDescendants(division.id).filter((location) =>
+            ['zone', 'area'].includes(location.location_type)
+          )
+
+        const getProductionLocationsForNode = (node) =>
+          getDescendants(node.id).filter(
+            (location) =>
+              ![
+                'project',
+                'building',
+                'floor',
+                'division',
+                'zone',
+                'area',
+              ].includes(location.location_type)
+          )
+
+        return (
+          <StandardPage
+            logo={logoDataUri}
+            reportTitle={reportTitle}
+            project={project}
+          >
+            <SectionHeading
+              number="3"
+              title="Location Structure"
+              subtitle="Physical production hierarchy used by planning and quantity allocation."
+            />
+
+            {locations.length > 0 ? (
+              <>
+                <View style={styles.locationSummaryRow}>
+                  {[
+                    ['Buildings', 'Physical structures', buildingLocations.length],
+                    [
+                      'Divisions / Floors',
+                      'Production divisions',
+                      divisionLocations.length,
+                    ],
+                    ['Zones / Areas', 'Production subdivisions', zoneLocations.length],
+                    [
+                      'Production Locations',
+                      'Assignable locations',
+                      explicitProductionLocations.length,
+                    ],
+                  ].map(([label, description, value]) => (
+                    <View key={label} style={styles.locationSummaryCard}>
+                      <View style={styles.locationSummaryCardInner}>
+                        <Text style={styles.locationSummaryLabel}>{label}</Text>
+                        <Text style={styles.locationSummaryDescription}>
+                          {description}
+                        </Text>
+                        <Text style={styles.locationSummaryValue}>{value}</Text>
+                      </View>
                     </View>
+                  ))}
+                </View>
 
-                    <View style={styles.treeType}>
-                      <Text style={styles.cellText}>
-                        {locationType(location.location_type)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.treeCode}>
-                      <Text style={styles.cellText}>
-                        {number(location.sequence_number, 0)}
-                      </Text>
-                    </View>
+                <View style={styles.locationProjectCard} wrap={false}>
+                  <View style={styles.locationProjectIdentity}>
+                    <Text style={styles.locationEyebrow}>Project</Text>
+                    <Text style={styles.locationProjectName}>
+                      {safe(project?.name, 'Project')}
+                    </Text>
                   </View>
-                )
-              })
+
+                  <View style={styles.locationBadgeRow}>
+                    <Text style={styles.locationCountBadge}>
+                      {divisionLocations.length} Divisions
+                    </Text>
+                    <Text style={styles.locationCountBadge}>
+                      {zoneLocations.length} Zones
+                    </Text>
+                    <Text style={styles.locationCountBadge}>
+                      {explicitProductionLocations.length} Locations
+                    </Text>
+                  </View>
+                </View>
+
+                {divisionLocations.length > 0 ? (
+                  divisionLocations.map((division) => {
+                    const zones = getZonesForDivision(division)
+                    const divisionProductionLocations =
+                      getProductionLocationsForNode(division)
+
+                    return (
+                      <View
+                        key={division.id}
+                        style={styles.locationDivisionCard}
+                        wrap={false}
+                      >
+                        <View style={styles.locationDivisionHeader}>
+                          <View style={styles.locationDivisionIdentity}>
+                            <Text style={styles.locationEyebrow}>
+                              Division / Floor
+                            </Text>
+                            <Text style={styles.locationDivisionName}>
+                              {safe(division.name)}
+                            </Text>
+                          </View>
+
+                          <View style={styles.locationBadgeRow}>
+                            <Text style={styles.locationCountBadge}>
+                              {zones.length} Zones
+                            </Text>
+                            <Text style={styles.locationCountBadge}>
+                              {divisionProductionLocations.length} Locations
+                            </Text>
+                          </View>
+                        </View>
+
+                        {zones.length > 0 ? (
+                          <View style={styles.locationZoneRow}>
+                            {zones.map((zone) => {
+                              const zoneProductionLocations =
+                                getProductionLocationsForNode(zone)
+                              const width =
+                                zones.length === 1
+                                  ? '100%'
+                                  : zones.length === 2
+                                    ? '50%'
+                                    : '33.333%'
+
+                              return (
+                                <View
+                                  key={zone.id}
+                                  style={[
+                                    styles.locationZoneColumn,
+                                    { width },
+                                  ]}
+                                >
+                                  <View style={styles.locationZoneCard}>
+                                    <View style={styles.locationZoneHeader}>
+                                      <Text style={styles.locationEyebrow}>
+                                        Zone / Area
+                                      </Text>
+                                      <Text style={styles.locationZoneName}>
+                                        {safe(zone.name)}
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.locationCountBadge,
+                                          {
+                                            marginLeft: 0,
+                                            marginTop: 4,
+                                            alignSelf: 'flex-start',
+                                          },
+                                        ]}
+                                      >
+                                        {zoneProductionLocations.length} Locations
+                                      </Text>
+                                    </View>
+
+                                    <View style={styles.locationZoneBody}>
+                                      {zoneProductionLocations.length > 0 ? (
+                                        zoneProductionLocations.map(
+                                          (productionLocation) => (
+                                            <Text
+                                              key={productionLocation.id}
+                                              style={styles.locationChildText}
+                                            >
+                                              • {safe(productionLocation.name)}
+                                            </Text>
+                                          )
+                                        )
+                                      ) : (
+                                        <Text style={styles.locationEmptyText}>
+                                          No locations in this zone.
+                                        </Text>
+                                      )}
+                                    </View>
+                                  </View>
+                                </View>
+                              )
+                            })}
+                          </View>
+                        ) : (
+                          <View style={styles.locationZoneBody}>
+                            <Text style={styles.locationEmptyText}>
+                              No zones or areas are configured for this division.
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    )
+                  })
+                ) : (
+                  <View style={styles.noData}>
+                    <Text>
+                      No divisions or floors are configured for this project.
+                    </Text>
+                  </View>
+                )}
+              </>
             ) : (
               <View style={styles.noData}>
                 <Text>No project locations are configured.</Text>
               </View>
             )}
-          </View>
-        </StandardPage>
-      )}
+          </StandardPage>
+        )
+      })()}
 
       {sections.quantityReconciliation && (
         <StandardPage
