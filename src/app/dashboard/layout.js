@@ -14,6 +14,7 @@ import {
 } from 'next/navigation'
 
 import LogoutButton from '../../components/LogoutButton'
+import ProjectSetupReportButton from './projects/setup/report/ProjectSetupReportButton'
 
 import {
   createClient,
@@ -2114,6 +2115,9 @@ export default function DashboardLayout({
                 />
 
 
+                <ProjectSetupReportButton />
+
+
                 <Link
                   href="/dashboard/projects/setup"
                   onClick={() => {
@@ -2276,7 +2280,6 @@ export default function DashboardLayout({
 
   )
 }
-
 
 
 
