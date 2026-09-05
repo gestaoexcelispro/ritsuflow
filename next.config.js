@@ -1,7 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+
+  experimental: {
+
+    outputFileTracingIncludes: {
+
+      '/api/projects/*/setup-report': [
+        './node_modules/pdfkit/**/*',
+      ],
+
+    },
+
+  },
+
+
   async redirects() {
+
     return [
+
       {
         source:
           '/dashboard/projetos/lista',
@@ -9,8 +25,11 @@ const nextConfig = {
         destination:
           '/dashboard/projects',
 
-        permanent: false,
+        permanent:
+          false,
       },
+
+
       {
         source:
           '/dashboard/projetos/coleta',
@@ -18,10 +37,16 @@ const nextConfig = {
         destination:
           '/dashboard/projects/setup?mode=new',
 
-        permanent: false,
+        permanent:
+          false,
       },
+
     ]
+
   },
+
 }
 
-module.exports = nextConfig
+
+module.exports =
+  nextConfig
