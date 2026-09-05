@@ -6,7 +6,7 @@ import { renderToBuffer } from '@react-pdf/renderer'
 
 import { createClient } from '../../../../../lib/supabase/server'
 
-import ProjectSetupReportDocument from '../../../../../dashboard/projects/setup/report/ProjectSetupReportDocument'
+import ProjectSetupReportDocument from '../../../../dashboard/projects/setup/report/ProjectSetupReportDocument'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
