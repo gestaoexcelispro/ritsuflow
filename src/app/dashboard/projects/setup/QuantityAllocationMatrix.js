@@ -245,6 +245,12 @@ export default function QuantityAllocationMatrix({
   ] =
     useState('')
 
+  const [
+    showQuantification,
+    setShowQuantification,
+  ] =
+    useState(true)
+
 
   // ==========================================================
   // LOCATION MAP
@@ -585,6 +591,127 @@ export default function QuantityAllocationMatrix({
         locationPathMap,
         locations,
         searchTerm,
+        sortedLocations,
+      ]
+    )
+
+
+  // ==========================================================
+  // QUANTIFICATION BY DIVISION / ZONE
+  // ==========================================================
+
+  const quantificationByDivision =
+    useMemo(
+      () =>
+        floorLocations
+          .map((floor) => {
+            const zones =
+              sortedLocations
+                .filter(
+                  (location) =>
+                    location.location_type ===
+                    'zone'
+                )
+                .filter((zone) => {
+                  const path =
+                    locationPathMap.get(
+                      zone.id
+                    ) || []
+
+                  return path.some(
+                    (pathLocation) =>
+                      pathLocation.id ===
+                      floor.id
+                  )
+                })
+
+            const totals =
+              new Map()
+
+            activeScopeItems.forEach(
+              (scopeItem) => {
+                zones.forEach(
+                  (zone) => {
+                    totals.set(
+                      `${scopeItem.id}___${zone.id}`,
+                      0
+                    )
+                  }
+                )
+              }
+            )
+
+            allocations.forEach(
+              (allocation) => {
+                const location =
+                  locationMap.get(
+                    allocation.location_id
+                  )
+
+                if (!location) return
+
+                const path =
+                  locationPathMap.get(
+                    location.id
+                  ) || []
+
+                const floorInPath =
+                  path.find(
+                    (pathLocation) =>
+                      pathLocation.location_type ===
+                      'floor'
+                  )
+
+                const zoneInPath =
+                  path.find(
+                    (pathLocation) =>
+                      pathLocation.location_type ===
+                      'zone'
+                  )
+
+                if (
+                  floorInPath?.id !==
+                    floor.id ||
+                  !zoneInPath ||
+                  !zones.some(
+                    (zone) =>
+                      zone.id ===
+                      zoneInPath.id
+                  )
+                ) {
+                  return
+                }
+
+                const key =
+                  `${allocation.service_id}___${zoneInPath.id}`
+
+                totals.set(
+                  key,
+                  (totals.get(key) || 0) +
+                    Number(
+                      allocation.quantity ||
+                        0
+                    )
+                )
+              }
+            )
+
+            return {
+              floor,
+              zones,
+              totals,
+            }
+          })
+          .filter(
+            (division) =>
+              division.zones.length > 0
+          ),
+      [
+        activeScopeItems,
+        allocations,
+        floorLocations,
+        locationMap,
+        locationPathMap,
         sortedLocations,
       ]
     )
@@ -1887,6 +2014,270 @@ export default function QuantityAllocationMatrix({
           </div>
         </>
       )}
+
+
+      {/* ======================================================
+          QUANTIFICATION BY LOCATION
+          ====================================================== */}
+
+      <div
+        style={{
+          marginTop: '28px',
+          borderTop: '1px solid #e4ebf1',
+          paddingTop: '20px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '16px',
+            marginBottom: showQuantification ? '18px' : 0,
+          }}
+        >
+          <div>
+            <p
+              className={styles.formDescription}
+              style={{
+                margin: '0 0 6px',
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Quantity consolidation
+            </p>
+
+            <h3
+              className={styles.formTitle}
+              style={{ margin: 0 }}
+            >
+              Quantification by Location
+            </h3>
+          </div>
+
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={() =>
+              setShowQuantification(
+                (currentValue) =>
+                  !currentValue
+              )
+            }
+          >
+            {showQuantification
+              ? 'Hide ▲'
+              : 'Show ▼'}
+          </button>
+        </div>
+
+        {showQuantification && (
+          <div
+            style={{
+              border: '1px solid #cbd5e0',
+              borderRadius: '8px',
+              overflowX: 'auto',
+              background: '#ffffff',
+            }}
+          >
+            {quantificationByDivision.length ===
+            0 ? (
+              <div
+                className={styles.workspaceEmpty}
+              >
+                <h3>
+                  No division totals available.
+                </h3>
+                <p>
+                  Create Division / Floor and Zone locations and enter Scope Item quantities to generate this table.
+                </p>
+              </div>
+            ) : (
+              quantificationByDivision.map(
+                ({ floor, zones, totals }) => (
+                  <div
+                    key={floor.id}
+                    style={{
+                      marginBottom: '24px',
+                    }}
+                  >
+                    <table
+                      style={{
+                        width: '100%',
+                        minWidth: `${Math.max(
+                          680,
+                          360 +
+                            zones.length *
+                              180
+                        )}px`,
+                        borderCollapse: 'collapse',
+                        fontSize: '0.86rem',
+                      }}
+                    >
+                      <thead>
+                        <tr
+                          style={{
+                            backgroundColor: '#2a4365',
+                            color: '#ffffff',
+                          }}
+                        >
+                          <th
+                            style={{
+                              width: '34%',
+                              padding: '12px 14px',
+                              border: '1px solid #1a365d',
+                              textAlign: 'left',
+                              fontWeight: 800,
+                            }}
+                          >
+                            {floor.name}
+                          </th>
+
+                          <th
+                            colSpan={zones.length}
+                            style={{
+                              padding: '12px 14px',
+                              border: '1px solid #1a365d',
+                              textAlign: 'center',
+                              fontWeight: 800,
+                              letterSpacing: '0.06em',
+                            }}
+                          >
+                            ZONES
+                          </th>
+                        </tr>
+
+                        <tr
+                          style={{
+                            backgroundColor: '#e2e8f0',
+                            color: '#1a365d',
+                          }}
+                        >
+                          <th
+                            style={{
+                              padding: '10px 14px',
+                              border: '1px solid #cbd5e0',
+                              textAlign: 'left',
+                              fontStyle: 'italic',
+                              fontWeight: 800,
+                            }}
+                          >
+                            Scope Item
+                          </th>
+
+                          {zones.map((zone) => (
+                            <th
+                              key={zone.id}
+                              style={{
+                                padding: '10px 14px',
+                                border: '1px solid #cbd5e0',
+                                textAlign: 'center',
+                                fontWeight: 800,
+                                backgroundColor:
+                                  getZoneColor(
+                                    zone.name
+                                  ),
+                              }}
+                            >
+                              {zone.name}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {activeScopeItems.map(
+                          (scopeItem) => (
+                            <tr
+                              key={scopeItem.id}
+                            >
+                              <td
+                                style={{
+                                  padding: '11px 14px',
+                                  border: '1px solid #cbd5e0',
+                                  fontWeight: 800,
+                                  color: '#2d3748',
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  <span>
+                                    {String(
+                                      scopeItem.service_name ||
+                                        ''
+                                    ).toUpperCase()}
+                                  </span>
+
+                                  {scopeItem.unit && (
+                                    <span
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        color: '#718096',
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {scopeItem.unit}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {zones.map((zone) => {
+                                const total =
+                                  totals.get(
+                                    `${scopeItem.id}___${zone.id}`
+                                  ) || 0
+
+                                return (
+                                  <td
+                                    key={zone.id}
+                                    style={{
+                                      padding: '11px 14px',
+                                      border: '1px solid #cbd5e0',
+                                      textAlign: 'center',
+                                      fontWeight:
+                                        total > 0
+                                          ? 700
+                                          : 500,
+                                      color:
+                                        total > 0
+                                          ? '#1a202c'
+                                          : '#a0aec0',
+                                      backgroundColor:
+                                        total > 0
+                                          ? getZoneColor(
+                                              zone.name
+                                            )
+                                          : undefined,
+                                    }}
+                                  >
+                                    {formatQuantity(
+                                      total
+                                    )}
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              )
+            )}
+          </div>
+        )}
+      </div>
 
 
       {/* ======================================================
