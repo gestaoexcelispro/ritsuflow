@@ -924,11 +924,18 @@ export default async function ProjectSetupPage({
 
       supabase
         .from(
-          'project_service_productivity'
+          'project_service_production_parameters'
         )
         .select(`
           id,
-          service_id
+          project_id,
+          service_id,
+          productivity_rate,
+          quantity_unit,
+          productivity_basis,
+          effective_workforce,
+          created_at,
+          updated_at
         `)
         .eq(
           'project_id',
@@ -1570,20 +1577,20 @@ export default async function ProjectSetupPage({
           projectId={
             selectedProject.id
           }
-          organizationId={
-            organization.id
+          projectCode={
+            selectedProject.code
           }
           userId={
             user.id
           }
-          locations={
-            locations
+          workPackages={
+            activeWorkPackages
           }
           scopeItems={
             activeScopeItems
           }
-          allocations={
-            allocations
+          initialParameters={
+            productivityRecords
           }
         />
       )}
