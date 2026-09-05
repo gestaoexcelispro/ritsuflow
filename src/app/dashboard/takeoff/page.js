@@ -1,7 +1,10 @@
 'use client'
 
 import {
+  useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 
@@ -9,30 +12,52 @@ import styles from './takeoff.module.css'
 
 
 // ============================================================
-// RitsuFlow™
+// RITSUFLOW™
 // TAKEOFF MODULE
 //
-// CAD-style takeoff workspace.
+// CAD-style PDF takeoff workspace.
 //
-// Architecture principle:
+// Current foundation:
 //
-// Drawing geometry is handled independently from construction
-// meaning.
+// PDF layer
+// + viewport/camera
+// + navigation
+// + drawing coordinates
 //
-// Geometry may later be mapped to:
+// Future layers:
 //
-// Project
-// → Location
-// → Work Package
-// → Scope Item
-// → Quantity
-// → Productivity
-// → Planning
-// → Production Control
+// PDF drawing
+// ↓
+// Takeoff geometry overlay
+// ↓
+// Snapping / selection / grips
+// ↓
+// Construction meaning
+// ↓
+// Quantity / productivity / planning / control
 //
-// This module is intentionally focused on construction takeoff,
-// not general-purpose CAD authoring.
+// IMPORTANT:
+//
+// Takeoff geometry must remain independent from the PDF canvas.
+// Never burn takeoff entities directly into the rendered PDF.
 // ============================================================
+
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+const MIN_ZOOM =
+  0.1
+
+const MAX_ZOOM =
+  12
+
+const ZOOM_FACTOR =
+  1.15
+
+const VIEWPORT_MARGIN =
+  44
 
 
 // ============================================================
@@ -83,7 +108,7 @@ function ToolIcon({
           <path d="M8 11V6a1.5 1.5 0 0 1 3 0v4" />
           <path d="M11 10V4.5a1.5 1.5 0 0 1 3 0V10" />
           <path d="M14 10V6a1.5 1.5 0 0 1 3 0v5" />
-          <path d="M17 11V8a1.5 1.5 0 0 1 3 0v6c0 4-2.8 7-7 7h-1c-2.5 0-4.5-1-6-3l-3-4a1.6 1.6 0 0 1 2.5-2l2.5 2z" />
+          <path d="M17 11V8a1.5 1.5 0 0 1 3 0v6c0 4-2.8 7-7 7h-1c-2.5 0-4.5-1-6-3l-3-4a1.6 1.6 0 0 1 2.5-2l2.5 2.5" />
         </svg>
       )
 
@@ -106,6 +131,20 @@ function ToolIcon({
           <path d="M16 3h5v5" />
           <path d="M8 21H3v-5" />
           <path d="M16 21h5v-5" />
+        </svg>
+      )
+
+
+    case 'fitWidth':
+      return (
+        <svg {...commonProps}>
+          <path d="M3 6v12" />
+          <path d="M21 6v12" />
+          <path d="M7 12h10" />
+          <path d="M7 12l3-3" />
+          <path d="M7 12l3 3" />
+          <path d="M17 12l-3-3" />
+          <path d="M17 12l-3 3" />
         </svg>
       )
 
@@ -227,6 +266,22 @@ function ToolIcon({
       )
 
 
+    case 'previous':
+      return (
+        <svg {...commonProps}>
+          <path d="M15 6l-6 6 6 6" />
+        </svg>
+      )
+
+
+    case 'next':
+      return (
+        <svg {...commonProps}>
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      )
+
+
     default:
       return (
         <svg {...commonProps}>
@@ -277,6 +332,13 @@ const toolGroups = [
         label: 'Fit Page',
         icon: 'fit',
         shortcut: 'F',
+      },
+
+      {
+        id: 'fitWidth',
+        label: 'Fit Width',
+        icon: 'fitWidth',
+        shortcut: 'W',
       },
 
     ],
@@ -338,10 +400,186 @@ const toolGroups = [
 
 
 // ============================================================
+// UTILITY
+// ============================================================
+
+function clamp(
+  value,
+  minimum,
+  maximum
+) {
+
+  return Math.min(
+    maximum,
+    Math.max(
+      minimum,
+      value
+    )
+  )
+
+}
+
+
+// ============================================================
 // TAKEOFF PAGE
 // ============================================================
 
 export default function TakeoffPage() {
+
+  // ==========================================================
+  // REFERENCES
+  // ==========================================================
+
+  const fileInputRef =
+    useRef(null)
+
+  const viewportRef =
+    useRef(null)
+
+  const canvasRef =
+    useRef(null)
+
+  const renderTaskRef =
+    useRef(null)
+
+  const pdfDocumentRef =
+    useRef(null)
+
+  const pdfPageRef =
+    useRef(null)
+
+  const panSessionRef =
+    useRef(null)
+
+
+  // ==========================================================
+  // PDF
+  // ==========================================================
+
+  const [
+    pdfFileName,
+    setPdfFileName,
+  ] =
+    useState(null)
+
+
+  const [
+    pdfDocument,
+    setPdfDocument,
+  ] =
+    useState(null)
+
+
+  const [
+    pageNumber,
+    setPageNumber,
+  ] =
+    useState(1)
+
+
+  const [
+    pageCount,
+    setPageCount,
+  ] =
+    useState(0)
+
+
+  const [
+    pageBaseSize,
+    setPageBaseSize,
+  ] =
+    useState(null)
+
+
+  const [
+    loadingPdf,
+    setLoadingPdf,
+  ] =
+    useState(false)
+
+
+  const [
+    pdfError,
+    setPdfError,
+  ] =
+    useState(null)
+
+
+  // ==========================================================
+  // VIEWPORT
+  // ==========================================================
+
+  const [
+    viewportSize,
+    setViewportSize,
+  ] =
+    useState({
+      width: 0,
+      height: 0,
+    })
+
+
+  const [
+    fitMode,
+    setFitMode,
+  ] =
+    useState('page')
+
+
+  const [
+    baseScale,
+    setBaseScale,
+  ] =
+    useState(1)
+
+
+  const [
+    zoom,
+    setZoom,
+  ] =
+    useState(1)
+
+
+  const [
+    pan,
+    setPan,
+  ] =
+    useState({
+      x: 0,
+      y: 0,
+    })
+
+
+  const [
+    renderedSize,
+    setRenderedSize,
+  ] =
+    useState({
+      width: 0,
+      height: 0,
+    })
+
+
+  const [
+    cursorPosition,
+    setCursorPosition,
+  ] =
+    useState({
+      x: null,
+      y: null,
+    })
+
+
+  const [
+    isPanning,
+    setIsPanning,
+  ] =
+    useState(false)
+
+
+  // ==========================================================
+  // CAD STATE
+  // ==========================================================
 
   const [
     activeTool,
@@ -356,6 +594,10 @@ export default function TakeoffPage() {
   ] =
     useState(true)
 
+
+  // ==========================================================
+  // CURRENT TOOL
+  // ==========================================================
 
   const currentTool =
     useMemo(
@@ -380,6 +622,1370 @@ export default function TakeoffPage() {
     )
 
 
+  // ==========================================================
+  // EFFECTIVE SCALE
+  // ==========================================================
+
+  const effectiveScale =
+    baseScale *
+    zoom
+
+
+  // ==========================================================
+  // PDF.JS
+  // ==========================================================
+
+  async function getPdfJs() {
+
+    const pdfjs =
+      await import(
+        'pdfjs-dist'
+      )
+
+
+    if (
+      !pdfjs
+        .GlobalWorkerOptions
+        .workerSrc
+    ) {
+
+      pdfjs
+        .GlobalWorkerOptions
+        .workerSrc =
+        new URL(
+          'pdfjs-dist/build/pdf.worker.min.mjs',
+          import.meta.url
+        ).toString()
+
+    }
+
+
+    return pdfjs
+
+  }
+
+
+  // ==========================================================
+  // IMPORT
+  // ==========================================================
+
+  function openFilePicker() {
+
+    fileInputRef
+      .current
+      ?.click()
+
+  }
+
+
+  async function handleFileChange(
+    event
+  ) {
+
+    const file =
+      event
+        .target
+        .files
+        ?.[0]
+
+
+    event.target.value =
+      ''
+
+
+    if (!file) {
+      return
+    }
+
+
+    if (
+      file.type !==
+        'application/pdf' &&
+      !file.name
+        .toLowerCase()
+        .endsWith(
+          '.pdf'
+        )
+    ) {
+
+      setPdfError(
+        'Please select a PDF drawing.'
+      )
+
+      return
+
+    }
+
+
+    setLoadingPdf(
+      true
+    )
+
+    setPdfError(
+      null
+    )
+
+
+    try {
+
+      if (
+        pdfDocumentRef
+          .current
+      ) {
+
+        try {
+
+          await pdfDocumentRef
+            .current
+            .destroy()
+
+        } catch {
+
+          // Ignore cleanup errors.
+
+        }
+
+      }
+
+
+      const pdfjs =
+        await getPdfJs()
+
+
+      const bytes =
+        new Uint8Array(
+          await file.arrayBuffer()
+        )
+
+
+      const loadingTask =
+        pdfjs.getDocument({
+          data: bytes,
+        })
+
+
+      const document =
+        await loadingTask.promise
+
+
+      pdfDocumentRef.current =
+        document
+
+
+      setPdfDocument(
+        document
+      )
+
+      setPdfFileName(
+        file.name
+      )
+
+      setPageCount(
+        document.numPages
+      )
+
+      setPageNumber(
+        1
+      )
+
+      setFitMode(
+        'page'
+      )
+
+      setZoom(
+        1
+      )
+
+      setPan({
+        x: 0,
+        y: 0,
+      })
+
+      setCursorPosition({
+        x: null,
+        y: null,
+      })
+
+    } catch (error) {
+
+      console.error(
+        'PDF import failed.',
+        error
+      )
+
+
+      setPdfDocument(
+        null
+      )
+
+      setPdfFileName(
+        null
+      )
+
+      setPageCount(
+        0
+      )
+
+      setPageBaseSize(
+        null
+      )
+
+
+      setPdfError(
+        'The PDF could not be opened.'
+      )
+
+    } finally {
+
+      setLoadingPdf(
+        false
+      )
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // VIEWPORT SIZE
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      const element =
+        viewportRef.current
+
+
+      if (!element) {
+        return
+      }
+
+
+      function updateSize() {
+
+        const rect =
+          element
+            .getBoundingClientRect()
+
+
+        setViewportSize({
+          width:
+            rect.width,
+
+          height:
+            rect.height,
+        })
+
+      }
+
+
+      updateSize()
+
+
+      const observer =
+        new ResizeObserver(
+          updateSize
+        )
+
+
+      observer.observe(
+        element
+      )
+
+
+      return () => {
+
+        observer.disconnect()
+
+      }
+
+    },
+    []
+  )
+
+
+  // ==========================================================
+  // LOAD PAGE METADATA
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      let cancelled =
+        false
+
+
+      async function loadPage() {
+
+        if (
+          !pdfDocument ||
+          !pageNumber
+        ) {
+          return
+        }
+
+
+        try {
+
+          const page =
+            await pdfDocument
+              .getPage(
+                pageNumber
+              )
+
+
+          if (cancelled) {
+            return
+          }
+
+
+          pdfPageRef.current =
+            page
+
+
+          const viewport =
+            page.getViewport({
+              scale: 1,
+            })
+
+
+          setPageBaseSize({
+            width:
+              viewport.width,
+
+            height:
+              viewport.height,
+          })
+
+
+          setZoom(
+            1
+          )
+
+          setPan({
+            x: 0,
+            y: 0,
+          })
+
+        } catch (error) {
+
+          console.error(
+            'PDF page could not be loaded.',
+            error
+          )
+
+
+          if (
+            !cancelled
+          ) {
+
+            setPdfError(
+              'The selected PDF page could not be rendered.'
+            )
+
+          }
+
+        }
+
+      }
+
+
+      loadPage()
+
+
+      return () => {
+
+        cancelled =
+          true
+
+      }
+
+    },
+    [
+      pdfDocument,
+      pageNumber,
+    ]
+  )
+
+
+  // ==========================================================
+  // FIT SCALE
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      if (
+        !pageBaseSize ||
+        !viewportSize.width ||
+        !viewportSize.height
+      ) {
+        return
+      }
+
+
+      const availableWidth =
+        Math.max(
+          1,
+          viewportSize.width -
+          VIEWPORT_MARGIN * 2
+        )
+
+
+      const availableHeight =
+        Math.max(
+          1,
+          viewportSize.height -
+          VIEWPORT_MARGIN * 2
+        )
+
+
+      const widthScale =
+        availableWidth /
+        pageBaseSize.width
+
+
+      const heightScale =
+        availableHeight /
+        pageBaseSize.height
+
+
+      const nextBaseScale =
+        fitMode ===
+          'width'
+          ? widthScale
+          : Math.min(
+              widthScale,
+              heightScale
+            )
+
+
+      setBaseScale(
+        Math.max(
+          0.01,
+          nextBaseScale
+        )
+      )
+
+    },
+    [
+      pageBaseSize,
+      viewportSize,
+      fitMode,
+    ]
+  )
+
+
+  // ==========================================================
+  // RENDER PDF
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      let cancelled =
+        false
+
+
+      async function renderPage() {
+
+        const page =
+          pdfPageRef.current
+
+        const canvas =
+          canvasRef.current
+
+
+        if (
+          !page ||
+          !canvas ||
+          !effectiveScale
+        ) {
+          return
+        }
+
+
+        if (
+          renderTaskRef.current
+        ) {
+
+          try {
+
+            renderTaskRef
+              .current
+              .cancel()
+
+          } catch {
+
+            // Ignore cancellation errors.
+
+          }
+
+        }
+
+
+        const viewport =
+          page.getViewport({
+            scale:
+              effectiveScale,
+          })
+
+
+        const outputScale =
+          Math.min(
+            window.devicePixelRatio ||
+              1,
+            2
+          )
+
+
+        const context =
+          canvas.getContext(
+            '2d',
+            {
+              alpha: false,
+            }
+          )
+
+
+        if (!context) {
+          return
+        }
+
+
+        canvas.width =
+          Math.max(
+            1,
+            Math.floor(
+              viewport.width *
+              outputScale
+            )
+          )
+
+
+        canvas.height =
+          Math.max(
+            1,
+            Math.floor(
+              viewport.height *
+              outputScale
+            )
+          )
+
+
+        canvas.style.width =
+          `${viewport.width}px`
+
+        canvas.style.height =
+          `${viewport.height}px`
+
+
+        setRenderedSize({
+          width:
+            viewport.width,
+
+          height:
+            viewport.height,
+        })
+
+
+        const transform =
+          outputScale !== 1
+            ? [
+                outputScale,
+                0,
+                0,
+                outputScale,
+                0,
+                0,
+              ]
+            : null
+
+
+        const renderTask =
+          page.render({
+            canvasContext:
+              context,
+
+            viewport,
+
+            transform,
+          })
+
+
+        renderTaskRef.current =
+          renderTask
+
+
+        try {
+
+          await renderTask.promise
+
+        } catch (error) {
+
+          if (
+            error?.name !==
+              'RenderingCancelledException' &&
+            !cancelled
+          ) {
+
+            console.error(
+              'PDF render failed.',
+              error
+            )
+
+          }
+
+        } finally {
+
+          if (
+            renderTaskRef.current ===
+            renderTask
+          ) {
+
+            renderTaskRef.current =
+              null
+
+          }
+
+        }
+
+      }
+
+
+      renderPage()
+
+
+      return () => {
+
+        cancelled =
+          true
+
+      }
+
+    },
+    [
+      pdfDocument,
+      pageNumber,
+      effectiveScale,
+    ]
+  )
+
+
+  // ==========================================================
+  // FIT COMMANDS
+  // ==========================================================
+
+  const fitPage =
+    useCallback(
+      () => {
+
+        if (!pdfDocument) {
+          return
+        }
+
+
+        setFitMode(
+          'page'
+        )
+
+        setZoom(
+          1
+        )
+
+        setPan({
+          x: 0,
+          y: 0,
+        })
+
+      },
+      [
+        pdfDocument,
+      ]
+    )
+
+
+  const fitWidth =
+    useCallback(
+      () => {
+
+        if (!pdfDocument) {
+          return
+        }
+
+
+        setFitMode(
+          'width'
+        )
+
+        setZoom(
+          1
+        )
+
+        setPan({
+          x: 0,
+          y: 0,
+        })
+
+      },
+      [
+        pdfDocument,
+      ]
+    )
+
+
+  // ==========================================================
+  // TOOL COMMAND
+  // ==========================================================
+
+  function activateTool(
+    toolId
+  ) {
+
+    if (
+      toolId ===
+      'fit'
+    ) {
+
+      fitPage()
+
+      return
+
+    }
+
+
+    if (
+      toolId ===
+      'fitWidth'
+    ) {
+
+      fitWidth()
+
+      return
+
+    }
+
+
+    setActiveTool(
+      toolId
+    )
+
+  }
+
+
+  // ==========================================================
+  // PAGE NAVIGATION
+  // ==========================================================
+
+  function previousPage() {
+
+    setPageNumber(
+      (
+        current
+      ) =>
+        Math.max(
+          1,
+          current - 1
+        )
+    )
+
+  }
+
+
+  function nextPage() {
+
+    setPageNumber(
+      (
+        current
+      ) =>
+        Math.min(
+          pageCount,
+          current + 1
+        )
+    )
+
+  }
+
+
+  // ==========================================================
+  // CURSOR COORDINATES
+  // ==========================================================
+
+  const updateCursorCoordinates =
+    useCallback(
+      (
+        clientX,
+        clientY
+      ) => {
+
+        const element =
+          viewportRef.current
+
+
+        if (
+          !element ||
+          !pdfDocument ||
+          !renderedSize.width ||
+          !renderedSize.height ||
+          !effectiveScale
+        ) {
+
+          setCursorPosition({
+            x: null,
+            y: null,
+          })
+
+          return
+
+        }
+
+
+        const rect =
+          element
+            .getBoundingClientRect()
+
+
+        const screenX =
+          clientX -
+          rect.left
+
+
+        const screenY =
+          clientY -
+          rect.top
+
+
+        const documentLeft =
+          rect.width / 2 +
+          pan.x -
+          renderedSize.width / 2
+
+
+        const documentTop =
+          rect.height / 2 +
+          pan.y -
+          renderedSize.height / 2
+
+
+        const localX =
+          screenX -
+          documentLeft
+
+
+        const localY =
+          screenY -
+          documentTop
+
+
+        if (
+          localX < 0 ||
+          localY < 0 ||
+          localX >
+            renderedSize.width ||
+          localY >
+            renderedSize.height
+        ) {
+
+          setCursorPosition({
+            x: null,
+            y: null,
+          })
+
+          return
+
+        }
+
+
+        setCursorPosition({
+          x:
+            localX /
+            effectiveScale,
+
+          y:
+            localY /
+            effectiveScale,
+        })
+
+      },
+      [
+        pdfDocument,
+        renderedSize,
+        pan,
+        effectiveScale,
+      ]
+    )
+
+
+  // ==========================================================
+  // POINTER MOVE
+  // ==========================================================
+
+  function handlePointerMove(
+    event
+  ) {
+
+    updateCursorCoordinates(
+      event.clientX,
+      event.clientY
+    )
+
+
+    const session =
+      panSessionRef.current
+
+
+    if (!session) {
+      return
+    }
+
+
+    const deltaX =
+      event.clientX -
+      session.startX
+
+
+    const deltaY =
+      event.clientY -
+      session.startY
+
+
+    setPan({
+      x:
+        session.panX +
+        deltaX,
+
+      y:
+        session.panY +
+        deltaY,
+    })
+
+  }
+
+
+  // ==========================================================
+  // PAN START
+  // ==========================================================
+
+  function handlePointerDown(
+    event
+  ) {
+
+    if (!pdfDocument) {
+      return
+    }
+
+
+    const usingMiddleMouse =
+      event.button ===
+      1
+
+
+    const usingPanTool =
+      activeTool ===
+        'pan' &&
+      event.button ===
+        0
+
+
+    if (
+      !usingMiddleMouse &&
+      !usingPanTool
+    ) {
+      return
+    }
+
+
+    event.preventDefault()
+
+
+    panSessionRef.current = {
+      startX:
+        event.clientX,
+
+      startY:
+        event.clientY,
+
+      panX:
+        pan.x,
+
+      panY:
+        pan.y,
+    }
+
+
+    setIsPanning(
+      true
+    )
+
+
+    event.currentTarget
+      .setPointerCapture(
+        event.pointerId
+      )
+
+  }
+
+
+  // ==========================================================
+  // PAN END
+  // ==========================================================
+
+  function handlePointerUp(
+    event
+  ) {
+
+    if (
+      panSessionRef.current
+    ) {
+
+      panSessionRef.current =
+        null
+
+
+      setIsPanning(
+        false
+      )
+
+
+      try {
+
+        event.currentTarget
+          .releasePointerCapture(
+            event.pointerId
+          )
+
+      } catch {
+
+        // Pointer may already be released.
+
+      }
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // WHEEL ZOOM
+  // ==========================================================
+
+  function handleWheel(
+    event
+  ) {
+
+    if (!pdfDocument) {
+      return
+    }
+
+
+    event.preventDefault()
+
+
+    const viewport =
+      viewportRef.current
+
+
+    if (!viewport) {
+      return
+    }
+
+
+    const rect =
+      viewport
+        .getBoundingClientRect()
+
+
+    const cursorX =
+      event.clientX -
+      rect.left -
+      rect.width / 2
+
+
+    const cursorY =
+      event.clientY -
+      rect.top -
+      rect.height / 2
+
+
+    const multiplier =
+      event.deltaY < 0
+        ? ZOOM_FACTOR
+        : 1 /
+          ZOOM_FACTOR
+
+
+    const nextZoom =
+      clamp(
+        zoom *
+          multiplier,
+        MIN_ZOOM,
+        MAX_ZOOM
+      )
+
+
+    if (
+      nextZoom ===
+      zoom
+    ) {
+      return
+    }
+
+
+    const ratio =
+      nextZoom /
+      zoom
+
+
+    setPan(
+      (
+        current
+      ) => ({
+
+        x:
+          cursorX -
+          (
+            cursorX -
+            current.x
+          ) *
+          ratio,
+
+        y:
+          cursorY -
+          (
+            cursorY -
+            current.y
+          ) *
+          ratio,
+
+      })
+    )
+
+
+    setZoom(
+      nextZoom
+    )
+
+  }
+
+
+  // ==========================================================
+  // KEYBOARD COMMANDS
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      function handleKeyDown(
+        event
+      ) {
+
+        const target =
+          event.target
+
+
+        const tagName =
+          target
+            ?.tagName
+            ?.toLowerCase()
+
+
+        if (
+          tagName ===
+            'input' ||
+          tagName ===
+            'textarea' ||
+          target
+            ?.isContentEditable
+        ) {
+          return
+        }
+
+
+        if (
+          event.key ===
+          'Escape'
+        ) {
+
+          setActiveTool(
+            'select'
+          )
+
+          return
+
+        }
+
+
+        const key =
+          event.key
+            .toLowerCase()
+
+
+        if (
+          key ===
+          'v'
+        ) {
+
+          setActiveTool(
+            'select'
+          )
+
+        } else if (
+          key ===
+          'h'
+        ) {
+
+          setActiveTool(
+            'pan'
+          )
+
+        } else if (
+          key ===
+          'z'
+        ) {
+
+          setActiveTool(
+            'zoom'
+          )
+
+        } else if (
+          key ===
+          'f'
+        ) {
+
+          fitPage()
+
+        } else if (
+          key ===
+          'w'
+        ) {
+
+          fitWidth()
+
+        }
+
+      }
+
+
+      window.addEventListener(
+        'keydown',
+        handleKeyDown
+      )
+
+
+      return () => {
+
+        window.removeEventListener(
+          'keydown',
+          handleKeyDown
+        )
+
+      }
+
+    },
+    [
+      fitPage,
+      fitWidth,
+    ]
+  )
+
+
+  // ==========================================================
+  // CLEANUP
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      return () => {
+
+        if (
+          renderTaskRef.current
+        ) {
+
+          try {
+
+            renderTaskRef
+              .current
+              .cancel()
+
+          } catch {
+
+            // Ignore cleanup errors.
+
+          }
+
+        }
+
+
+        if (
+          pdfDocumentRef.current
+        ) {
+
+          try {
+
+            pdfDocumentRef
+              .current
+              .destroy()
+
+          } catch {
+
+            // Ignore cleanup errors.
+
+          }
+
+        }
+
+      }
+
+    },
+    []
+  )
+
+
+  // ==========================================================
+  // CURSOR
+  // ==========================================================
+
+  let viewportCursor =
+    'default'
+
+
+  if (isPanning) {
+
+    viewportCursor =
+      'grabbing'
+
+  } else if (
+    activeTool ===
+    'pan'
+  ) {
+
+    viewportCursor =
+      'grab'
+
+  } else if (
+    activeTool ===
+    'zoom'
+  ) {
+
+    viewportCursor =
+      'zoom-in'
+
+  } else if (
+    pdfDocument
+  ) {
+
+    viewportCursor =
+      'crosshair'
+
+  }
+
+
+  // ==========================================================
+  // RENDER
+  // ==========================================================
+
   return (
 
     <div
@@ -387,6 +1993,22 @@ export default function TakeoffPage() {
         styles.takeoffShell
       }
     >
+
+      <input
+        ref={
+          fileInputRef
+        }
+        type="file"
+        accept="application/pdf,.pdf"
+        onChange={
+          handleFileChange
+        }
+        style={{
+          display:
+            'none',
+        }}
+      />
+
 
       {/* ======================================================
           COMMAND BAR
@@ -409,8 +2031,12 @@ export default function TakeoffPage() {
             className={
               styles.primaryAction
             }
-            disabled
-            title="PDF import will be enabled in the next prototype step."
+            onClick={
+              openFilePicker
+            }
+            disabled={
+              loadingPdf
+            }
           >
 
             <ToolIcon
@@ -418,7 +2044,11 @@ export default function TakeoffPage() {
             />
 
             <span>
-              Import PDF
+              {
+                loadingPdf
+                  ? 'Loading PDF...'
+                  : 'Import PDF'
+              }
             </span>
 
           </button>
@@ -442,15 +2072,27 @@ export default function TakeoffPage() {
                 styles.drawingName
               }
             >
-              No drawing loaded
+              {
+                pdfFileName ||
+                'No drawing loaded'
+              }
             </span>
+
 
             <span
               className={
                 styles.drawingMeta
               }
             >
-              PDF Takeoff Workspace
+              {
+                pdfDocument
+                  ? `${pageCount} ${
+                      pageCount === 1
+                        ? 'page'
+                        : 'pages'
+                    }`
+                  : 'PDF Takeoff Workspace'
+              }
             </span>
 
           </div>
@@ -464,12 +2106,108 @@ export default function TakeoffPage() {
           }
         >
 
+          {pdfDocument && (
+
+            <div
+              style={{
+                display:
+                  'flex',
+
+                alignItems:
+                  'center',
+
+                gap:
+                  '4px',
+
+                marginRight:
+                  '4px',
+              }}
+            >
+
+              <button
+                type="button"
+                className={
+                  styles.iconButton
+                }
+                onClick={
+                  previousPage
+                }
+                disabled={
+                  pageNumber <= 1
+                }
+                title="Previous page"
+                aria-label="Previous page"
+              >
+                <ToolIcon
+                  type="previous"
+                />
+              </button>
+
+
+              <span
+                style={{
+                  display:
+                    'inline-flex',
+
+                  alignItems:
+                    'center',
+
+                  justifyContent:
+                    'center',
+
+                  minWidth:
+                    '72px',
+
+                  color:
+                    '#425a70',
+
+                  fontSize:
+                    '11px',
+
+                  fontWeight:
+                    800,
+
+                  whiteSpace:
+                    'nowrap',
+                }}
+              >
+                {pageNumber} / {pageCount}
+              </span>
+
+
+              <button
+                type="button"
+                className={
+                  styles.iconButton
+                }
+                onClick={
+                  nextPage
+                }
+                disabled={
+                  pageNumber >=
+                  pageCount
+                }
+                title="Next page"
+                aria-label="Next page"
+              >
+                <ToolIcon
+                  type="next"
+                />
+              </button>
+
+            </div>
+
+          )}
+
+
           <button
             type="button"
             className={
               styles.commandButton
             }
-            disabled
+            disabled={
+              !pdfDocument
+            }
             title="Calibrate drawing scale"
           >
 
@@ -558,6 +2296,13 @@ export default function TakeoffPage() {
                       tool.id
 
 
+                    const isFitCommand =
+                      tool.id ===
+                        'fit' ||
+                      tool.id ===
+                        'fitWidth'
+
+
                     return (
 
                       <button
@@ -567,7 +2312,8 @@ export default function TakeoffPage() {
                         type="button"
                         className={[
                           styles.toolButton,
-                          active
+                          active &&
+                          !isFitCommand
                             ? styles.toolButtonActive
                             : '',
                         ]
@@ -578,9 +2324,14 @@ export default function TakeoffPage() {
                             ' '
                           )}
                         onClick={() =>
-                          setActiveTool(
+                          activateTool(
                             tool.id
                           )
+                        }
+                        disabled={
+                          !pdfDocument &&
+                          tool.id !==
+                            'select'
                         }
                         title={`${tool.label} (${tool.shortcut})`}
                       >
@@ -729,7 +2480,7 @@ export default function TakeoffPage() {
       >
 
         {/* ====================================================
-            DRAWING TREE
+            DRAWING PANEL
         ==================================================== */}
 
         <aside
@@ -753,29 +2504,212 @@ export default function TakeoffPage() {
             }
           >
 
-            <div
-              className={
-                styles.emptyPanelState
-              }
-            >
+            {!pdfDocument && (
 
-              <span
+              <div
                 className={
-                  styles.emptyPanelTitle
+                  styles.emptyPanelState
                 }
               >
-                No PDF loaded
-              </span>
 
-              <span
-                className={
-                  styles.emptyPanelText
-                }
+                <span
+                  className={
+                    styles.emptyPanelTitle
+                  }
+                >
+                  No PDF loaded
+                </span>
+
+                <span
+                  className={
+                    styles.emptyPanelText
+                  }
+                >
+                  Drawing pages and takeoff layers will appear here.
+                </span>
+
+              </div>
+
+            )}
+
+
+            {pdfDocument && (
+
+              <div
+                style={{
+                  display:
+                    'flex',
+
+                  flexDirection:
+                    'column',
+
+                  gap:
+                    '10px',
+                }}
               >
-                Drawing pages and takeoff layers will appear here.
-              </span>
 
-            </div>
+                <div
+                  className={
+                    styles.emptyPanelState
+                  }
+                >
+
+                  <span
+                    className={
+                      styles.emptyPanelTitle
+                    }
+                    style={{
+                      overflow:
+                        'hidden',
+
+                      textOverflow:
+                        'ellipsis',
+
+                      whiteSpace:
+                        'nowrap',
+                    }}
+                    title={
+                      pdfFileName ||
+                      ''
+                    }
+                  >
+                    {
+                      pdfFileName
+                    }
+                  </span>
+
+                  <span
+                    className={
+                      styles.emptyPanelText
+                    }
+                  >
+                    {pageCount} drawing {
+                      pageCount === 1
+                        ? 'page'
+                        : 'pages'
+                    }
+                  </span>
+
+                </div>
+
+
+                <div
+                  style={{
+                    display:
+                      'flex',
+
+                    flexDirection:
+                      'column',
+
+                    gap:
+                      '4px',
+                  }}
+                >
+
+                  {Array.from(
+                    {
+                      length:
+                        pageCount,
+                    },
+                    (
+                      _,
+                      index
+                    ) => {
+
+                      const number =
+                        index + 1
+
+
+                      const active =
+                        number ===
+                        pageNumber
+
+
+                      return (
+
+                        <button
+                          key={
+                            number
+                          }
+                          type="button"
+                          onClick={() =>
+                            setPageNumber(
+                              number
+                            )
+                          }
+                          style={{
+                            display:
+                              'flex',
+
+                            alignItems:
+                              'center',
+
+                            justifyContent:
+                              'space-between',
+
+                            width:
+                              '100%',
+
+                            minHeight:
+                              '34px',
+
+                            padding:
+                              '0 9px',
+
+                            border:
+                              active
+                                ? '1px solid #99e6dc'
+                                : '1px solid transparent',
+
+                            borderRadius:
+                              '6px',
+
+                            background:
+                              active
+                                ? '#eafaf7'
+                                : 'transparent',
+
+                            color:
+                              active
+                                ? '#087f73'
+                                : '#52677d',
+
+                            font:
+                              'inherit',
+
+                            fontSize:
+                              '11px',
+
+                            fontWeight:
+                              800,
+
+                            cursor:
+                              'pointer',
+                          }}
+                        >
+
+                          <span>
+                            Page {number}
+                          </span>
+
+                          {active && (
+                            <span>
+                              ●
+                            </span>
+                          )}
+
+                        </button>
+
+                      )
+
+                    }
+                  )}
+
+                </div>
+
+              </div>
+
+            )}
 
           </div>
 
@@ -787,9 +2721,53 @@ export default function TakeoffPage() {
         ==================================================== */}
 
         <main
+          ref={
+            viewportRef
+          }
           className={
             styles.viewport
           }
+          onPointerDown={
+            handlePointerDown
+          }
+          onPointerMove={
+            handlePointerMove
+          }
+          onPointerUp={
+            handlePointerUp
+          }
+          onPointerCancel={
+            handlePointerUp
+          }
+          onPointerLeave={() => {
+
+            if (
+              !panSessionRef.current
+            ) {
+
+              setCursorPosition({
+                x: null,
+                y: null,
+              })
+
+            }
+
+          }}
+          onWheel={
+            handleWheel
+          }
+          onContextMenu={(
+            event
+          ) =>
+            event.preventDefault()
+          }
+          style={{
+            cursor:
+              viewportCursor,
+
+            touchAction:
+              'none',
+          }}
         >
 
           <div
@@ -798,71 +2776,238 @@ export default function TakeoffPage() {
             }
           >
 
-            <div
-              className={
-                styles.emptyViewport
-              }
-            >
+
+            {!pdfDocument && (
 
               <div
                 className={
-                  styles.emptyViewportIcon
+                  styles.emptyViewport
                 }
-                aria-hidden="true"
               >
-                <svg
-                  width="52"
-                  height="52"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+
+                <div
+                  className={
+                    styles.emptyViewportIcon
+                  }
+                  aria-hidden="true"
                 >
-                  <path d="M6 2h9l5 5v15H6z" />
-                  <path d="M15 2v6h5" />
-                  <path d="M9 13h6" />
-                  <path d="M12 10v6" />
-                </svg>
+
+                  <svg
+                    width="52"
+                    height="52"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6 2h9l5 5v15H6z" />
+                    <path d="M15 2v6h5" />
+                    <path d="M9 13h6" />
+                    <path d="M12 10v6" />
+                  </svg>
+
+                </div>
+
+
+                <h2
+                  className={
+                    styles.emptyViewportTitle
+                  }
+                >
+                  {
+                    loadingPdf
+                      ? 'Loading drawing...'
+                      : 'Import a drawing'
+                  }
+                </h2>
+
+
+                <p
+                  className={
+                    styles.emptyViewportDescription
+                  }
+                >
+                  PDF rendering, CAD navigation, scale calibration,
+                  snapping, and takeoff geometry operate inside this viewport.
+                </p>
+
+
+                {pdfError && (
+
+                  <p
+                    style={{
+                      margin:
+                        '0 0 14px',
+
+                      color:
+                        '#b42318',
+
+                      fontSize:
+                        '11px',
+
+                      fontWeight:
+                        800,
+                    }}
+                  >
+                    {
+                      pdfError
+                    }
+                  </p>
+
+                )}
+
+
+                <button
+                  type="button"
+                  className={
+                    styles.viewportImportButton
+                  }
+                  onClick={
+                    openFilePicker
+                  }
+                  disabled={
+                    loadingPdf
+                  }
+                >
+
+                  <ToolIcon
+                    type="import"
+                  />
+
+                  {
+                    loadingPdf
+                      ? 'Loading PDF...'
+                      : 'Import PDF'
+                  }
+
+                </button>
+
               </div>
 
+            )}
 
-              <h2
-                className={
-                  styles.emptyViewportTitle
-                }
+
+            {pdfDocument && (
+
+              <div
+                style={{
+                  position:
+                    'absolute',
+
+                  left:
+                    '50%',
+
+                  top:
+                    '50%',
+
+                  width:
+                    `${renderedSize.width}px`,
+
+                  height:
+                    `${renderedSize.height}px`,
+
+                  transform:
+                    `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px)`,
+
+                  transformOrigin:
+                    'center center',
+
+                  boxShadow:
+                    '0 8px 28px rgba(15, 23, 42, 0.24)',
+
+                  background:
+                    '#ffffff',
+
+                  pointerEvents:
+                    'none',
+
+                  userSelect:
+                    'none',
+                }}
               >
-                Import a drawing
-              </h2>
 
+                {/* ============================================
+                    PDF RENDER LAYER
+                ============================================ */}
 
-              <p
-                className={
-                  styles.emptyViewportDescription
-                }
-              >
-                PDF rendering, vector detection, CAD navigation,
-                scale calibration, snapping, and measurement geometry
-                will operate inside this viewport.
-              </p>
+                <canvas
+                  ref={
+                    canvasRef
+                  }
+                  style={{
+                    display:
+                      'block',
 
+                    width:
+                      `${renderedSize.width}px`,
 
-              <button
-                type="button"
-                className={
-                  styles.viewportImportButton
-                }
-                disabled
-              >
-                <ToolIcon
-                  type="import"
+                    height:
+                      `${renderedSize.height}px`,
+                  }}
                 />
 
-                Import PDF
-              </button>
 
-            </div>
+                {/* ============================================
+                    TAKEOFF GEOMETRY LAYER
+                    Reserved for SVG geometry.
+                ============================================ */}
+
+                <svg
+                  viewBox={`0 0 ${Math.max(
+                    1,
+                    renderedSize.width
+                  )} ${Math.max(
+                    1,
+                    renderedSize.height
+                  )}`}
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                  style={{
+                    position:
+                      'absolute',
+
+                    inset:
+                      0,
+
+                    width:
+                      '100%',
+
+                    height:
+                      '100%',
+
+                    overflow:
+                      'visible',
+
+                    pointerEvents:
+                      'none',
+                  }}
+                />
+
+
+                {/* ============================================
+                    INTERACTION LAYER
+                    Future snaps / grips / hover feedback.
+                ============================================ */}
+
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position:
+                      'absolute',
+
+                    inset:
+                      0,
+
+                    pointerEvents:
+                      'none',
+                  }}
+                />
+
+              </div>
+
+            )}
 
           </div>
 
@@ -920,7 +3065,11 @@ export default function TakeoffPage() {
                 </span>
 
                 <strong>
-                  —
+                  {
+                    pdfDocument
+                      ? 'PDF'
+                      : '—'
+                  }
                 </strong>
 
               </div>
@@ -937,7 +3086,11 @@ export default function TakeoffPage() {
                 </span>
 
                 <strong>
-                  —
+                  {
+                    pdfDocument
+                      ? `${pageNumber} / ${pageCount}`
+                      : '—'
+                  }
                 </strong>
 
               </div>
@@ -954,7 +3107,72 @@ export default function TakeoffPage() {
                 </span>
 
                 <strong>
-                  —
+                  {
+                    pdfDocument
+                      ? 'Analyzing later'
+                      : '—'
+                  }
+                </strong>
+
+              </div>
+
+            </div>
+
+
+            <div
+              className={
+                styles.propertySection
+              }
+            >
+
+              <span
+                className={
+                  styles.propertySectionTitle
+                }
+              >
+                View
+              </span>
+
+
+              <div
+                className={
+                  styles.propertyRow
+                }
+              >
+
+                <span>
+                  Fit Mode
+                </span>
+
+                <strong>
+                  {
+                    fitMode ===
+                    'width'
+                      ? 'Width'
+                      : 'Page'
+                  }
+                </strong>
+
+              </div>
+
+
+              <div
+                className={
+                  styles.propertyRow
+                }
+              >
+
+                <span>
+                  Zoom
+                </span>
+
+                <strong>
+                  {
+                    `${Math.round(
+                      zoom *
+                      100
+                    )}%`
+                  }
                 </strong>
 
               </div>
@@ -1091,7 +3309,15 @@ export default function TakeoffPage() {
           >
             X:
             <strong>
-              —
+              {
+                cursorPosition.x !==
+                null
+                  ? cursorPosition.x
+                      .toFixed(
+                        2
+                      )
+                  : '—'
+              }
             </strong>
           </span>
 
@@ -1103,9 +3329,30 @@ export default function TakeoffPage() {
           >
             Y:
             <strong>
-              —
+              {
+                cursorPosition.y !==
+                null
+                  ? cursorPosition.y
+                      .toFixed(
+                        2
+                      )
+                  : '—'
+              }
             </strong>
           </span>
+
+
+          {pdfDocument && (
+
+            <span
+              className={
+                styles.statusItem
+              }
+            >
+              PDF pt
+            </span>
+
+          )}
 
         </div>
 
@@ -1148,6 +3395,22 @@ export default function TakeoffPage() {
               styles.statusItem
             }
           >
+            Page:
+            <strong>
+              {
+                pdfDocument
+                  ? `${pageNumber}/${pageCount}`
+                  : '—'
+              }
+            </strong>
+          </span>
+
+
+          <span
+            className={
+              styles.statusItem
+            }
+          >
             Scale:
             <strong>
               Not calibrated
@@ -1162,7 +3425,12 @@ export default function TakeoffPage() {
           >
             Zoom:
             <strong>
-              100%
+              {
+                `${Math.round(
+                  zoom *
+                  100
+                )}%`
+              }
             </strong>
           </span>
 
