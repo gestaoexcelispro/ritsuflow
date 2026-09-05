@@ -224,21 +224,6 @@ function getAllocationStatusClass(
   return styles.statusNeutral
 }
 
-function formatDiagnosticError(
-  error
-) {
-  if (!error) {
-    return 'NONE'
-  }
-
-  return [
-    `message: ${error.message || 'Unknown error'}`,
-    `code: ${error.code || 'N/A'}`,
-    `details: ${error.details || 'N/A'}`,
-    `hint: ${error.hint || 'N/A'}`,
-  ].join('\n')
-}
-
 export default async function ProjectSetupPage({
   searchParams,
 }) {
@@ -1023,51 +1008,6 @@ export default async function ProjectSetupPage({
     productivityResult.data ||
     []
 
-  // ==========================================================
-  // TEMPORARY AUTHENTICATED SERVER DIAGNOSTIC
-  //
-  // Remove after Project Setup persistence issue is isolated.
-  // ==========================================================
-
-  const diagnosticLines = [
-    'RITSUFLOW PROJECT SETUP DIAGNOSTIC',
-    '',
-    `Authenticated user: ${user.id}`,
-    `Organization: ${organization.id}`,
-    `Selected project: ${selectedProject.id}`,
-    `Project code: ${selectedProject.code}`,
-    '',
-    `Work Package rows: ${workPackages.length}`,
-    'Work Package error:',
-    formatDiagnosticError(
-      workPackagesResult.error
-    ),
-    '',
-    `Scope Item rows: ${scopeItems.length}`,
-    'Scope Item error:',
-    formatDiagnosticError(
-      scopeItemsResult.error
-    ),
-    '',
-    `Location rows: ${locations.length}`,
-    'Location error:',
-    formatDiagnosticError(
-      locationsResult.error
-    ),
-    '',
-    `Allocation rows: ${allocations.length}`,
-    'Allocation error:',
-    formatDiagnosticError(
-      allocationsResult.error
-    ),
-    '',
-    `Productivity rows: ${productivityRecords.length}`,
-    'Productivity error:',
-    formatDiagnosticError(
-      productivityResult.error
-    ),
-  ]
-
   const allocatedByScopeItem =
     new Map()
 
@@ -1187,69 +1127,6 @@ export default async function ProjectSetupPage({
         styles.container
       }
     >
-      {/* ======================================================
-          TEMPORARY DIAGNOSTIC PANEL
-          ====================================================== */}
-
-      <section
-        className={
-          styles.formPanel
-        }
-        style={{
-          border:
-            '2px solid #d97706',
-          marginBottom: '24px',
-        }}
-      >
-        <div
-          className={
-            styles.formHeader
-          }
-        >
-          <div>
-            <h2
-              className={
-                styles.formTitle
-              }
-            >
-              Temporary Project Setup
-              Diagnostic
-            </h2>
-
-            <p
-              className={
-                styles.formDescription
-              }
-            >
-              Authenticated server-side
-              Supabase read result. This
-              panel will be removed after
-              the persistence issue is
-              identified.
-            </p>
-          </div>
-        </div>
-
-        <pre
-          style={{
-            margin: 0,
-            padding: '18px',
-            overflowX: 'auto',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            fontSize: '13px',
-            lineHeight: 1.6,
-            background:
-              'rgba(0, 0, 0, 0.04)',
-            borderRadius: '8px',
-          }}
-        >
-          {diagnosticLines.join(
-            '\n'
-          )}
-        </pre>
-      </section>
-
       {activeSection ===
         'general' && (
         <>
