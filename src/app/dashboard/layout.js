@@ -150,6 +150,19 @@ function NavIcon({
       )
 
 
+    case 'preplanning':
+      return (
+        <svg {...commonProps}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M7 8h10" />
+          <path d="M7 12h4" />
+          <path d="M7 16h4" />
+          <path d="M15 12v4" />
+          <path d="M13 14h4" />
+        </svg>
+      )
+
+
     case 'masterplan':
       return (
         <svg {...commonProps}>
@@ -344,6 +357,12 @@ const baseNavigationGroups = [
     label: 'Planning',
 
     items: [
+
+      {
+        label: 'Pre-Planning',
+        href: '/dashboard/planning/pre-planning',
+        icon: 'preplanning',
+      },
 
       {
         label: 'Master Plan',
@@ -2280,6 +2299,3 @@ export default function DashboardLayout({
 
   )
 }
-
-
-
