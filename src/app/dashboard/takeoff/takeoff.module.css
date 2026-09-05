@@ -1,0 +1,613 @@
+.takeoffShell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  height: calc(100vh - 88px);
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid #d7e0e8;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+
+/* ============================================================
+   COMMAND BAR
+============================================================ */
+
+.commandBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #d7e0e8;
+  background: #ffffff;
+}
+
+.commandBarLeft,
+.commandBarRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.commandBarLeft {
+  flex: 1 1 auto;
+}
+
+.commandBarRight {
+  flex: 0 0 auto;
+}
+
+.primaryAction,
+.commandButton,
+.iconButton,
+.viewportImportButton,
+.toolButton,
+.statusToggle {
+  font: inherit;
+}
+
+.primaryAction,
+.commandButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.primaryAction {
+  border: 1px solid #052c49;
+  background: #052c49;
+  color: #ffffff;
+}
+
+.commandButton {
+  border: 1px solid #cdd8e2;
+  background: #ffffff;
+  color: #425a70;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid #cdd8e2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #425a70;
+}
+
+.primaryAction:disabled,
+.commandButton:disabled,
+.iconButton:disabled,
+.viewportImportButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.commandDivider {
+  width: 1px;
+  height: 28px;
+  margin: 0 2px;
+  background: #dce5ed;
+  flex-shrink: 0;
+}
+
+.drawingIdentity {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.drawingName {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawingMeta {
+  margin-top: 3px;
+  color: #7a8da0;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+
+/* ============================================================
+   TOOL RIBBON
+============================================================ */
+
+.toolRibbon {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 82px;
+  padding: 6px 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid #d7e0e8;
+  background: #f7f9fb;
+  scrollbar-width: thin;
+}
+
+.toolGroup {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: max-content;
+  padding: 0 8px;
+  border-right: 1px solid #dce5ed;
+}
+
+.toolGroup:first-child {
+  padding-left: 0;
+}
+
+.toolGroup:last-child {
+  border-right: 0;
+}
+
+.toolGroupButtons {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.toolButton {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 54px;
+  height: 54px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #52677d;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.toolButton:hover:not(:disabled) {
+  border-color: #d6e1e9;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.toolButtonActive {
+  border-color: #99e6dc;
+  background: #eafaf7;
+  color: #087f73;
+}
+
+.toolButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.toolButtonLabel {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.toolGroupLabel {
+  display: block;
+  min-height: 17px;
+  padding-top: 3px;
+  color: #8a9cad;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+
+/* ============================================================
+   MAIN WORKSPACE
+============================================================ */
+
+.workspace {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr) 240px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.leftPanel,
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #ffffff;
+}
+
+.leftPanel {
+  border-right: 1px solid #d7e0e8;
+}
+
+.rightPanel {
+  border-left: 1px solid #d7e0e8;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e2e8ef;
+  background: #f7f9fb;
+  color: #425a70;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.panelContent {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.emptyPanelState {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px;
+  border: 1px dashed #d3dee7;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.emptyPanelTitle {
+  color: #425a70;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emptyPanelText {
+  color: #8192a4;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+
+/* ============================================================
+   VIEWPORT
+============================================================ */
+
+.viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #aeb8c2;
+}
+
+.viewportCanvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px
+    ),
+    #89949f;
+  background-size: 20px 20px;
+}
+
+.emptyViewport {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(460px, calc(100% - 48px));
+  padding: 28px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  text-align: center;
+}
+
+.emptyViewportIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  background: #edf3f7;
+  color: #52677d;
+}
+
+.emptyViewportTitle {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 900;
+}
+
+.emptyViewportDescription {
+  max-width: 370px;
+  margin: 8px 0 18px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 600;
+}
+
+.viewportImportButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #052c49;
+  border-radius: 8px;
+  background: #052c49;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+
+/* ============================================================
+   PROPERTIES
+============================================================ */
+
+.propertySection {
+  margin-bottom: 18px;
+}
+
+.propertySectionTitle {
+  display: block;
+  margin-bottom: 8px;
+  color: #0f172a;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.propertyRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  padding: 7px 0;
+  border-bottom: 1px solid #edf1f5;
+  color: #77899b;
+  font-size: 11px;
+}
+
+.propertyRow strong {
+  color: #425a70;
+  font-weight: 800;
+  text-align: right;
+}
+
+.emptyProperties {
+  padding: 10px;
+  border: 1px dashed #d3dee7;
+  border-radius: 8px;
+  background: #fbfcfd;
+  color: #8192a4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   STATUS BAR
+============================================================ */
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-top: 1px solid #cbd6df;
+  background: #052c49;
+  color: #dbe7ef;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.statusLeft,
+.statusRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.statusItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.statusItem strong {
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.statusSeparator {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.statusToggle {
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  background: transparent;
+  color: #b8c8d4;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.statusToggleActive {
+  border-color: #5eead4;
+  background: rgba(20, 184, 166, 0.18);
+  color: #99f6e4;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 1180px) {
+
+  .workspace {
+    grid-template-columns: 180px minmax(0, 1fr) 210px;
+  }
+
+  .toolButton {
+    min-width: 50px;
+  }
+
+}
+
+
+@media (max-width: 980px) {
+
+  .takeoffShell {
+    height: calc(100vh - 76px);
+    border-radius: 8px;
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .leftPanel,
+  .rightPanel {
+    display: none;
+  }
+
+  .commandBar {
+    min-height: 52px;
+  }
+
+  .drawingMeta {
+    display: none;
+  }
+
+  .toolRibbon {
+    min-height: 76px;
+  }
+
+  .statusLeft {
+    display: none;
+  }
+
+  .statusBar {
+    justify-content: flex-end;
+  }
+
+}
+
+
+@media (max-width: 640px) {
+
+  .takeoffShell {
+    min-height: 520px;
+  }
+
+  .commandBar {
+    gap: 8px;
+    padding: 7px 8px;
+  }
+
+  .commandButton span,
+  .primaryAction span {
+    display: none;
+  }
+
+  .primaryAction,
+  .commandButton {
+    width: 38px;
+    padding: 0;
+  }
+
+  .drawingIdentity {
+    max-width: 150px;
+  }
+
+  .toolGroup {
+    padding: 0 5px;
+  }
+
+  .toolButton {
+    min-width: 46px;
+    height: 50px;
+    padding: 4px;
+  }
+
+  .toolButtonLabel {
+    font-size: 9px;
+  }
+
+  .statusRight {
+    gap: 6px;
+  }
+
+  .statusRight .statusItem:first-of-type {
+    display: none;
+  }
+
+}
