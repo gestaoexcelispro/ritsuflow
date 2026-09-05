@@ -69,7 +69,7 @@ const REPORT_SECTIONS = [
     label: 'Pre-Planning',
     group: 'Planning & Control',
     defaultSelected: false,
-    available: false,
+    available: true,
   },
   {
     key: 'masterPlan',
@@ -102,6 +102,12 @@ const REPORT_SECTIONS = [
 ]
 
 
+const REPORT_GROUPS = [
+  'Project Setup',
+  'Planning & Control',
+]
+
+
 function buildInitialSections() {
   return REPORT_SECTIONS.reduce(
     (
@@ -111,6 +117,36 @@ function buildInitialSections() {
       ...current,
       [section.key]:
         section.defaultSelected === true,
+    }),
+    {}
+  )
+}
+
+
+function buildClearedSections() {
+  return REPORT_SECTIONS.reduce(
+    (
+      current,
+      section
+    ) => ({
+      ...current,
+      [section.key]:
+        false,
+    }),
+    {}
+  )
+}
+
+
+function buildAllAvailableSections() {
+  return REPORT_SECTIONS.reduce(
+    (
+      current,
+      section
+    ) => ({
+      ...current,
+      [section.key]:
+        section.available !== false,
     }),
     {}
   )
@@ -223,20 +259,6 @@ export default function ProjectSetupReportButton() {
   )
 
 
-  const selectedCount =
-    useMemo(
-      () =>
-        Object.values(
-          sections
-        ).filter(
-          Boolean
-        ).length,
-      [
-        sections,
-      ]
-    )
-
-
   const availableSections =
     useMemo(
       () =>
@@ -244,22 +266,34 @@ export default function ProjectSetupReportButton() {
           (
             section
           ) =>
-            section.available !==
-            false
+            section.available !== false
         ),
       []
     )
 
 
-  const allSelected =
-    availableSections.every(
-      (
-        section
-      ) =>
-        sections[
-          section.key
-        ] === true
+  const selectedCount =
+    useMemo(
+      () =>
+        availableSections.filter(
+          (
+            section
+          ) =>
+            sections[
+              section.key
+            ] === true
+        ).length,
+      [
+        availableSections,
+        sections,
+      ]
     )
+
+
+  const allSelected =
+    availableSections.length > 0 &&
+    selectedCount ===
+      availableSections.length
 
 
   if (
@@ -313,15 +347,13 @@ export default function ProjectSetupReportButton() {
         (
           item
         ) =>
-          item.key ===
-          key
+          item.key === key
       )
 
 
     if (
       !section ||
-      section.available ===
-        false
+      section.available === false
     ) {
       return
     }
@@ -345,18 +377,7 @@ export default function ProjectSetupReportButton() {
   function selectAll() {
 
     setSections(
-      REPORT_SECTIONS.reduce(
-        (
-          current,
-          section
-        ) => ({
-          ...current,
-          [section.key]:
-            section.available !==
-            false,
-        }),
-        {}
-      )
+      buildAllAvailableSections()
     )
 
   }
@@ -365,17 +386,7 @@ export default function ProjectSetupReportButton() {
   function clearAll() {
 
     setSections(
-      REPORT_SECTIONS.reduce(
-        (
-          current,
-          section
-        ) => ({
-          ...current,
-          [section.key]:
-            false,
-        }),
-        {}
-      )
+      buildClearedSections()
     )
 
   }
@@ -1126,12 +1137,9 @@ export default function ProjectSetupReportButton() {
               </div>
 
 
-              {[
-                'Project Setup',
-                'Planning & Control',
-              ].map(
+              {REPORT_GROUPS.map(
                 (
-                  groupName
+                  group
                 ) => {
 
                   const groupSections =
@@ -1139,8 +1147,7 @@ export default function ProjectSetupReportButton() {
                       (
                         section
                       ) =>
-                        section.group ===
-                        groupName
+                        section.group === group
                     )
 
 
@@ -1148,19 +1155,22 @@ export default function ProjectSetupReportButton() {
 
                     <div
                       key={
-                        groupName
+                        group
                       }
                       style={{
+
                         marginTop:
-                          groupName ===
-                          'Project Setup'
+                          group ===
+                          REPORT_GROUPS[0]
                             ? 0
-                            : '18px',
+                            : '16px',
+
                       }}
                     >
 
                       <div
                         style={{
+
                           marginBottom:
                             '8px',
 
@@ -1170,19 +1180,23 @@ export default function ProjectSetupReportButton() {
                           fontSize:
                             '11px',
 
+                          lineHeight:
+                            1,
+
                           fontWeight:
                             900,
 
                           letterSpacing:
-                            '0.06em',
+                            '0.08em',
 
                           textTransform:
                             'uppercase',
+
                         }}
                       >
-                        {
-                          groupName
-                        }
+
+                        {group}
+
                       </div>
 
 
@@ -1206,9 +1220,13 @@ export default function ProjectSetupReportButton() {
                             section
                           ) => {
 
-                            const available =
-                              section.available !==
-                              false
+                            const isAvailable =
+                              section.available !== false
+
+                            const isChecked =
+                              sections[
+                                section.key
+                              ] === true
 
 
                             return (
@@ -1235,10 +1253,8 @@ export default function ProjectSetupReportButton() {
                                     '0 12px',
 
                                   border:
-                                    sections[
-                                      section.key
-                                    ] &&
-                                    available
+                                    isAvailable &&
+                                    isChecked
                                       ? '1px solid #99e6dc'
                                       : '1px solid #dce5ed',
 
@@ -1246,19 +1262,16 @@ export default function ProjectSetupReportButton() {
                                     '8px',
 
                                   background:
-                                    sections[
-                                      section.key
-                                    ] &&
-                                    available
-                                      ? '#f3fcfa'
-                                      : available
-                                        ? '#ffffff'
-                                        : '#f8fafc',
+                                    !isAvailable
+                                      ? '#f8fafc'
+                                      : isChecked
+                                        ? '#f3fcfa'
+                                        : '#ffffff',
 
                                   color:
-                                    available
+                                    isAvailable
                                       ? '#334155'
-                                      : '#94a3b8',
+                                      : '#a8b6c6',
 
                                   fontSize:
                                     '12px',
@@ -1268,14 +1281,14 @@ export default function ProjectSetupReportButton() {
 
                                   cursor:
                                     isGenerating ||
-                                    !available
+                                    !isAvailable
                                       ? 'default'
                                       : 'pointer',
 
                                   opacity:
-                                    available
-                                      ? 1
-                                      : 0.78,
+                                    !isAvailable
+                                      ? 0.9
+                                      : 1,
 
                                 }}
                               >
@@ -1283,13 +1296,11 @@ export default function ProjectSetupReportButton() {
                                 <input
                                   type="checkbox"
                                   checked={
-                                    sections[
-                                      section.key
-                                    ] === true
+                                    isChecked
                                   }
                                   disabled={
                                     isGenerating ||
-                                    !available
+                                    !isAvailable
                                   }
                                   onChange={() =>
                                     toggleSection(
@@ -1314,6 +1325,7 @@ export default function ProjectSetupReportButton() {
 
                                 <span
                                   style={{
+
                                     display:
                                       'flex',
 
@@ -1328,8 +1340,10 @@ export default function ProjectSetupReportButton() {
 
                                     width:
                                       '100%',
+
                                   }}
                                 >
+
                                   <span>
                                     {
                                       section.label
@@ -1337,12 +1351,13 @@ export default function ProjectSetupReportButton() {
                                   </span>
 
 
-                                  {!available && (
+                                  {!isAvailable && (
 
                                     <span
                                       style={{
+
                                         padding:
-                                          '2px 6px',
+                                          '3px 6px',
 
                                         borderRadius:
                                           '999px',
@@ -1351,19 +1366,28 @@ export default function ProjectSetupReportButton() {
                                           '#eef2f6',
 
                                         color:
-                                          '#64748b',
+                                          '#8fa0b4',
 
                                         fontSize:
                                           '9px',
 
+                                        lineHeight:
+                                          1,
+
                                         fontWeight:
                                           900,
 
-                                        whiteSpace:
-                                          'nowrap',
+                                        letterSpacing:
+                                          '0.04em',
+
+                                        flexShrink:
+                                          0,
+
                                       }}
                                     >
+
                                       NEXT
+
                                     </span>
 
                                   )}
