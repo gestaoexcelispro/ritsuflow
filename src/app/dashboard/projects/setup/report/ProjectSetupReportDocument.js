@@ -385,6 +385,28 @@ const styles = StyleSheet.create({
     width: '37%',
     textAlign: 'right',
   },
+  quantLevelRow: {
+    flexDirection: 'row',
+    minHeight: 25,
+    borderBottomWidth: 1,
+    borderBottomColor: '#D7E1E8',
+    backgroundColor: '#EDF3F6',
+  },
+  quantZoneRow: {
+    flexDirection: 'row',
+    minHeight: 23,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9EEF2',
+  },
+  quantLevelText: {
+    color: NAVY,
+    fontSize: 7,
+    fontWeight: 700,
+  },
+  quantZoneText: {
+    color: TEXT,
+    fontSize: 6.7,
+  },
   scopeSummaryRow: {
     flexDirection: 'row',
     marginHorizontal: -3,
@@ -2118,86 +2140,152 @@ export default function ProjectSetupReportDocument({
           </StandardPage>
         ))}
 
-      {sections.quantificationByLocation && (
-        <StandardPage
-          logo={logoDataUri}
-          reportTitle={reportTitle}
-          project={project}
-        >
-          <SectionHeading
-            number="6"
-            title="Quantification by Location"
-            subtitle="Aggregated allocated quantities organized through the project location hierarchy."
-          />
+      {sections.quantificationByLocation && (() => {
+        const childrenByParent = new Map()
 
-          <View style={styles.table}>
-            <View style={styles.tableHeader} fixed>
-              <View style={[styles.cell, styles.quantLocation]}>
-                <Text style={styles.headerCellText}>Location</Text>
+        locations.forEach((location) => {
+          const parentKey = location.parent_id || '__root__'
+
+          if (!childrenByParent.has(parentKey)) {
+            childrenByParent.set(parentKey, [])
+          }
+
+          childrenByParent.get(parentKey).push(location)
+        })
+
+        childrenByParent.forEach((children) => {
+          children.sort(
+            (a, b) =>
+              Number(a.sequence_number || 0) -
+                Number(b.sequence_number || 0) ||
+              safe(a.name).localeCompare(safe(b.name))
+          )
+        })
+
+        const quantificationLevels = orderedLocations.filter((location) =>
+          ['floor', 'division'].includes(location.location_type)
+        )
+
+        const getDescendants = (locationId) => {
+          const descendants = []
+          const stack = [...(childrenByParent.get(locationId) || [])]
+
+          while (stack.length > 0) {
+            const current = stack.shift()
+            descendants.push(current)
+            stack.push(...(childrenByParent.get(current.id) || []))
+          }
+
+          return descendants
+        }
+
+        const getZonesForLevel = (level) =>
+          getDescendants(level.id).filter((location) =>
+            ['zone', 'area'].includes(location.location_type)
+          )
+
+        return (
+          <StandardPage
+            logo={logoDataUri}
+            reportTitle={reportTitle}
+            project={project}
+          >
+            <SectionHeading
+              number="6"
+              title="Quantification by Location"
+              subtitle="Allocated quantities organized through the project location hierarchy."
+            />
+
+            <View style={styles.table}>
+              <View style={styles.tableHeader} fixed>
+                <View style={[styles.cell, styles.quantLocation]}>
+                  <Text style={styles.headerCellText}>Location</Text>
+                </View>
+
+                <View style={[styles.cell, styles.quantType]}>
+                  <Text style={styles.headerCellText}>Type</Text>
+                </View>
+
+                <View style={[styles.cell, styles.quantQuantity]}>
+                  <Text style={styles.headerCellText}>
+                    Direct Allocated Quantity
+                  </Text>
+                </View>
               </View>
 
-              <View style={[styles.cell, styles.quantType]}>
-                <Text style={styles.headerCellText}>Type</Text>
-              </View>
+              {quantificationLevels.length > 0 ? (
+                quantificationLevels.map((level) => {
+                  const zones = getZonesForLevel(level)
 
-              <View style={[styles.cell, styles.quantQuantity]}>
-                <Text style={styles.headerCellText}>
-                  Direct Allocated Quantity
-                </Text>
-              </View>
+                  return (
+                    <React.Fragment key={level.id}>
+                      <View style={styles.quantLevelRow} wrap={false}>
+                        <View style={[styles.cell, styles.quantLocation]}>
+                          <Text style={styles.quantLevelText}>
+                            {safe(level.name)}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cell, styles.quantType]}>
+                          <Text style={styles.quantLevelText}>
+                            {locationType(level.location_type)}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cell, styles.quantQuantity]}>
+                          <Text style={styles.quantLevelText}>
+                            {number(
+                              locationQuantityTotals.get(level.id) || 0
+                            )}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {zones.map((zone) => (
+                        <View
+                          key={zone.id}
+                          style={styles.quantZoneRow}
+                          wrap={false}
+                        >
+                          <View
+                            style={[
+                              styles.cell,
+                              styles.quantLocation,
+                              { paddingLeft: 18 },
+                            ]}
+                          >
+                            <Text style={styles.quantZoneText}>
+                              {safe(zone.name)}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, styles.quantType]}>
+                            <Text style={styles.quantZoneText}>
+                              {locationType(zone.location_type)}
+                            </Text>
+                          </View>
+
+                          <View style={[styles.cell, styles.quantQuantity]}>
+                            <Text style={styles.quantZoneText}>
+                              {number(
+                                locationQuantityTotals.get(zone.id) || 0
+                              )}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </React.Fragment>
+                  )
+                })
+              ) : (
+                <View style={styles.noData}>
+                  <Text>No location quantification is available.</Text>
+                </View>
+              )}
             </View>
-
-            {orderedLocations.length > 0 ? (
-              orderedLocations.map((location, index) => {
-                const depth = buildLocationDepth(location, locationMap)
-
-                return (
-                  <View
-                    key={location.id}
-                    wrap={false}
-                    style={[
-                      styles.tableRow,
-                      index % 2 === 1 ? styles.tableRowAlt : null,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.cell,
-                        styles.quantLocation,
-                        {
-                          paddingLeft: 6 + Math.min(depth, 6) * 10,
-                        },
-                      ]}
-                    >
-                      <Text style={styles.cellText}>
-                        {safe(location.name)}
-                      </Text>
-                    </View>
-
-                    <View style={[styles.cell, styles.quantType]}>
-                      <Text style={styles.cellText}>
-                        {locationType(location.location_type)}
-                      </Text>
-                    </View>
-
-                    <View style={[styles.cell, styles.quantQuantity]}>
-                      <Text style={styles.cellText}>
-                        {number(
-                          locationQuantityTotals.get(location.id) || 0
-                        )}
-                      </Text>
-                    </View>
-                  </View>
-                )
-              })
-            ) : (
-              <View style={styles.noData}>
-                <Text>No location quantification is available.</Text>
-              </View>
-            )}
-          </View>
-        </StandardPage>
-      )}
+          </StandardPage>
+        )
+      })()}
 
       {sections.productionParameters && (
         <StandardPage
