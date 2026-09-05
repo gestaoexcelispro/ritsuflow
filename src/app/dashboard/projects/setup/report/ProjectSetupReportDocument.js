@@ -30,11 +30,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   landscapePage: {
-    paddingTop: 30,
-    paddingBottom: 34,
-    paddingHorizontal: 28,
+    paddingTop: 24,
+    paddingBottom: 28,
+    paddingHorizontal: 22,
     fontFamily: 'Helvetica',
-    fontSize: 7,
+    fontSize: 6.6,
     color: TEXT,
     backgroundColor: '#FFFFFF',
   },
@@ -318,16 +318,16 @@ const styles = StyleSheet.create({
   },
   footerLandscape: {
     position: 'absolute',
-    bottom: 13,
-    left: 28,
-    right: 28,
-    paddingTop: 5,
+    bottom: 10,
+    left: 22,
+    right: 22,
+    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: BORDER,
     flexDirection: 'row',
     justifyContent: 'space-between',
     color: MUTED,
-    fontSize: 5.8,
+    fontSize: 5.4,
   },
   noData: {
     paddingVertical: 18,
@@ -339,16 +339,41 @@ const styles = StyleSheet.create({
     backgroundColor: SOFT,
   },
   matrixLocation: {
-    width: 125,
-    flexShrink: 0,
-  },
-  matrixType: {
-    width: 56,
+    width: 136,
     flexShrink: 0,
   },
   matrixScope: {
-    width: 78,
+    width: 84,
     flexShrink: 0,
+  },
+  matrixHeaderCode: {
+    color: TEAL,
+    fontSize: 5.4,
+    fontWeight: 700,
+    letterSpacing: 0.35,
+  },
+  matrixHeaderName: {
+    marginTop: 2,
+    color: NAVY,
+    fontSize: 5.6,
+    fontWeight: 700,
+    lineHeight: 1.08,
+  },
+  matrixHeaderUnit: {
+    marginTop: 2,
+    color: MUTED,
+    fontSize: 5.2,
+  },
+  matrixCell: {
+    paddingVertical: 3.5,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+  },
+  matrixRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9EEF2',
+    minHeight: 18,
   },
   quantLocation: {
     width: '46%',
@@ -1141,7 +1166,7 @@ export default function ProjectSetupReportDocument({
     return children.length === 0
   })
 
-  const matrixScopeChunks = splitIntoChunks(activeScopeItems, 5)
+  const matrixScopeChunks = splitIntoChunks(activeScopeItems, 7)
 
   const scopeRows = activeScopeItems.map((scopeItem) => {
     const workPackage = workPackageMap.get(
@@ -1996,42 +2021,41 @@ export default function ProjectSetupReportDocument({
                     : 'Scope Allocation Matrix — Continued'
                 }
                 subtitle={`Quantities by production location. Scope Item columns ${
-                  chunkIndex * 5 + 1
+                  chunkIndex * 7 + 1
                 }-${Math.min(
-                  chunkIndex * 5 + scopeChunk.length,
+                  chunkIndex * 7 + scopeChunk.length,
                   activeScopeItems.length
                 )} of ${activeScopeItems.length}.`}
               />
 
               <View style={styles.table}>
                 <View style={styles.tableHeader} fixed>
-                  <View style={[styles.cell, styles.matrixLocation]}>
+                  <View style={[styles.matrixCell, styles.matrixLocation]}>
                     <Text style={styles.headerCellText}>Location</Text>
                   </View>
 
-                  <View style={[styles.cell, styles.matrixType]}>
-                    <Text style={styles.headerCellText}>Type</Text>
-                  </View>
+                  {scopeChunk.map((scopeItem) => {
+                    const workPackage = workPackageMap.get(
+                      scopeItem.project_work_package_id
+                    )
 
-                  {scopeChunk.map((scopeItem) => (
-                    <View
-                      key={scopeItem.id}
-                      style={[styles.cell, styles.matrixScope]}
-                    >
-                      <Text style={styles.headerCellText}>
-                        {scopeItem.service_name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.cellText,
-                          styles.mutedText,
-                          { marginTop: 2 },
-                        ]}
+                    return (
+                      <View
+                        key={scopeItem.id}
+                        style={[styles.matrixCell, styles.matrixScope]}
                       >
-                        {safe(scopeItem.unit)}
-                      </Text>
-                    </View>
-                  ))}
+                        <Text style={styles.matrixHeaderCode}>
+                          {workPackage?.code || '—'}
+                        </Text>
+                        <Text style={styles.matrixHeaderName}>
+                          {scopeItem.service_name}
+                        </Text>
+                        <Text style={styles.matrixHeaderUnit}>
+                          {safe(scopeItem.unit)}
+                        </Text>
+                      </View>
+                    )
+                  })}
                 </View>
 
                 {productionLocations.length > 0 ? (
@@ -2040,28 +2064,22 @@ export default function ProjectSetupReportDocument({
                       key={location.id}
                       wrap={false}
                       style={[
-                        styles.tableRow,
+                        styles.matrixRow,
                         rowIndex % 2 === 1
                           ? styles.tableRowAlt
                           : null,
                       ]}
                     >
-                      <View style={[styles.cell, styles.matrixLocation]}>
+                      <View style={[styles.matrixCell, styles.matrixLocation]}>
                         <Text style={styles.cellText}>
                           {buildLocationPath(location, locationMap)}
-                        </Text>
-                      </View>
-
-                      <View style={[styles.cell, styles.matrixType]}>
-                        <Text style={styles.cellText}>
-                          {locationType(location.location_type)}
                         </Text>
                       </View>
 
                       {scopeChunk.map((scopeItem) => (
                         <View
                           key={scopeItem.id}
-                          style={[styles.cell, styles.matrixScope]}
+                          style={[styles.matrixCell, styles.matrixScope]}
                         >
                           <Text style={styles.cellText}>
                             {number(
