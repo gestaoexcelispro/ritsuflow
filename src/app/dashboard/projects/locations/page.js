@@ -2345,28 +2345,52 @@ export default function LocationBreakdownPage() {
           </p>
         </div>
 
-        <div className={styles.projectSelector}>
-          <label
-            htmlFor="active-project"
-            className={styles.projectSelectorLabel}
-          >
-            Active project
-          </label>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: '12px',
+          }}
+        >
+          <div className={styles.projectSelector}>
+            <label
+              htmlFor="active-project"
+              className={styles.projectSelectorLabel}
+            >
+              Active project
+            </label>
 
-          <select
-            id="active-project"
-            className={styles.projectSelectorInput}
-            value={selectedProject.id}
-            onChange={(event) =>
-              changeProject(event.target.value)
-            }
+            <select
+              id="active-project"
+              className={styles.projectSelectorInput}
+              value={selectedProject.id}
+              onChange={(event) =>
+                changeProject(event.target.value)
+              }
+            >
+              {projects.map((project) => (
+                <option value={project.id} key={project.id}>
+                  {project.code || 'Unassigned'} · {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Link
+            href={`/dashboard/projects/setup?projectId=${selectedProject.id}&section=locations`}
+            className={styles.secondaryButton}
+            style={{
+              minHeight: '48px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              whiteSpace: 'nowrap',
+              textDecoration: 'none',
+              padding: '0 18px',
+            }}
           >
-            {projects.map((project) => (
-              <option value={project.id} key={project.id}>
-                {project.code || 'Unassigned'} · {project.name}
-              </option>
-            ))}
-          </select>
+            ← Project Setup
+          </Link>
         </div>
       </section>
 
