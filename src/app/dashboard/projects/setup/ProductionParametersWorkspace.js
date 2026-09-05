@@ -1,710 +1,878 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+
+import { useRouter } from 'next/navigation'
+
 import { createClient } from '../../../../lib/supabase/client'
+
 import styles from './project-setup.module.css'
 
+
 function getErrorMessage(error) {
-  if (!error) return 'An unexpected error occurred.'
-  if (error.code === '23505') return 'A record with the same identifying information already exists.'
-  if (error.code === '23503') return 'This record is connected to other project information and cannot be changed.'
-  if (error.code === '23514') return 'One or more values do not satisfy the production parameter rules.'
-  if (error.code === '42501') return 'Your account does not have permission to perform this action.'
-  return error.message || 'The requested operation could not be completed.'
-}
-
-function formatQuantity(value) {
-  const numericValue = Number(value)
-  if (!Number.isFinite(numericValue)) return '0'
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(numericValue)
-}
-
-function getZoneColor(zoneName) {
-  if (!zoneName) return '#ffffff'
-  const normalized = String(zoneName).trim().toUpperCase()
-  const fixedColors = {
-    Z1: '#ebf8ff', Z2: '#f0fff4', Z3: '#fffaf0', Z4: '#f5f3ff',
-    Z5: '#fff1f2', Z6: '#ecfeff', Z7: '#fefce8', Z8: '#f0fdf4',
-    'ZONE 1': '#ebf8ff', 'ZONE 2': '#f0fff4', 'ZONE 3': '#fffaf0',
-    'ZONE 4': '#f5f3ff', 'ZONE 5': '#fff1f2', 'ZONE 6': '#ecfeff',
-    'ZONE A': '#f5f3ff', 'ZONE B': '#fffaf0', 'ZONE C': '#f0fff4',
+  if (!error) {
+    return 'An unexpected error occurred.'
   }
-  if (fixedColors[normalized]) return fixedColors[normalized]
-  const palette = ['#ebf8ff', '#f0fff4', '#fffaf0', '#f5f3ff', '#fff1f2', '#ecfeff', '#fefce8', '#f0fdf4']
-  let hash = 0
-  for (let index = 0; index < normalized.length; index += 1) {
-    hash = normalized.charCodeAt(index) + ((hash << 5) - hash)
+
+  if (error.code === '23505') {
+    return 'Production Parameters already exist for this Scope Item.'
   }
-  return palette[Math.abs(hash) % palette.length]
+
+  if (error.code === '23503') {
+    return 'This production parameter is connected to invalid project information.'
+  }
+
+  if (error.code === '23514') {
+    return 'The production parameter does not satisfy the project rules.'
+  }
+
+  if (error.code === '42501') {
+    return 'Your account does not have permission to perform this action.'
+  }
+
+  return (
+    error.message ||
+    'The requested operation could not be completed.'
+  )
 }
 
-const emptyProductivityForm = {
-  service_name: '',
-  service_code: '',
-  quantity_unit: '',
-  productivity_rate: '',
-  productivity_basis: 'worker_day',
-  description: '',
+
+function formatNumber(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '—'
+  }
+
+  const numericValue =
+    Number(value)
+
+  if (!Number.isFinite(numericValue)) {
+    return String(value)
+  }
+
+  return new Intl.NumberFormat(
+    'en-US',
+    {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }
+  ).format(numericValue)
 }
+
+
+function normalizeNumericText(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(',', '.')
+}
+
 
 export default function ProductionParametersWorkspace({
   projectId,
-  organizationId,
+  projectCode = '',
   userId,
-  locations = [],
+  workPackages = [],
   scopeItems = [],
-  allocations = [],
+  initialParameters = [],
 }) {
-  const supabase = useMemo(() => createClient(), [])
-  const [productivityLibrary, setProductivityLibrary] = useState([])
-  const [projectProductivities, setProjectProductivities] = useState([])
-  const [divisionTaktTargets, setDivisionTaktTargets] = useState([])
-  const [effectiveDrafts, setEffectiveDrafts] = useState({})
-  const [taktTargetDrafts, setTaktTargetDrafts] = useState({})
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [savingEffectiveKey, setSavingEffectiveKey] = useState(null)
-  const [savingTaktTargetId, setSavingTaktTargetId] = useState(null)
-  const [errorMessage, setErrorMessage] = useState('')
-  const [noticeMessage, setNoticeMessage] = useState('')
-  const [showTaktPresizing, setShowTaktPresizing] = useState(true)
-  const [isProductivityModalOpen, setIsProductivityModalOpen] = useState(false)
-  const [productivityTarget, setProductivityTarget] = useState(null)
-  const [productivitySearch, setProductivitySearch] = useState('')
-  const [productivityMode, setProductivityMode] = useState('select')
-  const [productivityForm, setProductivityForm] = useState(emptyProductivityForm)
+  const router =
+    useRouter()
+
+  const supabase =
+    useMemo(
+      () => createClient(),
+      []
+    )
+
+  const [parameters, setParameters] =
+    useState(initialParameters)
+
+  const [drafts, setDrafts] =
+    useState({})
+
+  const [searchTerm, setSearchTerm] =
+    useState('')
+
+  const [savingKey, setSavingKey] =
+    useState(null)
+
+  const [errorMessage, setErrorMessage] =
+    useState('')
+
+  const [noticeMessage, setNoticeMessage] =
+    useState('')
+
 
   useEffect(() => {
-    let cancelled = false
+    setParameters(initialParameters)
+  }, [initialParameters])
 
-    async function loadProductionParameters() {
-      if (!projectId || !organizationId) {
-        setIsLoading(false)
-        return
-      }
 
-      setIsLoading(true)
-      setErrorMessage('')
-
-      const [libraryResult, projectResult, taktResult] = await Promise.all([
-        supabase
-          .from('productivity_library')
-          .select(`
-            id,
-            organization_id,
-            service_name,
-            service_code,
-            quantity_unit,
-            productivity_rate,
-            productivity_basis,
-            description,
-            is_active,
-            created_at,
-            updated_at
-          `)
-          .eq('organization_id', organizationId)
-          .eq('is_active', true)
-          .order('service_name', { ascending: true }),
-        supabase
-          .from('project_service_productivity')
-          .select(`
-            id,
-            project_id,
-            division_location_id,
-            service_id,
-            productivity_library_id,
-            productivity_rate,
-            quantity_unit,
-            productivity_basis,
-            effective,
-            created_at,
-            updated_at
-          `)
-          .eq('project_id', projectId),
-        supabase
-          .from('project_division_takt_targets')
-          .select(`
-            id,
-            project_id,
-            division_location_id,
-            target_takt_days,
-            created_at,
-            updated_at
-          `)
-          .eq('project_id', projectId),
-      ])
-
-      if (cancelled) return
-
-      const loadError = libraryResult.error || projectResult.error || taktResult.error
-      if (loadError) {
-        setErrorMessage(getErrorMessage(loadError))
-        setIsLoading(false)
-        return
-      }
-
-      const loadedProductivities = projectResult.data || []
-      const loadedTargets = taktResult.data || []
-      setProductivityLibrary(libraryResult.data || [])
-      setProjectProductivities(loadedProductivities)
-      setDivisionTaktTargets(loadedTargets)
-
-      const nextEffectiveDrafts = {}
-      loadedProductivities.forEach((item) => {
-        const key = `${item.division_location_id}___${item.service_id}`
-        nextEffectiveDrafts[key] = item.effective === null || item.effective === undefined
-          ? ''
-          : String(item.effective)
-      })
-      setEffectiveDrafts(nextEffectiveDrafts)
-
-      const nextTargetDrafts = {}
-      loadedTargets.forEach((item) => {
-        nextTargetDrafts[item.division_location_id] =
-          item.target_takt_days === null || item.target_takt_days === undefined
-            ? ''
-            : String(item.target_takt_days)
-      })
-      setTaktTargetDrafts(nextTargetDrafts)
-      setIsLoading(false)
-    }
-
-    loadProductionParameters()
-    return () => { cancelled = true }
-  }, [organizationId, projectId, supabase])
-
-  const activeScopeItems = useMemo(
-    () => [...scopeItems]
-      .filter((scopeItem) => scopeItem.is_active !== false)
-      .sort((a, b) => (Number(a.sequence_number) || 0) - (Number(b.sequence_number) || 0)),
-    [scopeItems]
-  )
-
-  const sortedLocations = useMemo(
-    () => [...locations].sort((a, b) => {
-      const diff = (Number(a.sequence_number) || 0) - (Number(b.sequence_number) || 0)
-      return diff !== 0 ? diff : String(a.name || '').localeCompare(String(b.name || ''))
-    }),
-    [locations]
-  )
-
-  const locationMap = useMemo(
-    () => new Map(locations.map((location) => [location.id, location])),
-    [locations]
-  )
-
-  const locationPathMap = useMemo(() => {
-    const map = new Map()
-    locations.forEach((location) => {
-      const path = []
-      const visited = new Set()
-      let current = location
-      while (current && !visited.has(current.id)) {
-        visited.add(current.id)
-        path.unshift(current)
-        current = current.parent_id ? locationMap.get(current.parent_id) : null
-      }
-      map.set(location.id, path)
-    })
-    return map
-  }, [locationMap, locations])
-
-  const floorLocations = useMemo(
-    () => sortedLocations.filter((location) => location.location_type === 'floor'),
-    [sortedLocations]
-  )
-
-  const quantificationByDivision = useMemo(() => {
-    return floorLocations
-      .map((floor) => {
-        const zones = sortedLocations
-          .filter((location) => location.location_type === 'zone')
-          .filter((zone) => {
-            const path = locationPathMap.get(zone.id) || []
-            return path.some((item) => item.id === floor.id)
-          })
-
-        const totals = new Map()
-        activeScopeItems.forEach((scopeItem) => {
-          zones.forEach((zone) => totals.set(`${scopeItem.id}___${zone.id}`, 0))
-        })
-
-        allocations.forEach((allocation) => {
-          const location = locationMap.get(allocation.location_id)
-          if (!location) return
-          const path = locationPathMap.get(location.id) || []
-          const floorInPath = path.find((item) => item.location_type === 'floor')
-          const zoneInPath = path.find((item) => item.location_type === 'zone')
-          if (floorInPath?.id !== floor.id || !zoneInPath) return
-          const key = `${allocation.service_id}___${zoneInPath.id}`
-          totals.set(key, (totals.get(key) || 0) + Number(allocation.quantity || 0))
-        })
-
-        return { floor, zones, totals }
-      })
-      .filter((division) => division.zones.length > 0)
-  }, [activeScopeItems, allocations, floorLocations, locationMap, locationPathMap, sortedLocations])
-
-  const projectProductivityMap = useMemo(() => {
-    const map = new Map()
-    projectProductivities.forEach((item) => {
-      map.set(`${item.division_location_id}___${item.service_id}`, item)
-    })
-    return map
-  }, [projectProductivities])
-
-  const divisionTaktTargetMap = useMemo(() => {
-    const map = new Map()
-    divisionTaktTargets.forEach((item) => map.set(item.division_location_id, item))
-    return map
-  }, [divisionTaktTargets])
-
-  const filteredProductivityLibrary = useMemo(() => {
-    const search = productivitySearch.trim().toLowerCase()
-    if (!search) return productivityLibrary
-    return productivityLibrary.filter((item) =>
-      [item.service_name, item.service_code, item.quantity_unit, item.description]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(search)
+  const parameterMap =
+    useMemo(
+      () =>
+        new Map(
+          parameters.map(
+            (parameter) => [
+              parameter.service_id,
+              parameter,
+            ]
+          )
+        ),
+      [parameters]
     )
-  }, [productivityLibrary, productivitySearch])
 
-  const configuredCount = useMemo(
-    () => activeScopeItems.filter((scopeItem) =>
-      projectProductivities.some((item) =>
-        item.service_id === scopeItem.id && Number(item.productivity_rate) > 0
+
+  const workPackageMap =
+    useMemo(
+      () =>
+        new Map(
+          workPackages.map(
+            (workPackage) => [
+              workPackage.id,
+              workPackage,
+            ]
+          )
+        ),
+      [workPackages]
+    )
+
+
+  useEffect(() => {
+    const nextDrafts = {}
+
+    scopeItems.forEach(
+      (scopeItem) => {
+        const parameter =
+          parameterMap.get(scopeItem.id)
+
+        nextDrafts[scopeItem.id] = {
+          productivity_rate:
+            parameter?.productivity_rate === null ||
+            parameter?.productivity_rate === undefined
+              ? ''
+              : String(parameter.productivity_rate),
+
+          productivity_basis:
+            parameter?.productivity_basis ||
+            'worker_day',
+
+          effective_workforce:
+            parameter?.effective_workforce === null ||
+            parameter?.effective_workforce === undefined
+              ? ''
+              : String(parameter.effective_workforce),
+        }
+      }
+    )
+
+    setDrafts(nextDrafts)
+  }, [parameterMap, scopeItems])
+
+
+  const activeScopeItems =
+    useMemo(
+      () =>
+        [...scopeItems]
+          .filter(
+            (scopeItem) =>
+              scopeItem.is_active !== false
+          )
+          .sort(
+            (firstItem, secondItem) => {
+              const firstSequence =
+                Number(firstItem.sequence_number) || 0
+
+              const secondSequence =
+                Number(secondItem.sequence_number) || 0
+
+              if (firstSequence !== secondSequence) {
+                return firstSequence - secondSequence
+              }
+
+              return String(
+                firstItem.service_name || ''
+              ).localeCompare(
+                String(secondItem.service_name || '')
+              )
+            }
+          ),
+      [scopeItems]
+    )
+
+
+  const filteredScopeItems =
+    useMemo(
+      () => {
+        const normalizedSearch =
+          searchTerm
+            .trim()
+            .toLowerCase()
+
+        if (!normalizedSearch) {
+          return activeScopeItems
+        }
+
+        return activeScopeItems.filter(
+          (scopeItem) => {
+            const workPackage =
+              workPackageMap.get(
+                scopeItem.project_work_package_id
+              )
+
+            const searchableText =
+              [
+                workPackage?.code,
+                workPackage?.description,
+                scopeItem.service_code,
+                scopeItem.service_name,
+                scopeItem.unit,
+              ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase()
+
+            return searchableText.includes(
+              normalizedSearch
+            )
+          }
+        )
+      },
+      [
+        activeScopeItems,
+        searchTerm,
+        workPackageMap,
+      ]
+    )
+
+
+  const configuredCount =
+    useMemo(
+      () =>
+        activeScopeItems.filter(
+          (scopeItem) => {
+            const parameter =
+              parameterMap.get(scopeItem.id)
+
+            return (
+              Number(parameter?.productivity_rate) > 0 &&
+              Number(parameter?.effective_workforce) > 0
+            )
+          }
+        ).length,
+      [activeScopeItems, parameterMap]
+    )
+
+
+  async function saveParameter(scopeItem) {
+    if (!projectId || !userId || !scopeItem?.id) {
+      return
+    }
+
+    const draft =
+      drafts[scopeItem.id] || {}
+
+    const productivityText =
+      normalizeNumericText(
+        draft.productivity_rate
       )
-    ).length,
-    [activeScopeItems, projectProductivities]
-  )
 
-  function openProductivityModal(floor, scopeItem) {
-    setProductivityTarget({ floor, scopeItem })
-    setProductivitySearch(scopeItem.service_name || '')
-    setProductivityMode('select')
-    setProductivityForm({
-      ...emptyProductivityForm,
-      service_name: scopeItem.service_name || '',
-      service_code: scopeItem.service_code || '',
-      quantity_unit: scopeItem.unit || '',
-    })
+    const workforceText =
+      normalizeNumericText(
+        draft.effective_workforce
+      )
+
+    const basis =
+      String(
+        draft.productivity_basis ||
+        'worker_day'
+      ).trim()
+
+    const existing =
+      parameterMap.get(scopeItem.id)
+
+    const isCompletelyBlank =
+      productivityText === '' &&
+      workforceText === ''
+
     setErrorMessage('')
-    setIsProductivityModalOpen(true)
-  }
+    setNoticeMessage('')
 
-  function closeProductivityModal() {
-    if (isSaving) return
-    setIsProductivityModalOpen(false)
-    setProductivityTarget(null)
-    setProductivitySearch('')
-    setProductivityMode('select')
-    setProductivityForm(emptyProductivityForm)
-  }
-
-  async function applyProductivity(libraryItem) {
-    if (!projectId || !userId || !productivityTarget) return
-    const { floor, scopeItem } = productivityTarget
-    const key = `${floor.id}___${scopeItem.id}`
-    const existing = projectProductivityMap.get(key)
-    setIsSaving(true)
-    setErrorMessage('')
-
-    const { data, error } = await supabase
-      .from('project_service_productivity')
-      .upsert({
-        project_id: projectId,
-        division_location_id: floor.id,
-        service_id: scopeItem.id,
-        productivity_library_id: libraryItem.id,
-        productivity_rate: Number(libraryItem.productivity_rate),
-        quantity_unit: libraryItem.quantity_unit || scopeItem.unit || null,
-        productivity_basis: libraryItem.productivity_basis || 'worker_day',
-        effective: existing?.effective ?? null,
-        created_by: userId,
-      }, { onConflict: 'project_id,division_location_id,service_id' })
-      .select(`
-        id, project_id, division_location_id, service_id,
-        productivity_library_id, productivity_rate, quantity_unit,
-        productivity_basis, effective, created_at, updated_at
-      `)
-      .single()
-
-    if (error) {
-      setErrorMessage(getErrorMessage(error))
-      setIsSaving(false)
-      return
-    }
-
-    setProjectProductivities((current) => {
-      const exists = current.some((item) => item.id === data.id)
-      return exists ? current.map((item) => item.id === data.id ? data : item) : [...current, data]
-    })
-    setEffectiveDrafts((current) => ({
-      ...current,
-      [key]: data.effective === null || data.effective === undefined ? '' : String(data.effective),
-    }))
-    setNoticeMessage(`${libraryItem.service_name} productivity was applied to ${floor.name}.`)
-    setIsSaving(false)
-    closeProductivityModal()
-  }
-
-  async function createProductivity(event) {
-    event.preventDefault()
-    if (!organizationId || !userId || !productivityTarget) return
-    const serviceName = productivityForm.service_name.trim()
-    const rate = Number(String(productivityForm.productivity_rate).replace(',', '.'))
-    if (!serviceName) return setErrorMessage('Enter a Scope Item name.')
-    if (!Number.isFinite(rate) || rate <= 0) return setErrorMessage('Enter a productivity greater than zero.')
-    if (!productivityForm.quantity_unit.trim()) return setErrorMessage('Enter a quantity unit.')
-
-    setIsSaving(true)
-    setErrorMessage('')
-    const { data, error } = await supabase
-      .from('productivity_library')
-      .insert({
-        organization_id: organizationId,
-        service_name: serviceName,
-        service_code: productivityForm.service_code.trim() || null,
-        quantity_unit: productivityForm.quantity_unit.trim(),
-        productivity_rate: rate,
-        productivity_basis: productivityForm.productivity_basis.trim() || 'worker_day',
-        description: productivityForm.description.trim() || null,
-        is_active: true,
-        created_by: userId,
-      })
-      .select(`
-        id, organization_id, service_name, service_code, quantity_unit,
-        productivity_rate, productivity_basis, description, is_active,
-        created_at, updated_at
-      `)
-      .single()
-
-    if (error) {
-      setErrorMessage(getErrorMessage(error))
-      setIsSaving(false)
-      return
-    }
-
-    setProductivityLibrary((current) => [...current, data])
-    setIsSaving(false)
-    await applyProductivity(data)
-  }
-
-  async function saveEffective(floorId, serviceId) {
-    if (!projectId || !userId) return
-    const key = `${floorId}___${serviceId}`
-    const existing = projectProductivityMap.get(key)
-    const raw = String(effectiveDrafts[key] ?? '').trim()
-    const effective = raw === '' ? null : Number(raw.replace(',', '.'))
-
-    if (effective !== null && (!Number.isFinite(effective) || effective < 0)) {
-      setErrorMessage('Enter a valid effective workforce.')
-      setEffectiveDrafts((current) => ({
-        ...current,
-        [key]: existing?.effective === null || existing?.effective === undefined ? '' : String(existing.effective),
-      }))
-      return
-    }
-
-    setSavingEffectiveKey(key)
-    setErrorMessage('')
-    const { data, error } = await supabase
-      .from('project_service_productivity')
-      .upsert({
-        project_id: projectId,
-        division_location_id: floorId,
-        service_id: serviceId,
-        productivity_library_id: existing?.productivity_library_id || null,
-        productivity_rate: existing?.productivity_rate ?? null,
-        quantity_unit: existing?.quantity_unit ?? null,
-        productivity_basis: existing?.productivity_basis || 'worker_day',
-        effective,
-        created_by: userId,
-      }, { onConflict: 'project_id,division_location_id,service_id' })
-      .select(`
-        id, project_id, division_location_id, service_id,
-        productivity_library_id, productivity_rate, quantity_unit,
-        productivity_basis, effective, created_at, updated_at
-      `)
-      .single()
-
-    if (error) {
-      setErrorMessage(getErrorMessage(error))
-      setSavingEffectiveKey(null)
-      return
-    }
-
-    setProjectProductivities((current) => {
-      const exists = current.some((item) => item.id === data.id)
-      return exists ? current.map((item) => item.id === data.id ? data : item) : [...current, data]
-    })
-    setEffectiveDrafts((current) => ({ ...current, [key]: data.effective ?? '' }))
-    setSavingEffectiveKey(null)
-    setNoticeMessage('Effective workforce saved.')
-  }
-
-  async function saveDivisionTaktTarget(floorId) {
-    if (!projectId || !userId) return
-    const existing = divisionTaktTargetMap.get(floorId)
-    const raw = String(taktTargetDrafts[floorId] ?? '').trim()
-
-    if (raw === '') {
-      if (!existing) return
-      setSavingTaktTargetId(floorId)
-      const { error } = await supabase
-        .from('project_division_takt_targets')
-        .delete()
-        .eq('id', existing.id)
-        .eq('project_id', projectId)
-      if (error) {
-        setErrorMessage(getErrorMessage(error))
-        setSavingTaktTargetId(null)
+    if (isCompletelyBlank) {
+      if (!existing) {
         return
       }
-      setDivisionTaktTargets((current) => current.filter((item) => item.id !== existing.id))
-      setSavingTaktTargetId(null)
-      setNoticeMessage('Target Takt was cleared for this division.')
+
+      setSavingKey(scopeItem.id)
+
+      const { error } =
+        await supabase
+          .from(
+            'project_service_production_parameters'
+          )
+          .delete()
+          .eq('id', existing.id)
+          .eq('project_id', projectId)
+
+      if (error) {
+        setErrorMessage(
+          getErrorMessage(error)
+        )
+        setSavingKey(null)
+        return
+      }
+
+      setParameters(
+        (currentParameters) =>
+          currentParameters.filter(
+            (parameter) =>
+              parameter.id !== existing.id
+          )
+      )
+
+      setSavingKey(null)
+      setNoticeMessage(
+        `${scopeItem.service_name} production parameters were cleared.`
+      )
+      router.refresh()
       return
     }
 
-    const value = Number(raw.replace(',', '.'))
-    if (!Number.isFinite(value) || value <= 0) {
-      setErrorMessage('Enter a Target Takt greater than zero.')
-      setTaktTargetDrafts((current) => ({
-        ...current,
-        [floorId]: existing?.target_takt_days ?? '',
-      }))
+    const productivityRate =
+      productivityText === ''
+        ? null
+        : Number(productivityText)
+
+    const effectiveWorkforce =
+      workforceText === ''
+        ? null
+        : Number(workforceText)
+
+    if (
+      productivityRate !== null &&
+      (
+        !Number.isFinite(productivityRate) ||
+        productivityRate <= 0
+      )
+    ) {
+      setErrorMessage(
+        `Enter a Productivity greater than zero for ${scopeItem.service_name}.`
+      )
       return
     }
 
-    setSavingTaktTargetId(floorId)
-    setErrorMessage('')
-    const { data, error } = await supabase
-      .from('project_division_takt_targets')
-      .upsert({
-        project_id: projectId,
-        division_location_id: floorId,
-        target_takt_days: value,
-        created_by: userId,
-      }, { onConflict: 'project_id,division_location_id' })
-      .select(`
-        id, project_id, division_location_id, target_takt_days,
-        created_at, updated_at
-      `)
-      .single()
+    if (
+      effectiveWorkforce !== null &&
+      (
+        !Number.isFinite(effectiveWorkforce) ||
+        effectiveWorkforce <= 0
+      )
+    ) {
+      setErrorMessage(
+        `Enter an Effective Workforce greater than zero for ${scopeItem.service_name}.`
+      )
+      return
+    }
+
+    const unchanged =
+      existing &&
+      (existing.productivity_rate === null
+        ? null
+        : Number(existing.productivity_rate)) ===
+        productivityRate &&
+      (existing.effective_workforce === null
+        ? null
+        : Number(existing.effective_workforce)) ===
+        effectiveWorkforce &&
+      (existing.productivity_basis || 'worker_day') ===
+        basis &&
+      (existing.quantity_unit || scopeItem.unit || null) ===
+        (scopeItem.unit || null)
+
+    if (unchanged) {
+      return
+    }
+
+    setSavingKey(scopeItem.id)
+
+    const { data, error } =
+      await supabase
+        .from(
+          'project_service_production_parameters'
+        )
+        .upsert(
+          {
+            project_id: projectId,
+            service_id: scopeItem.id,
+            productivity_rate: productivityRate,
+            quantity_unit:
+              scopeItem.unit || null,
+            productivity_basis: basis,
+            effective_workforce:
+              effectiveWorkforce,
+            created_by: userId,
+          },
+          {
+            onConflict: 'project_id,service_id',
+          }
+        )
+        .select(`
+          id,
+          project_id,
+          service_id,
+          productivity_rate,
+          quantity_unit,
+          productivity_basis,
+          effective_workforce,
+          created_at,
+          updated_at
+        `)
+        .single()
 
     if (error) {
-      setErrorMessage(getErrorMessage(error))
-      setSavingTaktTargetId(null)
+      setErrorMessage(
+        getErrorMessage(error)
+      )
+      setSavingKey(null)
       return
     }
 
-    setDivisionTaktTargets((current) => {
-      const exists = current.some((item) => item.id === data.id)
-      return exists ? current.map((item) => item.id === data.id ? data : item) : [...current, data]
-    })
-    setTaktTargetDrafts((current) => ({ ...current, [floorId]: String(data.target_takt_days) }))
-    setSavingTaktTargetId(null)
-    setNoticeMessage(`Target Takt saved for ${locationMap.get(floorId)?.name || 'division'}.`)
+    setParameters(
+      (currentParameters) => {
+        const exists =
+          currentParameters.some(
+            (parameter) =>
+              parameter.id === data.id
+          )
+
+        return exists
+          ? currentParameters.map(
+              (parameter) =>
+                parameter.id === data.id
+                  ? data
+                  : parameter
+            )
+          : [
+              ...currentParameters,
+              data,
+            ]
+      }
+    )
+
+    setSavingKey(null)
+    setNoticeMessage(
+      `${scopeItem.service_name} production parameters were saved.`
+    )
+    router.refresh()
   }
 
-  if (isLoading) {
-    return <section className={styles.formPanel}><div className={styles.workspaceEmpty}><p>Loading production parameters...</p></div></section>
+
+  function updateDraft(
+    scopeItemId,
+    field,
+    value
+  ) {
+    setDrafts(
+      (currentDrafts) => ({
+        ...currentDrafts,
+        [scopeItemId]: {
+          ...(currentDrafts[scopeItemId] || {}),
+          [field]: value,
+        },
+      })
+    )
   }
+
 
   return (
     <>
       <section className={styles.metricGrid}>
         <article className={styles.metricCard}>
           <span className={styles.metricLabel}>Scope Items</span>
-          <strong className={styles.metricValue}>{activeScopeItems.length}</strong>
-          <span className={styles.metricDetail}>Active project scope</span>
+          <strong className={styles.metricValue}>
+            {activeScopeItems.length}
+          </strong>
+          <span className={styles.metricDetail}>
+            Active project scope
+          </span>
         </article>
+
         <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Configured Scope Items</span>
-          <strong className={styles.metricValue}>{configuredCount}</strong>
-          <span className={styles.metricDetail}>With productivity records</span>
+          <span className={styles.metricLabel}>Configured</span>
+          <strong className={styles.metricValue}>
+            {configuredCount}
+          </strong>
+          <span className={styles.metricDetail}>
+            Productivity + workforce defined
+          </span>
         </article>
+
         <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Divisions</span>
-          <strong className={styles.metricValue}>{floorLocations.length}</strong>
-          <span className={styles.metricDetail}>Production divisions</span>
-        </article>
-        <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Takt Targets</span>
-          <strong className={styles.metricValue}>{divisionTaktTargets.length}</strong>
-          <span className={styles.metricDetail}>Division-specific targets</span>
+          <span className={styles.metricLabel}>Pending</span>
+          <strong className={styles.metricValue}>
+            {Math.max(
+              activeScopeItems.length - configuredCount,
+              0
+            )}
+          </strong>
+          <span className={styles.metricDetail}>
+            Parameters still to define
+          </span>
         </article>
       </section>
 
-      {errorMessage && <div className={styles.scopeWorkspaceError} role="alert">{errorMessage}</div>}
-
-      <section className={styles.formPanel} style={{ marginTop: '24px' }}>
-        <div className={styles.formHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+      <section className={styles.formPanel}>
+        <div className={styles.formHeader}>
           <div>
-            <p className={styles.formDescription} style={{ margin: '0 0 6px' }}>Takt pre-sizing</p>
-            <h2 className={styles.formTitle}>Takt Pre-dimensioning</h2>
+            <h2 className={styles.formTitle}>
+              Production Parameters
+            </h2>
+
             <p className={styles.formDescription}>
-              Quantity ÷ (Productivity × Effective Workforce) = calculated duration. Compare the calculated duration with the division Target Takt before planning integration.
+              Define one project-wide production parameter set for each Scope Item.
+              These values form the calculation database used later to derive raw
+              activity durations from allocated quantities. Takt standardization is
+              intentionally handled in the planning stage, not here.
             </p>
           </div>
-          <button type="button" className={styles.secondaryButton} onClick={() => setShowTaktPresizing((current) => !current)}>
-            {showTaktPresizing ? 'Hide ▲' : 'Show ▼'}
-          </button>
         </div>
 
-        {showTaktPresizing && (
-          <div style={{ overflowX: 'auto', padding: '0 18px 18px' }}>
-            {quantificationByDivision.length === 0 ? (
-              <div className={styles.workspaceEmpty}>
-                <h3>No Takt pre-sizing data available.</h3>
-                <p>Create divisions, zones, Scope Items and allocation quantities first.</p>
-              </div>
-            ) : (
-              quantificationByDivision.map(({ floor, zones, totals }) => {
-                const targetTakt = Number(divisionTaktTargetMap.get(floor.id)?.target_takt_days || 0)
-                return (
-                  <div key={floor.id} style={{ marginTop: '20px', border: '1px solid #dbe7f3', borderRadius: '8px', overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', padding: '12px 14px', background: '#f8fbff' }}>
-                      <strong style={{ color: '#1a365d' }}>{floor.name}</strong>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.76rem', fontWeight: 800, color: '#4a5568' }}>
-                        TARGET TAKT
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="any"
-                          value={taktTargetDrafts[floor.id] ?? ''}
-                          onChange={(event) => setTaktTargetDrafts((current) => ({ ...current, [floor.id]: event.target.value }))}
-                          onBlur={() => saveDivisionTaktTarget(floor.id)}
-                          onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }}
-                          disabled={savingTaktTargetId === floor.id}
-                          style={{ width: '92px', minHeight: '34px', padding: '0 8px', border: '1px solid #cbd5e0', borderRadius: '6px', textAlign: 'center' }}
-                        />
-                        days
-                      </label>
-                    </div>
+        <div
+          style={{
+            padding: '16px 18px',
+            borderBottom: '1px solid #e4ebf1',
+            background: '#fbfcfd',
+          }}
+        >
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) =>
+              setSearchTerm(event.target.value)
+            }
+            placeholder="Search Work Packages or Scope Items..."
+            aria-label="Search Production Parameters"
+            style={{
+              width: '100%',
+              minHeight: '42px',
+              border: '1px solid #d7e0e8',
+              borderRadius: '8px',
+              padding: '0 12px',
+              background: '#ffffff',
+            }}
+          />
+        </div>
 
-                    <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-                      <thead>
-                        <tr style={{ background: '#2a4365', color: '#fff' }}>
-                          <th style={{ minWidth: '220px', padding: '10px 12px', border: '1px solid #365475', textAlign: 'left' }}>Scope Item</th>
-                          <th style={{ minWidth: '120px', padding: '10px 12px', border: '1px solid #365475' }}>Productivity</th>
-                          <th style={{ minWidth: '115px', padding: '10px 12px', border: '1px solid #365475' }}>Effective</th>
-                          {zones.map((zone) => <th key={zone.id} style={{ minWidth: '125px', padding: '10px 12px', border: '1px solid #365475' }}>{zone.name}<br/><span style={{ fontSize: '0.65rem', fontWeight: 500 }}>Qty / Duration</span></th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeScopeItems.map((scopeItem) => {
-                          const key = `${floor.id}___${scopeItem.id}`
-                          const record = projectProductivityMap.get(key)
-                          const rate = Number(record?.productivity_rate || 0)
-                          const effective = Number(record?.effective || 0)
-                          return (
-                            <tr key={scopeItem.id}>
-                              <td style={{ padding: '10px 12px', border: '1px solid #cbd5e0', fontWeight: 750 }}>
-                                <div>{scopeItem.service_name}</div>
-                                <div style={{ marginTop: '3px', fontSize: '0.66rem', color: '#718096' }}>{scopeItem.unit || '—'}</div>
-                              </td>
-                              <td style={{ padding: '8px 10px', border: '1px solid #cbd5e0', textAlign: 'center' }}>
-                                <button type="button" className={styles.secondaryButton} onClick={() => openProductivityModal(floor, scopeItem)} style={{ minHeight: '32px', padding: '0 10px' }}>
-                                  {rate > 0 ? `${formatQuantity(rate)} ${record?.quantity_unit || scopeItem.unit || ''}/worker-day` : 'Select'}
-                                </button>
-                              </td>
-                              <td style={{ padding: '8px 10px', border: '1px solid #cbd5e0', textAlign: 'center' }}>
-                                <input
-                                  type="number" min="0" step="any"
-                                  value={effectiveDrafts[key] ?? ''}
-                                  onChange={(event) => setEffectiveDrafts((current) => ({ ...current, [key]: event.target.value }))}
-                                  onBlur={() => saveEffective(floor.id, scopeItem.id)}
-                                  onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }}
-                                  disabled={savingEffectiveKey === key}
-                                  style={{ width: '78px', minHeight: '32px', padding: '0 7px', border: '1px solid #cbd5e0', borderRadius: '6px', textAlign: 'center' }}
-                                />
-                              </td>
-                              {zones.map((zone) => {
-                                const quantity = totals.get(`${scopeItem.id}___${zone.id}`) || 0
-                                const duration = rate > 0 && effective > 0 ? quantity / (rate * effective) : null
-                                const overTarget = targetTakt > 0 && duration !== null && duration > targetTakt
-                                return (
-                                  <td key={zone.id} style={{ padding: '8px 10px', border: '1px solid #cbd5e0', textAlign: 'center', background: quantity > 0 ? getZoneColor(zone.name) : undefined }}>
-                                    <strong>{formatQuantity(quantity)}</strong>
-                                    <div style={{ marginTop: '4px', fontSize: '0.68rem', fontWeight: 800, color: overTarget ? '#c53030' : '#4a5568' }}>
-                                      {duration === null ? '—' : `${formatQuantity(duration)} d`}
-                                    </div>
-                                  </td>
-                                )
-                              })}
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              })
-            )}
+        {errorMessage && (
+          <div className={styles.scopeWorkspaceError}>
+            {errorMessage}
           </div>
         )}
-      </section>
 
-      {noticeMessage && (
-        <div className={styles.scopeWorkspaceNotice} role="status">
-          <span>✓</span><span>{noticeMessage}</span>
-          <button type="button" onClick={() => setNoticeMessage('')} aria-label="Close notification">×</button>
-        </div>
-      )}
-
-      {isProductivityModalOpen && productivityTarget && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', padding: '24px', background: 'rgba(15, 23, 42, 0.5)' }} onMouseDown={(event) => { if (event.target === event.currentTarget) closeProductivityModal() }}>
-          <div style={{ width: 'min(760px, 100%)', maxHeight: '85vh', overflowY: 'auto', borderRadius: '12px', background: '#fff', boxShadow: '0 24px 60px rgba(15, 23, 42, 0.22)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', padding: '20px 22px', borderBottom: '1px solid #e2e8f0' }}>
-              <div>
-                <p className={styles.formDescription} style={{ margin: '0 0 4px' }}>Productivity</p>
-                <h2 className={styles.formTitle} style={{ margin: 0 }}>{productivityTarget.scopeItem.service_name} — {productivityTarget.floor.name}</h2>
-              </div>
-              <button type="button" className={styles.secondaryButton} onClick={closeProductivityModal}>×</button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', padding: '14px 22px', borderBottom: '1px solid #e2e8f0' }}>
-              <button type="button" className={productivityMode === 'select' ? styles.primaryButton : styles.secondaryButton} onClick={() => setProductivityMode('select')}>Select from library</button>
-              <button type="button" className={productivityMode === 'create' ? styles.primaryButton : styles.secondaryButton} onClick={() => setProductivityMode('create')}>Create productivity</button>
-            </div>
-
-            {productivityMode === 'select' ? (
-              <div style={{ padding: '18px 22px' }}>
-                <input type="search" value={productivitySearch} onChange={(event) => setProductivitySearch(event.target.value)} placeholder="Search productivity library..." style={{ width: '100%', minHeight: '40px', boxSizing: 'border-box', padding: '0 12px', border: '1px solid #cbd5e0', borderRadius: '7px', marginBottom: '14px' }} />
-                {filteredProductivityLibrary.length === 0 ? (
-                  <div className={styles.workspaceEmpty}><p>No matching productivity records.</p></div>
-                ) : (
-                  <div style={{ display: 'grid', gap: '8px' }}>
-                    {filteredProductivityLibrary.map((item) => (
-                      <button key={item.id} type="button" onClick={() => applyProductivity(item)} disabled={isSaving} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', padding: '12px 14px', border: '1px solid #dbe7f3', borderRadius: '8px', background: '#fff', textAlign: 'left', cursor: 'pointer' }}>
-                        <span><strong>{item.service_name}</strong><br/><small>{item.service_code || 'No code'} · {item.quantity_unit || 'No unit'}</small></span>
-                        <strong>{formatQuantity(item.productivity_rate)} / {item.productivity_basis || 'worker_day'}</strong>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <form onSubmit={createProductivity} style={{ display: 'grid', gap: '12px', padding: '18px 22px' }}>
-                <label>Scope Item name<input required value={productivityForm.service_name} onChange={(event) => setProductivityForm((current) => ({ ...current, service_name: event.target.value }))} style={{ width: '100%', minHeight: '38px', boxSizing: 'border-box' }} /></label>
-                <label>Code<input value={productivityForm.service_code} onChange={(event) => setProductivityForm((current) => ({ ...current, service_code: event.target.value }))} style={{ width: '100%', minHeight: '38px', boxSizing: 'border-box' }} /></label>
-                <label>Quantity unit<input required value={productivityForm.quantity_unit} onChange={(event) => setProductivityForm((current) => ({ ...current, quantity_unit: event.target.value }))} style={{ width: '100%', minHeight: '38px', boxSizing: 'border-box' }} /></label>
-                <label>Productivity rate<input type="number" min="0.000001" step="any" required value={productivityForm.productivity_rate} onChange={(event) => setProductivityForm((current) => ({ ...current, productivity_rate: event.target.value }))} style={{ width: '100%', minHeight: '38px', boxSizing: 'border-box' }} /></label>
-                <label>Basis<select value={productivityForm.productivity_basis} onChange={(event) => setProductivityForm((current) => ({ ...current, productivity_basis: event.target.value }))} style={{ width: '100%', minHeight: '38px' }}><option value="worker_day">worker_day</option><option value="crew_day">crew_day</option><option value="hour">hour</option></select></label>
-                <label>Description<textarea value={productivityForm.description} onChange={(event) => setProductivityForm((current) => ({ ...current, description: event.target.value }))} rows={3} style={{ width: '100%', boxSizing: 'border-box' }} /></label>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}><button type="button" className={styles.secondaryButton} onClick={closeProductivityModal} disabled={isSaving}>Cancel</button><button type="submit" className={styles.primaryButton} disabled={isSaving}>{isSaving ? 'Saving...' : 'Create and apply'}</button></div>
-              </form>
-            )}
+        {noticeMessage && (
+          <div className={styles.scopeWorkspaceNotice}>
+            {noticeMessage}
           </div>
+        )}
+
+        {activeScopeItems.length === 0 ? (
+          <div className={styles.workspaceEmpty}>
+            <span className={styles.workspaceEmptyIcon}>PP</span>
+            <h3>No Scope Items available.</h3>
+            <p>
+              Define the project Scope before establishing Production Parameters.
+            </p>
+          </div>
+        ) : (
+          <div
+            style={{
+              overflowX: 'auto',
+              width: '100%',
+            }}
+          >
+            <div
+              style={{
+                minWidth: '1160px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    '120px minmax(280px, 1.7fr) 90px 150px 170px 170px 170px',
+                  gap: 0,
+                  alignItems: 'center',
+                  minHeight: '48px',
+                  padding: '0 18px',
+                  borderBottom: '1px solid #dfe7ee',
+                  background: '#f5f8fa',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#4a5b68',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <span>Work Package</span>
+                <span>Scope Item</span>
+                <span>Unit</span>
+                <span>Productivity</span>
+                <span>Basis</span>
+                <span>Effective Workforce</span>
+                <span>Production Capacity</span>
+              </div>
+
+              {filteredScopeItems.map(
+                (scopeItem) => {
+                  const workPackage =
+                    workPackageMap.get(
+                      scopeItem.project_work_package_id
+                    )
+
+                  const draft =
+                    drafts[scopeItem.id] || {}
+
+                  const productivity =
+                    Number(
+                      normalizeNumericText(
+                        draft.productivity_rate
+                      )
+                    )
+
+                  const workforce =
+                    Number(
+                      normalizeNumericText(
+                        draft.effective_workforce
+                      )
+                    )
+
+                  const capacity =
+                    Number.isFinite(productivity) &&
+                    productivity > 0 &&
+                    Number.isFinite(workforce) &&
+                    workforce > 0
+                      ? productivity * workforce
+                      : null
+
+                  const isSaving =
+                    savingKey === scopeItem.id
+
+                  return (
+                    <div
+                      key={scopeItem.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns:
+                          '120px minmax(280px, 1.7fr) 90px 150px 170px 170px 170px',
+                        gap: 0,
+                        alignItems: 'center',
+                        minHeight: '66px',
+                        padding: '8px 18px',
+                        borderBottom: '1px solid #edf1f4',
+                        background: '#ffffff',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color: '#1f3b50',
+                        }}
+                      >
+                        {workPackage?.code || '—'}
+                      </span>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '3px',
+                          paddingRight: '12px',
+                        }}
+                      >
+                        <strong
+                          style={{
+                            color: '#18354a',
+                            fontSize: '14px',
+                          }}
+                        >
+                          {scopeItem.service_name}
+                        </strong>
+                        <span
+                          style={{
+                            color: '#71808c',
+                            fontSize: '12px',
+                          }}
+                        >
+                          {scopeItem.service_code || 'Scope Item'}
+                        </span>
+                      </div>
+
+                      <span>
+                        {scopeItem.unit || '—'}
+                      </span>
+
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={draft.productivity_rate ?? ''}
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          updateDraft(
+                            scopeItem.id,
+                            'productivity_rate',
+                            event.target.value
+                          )
+                        }
+                        onBlur={() =>
+                          saveParameter(scopeItem)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.currentTarget.blur()
+                          }
+                        }}
+                        placeholder="Rate"
+                        style={{
+                          width: '128px',
+                          minHeight: '38px',
+                          border: '1px solid #d7e0e8',
+                          borderRadius: '7px',
+                          padding: '0 10px',
+                        }}
+                      />
+
+                      <select
+                        value={
+                          draft.productivity_basis ||
+                          'worker_day'
+                        }
+                        disabled={isSaving}
+                        onChange={(event) => {
+                          updateDraft(
+                            scopeItem.id,
+                            'productivity_basis',
+                            event.target.value
+                          )
+                        }}
+                        onBlur={() =>
+                          saveParameter(scopeItem)
+                        }
+                        style={{
+                          width: '150px',
+                          minHeight: '38px',
+                          border: '1px solid #d7e0e8',
+                          borderRadius: '7px',
+                          padding: '0 8px',
+                          background: '#ffffff',
+                        }}
+                      >
+                        <option value="worker_day">
+                          Per worker / day
+                        </option>
+                        <option value="crew_day">
+                          Per crew / day
+                        </option>
+                      </select>
+
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={draft.effective_workforce ?? ''}
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          updateDraft(
+                            scopeItem.id,
+                            'effective_workforce',
+                            event.target.value
+                          )
+                        }
+                        onBlur={() =>
+                          saveParameter(scopeItem)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.currentTarget.blur()
+                          }
+                        }}
+                        placeholder="Workers"
+                        style={{
+                          width: '145px',
+                          minHeight: '38px',
+                          border: '1px solid #d7e0e8',
+                          borderRadius: '7px',
+                          padding: '0 10px',
+                        }}
+                      />
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                        }}
+                      >
+                        <strong
+                          style={{
+                            color: '#18354a',
+                            fontSize: '14px',
+                          }}
+                        >
+                          {capacity === null
+                            ? '—'
+                            : formatNumber(capacity)}
+                        </strong>
+
+                        <span
+                          style={{
+                            color: '#71808c',
+                            fontSize: '11px',
+                          }}
+                        >
+                          {capacity === null
+                            ? 'Waiting for inputs'
+                            : `${scopeItem.unit || 'unit'}/day`}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                }
+              )}
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: '14px 18px',
+            borderTop: '1px solid #e4ebf1',
+            background: '#fbfcfd',
+            color: '#667784',
+            fontSize: '12px',
+          }}
+        >
+          <span>
+            {filteredScopeItems.length} Scope Item
+            {filteredScopeItems.length === 1 ? '' : 's'} shown
+          </span>
+
+          <span>
+            Project {projectCode || projectId}
+          </span>
         </div>
-      )}
+      </section>
     </>
   )
 }
