@@ -443,6 +443,62 @@ export default async function PrePlanningPage({
   }
 
 
+  async function saveScopeSequence(formData) {
+    'use server'
+
+    const projectId =
+      String(formData.get('project_id') || '')
+
+    const serviceId =
+      String(formData.get('service_id') || '')
+
+    const productionSequence =
+      Number(formData.get('production_sequence'))
+
+    if (
+      !projectId ||
+      !serviceId ||
+      !Number.isInteger(productionSequence) ||
+      productionSequence <= 0
+    ) {
+      return
+    }
+
+    const actionSupabase =
+      await createClient()
+
+    const {
+      data: {
+        user: actionUser,
+      },
+    } =
+      await actionSupabase.auth.getUser()
+
+    if (!actionUser) {
+      return
+    }
+
+    await actionSupabase
+      .from('project_scope_pre_planning')
+      .upsert(
+        {
+          project_id: projectId,
+          service_id: serviceId,
+          production_sequence: productionSequence,
+          created_by: actionUser.id,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'project_id,service_id',
+        }
+      )
+
+    revalidatePath(
+      '/dashboard/planning/pre-planning'
+    )
+  }
+
+
   async function saveTakt(formData) {
     'use server'
 
@@ -523,84 +579,6 @@ export default async function PrePlanningPage({
         {
           onConflict:
             'project_id',
-        }
-      )
-
-    revalidatePath(
-      '/dashboard/planning/pre-planning'
-    )
-  }
-
-
-  async function saveExecutionMode(
-    formData
-  ) {
-    'use server'
-
-    const projectId =
-      String(
-        formData.get('project_id') || ''
-      )
-
-    const workPackageId =
-      String(
-        formData.get(
-          'project_work_package_id'
-        ) || ''
-      )
-
-    const executionMode =
-      String(
-        formData.get(
-          'execution_mode'
-        ) || ''
-      )
-
-    if (
-      !projectId ||
-      !workPackageId ||
-      ![
-        'concurrent',
-        'sequential',
-      ].includes(executionMode)
-    ) {
-      return
-    }
-
-    const actionSupabase =
-      await createClient()
-
-    const {
-      data: {
-        user: actionUser,
-      },
-    } =
-      await actionSupabase.auth.getUser()
-
-    if (!actionUser) {
-      return
-    }
-
-    await actionSupabase
-      .from(
-        'project_work_package_pre_planning'
-      )
-      .upsert(
-        {
-          project_id:
-            projectId,
-          project_work_package_id:
-            workPackageId,
-          execution_mode:
-            executionMode,
-          created_by:
-            actionUser.id,
-          updated_at:
-            new Date().toISOString(),
-        },
-        {
-          onConflict:
-            'project_id,project_work_package_id',
         }
       )
 
@@ -896,6 +874,7 @@ export default async function PrePlanningPage({
     productionParametersResult,
     settingsResult,
     workPackageRulesResult,
+    scopeSequenceResult,
   ] =
     await Promise.all(
       [
@@ -1045,6 +1024,22 @@ export default async function PrePlanningPage({
             'project_id',
             selectedProject.id
           ),
+
+        supabase
+          .from(
+            'project_scope_pre_planning'
+          )
+          .select(
+            `
+              id,
+              service_id,
+              production_sequence
+            `
+          )
+          .eq(
+            'project_id',
+            selectedProject.id
+          ),
       ]
     )
 
@@ -1057,6 +1052,7 @@ export default async function PrePlanningPage({
       productionParametersResult.error,
       settingsResult.error,
       workPackageRulesResult.error,
+      scopeSequenceResult.error,
     ].filter(Boolean)
 
   if (loadErrors.length > 0) {
@@ -1159,15 +1155,15 @@ export default async function PrePlanningPage({
       )
     )
 
-  const ruleMap =
+  const scopeSequenceMap =
     new Map(
       (
-        workPackageRulesResult.data ||
+        scopeSequenceResult.data ||
         []
       ).map(
         (item) => [
-          item.project_work_package_id,
-          item.execution_mode,
+          item.service_id,
+          Number(item.production_sequence) || 1,
         ]
       )
     )
@@ -1273,73 +1269,92 @@ export default async function PrePlanningPage({
       (group) => {
         const packages = {}
 
-        for (
-          const workPackage
-          of workPackages
-        ) {
+        for (const workPackage of workPackages) {
           const packageRows =
             group.rows.filter(
               (row) =>
-                row.workPackageId ===
-                workPackage.id
+                row.workPackageId === workPackage.id
             )
 
-          const validDurations =
-            packageRows
-              .map(
-                (row) =>
-                  row.rawDuration
+          const sequenceGroups =
+            new Map()
+
+          for (const packageRow of packageRows) {
+            if (
+              !Number.isFinite(
+                packageRow.rawDuration
               )
-              .filter(
-                (value) =>
-                  Number.isFinite(value)
-              )
+            ) {
+              continue
+            }
 
-          const executionMode =
-            ruleMap.get(
-              workPackage.id
-            ) || 'concurrent'
+            const productionSequence =
+              scopeSequenceMap.get(
+                packageRow.serviceId
+              ) || 1
 
-          let rawDuration = null
+            const currentDurations =
+              sequenceGroups.get(
+                productionSequence
+              ) || []
 
-          if (
-            validDurations.length > 0
-          ) {
-            rawDuration =
-              executionMode ===
-              'sequential'
-                ? validDurations.reduce(
-                    (
-                      total,
-                      value
-                    ) =>
-                      total + value,
-                    0
-                  )
-                : Math.max(
-                    ...validDurations
-                  )
+            currentDurations.push(
+              packageRow.rawDuration
+            )
+
+            sequenceGroups.set(
+              productionSequence,
+              currentDurations
+            )
           }
+
+          const sequenceDurations =
+            [...sequenceGroups.entries()]
+              .sort(
+                (
+                  [firstSequence],
+                  [secondSequence]
+                ) =>
+                  firstSequence -
+                  secondSequence
+              )
+              .map(
+                (
+                  [
+                    productionSequence,
+                    durations,
+                  ]
+                ) => ({
+                  productionSequence,
+                  duration:
+                    Math.max(...durations),
+                })
+              )
+
+          const rawDuration =
+            sequenceDurations.length > 0
+              ? sequenceDurations.reduce(
+                  (total, item) =>
+                    total + item.duration,
+                  0
+                )
+              : null
 
           const utilization =
             rawDuration !== null &&
             hasTargetTakt
-              ? rawDuration /
-                targetTakt
+              ? rawDuration / targetTakt
               : null
 
-          packages[
-            workPackage.id
-          ] = {
+          packages[workPackage.id] = {
             rawDuration,
             utilization,
-            executionMode,
+            sequenceDurations,
           }
         }
 
         return {
-          locationId:
-            group.location.id,
+          locationId: group.location.id,
           locationPath:
             buildLocationPath(
               group.location,
@@ -1714,228 +1729,327 @@ export default async function PrePlanningPage({
       <section
         style={{
           overflow: 'hidden',
-          border:
-            `1px solid ${BORDER}`,
+          border: `1px solid ${BORDER}`,
           borderRadius: '12px',
           background: '#ffffff',
         }}
       >
         <SectionHeader
           step="2"
-          title="Work Package Logic"
-          description="Define how Scope Items behave inside each Work Package. Concurrent uses the longest Scope Item duration; Sequential adds the Scope Item durations."
+          title="Scope Production Sequence"
+          description="Define the production order of Scope Items inside each Work Package. Scope Items with the same sequence may overlap; the next sequence starts after the previous sequence."
         />
 
         <div
           style={{
-            overflowX: 'auto',
+            padding: '13px 16px',
+            borderBottom: `1px solid ${BORDER}`,
+            background: '#f0fdfa',
+            color: '#135e56',
+            fontSize: '12px',
+            lineHeight: 1.5,
           }}
         >
-          <table
-            style={{
-              width: '100%',
-              minWidth: '760px',
-              borderCollapse:
-                'collapse',
-            }}
-          >
-            <thead>
-              <tr>
-                {[
-                  'Work Package',
-                  'Description',
-                  'Scope Items',
-                  'Execution Mode',
-                ].map(
-                  (label) => (
-                    <th
-                      key={label}
+          <strong>Production rule:</strong>{' '}
+          Same sequence = overlapping work. Different sequence = consecutive work. Work Package duration = SUM of the longest Scope Item duration in each sequence.
+        </div>
+
+        {workPackages.map(
+          (workPackage) => {
+            const packageScopeItems =
+              scopeItems
+                .filter(
+                  (scopeItem) =>
+                    scopeItem.project_work_package_id ===
+                    workPackage.id
+                )
+                .sort(
+                  (first, second) =>
+                    Number(first.sequence_number || 0) -
+                    Number(second.sequence_number || 0)
+                )
+
+            if (packageScopeItems.length === 0) {
+              return null
+            }
+
+            return (
+              <div
+                key={workPackage.id}
+                style={{
+                  borderBottom: `1px solid ${BORDER}`,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    padding: '13px 16px',
+                    background: '#fbfcfd',
+                  }}
+                >
+                  <div>
+                    <strong
                       style={{
-                        padding:
-                          '10px 12px',
-                        borderBottom:
-                          `1px solid ${BORDER}`,
-                        background:
-                          '#eef3f6',
-                        color:
-                          '#52677d',
-                        fontSize:
-                          '10px',
+                        color: TEAL,
+                        fontSize: '12px',
                         fontWeight: 900,
-                        textAlign:
-                          'left',
-                        textTransform:
-                          'uppercase',
                       }}
                     >
-                      {label}
-                    </th>
-                  )
-                )}
-              </tr>
-            </thead>
+                      {workPackage.code}
+                    </strong>
 
-            <tbody>
-              {workPackages.map(
-                (workPackage) => {
-                  const scopeCount =
-                    scopeItems.filter(
-                      (scopeItem) =>
-                        scopeItem
-                          .project_work_package_id ===
-                        workPackage.id
-                    ).length
-
-                  const executionMode =
-                    ruleMap.get(
-                      workPackage.id
-                    ) || 'concurrent'
-
-                  return (
-                    <tr
-                      key={
-                        workPackage.id
-                      }
+                    <span
+                      style={{
+                        marginLeft: '8px',
+                        color: NAVY,
+                        fontSize: '12px',
+                        fontWeight: 800,
+                      }}
                     >
-                      <td
-                        style={{
-                          padding:
-                            '11px 12px',
-                          borderBottom:
-                            '1px solid #edf1f4',
-                          color: TEAL,
-                          fontSize:
-                            '12px',
-                          fontWeight: 900,
-                        }}
-                      >
-                        {workPackage.code}
-                      </td>
+                      {workPackage.description || 'Work Package'}
+                    </span>
+                  </div>
 
-                      <td
-                        style={{
-                          padding:
-                            '11px 12px',
-                          borderBottom:
-                            '1px solid #edf1f4',
-                          color: TEXT,
-                          fontSize:
-                            '12px',
-                        }}
-                      >
-                        {workPackage.description ||
-                          '—'}
-                      </td>
+                  <span
+                    style={{
+                      color: MUTED,
+                      fontSize: '11px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {packageScopeItems.length} Scope Item
+                    {packageScopeItems.length === 1 ? '' : 's'}
+                  </span>
+                </div>
 
-                      <td
-                        style={{
-                          padding:
-                            '11px 12px',
-                          borderBottom:
-                            '1px solid #edf1f4',
-                          color: TEXT,
-                          fontSize:
-                            '12px',
-                        }}
-                      >
-                        {scopeCount}
-                      </td>
+                <div style={{ overflowX: 'auto' }}>
+                  <table
+                    style={{
+                      width: '100%',
+                      minWidth: '820px',
+                      borderCollapse: 'collapse',
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        {[
+                          'Production Sequence',
+                          'Scope Item',
+                          'Unit',
+                          'Productivity Basis',
+                          'Raw Duration Range',
+                        ].map(
+                          (label) => (
+                            <th
+                              key={label}
+                              style={{
+                                padding: '9px 12px',
+                                borderBottom: `1px solid ${BORDER}`,
+                                background: '#eef3f6',
+                                color: '#52677d',
+                                fontSize: '10px',
+                                fontWeight: 900,
+                                textAlign: 'left',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              {label}
+                            </th>
+                          )
+                        )}
+                      </tr>
+                    </thead>
 
-                      <td
-                        style={{
-                          padding:
-                            '8px 12px',
-                          borderBottom:
-                            '1px solid #edf1f4',
-                        }}
-                      >
-                        <form
-                          action={
-                            saveExecutionMode
-                          }
-                          style={{
-                            display:
-                              'flex',
-                            gap: '8px',
-                          }}
-                        >
-                          <input
-                            type="hidden"
-                            name="project_id"
-                            value={
-                              selectedProject.id
-                            }
-                          />
+                    <tbody>
+                      {packageScopeItems.map(
+                        (scopeItem) => {
+                          const parameter =
+                            parameterMap.get(scopeItem.id)
 
-                          <input
-                            type="hidden"
-                            name="project_work_package_id"
-                            value={
-                              workPackage.id
-                            }
-                          />
+                          const itemDurations =
+                            calculations
+                              .filter(
+                                (row) =>
+                                  row.serviceId === scopeItem.id
+                              )
+                              .map(
+                                (row) => row.rawDuration
+                              )
+                              .filter(
+                                (value) =>
+                                  Number.isFinite(value)
+                              )
 
-                          <select
-                            name="execution_mode"
-                            defaultValue={
-                              executionMode
-                            }
-                            style={{
-                              minHeight:
-                                '36px',
-                              border:
-                                `1px solid ${BORDER}`,
-                              borderRadius:
-                                '7px',
-                              padding:
-                                '0 8px',
-                              background:
-                                '#ffffff',
-                            }}
-                          >
-                            <option value="concurrent">
-                              Concurrent
-                            </option>
+                          const minDuration =
+                            itemDurations.length > 0
+                              ? Math.min(...itemDurations)
+                              : null
 
-                            <option value="sequential">
-                              Sequential
-                            </option>
-                          </select>
+                          const maxDuration =
+                            itemDurations.length > 0
+                              ? Math.max(...itemDurations)
+                              : null
 
-                          <button
-                            type="submit"
-                            style={{
-                              minHeight:
-                                '36px',
-                              padding:
-                                '0 10px',
-                              border:
-                                `1px solid ${BORDER}`,
-                              borderRadius:
-                                '7px',
-                              background:
-                                '#ffffff',
-                              color:
-                                NAVY,
-                              fontSize:
-                                '11px',
-                              fontWeight:
-                                800,
-                              cursor:
-                                'pointer',
-                            }}
-                          >
-                            Save
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  )
-                }
-              )}
-            </tbody>
-          </table>
-        </div>
+                          const productionSequence =
+                            scopeSequenceMap.get(
+                              scopeItem.id
+                            ) || 1
+
+                          return (
+                            <tr key={scopeItem.id}>
+                              <td
+                                style={{
+                                  width: '190px',
+                                  padding: '8px 12px',
+                                  borderBottom:
+                                    '1px solid #edf1f4',
+                                }}
+                              >
+                                {packageScopeItems.length === 1 ? (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      minHeight: '30px',
+                                      alignItems: 'center',
+                                      padding: '0 9px',
+                                      borderRadius: '999px',
+                                      background: '#f1f5f9',
+                                      color: MUTED,
+                                      fontSize: '10px',
+                                      fontWeight: 900,
+                                    }}
+                                  >
+                                    Seq 1
+                                  </span>
+                                ) : (
+                                  <form
+                                    action={saveScopeSequence}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '7px',
+                                    }}
+                                  >
+                                    <input
+                                      type="hidden"
+                                      name="project_id"
+                                      value={selectedProject.id}
+                                    />
+
+                                    <input
+                                      type="hidden"
+                                      name="service_id"
+                                      value={scopeItem.id}
+                                    />
+
+                                    <input
+                                      type="number"
+                                      name="production_sequence"
+                                      min="1"
+                                      step="1"
+                                      defaultValue={productionSequence}
+                                      aria-label={`Production sequence for ${scopeItem.service_name}`}
+                                      style={{
+                                        width: '70px',
+                                        minHeight: '34px',
+                                        border: `1px solid ${BORDER}`,
+                                        borderRadius: '7px',
+                                        padding: '0 9px',
+                                        background: '#ffffff',
+                                      }}
+                                    />
+
+                                    <button
+                                      type="submit"
+                                      style={{
+                                        minHeight: '34px',
+                                        padding: '0 10px',
+                                        border: `1px solid ${BORDER}`,
+                                        borderRadius: '7px',
+                                        background: '#ffffff',
+                                        color: NAVY,
+                                        fontSize: '10px',
+                                        fontWeight: 900,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      Apply
+                                    </button>
+                                  </form>
+                                )}
+                              </td>
+
+                              <td
+                                style={{
+                                  padding: '10px 12px',
+                                  borderBottom:
+                                    '1px solid #edf1f4',
+                                  color: TEXT,
+                                  fontSize: '12px',
+                                  fontWeight: 800,
+                                }}
+                              >
+                                {scopeItem.service_name}
+                              </td>
+
+                              <td
+                                style={{
+                                  padding: '10px 12px',
+                                  borderBottom:
+                                    '1px solid #edf1f4',
+                                  color: TEXT,
+                                  fontSize: '11px',
+                                }}
+                              >
+                                {scopeItem.unit || '—'}
+                              </td>
+
+                              <td
+                                style={{
+                                  padding: '10px 12px',
+                                  borderBottom:
+                                    '1px solid #edf1f4',
+                                  color: TEXT,
+                                  fontSize: '11px',
+                                }}
+                              >
+                                {parameter?.productivity_basis === 'crew_day'
+                                  ? 'Per crew / day'
+                                  : parameter?.productivity_basis === 'worker_day'
+                                    ? 'Per worker / day'
+                                    : '—'}
+                              </td>
+
+                              <td
+                                style={{
+                                  padding: '10px 12px',
+                                  borderBottom:
+                                    '1px solid #edf1f4',
+                                  color: NAVY,
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                }}
+                              >
+                                {minDuration === null
+                                  ? '—'
+                                  : minDuration === maxDuration
+                                    ? `${safeNumber(minDuration)} d`
+                                    : `${safeNumber(minDuration)}–${safeNumber(maxDuration)} d`}
+                              </td>
+                            </tr>
+                          )
+                        }
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          }
+        )}
       </section>
 
 
