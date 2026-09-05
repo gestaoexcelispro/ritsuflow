@@ -360,6 +360,193 @@ const styles = StyleSheet.create({
     width: '37%',
     textAlign: 'right',
   },
+  scopeSummaryRow: {
+    flexDirection: 'row',
+    marginHorizontal: -3,
+    marginBottom: 12,
+  },
+  scopeSummaryCard: {
+    width: '25%',
+    paddingHorizontal: 3,
+  },
+  scopeSummaryCardInner: {
+    minHeight: 58,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  scopeSummaryLabel: {
+    color: MUTED,
+    fontSize: 5.8,
+    fontWeight: 700,
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+  },
+  scopeSummaryDescription: {
+    marginTop: 3,
+    color: MUTED,
+    fontSize: 5.4,
+  },
+  scopeSummaryValue: {
+    marginTop: 7,
+    color: NAVY,
+    fontSize: 14,
+    fontWeight: 700,
+    textAlign: 'right',
+  },
+  scopeReadinessCard: {
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  scopeReadinessLeft: {
+    width: '75%',
+  },
+  scopeReadinessTitle: {
+    marginTop: 3,
+    color: NAVY,
+    fontSize: 9,
+    fontWeight: 700,
+  },
+  scopeReadyBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: SUCCESS,
+    color: '#24724D',
+    fontSize: 5.8,
+    fontWeight: 700,
+  },
+  scopeIncompleteBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: WARNING,
+    color: '#996E16',
+    fontSize: 5.8,
+    fontWeight: 700,
+  },
+  scopePackageCard: {
+    marginBottom: 9,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  scopePackageHeader: {
+    paddingVertical: 8,
+    paddingHorizontal: 9,
+    backgroundColor: SOFT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  scopePackageIdentity: {
+    width: '57%',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  scopePackageIndex: {
+    width: 24,
+    height: 24,
+    marginRight: 8,
+    borderRadius: 4,
+    backgroundColor: '#EAF0F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scopePackageIndexText: {
+    color: NAVY,
+    fontSize: 6.5,
+    fontWeight: 700,
+  },
+  scopePackageCode: {
+    color: TEAL,
+    fontSize: 6,
+    fontWeight: 700,
+    letterSpacing: 0.5,
+  },
+  scopePackageName: {
+    marginTop: 2,
+    color: NAVY,
+    fontSize: 9,
+    fontWeight: 700,
+  },
+  scopePackageMeta: {
+    width: '43%',
+    alignItems: 'flex-end',
+  },
+  scopePackageMetaText: {
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 9,
+    backgroundColor: '#EEF4F7',
+    color: NAVY,
+    fontSize: 5.6,
+    fontWeight: 700,
+  },
+  scopeTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFB',
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  scopeTableRow: {
+    flexDirection: 'row',
+    minHeight: 28,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9EEF2',
+  },
+  scopeIdCell: {
+    width: '8%',
+  },
+  scopeItemCell: {
+    width: '34%',
+  },
+  scopeUnitCell: {
+    width: '9%',
+  },
+  scopeQuantityCell: {
+    width: '14%',
+    textAlign: 'right',
+  },
+  scopeUnitCostCell: {
+    width: '14%',
+    textAlign: 'right',
+  },
+  scopeTotalCostCell: {
+    width: '15%',
+    textAlign: 'right',
+  },
+  scopeStatusCell: {
+    width: '6%',
+    alignItems: 'center',
+  },
+  scopeStatusDotComplete: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#24724D',
+  },
+  scopeStatusDotIncomplete: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#996E16',
+  },
   locationSummaryRow: {
     flexDirection: 'row',
     marginHorizontal: -3,
@@ -974,6 +1161,70 @@ export default function ProjectSetupReportDocument({
     }
   })
 
+  const scopeItemsAssigned = activeScopeItems.filter(
+    (scopeItem) =>
+      scopeItem.project_work_package_id &&
+      workPackageMap.has(scopeItem.project_work_package_id)
+  ).length
+
+  const scopeCost = activeScopeItems.reduce((total, scopeItem) => {
+    const quantity = Number(scopeItem.scope_quantity)
+    const unitCost = Number(scopeItem.unit_cost)
+
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCost)) {
+      return total
+    }
+
+    return total + quantity * unitCost
+  }, 0)
+
+  const scopeItemIsComplete = (scopeItem) => {
+    const quantity = Number(scopeItem.scope_quantity)
+    const unitCost = Number(scopeItem.unit_cost)
+
+    return Boolean(
+      scopeItem.project_work_package_id &&
+        scopeItem.service_name &&
+        scopeItem.unit &&
+        Number.isFinite(quantity) &&
+        quantity >= 0 &&
+        Number.isFinite(unitCost) &&
+        unitCost >= 0
+    )
+  }
+
+  const completedScopeItems = activeScopeItems.filter(scopeItemIsComplete).length
+  const scopeDefinitionComplete =
+    activeScopeItems.length > 0 &&
+    completedScopeItems === activeScopeItems.length &&
+    scopeItemsAssigned === activeScopeItems.length
+
+  const projectScopePackages = activeWorkPackages
+    .map((workPackage) => {
+      const packageScopeItems = activeScopeItems.filter(
+        (scopeItem) =>
+          scopeItem.project_work_package_id === workPackage.id
+      )
+
+      const packageCost = packageScopeItems.reduce((total, scopeItem) => {
+        const quantity = Number(scopeItem.scope_quantity)
+        const unitCost = Number(scopeItem.unit_cost)
+
+        if (!Number.isFinite(quantity) || !Number.isFinite(unitCost)) {
+          return total
+        }
+
+        return total + quantity * unitCost
+      }, 0)
+
+      return {
+        workPackage,
+        scopeItems: packageScopeItems,
+        packageCost,
+      }
+    })
+    .filter((entry) => entry.scopeItems.length > 0)
+
   const reconciliationRows = activeScopeItems.map((scopeItem) => {
     const allocated = allocatedByScopeItem.get(scopeItem.id) || 0
     const scope =
@@ -1177,43 +1428,206 @@ export default function ProjectSetupReportDocument({
         >
           <SectionHeading
             number="2"
-            title="Scope Summary"
-            subtitle="Project Scope Breakdown Structure and project-level quantities."
+            title="Project Scope"
+            subtitle="Work Packages and Scope Items defining the project Scope Breakdown Structure, quantities, and cost basis."
           />
 
-          {scopeRows.length > 0 ? (
-            <GenericTable
-              columns={[
-                {
-                  key: 'workPackage',
-                  label: 'Work Package',
-                  width: '13%',
-                },
-                {
-                  key: 'scopeItem',
-                  label: 'Scope Item',
-                  width: '43%',
-                },
-                {
-                  key: 'unit',
-                  label: 'Unit',
-                  width: '10%',
-                },
-                {
-                  key: 'quantity',
-                  label: 'Quantity',
-                  width: '16%',
-                  align: 'right',
-                },
-                {
-                  key: 'unitCost',
-                  label: 'Unit Cost',
-                  width: '18%',
-                  align: 'right',
-                },
-              ]}
-              rows={scopeRows}
-            />
+          <View style={styles.scopeSummaryRow}>
+            {[
+              [
+                'Work Packages',
+                'Active scope groups',
+                activeWorkPackages.length,
+              ],
+              [
+                'Scope Items',
+                'Project deliverables',
+                activeScopeItems.length,
+              ],
+              [
+                'Package Assignment',
+                'Scope Items classified',
+                `${scopeItemsAssigned}/${activeScopeItems.length}`,
+              ],
+              [
+                'Scope Cost',
+                `${completedScopeItems}/${activeScopeItems.length} Scope Items costed`,
+                money(scopeCost, project?.currency_code || 'USD'),
+              ],
+            ].map(([label, description, value]) => (
+              <View key={label} style={styles.scopeSummaryCard}>
+                <View style={styles.scopeSummaryCardInner}>
+                  <Text style={styles.scopeSummaryLabel}>{label}</Text>
+                  <Text style={styles.scopeSummaryDescription}>
+                    {description}
+                  </Text>
+                  <Text style={styles.scopeSummaryValue}>{value}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.scopeReadinessCard} wrap={false}>
+            <View style={styles.scopeReadinessLeft}>
+              <Text style={styles.scopeSummaryLabel}>Scope Definition</Text>
+              <Text style={styles.scopeReadinessTitle}>
+                {scopeDefinitionComplete ? 'Complete' : 'Incomplete'}
+              </Text>
+            </View>
+
+            <Text
+              style={
+                scopeDefinitionComplete
+                  ? styles.scopeReadyBadge
+                  : styles.scopeIncompleteBadge
+              }
+            >
+              {scopeDefinitionComplete ? 'READY' : 'REVIEW'}
+            </Text>
+          </View>
+
+          {projectScopePackages.length > 0 ? (
+            projectScopePackages.map((entry, packageIndex) => {
+              const workPackageName =
+                entry.workPackage.name ||
+                entry.workPackage.description ||
+                entry.workPackage.code ||
+                'Work Package'
+
+              return (
+                <View
+                  key={entry.workPackage.id}
+                  style={styles.scopePackageCard}
+                  wrap={false}
+                >
+                  <View style={styles.scopePackageHeader}>
+                    <View style={styles.scopePackageIdentity}>
+                      <View style={styles.scopePackageIndex}>
+                        <Text style={styles.scopePackageIndexText}>
+                          {String(packageIndex + 1).padStart(2, '0')}
+                        </Text>
+                      </View>
+
+                      <View>
+                        <Text style={styles.scopePackageCode}>
+                          {safe(entry.workPackage.code)}
+                        </Text>
+                        <Text style={styles.scopePackageName}>
+                          {safe(workPackageName)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.scopePackageMeta}>
+                      <Text style={styles.scopePackageMetaText}>
+                        {entry.scopeItems.length} Scope Item
+                        {entry.scopeItems.length === 1 ? '' : 's'} ·{' '}
+                        {money(
+                          entry.packageCost,
+                          project?.currency_code || 'USD'
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.scopeTableHeader}>
+                    <View style={[styles.cell, styles.scopeIdCell]}>
+                      <Text style={styles.headerCellText}>ID</Text>
+                    </View>
+                    <View style={[styles.cell, styles.scopeItemCell]}>
+                      <Text style={styles.headerCellText}>Scope Item</Text>
+                    </View>
+                    <View style={[styles.cell, styles.scopeUnitCell]}>
+                      <Text style={styles.headerCellText}>Unit</Text>
+                    </View>
+                    <View style={[styles.cell, styles.scopeQuantityCell]}>
+                      <Text style={styles.headerCellText}>Scope Quantity</Text>
+                    </View>
+                    <View style={[styles.cell, styles.scopeUnitCostCell]}>
+                      <Text style={styles.headerCellText}>Unit Cost</Text>
+                    </View>
+                    <View style={[styles.cell, styles.scopeTotalCostCell]}>
+                      <Text style={styles.headerCellText}>Total Cost</Text>
+                    </View>
+                    <View style={[styles.cell, styles.scopeStatusCell]}>
+                      <Text style={styles.headerCellText}>Status</Text>
+                    </View>
+                  </View>
+
+                  {entry.scopeItems.map((scopeItem, itemIndex) => {
+                    const quantity = Number(scopeItem.scope_quantity)
+                    const unitCost = Number(scopeItem.unit_cost)
+                    const totalCost =
+                      Number.isFinite(quantity) && Number.isFinite(unitCost)
+                        ? quantity * unitCost
+                        : null
+                    const isComplete = scopeItemIsComplete(scopeItem)
+
+                    return (
+                      <View
+                        key={scopeItem.id}
+                        style={styles.scopeTableRow}
+                        wrap={false}
+                      >
+                        <View style={[styles.cell, styles.scopeIdCell]}>
+                          <Text style={styles.cellText}>
+                            {packageIndex + 1}.{itemIndex + 1}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cell, styles.scopeItemCell]}>
+                          <Text style={styles.cellText}>
+                            {safe(scopeItem.service_name)}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cell, styles.scopeUnitCell]}>
+                          <Text style={styles.cellText}>
+                            {safe(scopeItem.unit)}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cell, styles.scopeQuantityCell]}>
+                          <Text style={styles.cellText}>
+                            {number(scopeItem.scope_quantity)}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cell, styles.scopeUnitCostCell]}>
+                          <Text style={styles.cellText}>
+                            {money(
+                              scopeItem.unit_cost,
+                              project?.currency_code || 'USD'
+                            )}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cell, styles.scopeTotalCostCell]}>
+                          <Text style={styles.cellText}>
+                            {totalCost === null
+                              ? '—'
+                              : money(
+                                  totalCost,
+                                  project?.currency_code || 'USD'
+                                )}
+                          </Text>
+                        </View>
+
+                        <View style={[styles.cell, styles.scopeStatusCell]}>
+                          <View
+                            style={
+                              isComplete
+                                ? styles.scopeStatusDotComplete
+                                : styles.scopeStatusDotIncomplete
+                            }
+                          />
+                        </View>
+                      </View>
+                    )
+                  })}
+                </View>
+              )
+            })
           ) : (
             <View style={styles.noData}>
               <Text>No Scope Items are configured for this project.</Text>
