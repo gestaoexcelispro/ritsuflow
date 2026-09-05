@@ -27,8 +27,23 @@ import styles from './dashboard.module.css'
 // RitsuFlow™
 // DASHBOARD NAVIGATION
 //
-// Product navigation follows the user's workflow rather than
-// exposing every underlying database/domain structure.
+// Product navigation follows the user's workflow while keeping
+// major RitsuFlow domains independently accessible.
+//
+// Takeoff is intentionally implemented as a standalone module.
+// Its internal drawing geometry engine must remain independent
+// from construction meaning.
+//
+// Takeoff geometry may later map to:
+//
+// Project
+// → Location
+// → Work Package
+// → Scope Item
+// → Quantity
+// → Productivity
+// → Planning
+// → Production Control
 //
 // Project Setup will progressively become the unified project
 // definition workspace:
@@ -93,6 +108,20 @@ function NavIcon({
         <svg {...commonProps}>
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.2 19.3a1.7 1.7 0 0 0-1.4.4l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.7 8.2a1.7 1.7 0 0 0-.4-1.4l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.8 4.7a1.7 1.7 0 0 0 1.4-.4l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.1.4.3.7.6 1 .3.2.7.4 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.7.6z" />
+        </svg>
+      )
+
+
+    case 'takeoff':
+      return (
+        <svg {...commonProps}>
+          <path d="M5 3h10l4 4v14H5z" />
+          <path d="M15 3v5h4" />
+          <path d="M8 16l3-3 2 2 4-5" />
+          <circle cx="8" cy="16" r="1" />
+          <circle cx="11" cy="13" r="1" />
+          <circle cx="13" cy="15" r="1" />
+          <circle cx="17" cy="10" r="1" />
         </svg>
       )
 
@@ -315,6 +344,21 @@ const baseNavigationGroups = [
 
 
   {
+    label: 'Takeoff',
+
+    items: [
+
+      {
+        label: 'Drawing Takeoff',
+        href: '/dashboard/takeoff',
+        icon: 'takeoff',
+      },
+
+    ],
+  },
+
+
+  {
     label: 'Field Management',
 
     items: [
@@ -397,7 +441,6 @@ const baseNavigationGroups = [
 
     items: [
 
-
     ],
   },
 
@@ -438,9 +481,6 @@ const platformNavigationGroup = {
 
 // ============================================================
 // LEGACY PROJECT SETUP ROUTES
-//
-// These routes remain available while their functionality is
-// progressively absorbed into the unified Project Setup page.
 // ============================================================
 
 const projectSetupLegacyRoutes = [
@@ -652,6 +692,9 @@ export default function DashboardLayout({
     useState({
 
       Workspace:
+        true,
+
+      Takeoff:
         true,
 
       'Field Management':
@@ -1616,7 +1659,7 @@ export default function DashboardLayout({
                                       position:
                                         'absolute',
 
-                                    left:
+                                      left:
                                         '-5px',
 
                                       top:
