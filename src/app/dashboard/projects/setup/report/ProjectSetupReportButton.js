@@ -11,34 +11,93 @@ const REPORT_SECTIONS = [
   {
     key: 'cover',
     label: 'Cover Page',
+    group: 'Project Setup',
+    defaultSelected: true,
+    available: true,
   },
   {
     key: 'basicInformation',
     label: 'Project Basic Information',
+    group: 'Project Setup',
+    defaultSelected: true,
+    available: true,
   },
   {
     key: 'scopeSummary',
-    label: 'Scope Summary',
+    label: 'Project Scope',
+    group: 'Project Setup',
+    defaultSelected: true,
+    available: true,
   },
   {
     key: 'locationStructure',
     label: 'Location Structure',
+    group: 'Project Setup',
+    defaultSelected: true,
+    available: true,
   },
   {
     key: 'quantityReconciliation',
     label: 'Quantity Reconciliation',
+    group: 'Project Setup',
+    defaultSelected: true,
+    available: true,
   },
   {
     key: 'scopeAllocationMatrix',
     label: 'Scope Allocation Matrix',
+    group: 'Project Setup',
+    defaultSelected: true,
+    available: true,
   },
   {
     key: 'quantificationByLocation',
     label: 'Quantification by Location',
+    group: 'Project Setup',
+    defaultSelected: true,
+    available: true,
   },
   {
     key: 'productionParameters',
     label: 'Production Parameters',
+    group: 'Project Setup',
+    defaultSelected: true,
+    available: true,
+  },
+  {
+    key: 'prePlanning',
+    label: 'Pre-Planning',
+    group: 'Planning & Control',
+    defaultSelected: false,
+    available: false,
+  },
+  {
+    key: 'masterPlan',
+    label: 'Master Plan',
+    group: 'Planning & Control',
+    defaultSelected: false,
+    available: false,
+  },
+  {
+    key: 'lookaheadPlanning',
+    label: 'Lookahead Planning',
+    group: 'Planning & Control',
+    defaultSelected: false,
+    available: false,
+  },
+  {
+    key: 'weeklyPlanning',
+    label: 'Weekly Planning',
+    group: 'Planning & Control',
+    defaultSelected: false,
+    available: false,
+  },
+  {
+    key: 'constraintLog',
+    label: 'Constraint Log',
+    group: 'Planning & Control',
+    defaultSelected: false,
+    available: false,
   },
 ]
 
@@ -51,7 +110,7 @@ function buildInitialSections() {
     ) => ({
       ...current,
       [section.key]:
-        true,
+        section.defaultSelected === true,
     }),
     {}
   )
@@ -178,9 +237,29 @@ export default function ProjectSetupReportButton() {
     )
 
 
+  const availableSections =
+    useMemo(
+      () =>
+        REPORT_SECTIONS.filter(
+          (
+            section
+          ) =>
+            section.available !==
+            false
+        ),
+      []
+    )
+
+
   const allSelected =
-    selectedCount ===
-    REPORT_SECTIONS.length
+    availableSections.every(
+      (
+        section
+      ) =>
+        sections[
+          section.key
+        ] === true
+    )
 
 
   if (
@@ -229,6 +308,25 @@ export default function ProjectSetupReportButton() {
     key
   ) {
 
+    const section =
+      REPORT_SECTIONS.find(
+        (
+          item
+        ) =>
+          item.key ===
+          key
+      )
+
+
+    if (
+      !section ||
+      section.available ===
+        false
+    ) {
+      return
+    }
+
+
     setSections(
       (
         current
@@ -247,7 +345,18 @@ export default function ProjectSetupReportButton() {
   function selectAll() {
 
     setSections(
-      buildInitialSections()
+      REPORT_SECTIONS.reduce(
+        (
+          current,
+          section
+        ) => ({
+          ...current,
+          [section.key]:
+            section.available !==
+            false,
+        }),
+        {}
+      )
     )
 
   }
@@ -1017,124 +1126,265 @@ export default function ProjectSetupReportButton() {
               </div>
 
 
-              <div
-                style={{
+              {[
+                'Project Setup',
+                'Planning & Control',
+              ].map(
+                (
+                  groupName
+                ) => {
 
-                  display:
-                    'grid',
+                  const groupSections =
+                    REPORT_SECTIONS.filter(
+                      (
+                        section
+                      ) =>
+                        section.group ===
+                        groupName
+                    )
 
-                  gridTemplateColumns:
-                    'repeat(2, minmax(0, 1fr))',
 
-                  gap:
-                    '8px',
+                  return (
 
-                }}
-              >
-
-                {REPORT_SECTIONS.map(
-                  (
-                    section
-                  ) => (
-
-                    <label
+                    <div
                       key={
-                        section.key
+                        groupName
                       }
                       style={{
-
-                        display:
-                          'flex',
-
-                        alignItems:
-                          'center',
-
-                        gap:
-                          '10px',
-
-                        minHeight:
-                          '44px',
-
-                        padding:
-                          '0 12px',
-
-                        border:
-                          sections[
-                            section.key
-                          ]
-                            ? '1px solid #99e6dc'
-                            : '1px solid #dce5ed',
-
-                        borderRadius:
-                          '8px',
-
-                        background:
-                          sections[
-                            section.key
-                          ]
-                            ? '#f3fcfa'
-                            : '#ffffff',
-
-                        color:
-                          '#334155',
-
-                        fontSize:
-                          '12px',
-
-                        fontWeight:
-                          700,
-
-                        cursor:
-                          isGenerating
-                            ? 'default'
-                            : 'pointer',
-
+                        marginTop:
+                          groupName ===
+                          'Project Setup'
+                            ? 0
+                            : '18px',
                       }}
                     >
 
-                      <input
-                        type="checkbox"
-                        checked={
-                          sections[
-                            section.key
-                          ] === true
-                        }
-                        disabled={
-                          isGenerating
-                        }
-                        onChange={() =>
-                          toggleSection(
-                            section.key
-                          )
-                        }
+                      <div
                         style={{
-                          width:
-                            '16px',
+                          marginBottom:
+                            '8px',
 
-                          height:
-                            '16px',
+                          color:
+                            '#64748b',
 
-                          accentColor:
-                            '#00998b',
+                          fontSize:
+                            '11px',
 
-                          flexShrink:
-                            0,
+                          fontWeight:
+                            900,
+
+                          letterSpacing:
+                            '0.06em',
+
+                          textTransform:
+                            'uppercase',
                         }}
-                      />
-
-
-                      <span>
+                      >
                         {
-                          section.label
+                          groupName
                         }
-                      </span>
+                      </div>
 
-                    </label>
+
+                      <div
+                        style={{
+
+                          display:
+                            'grid',
+
+                          gridTemplateColumns:
+                            'repeat(2, minmax(0, 1fr))',
+
+                          gap:
+                            '8px',
+
+                        }}
+                      >
+
+                        {groupSections.map(
+                          (
+                            section
+                          ) => {
+
+                            const available =
+                              section.available !==
+                              false
+
+
+                            return (
+
+                              <label
+                                key={
+                                  section.key
+                                }
+                                style={{
+
+                                  display:
+                                    'flex',
+
+                                  alignItems:
+                                    'center',
+
+                                  gap:
+                                    '10px',
+
+                                  minHeight:
+                                    '44px',
+
+                                  padding:
+                                    '0 12px',
+
+                                  border:
+                                    sections[
+                                      section.key
+                                    ] &&
+                                    available
+                                      ? '1px solid #99e6dc'
+                                      : '1px solid #dce5ed',
+
+                                  borderRadius:
+                                    '8px',
+
+                                  background:
+                                    sections[
+                                      section.key
+                                    ] &&
+                                    available
+                                      ? '#f3fcfa'
+                                      : available
+                                        ? '#ffffff'
+                                        : '#f8fafc',
+
+                                  color:
+                                    available
+                                      ? '#334155'
+                                      : '#94a3b8',
+
+                                  fontSize:
+                                    '12px',
+
+                                  fontWeight:
+                                    700,
+
+                                  cursor:
+                                    isGenerating ||
+                                    !available
+                                      ? 'default'
+                                      : 'pointer',
+
+                                  opacity:
+                                    available
+                                      ? 1
+                                      : 0.78,
+
+                                }}
+                              >
+
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    sections[
+                                      section.key
+                                    ] === true
+                                  }
+                                  disabled={
+                                    isGenerating ||
+                                    !available
+                                  }
+                                  onChange={() =>
+                                    toggleSection(
+                                      section.key
+                                    )
+                                  }
+                                  style={{
+                                    width:
+                                      '16px',
+
+                                    height:
+                                      '16px',
+
+                                    accentColor:
+                                      '#00998b',
+
+                                    flexShrink:
+                                      0,
+                                  }}
+                                />
+
+
+                                <span
+                                  style={{
+                                    display:
+                                      'flex',
+
+                                    alignItems:
+                                      'center',
+
+                                    justifyContent:
+                                      'space-between',
+
+                                    gap:
+                                      '8px',
+
+                                    width:
+                                      '100%',
+                                  }}
+                                >
+                                  <span>
+                                    {
+                                      section.label
+                                    }
+                                  </span>
+
+
+                                  {!available && (
+
+                                    <span
+                                      style={{
+                                        padding:
+                                          '2px 6px',
+
+                                        borderRadius:
+                                          '999px',
+
+                                        background:
+                                          '#eef2f6',
+
+                                        color:
+                                          '#64748b',
+
+                                        fontSize:
+                                          '9px',
+
+                                        fontWeight:
+                                          900,
+
+                                        whiteSpace:
+                                          'nowrap',
+                                      }}
+                                    >
+                                      NEXT
+                                    </span>
+
+                                  )}
+
+                                </span>
+
+                              </label>
+
+                            )
+
+                          }
+                        )}
+
+                      </div>
+
+                    </div>
 
                   )
-                )}
 
-              </div>
+                }
+              )}
 
 
               {errorMessage && (
@@ -1221,7 +1471,7 @@ export default function ProjectSetupReportButton() {
                   }}
                 >
 
-                  {selectedCount} of {REPORT_SECTIONS.length} sections selected
+                  {selectedCount} of {availableSections.length} available sections selected
 
                 </div>
 
