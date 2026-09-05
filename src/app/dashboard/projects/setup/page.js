@@ -7,6 +7,7 @@ import ProjectForm from './ProjectForm'
 import ScopeWorkspace from './ScopeWorkspace'
 import LocationWorkspace from './LocationWorkspace'
 import QuantityAllocationMatrix from './QuantityAllocationMatrix'
+import ProductionParametersWorkspace from './ProductionParametersWorkspace'
 
 import styles from './project-setup.module.css'
 import selectorStyles from './selector.module.css'
@@ -1565,211 +1566,26 @@ export default async function ProjectSetupPage({
 
       {activeSection ===
         'production' && (
-        <>
-          <section
-            className={
-              styles.metricGrid
-            }
-          >
-            <article
-              className={
-                styles.metricCard
-              }
-            >
-              <span
-                className={
-                  styles.metricLabel
-                }
-              >
-                Scope Items
-              </span>
-
-              <strong
-                className={
-                  styles.metricValue
-                }
-              >
-                {
-                  activeScopeItems.length
-                }
-              </strong>
-
-              <span
-                className={
-                  styles.metricDetail
-                }
-              >
-                Active project scope
-              </span>
-            </article>
-
-            <article
-              className={
-                styles.metricCard
-              }
-            >
-              <span
-                className={
-                  styles.metricLabel
-                }
-              >
-                Productivity Records
-              </span>
-
-              <strong
-                className={
-                  styles.metricValue
-                }
-              >
-                {
-                  productivityRecords.length
-                }
-              </strong>
-
-              <span
-                className={
-                  styles.metricDetail
-                }
-              >
-                Project-specific
-                production inputs
-              </span>
-            </article>
-          </section>
-
-          <section
-            className={
-              styles.definitionBridge
-            }
-          >
-            <div
-              className={
-                styles.productionParameterFlow
-              }
-            >
-              <div
-                className={
-                  styles.parameterNode
-                }
-              >
-                <span
-                  className={
-                    styles.parameterLabel
-                  }
-                >
-                  Quantity
-                </span>
-
-                <strong>
-                  Scope Allocation
-                </strong>
-              </div>
-
-              <span
-                className={
-                  styles.definitionArrow
-                }
-              >
-                ×
-              </span>
-
-              <div
-                className={
-                  styles.parameterNode
-                }
-              >
-                <span
-                  className={
-                    styles.parameterLabel
-                  }
-                >
-                  Productivity
-                </span>
-
-                <strong>
-                  Rate
-                </strong>
-              </div>
-
-              <span
-                className={
-                  styles.definitionArrow
-                }
-              >
-                ×
-              </span>
-
-              <div
-                className={
-                  styles.parameterNode
-                }
-              >
-                <span
-                  className={
-                    styles.parameterLabel
-                  }
-                >
-                  Resources
-                </span>
-
-                <strong>
-                  Effective Workforce
-                </strong>
-              </div>
-
-              <span
-                className={
-                  styles.definitionArrow
-                }
-              >
-                →
-              </span>
-
-              <div
-                className={
-                  styles.parameterNode
-                }
-              >
-                <span
-                  className={
-                    styles.parameterLabel
-                  }
-                >
-                  Planning Input
-                </span>
-
-                <strong>
-                  Duration / Takt
-                </strong>
-              </div>
-            </div>
-
-            <p
-              className={
-                styles.definitionBridgeText
-              }
-            >
-              Productivity and Takt
-              pre-dimensioning remain
-              available in the current
-              Location workspace during
-              this migration. They will
-              move into this section
-              after Scope Allocation is
-              fully integrated.
-            </p>
-
-            <Link
-              href={`/dashboard/projects/locations?projectId=${selectedProject.id}`}
-              className={
-                styles.secondaryButton
-              }
-            >
-              Open current Production
-              Parameters
-            </Link>
-          </section>
-        </>
+        <ProductionParametersWorkspace
+          projectId={
+            selectedProject.id
+          }
+          organizationId={
+            organization.id
+          }
+          userId={
+            user.id
+          }
+          locations={
+            locations
+          }
+          scopeItems={
+            activeScopeItems
+          }
+          allocations={
+            allocations
+          }
+        />
       )}
     </div>
   )
