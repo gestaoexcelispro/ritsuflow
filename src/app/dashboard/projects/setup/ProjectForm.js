@@ -5,9 +5,17 @@ import {
   useRef,
   useState,
 } from 'react'
+
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { createClient } from '../../../../lib/supabase/client'
+
+import {
+  useRouter,
+} from 'next/navigation'
+
+import {
+  createClient,
+} from '../../../../lib/supabase/client'
+
 import styles from './project-setup.module.css'
 
 const PROJECT_COVER_BUCKET =
@@ -166,7 +174,6 @@ function getFileExtension(file) {
 
 export default function ProjectForm({
   organizationId,
-  organizationName,
   userId,
   project,
   suggestedCode,
@@ -180,7 +187,10 @@ export default function ProjectForm({
   const isEditing =
     Boolean(project?.id)
 
-  const [formData, setFormData] =
+  const [
+    formData,
+    setFormData,
+  ] =
     useState(() =>
       createInitialFormData(
         project,
@@ -191,54 +201,63 @@ export default function ProjectForm({
   const [
     coverImagePath,
     setCoverImagePath,
-  ] = useState(
-    project?.cover_image_path ||
-      ''
-  )
+  ] =
+    useState(
+      project?.cover_image_path ||
+        ''
+    )
 
   const [
     coverImageUrl,
     setCoverImageUrl,
-  ] = useState('')
+  ] =
+    useState('')
 
   const [
     coverImageLoading,
     setCoverImageLoading,
-  ] = useState(
-    Boolean(
-      project?.cover_image_path
+  ] =
+    useState(
+      Boolean(
+        project?.cover_image_path
+      )
     )
-  )
 
   const [
     isUploadingCover,
     setIsUploadingCover,
-  ] = useState(false)
+  ] =
+    useState(false)
 
   const [
     isRemovingCover,
     setIsRemovingCover,
-  ] = useState(false)
+  ] =
+    useState(false)
 
   const [
     coverErrorMessage,
     setCoverErrorMessage,
-  ] = useState('')
+  ] =
+    useState('')
 
   const [
     coverSuccessMessage,
     setCoverSuccessMessage,
-  ] = useState('')
+  ] =
+    useState('')
 
   const [
     isSaving,
     setIsSaving,
-  ] = useState(false)
+  ] =
+    useState(false)
 
   const [
     errorMessage,
     setErrorMessage,
-  ] = useState('')
+  ] =
+    useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -251,6 +270,7 @@ export default function ProjectForm({
         setCoverImageLoading(
           false
         )
+
         return
       }
 
@@ -319,13 +339,15 @@ export default function ProjectForm({
       value,
       type,
       checked,
-    } = event.target
+    } =
+      event.target
 
     setFormData(
       (
         currentFormData
       ) => ({
         ...currentFormData,
+
         [name]:
           type === 'checkbox'
             ? checked
@@ -349,7 +371,9 @@ export default function ProjectForm({
         'Create the project first. You can then add its cover photo from Project Setup.'
       )
 
-      event.target.value = ''
+      event.target.value =
+        ''
+
       return
     }
 
@@ -362,7 +386,9 @@ export default function ProjectForm({
         'Use a JPEG, PNG, WebP, HEIC, or HEIF image.'
       )
 
-      event.target.value = ''
+      event.target.value =
+        ''
+
       return
     }
 
@@ -374,7 +400,9 @@ export default function ProjectForm({
         'The project cover image cannot exceed 20 MB.'
       )
 
-      event.target.value = ''
+      event.target.value =
+        ''
+
       return
     }
 
@@ -423,16 +451,17 @@ export default function ProjectForm({
 
       const {
         error: updateError,
-      } = await supabase
-        .from('projects')
-        .update({
-          cover_image_path:
-            newStoragePath,
-        })
-        .eq(
-          'id',
-          project.id
-        )
+      } =
+        await supabase
+          .from('projects')
+          .update({
+            cover_image_path:
+              newStoragePath,
+          })
+          .eq(
+            'id',
+            project.id
+          )
 
       if (updateError) {
         await supabase.storage
@@ -560,16 +589,17 @@ export default function ProjectForm({
     try {
       const {
         error: updateError,
-      } = await supabase
-        .from('projects')
-        .update({
-          cover_image_path:
-            null,
-        })
-        .eq(
-          'id',
-          project.id
-        )
+      } =
+        await supabase
+          .from('projects')
+          .update({
+            cover_image_path:
+              null,
+          })
+          .eq(
+            'id',
+            project.id
+          )
 
       if (updateError) {
         throw updateError
@@ -646,6 +676,7 @@ export default function ProjectForm({
       )
 
       setIsSaving(false)
+
       return
     }
 
@@ -660,6 +691,7 @@ export default function ProjectForm({
       )
 
       setIsSaving(false)
+
       return
     }
 
@@ -708,6 +740,7 @@ export default function ProjectForm({
       )
 
       setIsSaving(false)
+
       return
     }
 
@@ -726,6 +759,7 @@ export default function ProjectForm({
       )
 
       setIsSaving(false)
+
       return
     }
 
@@ -746,6 +780,7 @@ export default function ProjectForm({
       )
 
       setIsSaving(false)
+
       return
     }
 
@@ -766,6 +801,7 @@ export default function ProjectForm({
       )
 
       setIsSaving(false)
+
       return
     }
 
@@ -782,6 +818,7 @@ export default function ProjectForm({
       )
 
       setIsSaving(false)
+
       return
     }
 
@@ -896,6 +933,7 @@ export default function ProjectForm({
         const {
           data:
             createdProject,
+
           error:
             createError,
         } =
@@ -983,1245 +1021,1272 @@ export default function ProjectForm({
   }
 
   return (
-    <>
+    <article
+      className={
+        styles.formPanel
+      }
+    >
       <div
         className={
-          styles.contextBar
+          styles.formHeader
         }
       >
-        <div
+        <h2
           className={
-            styles.contextIdentity
-          }
-        >
-          <span
-            className={
-              styles.contextIcon
-            }
-          >
-            OR
-          </span>
-
-          <div>
-            <p
-              className={
-                styles.contextLabel
-              }
-            >
-              Organization
-            </p>
-
-            <p
-              className={
-                styles.contextValue
-              }
-            >
-              {organizationName}
-            </p>
-          </div>
-        </div>
-
-        <span
-          className={
-            styles.contextMode
+            styles.formTitle
           }
         >
           {isEditing
-            ? 'Editing project'
-            : 'New project'}
-        </span>
+            ? 'Project information'
+            : 'Create project'}
+        </h2>
+
+        <p
+          className={
+            styles.formDescription
+          }
+        >
+          Define the project identity,
+          presentation, commercial
+          references, planned dates,
+          and geographic information.
+        </p>
       </div>
 
-      <article
+      <form
+        id="project-general-form"
         className={
-          styles.formPanel
+          styles.form
+        }
+        onSubmit={
+          handleSubmit
         }
       >
-        <div
+        <section
           className={
-            styles.formHeader
+            styles.section
           }
         >
-          <h2
+          <div
             className={
-              styles.formTitle
+              styles.sectionHeading
             }
           >
-            {isEditing
-              ? 'Project information'
-              : 'Create project'}
-          </h2>
+            <h3
+              className={
+                styles.sectionTitle
+              }
+            >
+              Project identity
+            </h3>
 
-          <p
-            className={
-              styles.formDescription
-            }
-          >
-            Define the project identity,
-            presentation, commercial references,
-            planned dates, and geographic
-            information.
-          </p>
-        </div>
+            <p
+              className={
+                styles.sectionDescription
+              }
+            >
+              Core information used
+              throughout the planning
+              workflow.
+            </p>
+          </div>
 
-        <form
-          className={
-            styles.form
-          }
-          onSubmit={
-            handleSubmit
-          }
-        >
-          <section
+          <div
             className={
-              styles.section
+              styles.grid
             }
           >
             <div
-              className={
-                styles.sectionHeading
-              }
+              className={`${styles.field} ${styles.span4}`}
             >
-              <h3
+              <label
                 className={
-                  styles.sectionTitle
+                  styles.label
                 }
+                htmlFor="code"
               >
-                Project identity
-              </h3>
+                Project code
+
+                <span
+                  className={
+                    styles.required
+                  }
+                >
+                  *
+                </span>
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="code"
+                name="code"
+                value={
+                  formData.code
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="RF-0002"
+                required
+              />
 
               <p
                 className={
-                  styles.sectionDescription
+                  styles.helpText
                 }
               >
-                Core information used throughout
-                the planning workflow.
+                Unique code within
+                the organization.
               </p>
             </div>
 
             <div
+              className={`${styles.field} ${styles.span8}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="name"
+              >
+                Project name
+
+                <span
+                  className={
+                    styles.required
+                  }
+                >
+                  *
+                </span>
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="name"
+                name="name"
+                value={
+                  formData.name
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="Project name"
+                required
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span8}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="client_name"
+              >
+                Client
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="client_name"
+                name="client_name"
+                value={
+                  formData.client_name
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="Client or owner"
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span4}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="status"
+              >
+                Project status
+              </label>
+
+              <select
+                className={
+                  styles.select
+                }
+                id="status"
+                name="status"
+                value={
+                  formData.status
+                }
+                onChange={
+                  handleChange
+                }
+              >
+                <option value="planning">
+                  Planning
+                </option>
+
+                <option value="active">
+                  Active
+                </option>
+
+                <option value="on_hold">
+                  On hold
+                </option>
+
+                <option value="completed">
+                  Completed
+                </option>
+
+                <option value="archived">
+                  Archived
+                </option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section
+          className={
+            styles.section
+          }
+        >
+          <div
+            className={
+              styles.sectionHeading
+            }
+          >
+            <h3
               className={
-                styles.grid
+                styles.sectionTitle
               }
             >
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="code"
-                >
-                  Project code
+              Project cover
+            </h3>
 
+            <p
+              className={
+                styles.sectionDescription
+              }
+            >
+              Define the project image
+              used in Daily Reports,
+              project cards,
+              dashboards, and project
+              workspaces.
+            </p>
+          </div>
+
+          <div
+            className={
+              styles.coverLayout
+            }
+          >
+            <div
+              className={
+                styles.coverPreview
+              }
+            >
+              {coverImageLoading ? (
+                <div
+                  className={
+                    styles.coverPlaceholder
+                  }
+                >
                   <span
                     className={
-                      styles.required
+                      styles.coverPlaceholderIcon
                     }
                   >
-                    *
+                    IM
                   </span>
-                </label>
 
-                <input
+                  <span>
+                    Loading project
+                    image...
+                  </span>
+                </div>
+              ) : coverImageUrl ? (
+                <img
+                  src={
+                    coverImageUrl
+                  }
+                  alt={`${formData.name || 'Project'} cover`}
                   className={
-                    styles.input
+                    styles.coverImage
                   }
-                  id="code"
-                  name="code"
-                  value={
-                    formData.code
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="RF-0002"
-                  required
                 />
+              ) : (
+                <div
+                  className={
+                    styles.coverPlaceholder
+                  }
+                >
+                  <span
+                    className={
+                      styles.coverPlaceholderIcon
+                    }
+                  >
+                    IM
+                  </span>
+
+                  <strong>
+                    No project cover
+                  </strong>
+
+                  <span>
+                    Add a field or
+                    construction image
+                    to visually identify
+                    this project.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div
+              className={
+                styles.coverDetails
+              }
+            >
+              <div>
+                <p
+                  className={
+                    styles.coverProjectName
+                  }
+                >
+                  {formData.name ||
+                    'Project cover photo'}
+                </p>
 
                 <p
                   className={
-                    styles.helpText
+                    styles.coverHelp
                   }
                 >
-                  Unique code within the
-                  organization.
+                  Recommended:
+                  landscape orientation.
+                  JPEG, PNG, WebP, HEIC
+                  or HEIF. Maximum file
+                  size 20 MB.
                 </p>
               </div>
 
-              <div
-                className={`${styles.field} ${styles.span8}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="name"
-                >
-                  Project name
-
-                  <span
-                    className={
-                      styles.required
-                    }
-                  >
-                    *
-                  </span>
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="name"
-                  name="name"
-                  value={
-                    formData.name
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="Project name"
-                  required
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span8}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="client_name"
-                >
-                  Client
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="client_name"
-                  name="client_name"
-                  value={
-                    formData.client_name
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="Client or owner"
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="status"
-                >
-                  Project status
-                </label>
-
-                <select
-                  className={
-                    styles.select
-                  }
-                  id="status"
-                  name="status"
-                  value={
-                    formData.status
-                  }
-                  onChange={
-                    handleChange
-                  }
-                >
-                  <option value="planning">
-                    Planning
-                  </option>
-
-                  <option value="active">
-                    Active
-                  </option>
-
-                  <option value="on_hold">
-                    On hold
-                  </option>
-
-                  <option value="completed">
-                    Completed
-                  </option>
-
-                  <option value="archived">
-                    Archived
-                  </option>
-                </select>
-              </div>
-            </div>
-          </section>
-
-          <section
-            className={
-              styles.section
-            }
-          >
-            <div
-              className={
-                styles.sectionHeading
-              }
-            >
-              <h3
-                className={
-                  styles.sectionTitle
-                }
-              >
-                Project cover
-              </h3>
-
-              <p
-                className={
-                  styles.sectionDescription
-                }
-              >
-                Define the project image used in
-                Daily Reports, project cards,
-                dashboards, and project
-                workspaces.
-              </p>
-            </div>
-
-            <div
-              className={
-                styles.coverLayout
-              }
-            >
-              <div
-                className={
-                  styles.coverPreview
-                }
-              >
-                {coverImageLoading ? (
-                  <div
-                    className={
-                      styles.coverPlaceholder
-                    }
-                  >
-                    <span
-                      className={
-                        styles.coverPlaceholderIcon
-                      }
-                    >
-                      IM
-                    </span>
-
-                    <span>
-                      Loading project image...
-                    </span>
-                  </div>
-                ) : coverImageUrl ? (
-                  <img
-                    src={
-                      coverImageUrl
-                    }
-                    alt={`${formData.name || 'Project'} cover`}
-                    className={
-                      styles.coverImage
-                    }
-                  />
-                ) : (
-                  <div
-                    className={
-                      styles.coverPlaceholder
-                    }
-                  >
-                    <span
-                      className={
-                        styles.coverPlaceholderIcon
-                      }
-                    >
-                      IM
-                    </span>
-
-                    <strong>
-                      No project cover
-                    </strong>
-
-                    <span>
-                      Add a field or construction
-                      image to visually identify
-                      this project.
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div
-                className={
-                  styles.coverDetails
-                }
-              >
-                <div>
-                  <p
-                    className={
-                      styles.coverProjectName
-                    }
-                  >
-                    {formData.name ||
-                      'Project cover photo'}
-                  </p>
-
-                  <p
-                    className={
-                      styles.coverHelp
-                    }
-                  >
-                    Recommended: landscape
-                    orientation. JPEG, PNG,
-                    WebP, HEIC or HEIF. Maximum
-                    file size 20 MB.
-                  </p>
-                </div>
-
-                {!isEditing && (
-                  <div
-                    className={
-                      styles.coverNotice
-                    }
-                  >
-                    Create the project first.
-                    After creation, return to
-                    Project Setup to add its
-                    cover image.
-                  </div>
-                )}
-
-                {coverErrorMessage && (
-                  <div
-                    className={
-                      styles.coverError
-                    }
-                  >
-                    {coverErrorMessage}
-                  </div>
-                )}
-
-                {coverSuccessMessage && (
-                  <div
-                    className={
-                      styles.coverSuccess
-                    }
-                  >
-                    {coverSuccessMessage}
-                  </div>
-                )}
-
-                <input
-                  ref={
-                    fileInputRef
-                  }
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                  onChange={
-                    handleCoverUpload
-                  }
-                  className={
-                    styles.hiddenFileInput
-                  }
-                />
-
+              {!isEditing && (
                 <div
                   className={
-                    styles.coverActions
+                    styles.coverNotice
                   }
                 >
+                  Create the project
+                  first. After
+                  creation, return to
+                  Project Setup to add
+                  its cover image.
+                </div>
+              )}
+
+              {coverErrorMessage && (
+                <div
+                  className={
+                    styles.coverError
+                  }
+                >
+                  {
+                    coverErrorMessage
+                  }
+                </div>
+              )}
+
+              {coverSuccessMessage && (
+                <div
+                  className={
+                    styles.coverSuccess
+                  }
+                >
+                  {
+                    coverSuccessMessage
+                  }
+                </div>
+              )}
+
+              <input
+                ref={
+                  fileInputRef
+                }
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                onChange={
+                  handleCoverUpload
+                }
+                className={
+                  styles.hiddenFileInput
+                }
+              />
+
+              <div
+                className={
+                  styles.coverActions
+                }
+              >
+                <button
+                  type="button"
+                  className={
+                    styles.coverPrimaryButton
+                  }
+                  disabled={
+                    !isEditing ||
+                    isUploadingCover ||
+                    isRemovingCover
+                  }
+                  onClick={() =>
+                    fileInputRef.current?.click()
+                  }
+                >
+                  {isUploadingCover
+                    ? 'Uploading...'
+                    : coverImagePath
+                      ? 'Change photo'
+                      : 'Upload photo'}
+                </button>
+
+                {coverImagePath && (
                   <button
                     type="button"
                     className={
-                      styles.coverPrimaryButton
+                      styles.coverRemoveButton
                     }
                     disabled={
-                      !isEditing ||
                       isUploadingCover ||
                       isRemovingCover
                     }
-                    onClick={() =>
-                      fileInputRef.current?.click()
+                    onClick={
+                      handleRemoveCover
                     }
                   >
-                    {isUploadingCover
-                      ? 'Uploading...'
-                      : coverImagePath
-                        ? 'Change photo'
-                        : 'Upload photo'}
+                    {isRemovingCover
+                      ? 'Removing...'
+                      : 'Remove photo'}
                   </button>
-
-                  {coverImagePath && (
-                    <button
-                      type="button"
-                      className={
-                        styles.coverRemoveButton
-                      }
-                      disabled={
-                        isUploadingCover ||
-                        isRemovingCover
-                      }
-                      onClick={
-                        handleRemoveCover
-                      }
-                    >
-                      {isRemovingCover
-                        ? 'Removing...'
-                        : 'Remove photo'}
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
-          </section>
+          </div>
+        </section>
 
-          <section
+        <section
+          className={
+            styles.section
+          }
+        >
+          <div
             className={
-              styles.section
+              styles.sectionHeading
             }
           >
-            <div
+            <h3
               className={
-                styles.sectionHeading
+                styles.sectionTitle
               }
             >
-              <h3
-                className={
-                  styles.sectionTitle
-                }
-              >
-                Contract and schedule
-              </h3>
+              Contract and schedule
+            </h3>
 
-              <p
-                className={
-                  styles.sectionDescription
-                }
-              >
-                Optional project references and
-                planned boundaries.
-              </p>
-            </div>
-
-            <div
-              className={
-                styles.grid
-              }
-            >
-              <div
-                className={`${styles.field} ${styles.span3}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="proposal_number"
-                >
-                  Proposal number
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="proposal_number"
-                  name="proposal_number"
-                  value={
-                    formData.proposal_number
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span3}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="contract_number"
-                >
-                  Contract number
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="contract_number"
-                  name="contract_number"
-                  value={
-                    formData.contract_number
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span3}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="contract_value"
-                >
-                  Contract value
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="contract_value"
-                  name="contract_value"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={
-                    formData.contract_value
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span3}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="currency_code"
-                >
-                  Currency
-                </label>
-
-                <select
-                  className={
-                    styles.select
-                  }
-                  id="currency_code"
-                  name="currency_code"
-                  value={
-                    formData.currency_code
-                  }
-                  onChange={
-                    handleChange
-                  }
-                >
-                  <option value="USD">
-                    USD
-                  </option>
-
-                  <option value="BRL">
-                    BRL
-                  </option>
-
-                  <option value="CAD">
-                    CAD
-                  </option>
-
-                  <option value="EUR">
-                    EUR
-                  </option>
-
-                  <option value="GBP">
-                    GBP
-                  </option>
-                </select>
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span6}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="planned_start_date"
-                >
-                  Planned start date
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="planned_start_date"
-                  name="planned_start_date"
-                  type="date"
-                  value={
-                    formData.planned_start_date
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span6}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="planned_finish_date"
-                >
-                  Planned finish date
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="planned_finish_date"
-                  name="planned_finish_date"
-                  type="date"
-                  value={
-                    formData.planned_finish_date
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-            </div>
-          </section>
-
-          <section
-            className={
-              styles.section
-            }
-          >
-            <div
-              className={
-                styles.sectionHeading
-              }
-            >
-              <h3
-                className={
-                  styles.sectionTitle
-                }
-              >
-                Project location
-              </h3>
-
-              <p
-                className={
-                  styles.sectionDescription
-                }
-              >
-                Geographic information used for
-                project identification and
-                reporting.
-              </p>
-            </div>
-
-            <div
-              className={
-                styles.grid
-              }
-            >
-              <div
-                className={`${styles.field} ${styles.span12}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="address_line"
-                >
-                  Address
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="address_line"
-                  name="address_line"
-                  value={
-                    formData.address_line
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="Street and number"
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span6}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="neighborhood"
-                >
-                  Neighborhood or district
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="neighborhood"
-                  name="neighborhood"
-                  value={
-                    formData.neighborhood
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span6}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="city"
-                >
-                  City
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="city"
-                  name="city"
-                  value={
-                    formData.city
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="state_region"
-                >
-                  State or region
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="state_region"
-                  name="state_region"
-                  value={
-                    formData.state_region
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="postal_code"
-                >
-                  Postal code
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="postal_code"
-                  name="postal_code"
-                  value={
-                    formData.postal_code
-                  }
-                  onChange={
-                    handleChange
-                  }
-                />
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="country_code"
-                >
-                  Country code
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="country_code"
-                  name="country_code"
-                  maxLength="2"
-                  value={
-                    formData.country_code
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="US"
-                  required
-                />
-
-                <p
-                  className={
-                    styles.helpText
-                  }
-                >
-                  Use the two-letter ISO country
-                  code.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section
-            className={
-              styles.section
-            }
-          >
-            <div
-              className={
-                styles.sectionHeading
-              }
-            >
-              <h3
-                className={
-                  styles.sectionTitle
-                }
-              >
-                Attendance Geofence
-              </h3>
-
-              <p
-                className={
-                  styles.sectionDescription
-                }
-              >
-                Define the jobsite reference point
-                and allowed radius used to validate
-                Attendance Check-In and Check-Out
-                locations.
-              </p>
-            </div>
-
-            <div
-              className={
-                styles.grid
-              }
-            >
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="latitude"
-                >
-                  Reference latitude
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="latitude"
-                  name="latitude"
-                  type="number"
-                  min="-90"
-                  max="90"
-                  step="any"
-                  value={
-                    formData.latitude
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="-25.000000"
-                />
-
-                <p
-                  className={
-                    styles.helpText
-                  }
-                >
-                  Decimal degrees between -90 and
-                  90.
-                </p>
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="longitude"
-                >
-                  Reference longitude
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="longitude"
-                  name="longitude"
-                  type="number"
-                  min="-180"
-                  max="180"
-                  step="any"
-                  value={
-                    formData.longitude
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="-50.000000"
-                />
-
-                <p
-                  className={
-                    styles.helpText
-                  }
-                >
-                  Decimal degrees between -180 and
-                  180.
-                </p>
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="geofence_radius_m"
-                >
-                  Geofence radius
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="geofence_radius_m"
-                  name="geofence_radius_m"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={
-                    formData.geofence_radius_m
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="150"
-                />
-
-                <p
-                  className={
-                    styles.helpText
-                  }
-                >
-                  Maximum allowed distance from the
-                  reference point, in meters.
-                </p>
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span4}`}
-              >
-                <label
-                  className={
-                    styles.label
-                  }
-                  htmlFor="max_gps_accuracy_m"
-                >
-                  Maximum GPS accuracy
-                </label>
-
-                <input
-                  className={
-                    styles.input
-                  }
-                  id="max_gps_accuracy_m"
-                  name="max_gps_accuracy_m"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={
-                    formData.max_gps_accuracy_m
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  placeholder="50"
-                />
-
-                <p
-                  className={
-                    styles.helpText
-                  }
-                >
-                  Maximum acceptable device GPS
-                  accuracy, in meters. Leave blank
-                  to disable the project-specific
-                  accuracy threshold.
-                </p>
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span12}`}
-              >
-                <label
-                  htmlFor="geofence_enabled"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '12px',
-                    padding: '14px 16px',
-                    border: '1px solid #d9e2ec',
-                    borderRadius: '12px',
-                    background: formData.geofence_enabled
-                      ? '#f0fdfa'
-                      : '#f8fafc',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    id="geofence_enabled"
-                    name="geofence_enabled"
-                    type="checkbox"
-                    checked={
-                      formData.geofence_enabled
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    style={{
-                      width: '18px',
-                      height: '18px',
-                      marginTop: '2px',
-                      accentColor: '#08aa96',
-                      cursor: 'pointer',
-                    }}
-                  />
-
-                  <span>
-                    <strong
-                      style={{
-                        display: 'block',
-                        marginBottom: '4px',
-                        color: '#0f172a',
-                        fontSize: '0.86rem',
-                      }}
-                    >
-                      Enable Attendance Geofence
-                    </strong>
-
-                    <span
-                      style={{
-                        display: 'block',
-                        color: '#64748b',
-                        fontSize: '0.78rem',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      When enabled, RitsuFlow will
-                      compare worker GPS coordinates
-                      with this project reference
-                      point during Check-In and
-                      Check-Out.
-                    </span>
-                  </span>
-                </label>
-              </div>
-
-              <div
-                className={`${styles.field} ${styles.span12}`}
-              >
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    border: formData.geofence_enabled
-                      ? '1px solid #99f6e4'
-                      : '1px solid #e2e8f0',
-                    borderRadius: '10px',
-                    background: formData.geofence_enabled
-                      ? '#f0fdfa'
-                      : '#f8fafc',
-                    color: formData.geofence_enabled
-                      ? '#115e59'
-                      : '#64748b',
-                    fontSize: '0.78rem',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {formData.geofence_enabled
-                    ? 'Attendance Geofence is enabled. Check-In and Check-Out location validation will use the configured coordinates and radius.'
-                    : 'Attendance Geofence is disabled. Attendance can continue without project distance validation until this setting is enabled.'}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {errorMessage && (
             <p
               className={
-                styles.errorMessage
+                styles.sectionDescription
               }
-              role="alert"
             >
-              {errorMessage}
+              Optional project
+              references and planned
+              boundaries.
             </p>
-          )}
+          </div>
 
+          <div
+            className={
+              styles.grid
+            }
+          >
+            <div
+              className={`${styles.field} ${styles.span3}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="proposal_number"
+              >
+                Proposal number
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="proposal_number"
+                name="proposal_number"
+                value={
+                  formData.proposal_number
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span3}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="contract_number"
+              >
+                Contract number
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="contract_number"
+                name="contract_number"
+                value={
+                  formData.contract_number
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span3}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="contract_value"
+              >
+                Contract value
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="contract_value"
+                name="contract_value"
+                type="number"
+                min="0"
+                step="0.01"
+                value={
+                  formData.contract_value
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span3}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="currency_code"
+              >
+                Currency
+              </label>
+
+              <select
+                className={
+                  styles.select
+                }
+                id="currency_code"
+                name="currency_code"
+                value={
+                  formData.currency_code
+                }
+                onChange={
+                  handleChange
+                }
+              >
+                <option value="USD">
+                  USD
+                </option>
+
+                <option value="BRL">
+                  BRL
+                </option>
+
+                <option value="CAD">
+                  CAD
+                </option>
+
+                <option value="EUR">
+                  EUR
+                </option>
+
+                <option value="GBP">
+                  GBP
+                </option>
+              </select>
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span6}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="planned_start_date"
+              >
+                Planned start date
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="planned_start_date"
+                name="planned_start_date"
+                type="date"
+                value={
+                  formData.planned_start_date
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span6}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="planned_finish_date"
+              >
+                Planned finish date
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="planned_finish_date"
+                name="planned_finish_date"
+                type="date"
+                value={
+                  formData.planned_finish_date
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+          </div>
+        </section>
+
+        <section
+          className={
+            styles.section
+          }
+        >
+          <div
+            className={
+              styles.sectionHeading
+            }
+          >
+            <h3
+              className={
+                styles.sectionTitle
+              }
+            >
+              Project location
+            </h3>
+
+            <p
+              className={
+                styles.sectionDescription
+              }
+            >
+              Geographic information
+              used for project
+              identification and
+              reporting.
+            </p>
+          </div>
+
+          <div
+            className={
+              styles.grid
+            }
+          >
+            <div
+              className={`${styles.field} ${styles.span12}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="address_line"
+              >
+                Address
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="address_line"
+                name="address_line"
+                value={
+                  formData.address_line
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="Street and number"
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span6}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="neighborhood"
+              >
+                Neighborhood or
+                district
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="neighborhood"
+                name="neighborhood"
+                value={
+                  formData.neighborhood
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span6}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="city"
+              >
+                City
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="city"
+                name="city"
+                value={
+                  formData.city
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span4}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="state_region"
+              >
+                State or region
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="state_region"
+                name="state_region"
+                value={
+                  formData.state_region
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span4}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="postal_code"
+              >
+                Postal code
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="postal_code"
+                name="postal_code"
+                value={
+                  formData.postal_code
+                }
+                onChange={
+                  handleChange
+                }
+              />
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span4}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="country_code"
+              >
+                Country code
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="country_code"
+                name="country_code"
+                maxLength="2"
+                value={
+                  formData.country_code
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="US"
+                required
+              />
+
+              <p
+                className={
+                  styles.helpText
+                }
+              >
+                Use the two-letter ISO
+                country code.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section
+          className={
+            styles.section
+          }
+        >
+          <div
+            className={
+              styles.sectionHeading
+            }
+          >
+            <h3
+              className={
+                styles.sectionTitle
+              }
+            >
+              Attendance Geofence
+            </h3>
+
+            <p
+              className={
+                styles.sectionDescription
+              }
+            >
+              Define the jobsite
+              reference point and
+              allowed radius used to
+              validate Attendance
+              Check-In and Check-Out
+              locations.
+            </p>
+          </div>
+
+          <div
+            className={
+              styles.grid
+            }
+          >
+            <div
+              className={`${styles.field} ${styles.span4}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="latitude"
+              >
+                Reference latitude
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="latitude"
+                name="latitude"
+                type="number"
+                min="-90"
+                max="90"
+                step="any"
+                value={
+                  formData.latitude
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="-25.000000"
+              />
+
+              <p
+                className={
+                  styles.helpText
+                }
+              >
+                Decimal degrees
+                between -90 and 90.
+              </p>
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span4}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="longitude"
+              >
+                Reference longitude
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="longitude"
+                name="longitude"
+                type="number"
+                min="-180"
+                max="180"
+                step="any"
+                value={
+                  formData.longitude
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="-50.000000"
+              />
+
+              <p
+                className={
+                  styles.helpText
+                }
+              >
+                Decimal degrees
+                between -180 and 180.
+              </p>
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span4}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="geofence_radius_m"
+              >
+                Geofence radius
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="geofence_radius_m"
+                name="geofence_radius_m"
+                type="number"
+                min="1"
+                step="1"
+                value={
+                  formData.geofence_radius_m
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="150"
+              />
+
+              <p
+                className={
+                  styles.helpText
+                }
+              >
+                Maximum allowed
+                distance from the
+                reference point, in
+                meters.
+              </p>
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span4}`}
+            >
+              <label
+                className={
+                  styles.label
+                }
+                htmlFor="max_gps_accuracy_m"
+              >
+                Maximum GPS accuracy
+              </label>
+
+              <input
+                className={
+                  styles.input
+                }
+                id="max_gps_accuracy_m"
+                name="max_gps_accuracy_m"
+                type="number"
+                min="1"
+                step="1"
+                value={
+                  formData.max_gps_accuracy_m
+                }
+                onChange={
+                  handleChange
+                }
+                placeholder="50"
+              />
+
+              <p
+                className={
+                  styles.helpText
+                }
+              >
+                Maximum acceptable
+                device GPS accuracy,
+                in meters. Leave blank
+                to disable the
+                project-specific
+                accuracy threshold.
+              </p>
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span12}`}
+            >
+              <label
+                htmlFor="geofence_enabled"
+                style={{
+                  display:
+                    'flex',
+
+                  alignItems:
+                    'flex-start',
+
+                  gap:
+                    '12px',
+
+                  padding:
+                    '14px 16px',
+
+                  border:
+                    '1px solid #d9e2ec',
+
+                  borderRadius:
+                    '12px',
+
+                  background:
+                    formData.geofence_enabled
+                      ? '#f0fdfa'
+                      : '#f8fafc',
+
+                  cursor:
+                    'pointer',
+                }}
+              >
+                <input
+                  id="geofence_enabled"
+                  name="geofence_enabled"
+                  type="checkbox"
+                  checked={
+                    formData.geofence_enabled
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  style={{
+                    width:
+                      '18px',
+
+                    height:
+                      '18px',
+
+                    marginTop:
+                      '2px',
+
+                    accentColor:
+                      '#08aa96',
+
+                    cursor:
+                      'pointer',
+                  }}
+                />
+
+                <span>
+                  <strong
+                    style={{
+                      display:
+                        'block',
+
+                      marginBottom:
+                        '4px',
+
+                      color:
+                        '#0f172a',
+
+                      fontSize:
+                        '0.86rem',
+                    }}
+                  >
+                    Enable Attendance
+                    Geofence
+                  </strong>
+
+                  <span
+                    style={{
+                      display:
+                        'block',
+
+                      color:
+                        '#64748b',
+
+                      fontSize:
+                        '0.78rem',
+
+                      lineHeight:
+                        1.5,
+                    }}
+                  >
+                    When enabled,
+                    RitsuFlow will
+                    compare worker GPS
+                    coordinates with
+                    this project
+                    reference point
+                    during Check-In
+                    and Check-Out.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <div
+              className={`${styles.field} ${styles.span12}`}
+            >
+              <div
+                style={{
+                  padding:
+                    '12px 14px',
+
+                  border:
+                    formData.geofence_enabled
+                      ? '1px solid #99f6e4'
+                      : '1px solid #e2e8f0',
+
+                  borderRadius:
+                    '10px',
+
+                  background:
+                    formData.geofence_enabled
+                      ? '#f0fdfa'
+                      : '#f8fafc',
+
+                  color:
+                    formData.geofence_enabled
+                      ? '#115e59'
+                      : '#64748b',
+
+                  fontSize:
+                    '0.78rem',
+
+                  lineHeight:
+                    1.5,
+                }}
+              >
+                {formData.geofence_enabled
+                  ? 'Attendance Geofence is enabled. Check-In and Check-Out location validation will use the configured coordinates and radius.'
+                  : 'Attendance Geofence is disabled. Attendance can continue without project distance validation until this setting is enabled.'}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {errorMessage && (
+          <p
+            className={
+              styles.errorMessage
+            }
+            role="alert"
+          >
+            {errorMessage}
+          </p>
+        )}
+
+        {!isEditing && (
           <div
             className={
               styles.actions
@@ -2246,14 +2311,12 @@ export default function ProjectForm({
               }
             >
               {isSaving
-                ? 'Saving project...'
-                : isEditing
-                  ? 'Save changes'
-                  : 'Create project'}
+                ? 'Creating project...'
+                : 'Create project'}
             </button>
           </div>
-        </form>
-      </article>
-    </>
+        )}
+      </form>
+    </article>
   )
 }
