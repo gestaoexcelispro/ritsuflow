@@ -6,6 +6,7 @@ import { createClient } from '../../../../lib/supabase/server'
 import ProjectForm from './ProjectForm'
 import ScopeWorkspace from './ScopeWorkspace'
 import LocationWorkspace from './LocationWorkspace'
+import QuantityAllocationMatrix from './QuantityAllocationMatrix'
 
 import styles from './project-setup.module.css'
 import selectorStyles from './selector.module.css'
@@ -906,9 +907,14 @@ export default async function ProjectSetupPage({
           'location_service_quantities'
         )
         .select(`
+          id,
+          project_id,
           location_id,
           service_id,
-          quantity
+          quantity,
+          source_scope_item_id,
+          created_at,
+          updated_at
         `)
         .eq(
           'project_id',
@@ -1532,22 +1538,28 @@ export default async function ProjectSetupPage({
               </div>
             )}
 
-            <div
-              className={
-                styles.migrationAction
-              }
-            >
-              <Link
-                href={`/dashboard/projects/locations?projectId=${selectedProject.id}`}
-                className={
-                  styles.secondaryButton
-                }
-              >
-                Open current quantity
-                matrix
-              </Link>
-            </div>
           </section>
+
+          <QuantityAllocationMatrix
+            projectId={
+              selectedProject.id
+            }
+            projectCode={
+              selectedProject.code
+            }
+            userId={
+              user.id
+            }
+            locations={
+              locations
+            }
+            scopeItems={
+              activeScopeItems
+            }
+            initialAllocations={
+              allocations
+            }
+          />
         </>
       )}
 
