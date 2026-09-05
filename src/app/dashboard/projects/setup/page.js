@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation'
 import { createClient } from '../../../../lib/supabase/server'
 
 import ProjectForm from './ProjectForm'
-import ProjectSetupToolbar from './ProjectSetupToolbar'
 import ScopeWorkspace from './ScopeWorkspace'
 import LocationWorkspace from './LocationWorkspace'
 
@@ -1180,57 +1179,12 @@ export default async function ProjectSetupPage({
         )
     )
 
-  const sectionStates = {
-    general:
-      'complete',
-
-    scope:
-      scopeComplete
-        ? 'complete'
-        : 'incomplete',
-
-    locations:
-      locationsComplete
-        ? 'complete'
-        : 'incomplete',
-
-    allocation:
-      allocationComplete
-        ? 'complete'
-        : 'incomplete',
-
-    production:
-      productionParametersComplete
-        ? 'complete'
-        : 'pending',
-  }
-
   return (
     <div
       className={
         styles.container
       }
     >
-      <ProjectSetupToolbar
-        projectId={
-          selectedProject.id
-        }
-        activeSection={
-          activeSection
-        }
-        sections={
-          setupSections
-        }
-        sectionStates={
-          sectionStates
-        }
-        showSave={
-          activeSection ===
-          'general'
-        }
-        formId="project-general-form"
-      />
-
       {activeSection ===
         'general' && (
         <ProjectForm
