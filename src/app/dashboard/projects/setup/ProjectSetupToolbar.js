@@ -20,13 +20,29 @@ export default function ProjectSetupToolbar({
     <div
       style={{
         position: 'sticky',
+
+        /*
+         * Dashboard header height.
+         * When scrolling, the Project Setup toolbar
+         * stops immediately below the global header.
+         */
         top: '81px',
+
         zIndex: 900,
 
         width: '100%',
         boxSizing: 'border-box',
 
-        margin: '0 0 28px',
+        /*
+         * Pull the workspace toolbar upward through
+         * the large dashboard content top-space.
+         *
+         * This is intentionally controlled here rather
+         * than globally so other dashboard pages are
+         * unaffected.
+         */
+        marginTop: '-130px',
+        marginBottom: '28px',
 
         border: '1px solid #dce5ed',
         borderRadius: '0',
@@ -47,16 +63,22 @@ export default function ProjectSetupToolbar({
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
+
+          alignItems:
+            'center',
+
           justifyContent:
             'space-between',
 
           gap: '18px',
 
           width: '100%',
-          minHeight: '72px',
 
-          boxSizing: 'border-box',
+          minHeight:
+            '72px',
+
+          boxSizing:
+            'border-box',
 
           padding:
             '12px 20px',
@@ -66,17 +88,25 @@ export default function ProjectSetupToolbar({
           aria-label="Project setup sections"
           style={{
             display: 'flex',
-            alignItems: 'center',
 
-            flex: '1 1 auto',
+            alignItems:
+              'center',
+
+            flex:
+              '1 1 auto',
+
             minWidth: 0,
 
             gap: '4px',
 
-            overflowX: 'auto',
-            overflowY: 'hidden',
+            overflowX:
+              'auto',
 
-            scrollbarWidth: 'none',
+            overflowY:
+              'hidden',
+
+            scrollbarWidth:
+              'none',
 
             msOverflowStyle:
               'none',
@@ -114,12 +144,14 @@ export default function ProjectSetupToolbar({
                     alignItems:
                       'center',
 
-                    flexShrink: 0,
+                    flexShrink:
+                      0,
 
                     minHeight:
                       '40px',
 
-                    gap: '8px',
+                    gap:
+                      '8px',
 
                     padding:
                       '0 13px',
@@ -303,11 +335,17 @@ export default function ProjectSetupToolbar({
 
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            flexShrink: 0,
+            display:
+              'flex',
 
-            gap: '8px',
+            alignItems:
+              'center',
+
+            flexShrink:
+              0,
+
+            gap:
+              '8px',
           }}
         >
           <Link
