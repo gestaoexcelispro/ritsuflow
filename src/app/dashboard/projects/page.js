@@ -185,6 +185,254 @@ function CardsIcon() {
   )
 }
 
+function AnimatedWorkspaceBackground() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }}
+    >
+      <style>
+        {`
+          @keyframes ritsuflowFloatOne {
+            0% {
+              transform: translate3d(0, 0, 0) rotate(0deg);
+            }
+
+            50% {
+              transform: translate3d(18px, -16px, 0) rotate(7deg);
+            }
+
+            100% {
+              transform: translate3d(0, 0, 0) rotate(0deg);
+            }
+          }
+
+          @keyframes ritsuflowFloatTwo {
+            0% {
+              transform: translate3d(0, 0, 0) rotate(0deg);
+            }
+
+            50% {
+              transform: translate3d(-20px, 14px, 0) rotate(-8deg);
+            }
+
+            100% {
+              transform: translate3d(0, 0, 0) rotate(0deg);
+            }
+          }
+
+          @keyframes ritsuflowArcDrift {
+            0% {
+              transform: translate3d(0, 0, 0) scale(1);
+            }
+
+            50% {
+              transform: translate3d(24px, -12px, 0) scale(1.03);
+            }
+
+            100% {
+              transform: translate3d(0, 0, 0) scale(1);
+            }
+          }
+
+          @keyframes ritsuflowPulse {
+            0% {
+              opacity: 0.35;
+              transform: scale(0.95);
+            }
+
+            50% {
+              opacity: 0.75;
+              transform: scale(1.08);
+            }
+
+            100% {
+              opacity: 0.35;
+              transform: scale(0.95);
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .ritsuflow-motion {
+              animation: none !important;
+            }
+          }
+        `}
+      </style>
+
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'linear-gradient(135deg, #f8fbff 0%, #f6fbfd 45%, #f8fcfa 100%)',
+        }}
+      />
+
+      <div
+        className="ritsuflow-motion"
+        style={{
+          position: 'absolute',
+          top: '-270px',
+          left: '-220px',
+          width: '720px',
+          height: '720px',
+          borderRadius: '50%',
+          border:
+            '58px solid rgba(37, 99, 235, 0.045)',
+          animation:
+            'ritsuflowArcDrift 18s ease-in-out infinite',
+        }}
+      />
+
+      <div
+        className="ritsuflow-motion"
+        style={{
+          position: 'absolute',
+          right: '-360px',
+          bottom: '-390px',
+          width: '860px',
+          height: '860px',
+          borderRadius: '50%',
+          border:
+            '64px solid rgba(20, 184, 166, 0.045)',
+          animation:
+            'ritsuflowArcDrift 22s ease-in-out infinite reverse',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'absolute',
+          top: '8%',
+          right: '21%',
+          width: '180px',
+          height: '110px',
+          opacity: 0.42,
+          backgroundImage:
+            'radial-gradient(circle, rgba(100,116,139,0.26) 1.2px, transparent 1.2px)',
+          backgroundSize:
+            '16px 16px',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'absolute',
+          right: '8%',
+          bottom: '12%',
+          width: '170px',
+          height: '110px',
+          opacity: 0.32,
+          backgroundImage:
+            'radial-gradient(circle, rgba(100,116,139,0.24) 1.2px, transparent 1.2px)',
+          backgroundSize:
+            '16px 16px',
+        }}
+      />
+
+      <div
+        className="ritsuflow-motion"
+        style={{
+          position: 'absolute',
+          top: '18%',
+          right: '8%',
+          width: '42px',
+          height: '42px',
+          border:
+            '2px solid rgba(37, 99, 235, 0.30)',
+          borderRadius: '11px',
+          animation:
+            'ritsuflowFloatOne 11s ease-in-out infinite',
+        }}
+      />
+
+      <div
+        className="ritsuflow-motion"
+        style={{
+          position: 'absolute',
+          top: '34%',
+          right: '33%',
+          width: '28px',
+          height: '28px',
+          borderRadius: '8px',
+          background:
+            'rgba(45, 212, 191, 0.18)',
+          animation:
+            'ritsuflowFloatTwo 9s ease-in-out infinite',
+        }}
+      />
+
+      <div
+        className="ritsuflow-motion"
+        style={{
+          position: 'absolute',
+          bottom: '16%',
+          left: '6%',
+          width: '18px',
+          height: '18px',
+          borderRadius: '50%',
+          background:
+            'rgba(45, 212, 191, 0.45)',
+          animation:
+            'ritsuflowPulse 6s ease-in-out infinite',
+        }}
+      />
+
+      <div
+        className="ritsuflow-motion"
+        style={{
+          position: 'absolute',
+          bottom: '22%',
+          right: '28%',
+          width: '22px',
+          height: '22px',
+          borderRadius: '50%',
+          background:
+            'rgba(59, 130, 246, 0.34)',
+          animation:
+            'ritsuflowPulse 7s ease-in-out infinite 1s',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'absolute',
+          left: '-160px',
+          bottom: '-110px',
+          width: '470px',
+          height: '280px',
+          borderRadius:
+            '50% 50% 0 0',
+          background:
+            'linear-gradient(135deg, rgba(191,219,254,0.26), rgba(204,251,241,0.17))',
+          filter: 'blur(2px)',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'absolute',
+          top: '-120px',
+          right: '-20px',
+          width: '520px',
+          height: '300px',
+          borderRadius:
+            '0 0 0 80%',
+          background:
+            'linear-gradient(225deg, rgba(204,251,241,0.24), rgba(219,234,254,0.10))',
+        }}
+      />
+    </div>
+  )
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] =
     useState([])
@@ -642,677 +890,294 @@ export default function ProjectsPage() {
           position: 'relative',
           minHeight:
             'calc(100vh - 88px)',
-          padding:
-            '72px 40px 40px',
-          backgroundImage: `
-            linear-gradient(
-              rgba(248, 250, 252, 0.90),
-              rgba(248, 250, 252, 0.94)
-            ),
-            url('/login-construction.jpg')
-          `,
-          backgroundSize:
-            'cover',
-          backgroundPosition:
-            'center',
-          backgroundRepeat:
-            'no-repeat',
-          backgroundAttachment:
-            'fixed',
+          overflow: 'hidden',
         }}
       >
-        {errorMessage && (
-          <div
-            role="alert"
-            style={{
-              marginBottom: '18px',
-              padding:
-                '12px 15px',
-              border:
-                '1px solid #feb2b2',
-              borderRadius: '8px',
-              backgroundColor:
-                '#fff5f5',
-              color: '#c53030',
-            }}
-          >
-            {errorMessage}
-          </div>
-        )}
+        <AnimatedWorkspaceBackground />
 
-        {viewMode === 'list' ? (
-          <div
-            style={{
-              overflowX: 'auto',
-              borderRadius: '10px',
-              backgroundColor:
-                '#ffffff',
-              border:
-                '1px solid #e2e8f0',
-              boxShadow:
-                '0 10px 30px rgba(15, 23, 42, 0.08)',
-            }}
-          >
-            <table
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            padding:
+              '72px 40px 48px',
+          }}
+        >
+          {errorMessage && (
+            <div
+              role="alert"
               style={{
-                width: '100%',
-                minWidth: '920px',
-                borderCollapse:
-                  'collapse',
-                textAlign: 'left',
+                marginBottom:
+                  '18px',
+                padding:
+                  '12px 15px',
+                border:
+                  '1px solid #feb2b2',
+                borderRadius:
+                  '8px',
+                backgroundColor:
+                  '#fff5f5',
+                color: '#c53030',
               }}
             >
-              <thead
+              {errorMessage}
+            </div>
+          )}
+
+          {viewMode ===
+          'list' ? (
+            <div
+              style={{
+                overflowX:
+                  'auto',
+                borderRadius:
+                  '12px',
+                backgroundColor:
+                  'rgba(255,255,255,0.94)',
+                border:
+                  '1px solid rgba(226,232,240,0.92)',
+                boxShadow:
+                  '0 12px 34px rgba(15, 23, 42, 0.07)',
+                backdropFilter:
+                  'blur(10px)',
+              }}
+            >
+              <table
                 style={{
-                  borderBottom:
-                    '1px solid #e2e8f0',
-                  backgroundColor:
-                    '#f8fafc',
+                  width:
+                    '100%',
+                  minWidth:
+                    '920px',
+                  borderCollapse:
+                    'collapse',
+                  textAlign:
+                    'left',
                 }}
               >
-                <tr>
-                  <th
-                    style={
-                      headerCellStyle
-                    }
-                  >
-                    Code
-                  </th>
-
-                  <th
-                    style={
-                      headerCellStyle
-                    }
-                  >
-                    Project
-                  </th>
-
-                  <th
-                    style={
-                      headerCellStyle
-                    }
-                  >
-                    Client
-                  </th>
-
-                  <th
-                    style={
-                      headerCellStyle
-                    }
-                  >
-                    Contract Value
-                  </th>
-
-                  <th
-                    style={
-                      headerCellStyle
-                    }
-                  >
-                    Location
-                  </th>
-
-                  <th
-                    style={
-                      headerCellStyle
-                    }
-                  >
-                    Status
-                  </th>
-
-                  <th
-                    style={
-                      headerCellStyle
-                    }
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {isLoading ? (
+                <thead
+                  style={{
+                    borderBottom:
+                      '1px solid #e2e8f0',
+                    backgroundColor:
+                      'rgba(248,250,252,0.96)',
+                  }}
+                >
                   <tr>
-                    <td
-                      colSpan="7"
+                    <th
                       style={
-                        emptyCellStyle
+                        headerCellStyle
                       }
                     >
-                      Loading projects...
-                    </td>
-                  </tr>
-                ) : projects.length ===
-                  0 ? (
-                  <tr>
-                    <td
-                      colSpan="7"
+                      Code
+                    </th>
+
+                    <th
                       style={
-                        emptyCellStyle
+                        headerCellStyle
                       }
                     >
-                      No projects configured yet.
-                    </td>
+                      Project
+                    </th>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
+                      Client
+                    </th>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
+                      Contract Value
+                    </th>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
+                      Location
+                    </th>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
+                      Status
+                    </th>
+
+                    <th
+                      style={
+                        headerCellStyle
+                      }
+                    >
+                      Actions
+                    </th>
                   </tr>
-                ) : (
-                  projects.map(
-                    (
-                      project
-                    ) => {
-                      const statusStyle =
-                        getStatusStyle(
-                          project.status
-                        )
+                </thead>
 
-                      return (
-                        <tr
-                          key={
-                            project.id
-                          }
-                          style={{
-                            borderBottom:
-                              '1px solid #e2e8f0',
-                          }}
-                        >
-                          <td
-                            style={
-                              bodyCellStyle
-                            }
-                          >
-                            <strong
-                              style={{
-                                color:
-                                  '#1e3a5f',
-                              }}
-                            >
-                              {project.code ||
-                                '—'}
-                            </strong>
-                          </td>
-
-                          <td
-                            style={
-                              bodyCellStyle
-                            }
-                          >
-                            <strong
-                              style={{
-                                color:
-                                  '#0f172a',
-                              }}
-                            >
-                              {
-                                project.name
-                              }
-                            </strong>
-                          </td>
-
-                          <td
-                            style={
-                              bodyCellStyle
-                            }
-                          >
-                            {project.client_name ||
-                              '—'}
-                          </td>
-
-                          <td
-                            style={
-                              bodyCellStyle
-                            }
-                          >
-                            <strong
-                              style={{
-                                color:
-                                  '#1d4ed8',
-                              }}
-                            >
-                              {formatContractValue(
-                                project
-                              )}
-                            </strong>
-                          </td>
-
-                          <td
-                            style={
-                              bodyCellStyle
-                            }
-                          >
-                            {formatLocation(
-                              project
-                            )}
-                          </td>
-
-                          <td
-                            style={
-                              bodyCellStyle
-                            }
-                          >
-                            <span
-                              style={{
-                                display:
-                                  'inline-flex',
-                                alignItems:
-                                  'center',
-                                minHeight:
-                                  '28px',
-                                padding:
-                                  '0 10px',
-                                border:
-                                  `1px solid ${statusStyle.borderColor}`,
-                                borderRadius:
-                                  '999px',
-                                backgroundColor:
-                                  statusStyle.backgroundColor,
-                                color:
-                                  statusStyle.color,
-                                fontSize:
-                                  '0.76rem',
-                                fontWeight:
-                                  800,
-                                whiteSpace:
-                                  'nowrap',
-                              }}
-                            >
-                              {statusLabels[
-                                project
-                                  .status
-                              ] ||
-                                project.status}
-                            </span>
-                          </td>
-
-                          <td
-                            style={{
-                              ...bodyCellStyle,
-                              whiteSpace:
-                                'nowrap',
-                            }}
-                          >
-                            <Link
-                              href={`/dashboard/projects/setup?projectId=${project.id}`}
-                              style={{
-                                display:
-                                  'inline-flex',
-                                marginRight:
-                                  '8px',
-                                padding:
-                                  '7px 12px',
-                                borderRadius:
-                                  '6px',
-                                backgroundColor:
-                                  '#eff6ff',
-                                color:
-                                  '#1d4ed8',
-                                fontSize:
-                                  '0.8rem',
-                                fontWeight:
-                                  800,
-                                textDecoration:
-                                  'none',
-                              }}
-                            >
-                              Setup
-                            </Link>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDelete(
-                                  project
-                                )
-                              }
-                              disabled={
-                                deletingProjectId ===
-                                project.id
-                              }
-                              style={{
-                                border:
-                                  'none',
-                                padding:
-                                  '7px 12px',
-                                borderRadius:
-                                  '6px',
-                                backgroundColor:
-                                  '#fef2f2',
-                                color:
-                                  '#dc2626',
-                                cursor:
-                                  deletingProjectId ===
-                                  project.id
-                                    ? 'not-allowed'
-                                    : 'pointer',
-                                fontSize:
-                                  '0.8rem',
-                                fontWeight:
-                                  800,
-                                opacity:
-                                  deletingProjectId ===
-                                  project.id
-                                    ? 0.6
-                                    : 1,
-                              }}
-                            >
-                              {deletingProjectId ===
-                              project.id
-                                ? 'Deleting...'
-                                : 'Delete'}
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    }
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div>
-            {isLoading ? (
-              <div
-                style={
-                  cardEmptyStateStyle
-                }
-              >
-                Loading projects...
-              </div>
-            ) : projects.length ===
-              0 ? (
-              <div
-                style={
-                  cardEmptyStateStyle
-                }
-              >
-                No projects configured yet.
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns:
-                    'repeat(auto-fill, minmax(320px, 1fr))',
-                  gap: '20px',
-                }}
-              >
-                {projects.map(
-                  (
-                    project
-                  ) => {
-                    const statusStyle =
-                      getStatusStyle(
-                        project.status
-                      )
-
-                    const coverUrl =
-                      projectCoverUrls[
-                        project.id
-                      ]
-
-                    return (
-                      <article
-                        key={
-                          project.id
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td
+                        colSpan="7"
+                        style={
+                          emptyCellStyle
                         }
-                        style={{
-                          display:
-                            'flex',
-                          flexDirection:
-                            'column',
-                          overflow:
-                            'hidden',
-                          border:
-                            '1px solid #e2e8f0',
-                          borderRadius:
-                            '12px',
-                          backgroundColor:
-                            '#ffffff',
-                          boxShadow:
-                            '0 12px 32px rgba(15, 23, 42, 0.10)',
-                        }}
                       >
-                        <div
-                          style={{
-                            position:
-                              'relative',
-                            width:
-                              '100%',
-                            aspectRatio:
-                              '16 / 9',
-                            overflow:
-                              'hidden',
-                            background:
-                              'linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%)',
-                          }}
-                        >
-                          {coverUrl ? (
-                            <img
-                              src={
-                                coverUrl
-                              }
-                              alt={`${project.name} cover`}
-                              style={{
-                                display:
-                                  'block',
-                                width:
-                                  '100%',
-                                height:
-                                  '100%',
-                                objectFit:
-                                  'cover',
-                              }}
-                            />
-                          ) : (
-                            <div
-                              style={{
-                                display:
-                                  'flex',
-                                alignItems:
-                                  'center',
-                                justifyContent:
-                                  'center',
-                                width:
-                                  '100%',
-                                height:
-                                  '100%',
-                                color:
-                                  '#94a3b8',
-                                fontSize:
-                                  '0.78rem',
-                                fontWeight:
-                                  800,
-                                letterSpacing:
-                                  '0.04em',
-                                textTransform:
-                                  'uppercase',
-                              }}
-                            >
-                              No cover image
-                            </div>
-                          )}
-                        </div>
+                        Loading projects...
+                      </td>
+                    </tr>
+                  ) : projects.length ===
+                    0 ? (
+                    <tr>
+                      <td
+                        colSpan="7"
+                        style={
+                          emptyCellStyle
+                        }
+                      >
+                        No projects configured yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    projects.map(
+                      (
+                        project
+                      ) => {
+                        const statusStyle =
+                          getStatusStyle(
+                            project.status
+                          )
 
-                        <div
-                          style={{
-                            display:
-                              'flex',
-                            flexDirection:
-                              'column',
-                            flex: 1,
-                            padding:
-                              '20px 22px 22px',
-                          }}
-                        >
-                          <div
+                        return (
+                          <tr
+                            key={
+                              project.id
+                            }
                             style={{
-                              display:
-                                'flex',
-                              alignItems:
-                                'flex-start',
-                              justifyContent:
-                                'space-between',
-                              gap: '12px',
-                              marginBottom:
-                                '16px',
-                            }}
-                          >
-                            <span
-                              style={{
-                                color:
-                                  '#64748b',
-                                fontSize:
-                                  '0.76rem',
-                                fontWeight:
-                                  900,
-                                letterSpacing:
-                                  '0.06em',
-                                textTransform:
-                                  'uppercase',
-                              }}
-                            >
-                              {project.code ||
-                                '—'}
-                            </span>
-
-                            <span
-                              style={{
-                                display:
-                                  'inline-flex',
-                                alignItems:
-                                  'center',
-                                minHeight:
-                                  '28px',
-                                padding:
-                                  '0 10px',
-                                border:
-                                  `1px solid ${statusStyle.borderColor}`,
-                                borderRadius:
-                                  '999px',
-                                backgroundColor:
-                                  statusStyle.backgroundColor,
-                                color:
-                                  statusStyle.color,
-                                fontSize:
-                                  '0.74rem',
-                                fontWeight:
-                                  800,
-                                whiteSpace:
-                                  'nowrap',
-                              }}
-                            >
-                              {statusLabels[
-                                project
-                                  .status
-                              ] ||
-                                project.status}
-                            </span>
-                          </div>
-
-                          <h2
-                            style={{
-                              margin:
-                                '0 0 8px',
-                              color:
-                                '#0f172a',
-                              fontSize:
-                                '1.06rem',
-                              lineHeight:
-                                1.35,
-                              fontWeight:
-                                900,
-                            }}
-                          >
-                            {project.name}
-                          </h2>
-
-                          <p
-                            style={{
-                              margin:
-                                '0 0 4px',
-                              color:
-                                '#475569',
-                              fontSize:
-                                '0.9rem',
-                              lineHeight:
-                                1.5,
-                            }}
-                          >
-                            {project.client_name ||
-                              'Client not specified'}
-                          </p>
-
-                          <p
-                            style={{
-                              margin:
-                                '0 0 18px',
-                              color:
-                                '#64748b',
-                              fontSize:
-                                '0.86rem',
-                              lineHeight:
-                                1.5,
-                            }}
-                          >
-                            {formatLocation(
-                              project
-                            )}
-                          </p>
-
-                          <div
-                            style={{
-                              marginTop:
-                                'auto',
-                              paddingTop:
-                                '16px',
-                              borderTop:
+                              borderBottom:
                                 '1px solid #e2e8f0',
                             }}
                           >
-                            <div
-                              style={{
-                                marginBottom:
-                                  '16px',
-                              }}
+                            <td
+                              style={
+                                bodyCellStyle
+                              }
                             >
-                              <div
+                              <strong
                                 style={{
-                                  marginBottom:
-                                    '4px',
                                   color:
-                                    '#64748b',
-                                  fontSize:
-                                    '0.72rem',
-                                  fontWeight:
-                                    800,
-                                  letterSpacing:
-                                    '0.04em',
-                                  textTransform:
-                                    'uppercase',
+                                    '#1e3a5f',
                                 }}
                               >
-                                Contract Value
-                              </div>
+                                {project.code ||
+                                  '—'}
+                              </strong>
+                            </td>
 
+                            <td
+                              style={
+                                bodyCellStyle
+                              }
+                            >
+                              <strong
+                                style={{
+                                  color:
+                                    '#0f172a',
+                                }}
+                              >
+                                {
+                                  project.name
+                                }
+                              </strong>
+                            </td>
+
+                            <td
+                              style={
+                                bodyCellStyle
+                              }
+                            >
+                              {project.client_name ||
+                                '—'}
+                            </td>
+
+                            <td
+                              style={
+                                bodyCellStyle
+                              }
+                            >
                               <strong
                                 style={{
                                   color:
                                     '#1d4ed8',
-                                  fontSize:
-                                    '1rem',
                                 }}
                               >
                                 {formatContractValue(
                                   project
                                 )}
                               </strong>
-                            </div>
+                            </td>
 
-                            <div
+                            <td
+                              style={
+                                bodyCellStyle
+                              }
+                            >
+                              {formatLocation(
+                                project
+                              )}
+                            </td>
+
+                            <td
+                              style={
+                                bodyCellStyle
+                              }
+                            >
+                              <span
+                                style={{
+                                  display:
+                                    'inline-flex',
+                                  alignItems:
+                                    'center',
+                                  minHeight:
+                                    '28px',
+                                  padding:
+                                    '0 10px',
+                                  border:
+                                    `1px solid ${statusStyle.borderColor}`,
+                                  borderRadius:
+                                    '999px',
+                                  backgroundColor:
+                                    statusStyle.backgroundColor,
+                                  color:
+                                    statusStyle.color,
+                                  fontSize:
+                                    '0.76rem',
+                                  fontWeight:
+                                    800,
+                                  whiteSpace:
+                                    'nowrap',
+                                }}
+                              >
+                                {statusLabels[
+                                  project
+                                    .status
+                                ] ||
+                                  project.status}
+                              </span>
+                            </td>
+
+                            <td
                               style={{
-                                display:
-                                  'flex',
-                                alignItems:
-                                  'center',
-                                gap: '8px',
+                                ...bodyCellStyle,
+                                whiteSpace:
+                                  'nowrap',
                               }}
                             >
                               <Link
@@ -1320,16 +1185,12 @@ export default function ProjectsPage() {
                                 style={{
                                   display:
                                     'inline-flex',
-                                  alignItems:
-                                    'center',
-                                  justifyContent:
-                                    'center',
-                                  minHeight:
-                                    '36px',
+                                  marginRight:
+                                    '8px',
                                   padding:
-                                    '0 14px',
+                                    '7px 12px',
                                   borderRadius:
-                                    '7px',
+                                    '6px',
                                   backgroundColor:
                                     '#eff6ff',
                                   color:
@@ -1357,14 +1218,12 @@ export default function ProjectsPage() {
                                   project.id
                                 }
                                 style={{
-                                  minHeight:
-                                    '36px',
                                   border:
                                     'none',
                                   padding:
-                                    '0 14px',
+                                    '7px 12px',
                                   borderRadius:
-                                    '7px',
+                                    '6px',
                                   backgroundColor:
                                     '#fef2f2',
                                   color:
@@ -1390,17 +1249,413 @@ export default function ProjectsPage() {
                                   ? 'Deleting...'
                                   : 'Delete'}
                               </button>
+                            </td>
+                          </tr>
+                        )
+                      }
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div>
+              {isLoading ? (
+                <div
+                  style={
+                    cardEmptyStateStyle
+                  }
+                >
+                  Loading projects...
+                </div>
+              ) : projects.length ===
+                0 ? (
+                <div
+                  style={
+                    cardEmptyStateStyle
+                  }
+                >
+                  No projects configured yet.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns:
+                      'repeat(auto-fill, minmax(320px, 1fr))',
+                    gap: '20px',
+                  }}
+                >
+                  {projects.map(
+                    (
+                      project
+                    ) => {
+                      const statusStyle =
+                        getStatusStyle(
+                          project.status
+                        )
+
+                      const coverUrl =
+                        projectCoverUrls[
+                          project.id
+                        ]
+
+                      return (
+                        <article
+                          key={
+                            project.id
+                          }
+                          style={{
+                            display:
+                              'flex',
+                            flexDirection:
+                              'column',
+                            overflow:
+                              'hidden',
+                            border:
+                              '1px solid rgba(226,232,240,0.92)',
+                            borderRadius:
+                              '14px',
+                            backgroundColor:
+                              'rgba(255,255,255,0.95)',
+                            boxShadow:
+                              '0 14px 36px rgba(15, 23, 42, 0.09)',
+                            backdropFilter:
+                              'blur(10px)',
+                          }}
+                        >
+                          <div
+                            style={{
+                              position:
+                                'relative',
+                              width:
+                                '100%',
+                              aspectRatio:
+                                '16 / 9',
+                              overflow:
+                                'hidden',
+                              background:
+                                'linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%)',
+                            }}
+                          >
+                            {coverUrl ? (
+                              <img
+                                src={
+                                  coverUrl
+                                }
+                                alt={`${project.name} cover`}
+                                style={{
+                                  display:
+                                    'block',
+                                  width:
+                                    '100%',
+                                  height:
+                                    '100%',
+                                  objectFit:
+                                    'cover',
+                                }}
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  display:
+                                    'flex',
+                                  alignItems:
+                                    'center',
+                                  justifyContent:
+                                    'center',
+                                  width:
+                                    '100%',
+                                  height:
+                                    '100%',
+                                  color:
+                                    '#94a3b8',
+                                  fontSize:
+                                    '0.78rem',
+                                  fontWeight:
+                                    800,
+                                  letterSpacing:
+                                    '0.04em',
+                                  textTransform:
+                                    'uppercase',
+                                }}
+                              >
+                                No cover image
+                              </div>
+                            )}
+                          </div>
+
+                          <div
+                            style={{
+                              display:
+                                'flex',
+                              flexDirection:
+                                'column',
+                              flex: 1,
+                              padding:
+                                '20px 22px 22px',
+                            }}
+                          >
+                            <div
+                              style={{
+                                display:
+                                  'flex',
+                                alignItems:
+                                  'flex-start',
+                                justifyContent:
+                                  'space-between',
+                                gap: '12px',
+                                marginBottom:
+                                  '16px',
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color:
+                                    '#64748b',
+                                  fontSize:
+                                    '0.76rem',
+                                  fontWeight:
+                                    900,
+                                  letterSpacing:
+                                    '0.06em',
+                                  textTransform:
+                                    'uppercase',
+                                }}
+                              >
+                                {project.code ||
+                                  '—'}
+                              </span>
+
+                              <span
+                                style={{
+                                  display:
+                                    'inline-flex',
+                                  alignItems:
+                                    'center',
+                                  minHeight:
+                                    '28px',
+                                  padding:
+                                    '0 10px',
+                                  border:
+                                    `1px solid ${statusStyle.borderColor}`,
+                                  borderRadius:
+                                    '999px',
+                                  backgroundColor:
+                                    statusStyle.backgroundColor,
+                                  color:
+                                    statusStyle.color,
+                                  fontSize:
+                                    '0.74rem',
+                                  fontWeight:
+                                    800,
+                                  whiteSpace:
+                                    'nowrap',
+                                }}
+                              >
+                                {statusLabels[
+                                  project
+                                    .status
+                                ] ||
+                                  project.status}
+                              </span>
+                            </div>
+
+                            <h2
+                              style={{
+                                margin:
+                                  '0 0 8px',
+                                color:
+                                  '#0f172a',
+                                fontSize:
+                                  '1.06rem',
+                                lineHeight:
+                                  1.35,
+                                fontWeight:
+                                  900,
+                              }}
+                            >
+                              {project.name}
+                            </h2>
+
+                            <p
+                              style={{
+                                margin:
+                                  '0 0 4px',
+                                color:
+                                  '#475569',
+                                fontSize:
+                                  '0.9rem',
+                                lineHeight:
+                                  1.5,
+                              }}
+                            >
+                              {project.client_name ||
+                                'Client not specified'}
+                            </p>
+
+                            <p
+                              style={{
+                                margin:
+                                  '0 0 18px',
+                                color:
+                                  '#64748b',
+                                fontSize:
+                                  '0.86rem',
+                                lineHeight:
+                                  1.5,
+                              }}
+                            >
+                              {formatLocation(
+                                project
+                              )}
+                            </p>
+
+                            <div
+                              style={{
+                                marginTop:
+                                  'auto',
+                                paddingTop:
+                                  '16px',
+                                borderTop:
+                                  '1px solid #e2e8f0',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  marginBottom:
+                                    '16px',
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    marginBottom:
+                                      '4px',
+                                    color:
+                                      '#64748b',
+                                    fontSize:
+                                      '0.72rem',
+                                    fontWeight:
+                                      800,
+                                    letterSpacing:
+                                      '0.04em',
+                                    textTransform:
+                                      'uppercase',
+                                  }}
+                                >
+                                  Contract Value
+                                </div>
+
+                                <strong
+                                  style={{
+                                    color:
+                                      '#1d4ed8',
+                                    fontSize:
+                                      '1rem',
+                                  }}
+                                >
+                                  {formatContractValue(
+                                    project
+                                  )}
+                                </strong>
+                              </div>
+
+                              <div
+                                style={{
+                                  display:
+                                    'flex',
+                                  alignItems:
+                                    'center',
+                                  gap: '8px',
+                                }}
+                              >
+                                <Link
+                                  href={`/dashboard/projects/setup?projectId=${project.id}`}
+                                  style={{
+                                    display:
+                                      'inline-flex',
+                                    alignItems:
+                                      'center',
+                                    justifyContent:
+                                      'center',
+                                    minHeight:
+                                      '36px',
+                                    padding:
+                                      '0 14px',
+                                    borderRadius:
+                                      '7px',
+                                    backgroundColor:
+                                      '#eff6ff',
+                                    color:
+                                      '#1d4ed8',
+                                    fontSize:
+                                      '0.8rem',
+                                    fontWeight:
+                                      800,
+                                    textDecoration:
+                                      'none',
+                                  }}
+                                >
+                                  Setup
+                                </Link>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDelete(
+                                      project
+                                    )
+                                  }
+                                  disabled={
+                                    deletingProjectId ===
+                                    project.id
+                                  }
+                                  style={{
+                                    minHeight:
+                                      '36px',
+                                    border:
+                                      'none',
+                                    padding:
+                                      '0 14px',
+                                    borderRadius:
+                                      '7px',
+                                    backgroundColor:
+                                      '#fef2f2',
+                                    color:
+                                      '#dc2626',
+                                    cursor:
+                                      deletingProjectId ===
+                                      project.id
+                                        ? 'not-allowed'
+                                        : 'pointer',
+                                    fontSize:
+                                      '0.8rem',
+                                    fontWeight:
+                                      800,
+                                    opacity:
+                                      deletingProjectId ===
+                                      project.id
+                                        ? 0.6
+                                        : 1,
+                                  }}
+                                >
+                                  {deletingProjectId ===
+                                  project.id
+                                    ? 'Deleting...'
+                                    : 'Delete'}
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </article>
-                    )
-                  }
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                        </article>
+                      )
+                    }
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </>
   )
@@ -1431,9 +1686,15 @@ const emptyCellStyle = {
 
 const cardEmptyStateStyle = {
   padding: '50px 24px',
-  border: '1px solid #e2e8f0',
-  borderRadius: '10px',
-  backgroundColor: '#ffffff',
+  border:
+    '1px solid rgba(226,232,240,0.92)',
+  borderRadius: '12px',
+  backgroundColor:
+    'rgba(255,255,255,0.94)',
   color: '#64748b',
   textAlign: 'center',
+  boxShadow:
+    '0 12px 30px rgba(15, 23, 42, 0.06)',
+  backdropFilter:
+    'blur(10px)',
 }
