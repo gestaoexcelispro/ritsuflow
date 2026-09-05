@@ -639,7 +639,26 @@ export default function ProjectsPage() {
 
       <div
         style={{
-          padding: '32px 40px 40px',
+          position: 'relative',
+          minHeight:
+            'calc(100vh - 88px)',
+          padding:
+            '72px 40px 40px',
+          backgroundImage: `
+            linear-gradient(
+              rgba(248, 250, 252, 0.90),
+              rgba(248, 250, 252, 0.94)
+            ),
+            url('/login-construction.jpg')
+          `,
+          backgroundSize:
+            'cover',
+          backgroundPosition:
+            'center',
+          backgroundRepeat:
+            'no-repeat',
+          backgroundAttachment:
+            'fixed',
         }}
       >
         {errorMessage && (
@@ -671,7 +690,7 @@ export default function ProjectsPage() {
               border:
                 '1px solid #e2e8f0',
               boxShadow:
-                '0 1px 3px rgba(15, 23, 42, 0.04)',
+                '0 10px 30px rgba(15, 23, 42, 0.08)',
             }}
           >
             <table
@@ -1048,7 +1067,7 @@ export default function ProjectsPage() {
                           backgroundColor:
                             '#ffffff',
                           boxShadow:
-                            '0 1px 3px rgba(15, 23, 42, 0.05)',
+                            '0 12px 32px rgba(15, 23, 42, 0.10)',
                         }}
                       >
                         <div
