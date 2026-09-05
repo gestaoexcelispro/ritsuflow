@@ -15,31 +15,30 @@ import styles from './takeoff.module.css'
 // RITSUFLOW™
 // TAKEOFF MODULE
 //
-// CAD-style PDF takeoff workspace.
+// Standalone CAD-style PDF takeoff workspace.
 //
-// Current foundation:
+// Takeoff behaves as a specialized application inside
+// RitsuFlow.
 //
-// PDF layer
-// + viewport/camera
-// + navigation
-// + drawing coordinates
+// Geometry remains independent from construction meaning:
 //
-// Future layers:
-//
-// PDF drawing
+// PDF Drawing
 // ↓
-// Takeoff geometry overlay
+// Takeoff Geometry
 // ↓
-// Snapping / selection / grips
+// Location
 // ↓
-// Construction meaning
+// Work Package
 // ↓
-// Quantity / productivity / planning / control
-//
-// IMPORTANT:
-//
-// Takeoff geometry must remain independent from the PDF canvas.
-// Never burn takeoff entities directly into the rendered PDF.
+// Scope Item
+// ↓
+// Quantity
+// ↓
+// Productivity
+// ↓
+// Planning
+// ↓
+// Production Control
 // ============================================================
 
 
@@ -652,10 +651,7 @@ export default function TakeoffPage() {
       pdfjs
         .GlobalWorkerOptions
         .workerSrc =
-        new URL(
-          'pdfjs-dist/build/pdf.worker.min.mjs',
-          import.meta.url
-        ).toString()
+        `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 
     }
 
@@ -1770,7 +1766,7 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
-  // KEYBOARD COMMANDS
+  // KEYBOARD
   // ==========================================================
 
   useEffect(
@@ -2470,7 +2466,7 @@ export default function TakeoffPage() {
 
 
       {/* ======================================================
-          MAIN CAD WORKSPACE
+          MAIN WORKSPACE
       ====================================================== */}
 
       <div
@@ -2478,10 +2474,6 @@ export default function TakeoffPage() {
           styles.workspace
         }
       >
-
-        {/* ====================================================
-            DRAWING PANEL
-        ==================================================== */}
 
         <aside
           className={
@@ -2558,20 +2550,6 @@ export default function TakeoffPage() {
                     className={
                       styles.emptyPanelTitle
                     }
-                    style={{
-                      overflow:
-                        'hidden',
-
-                      textOverflow:
-                        'ellipsis',
-
-                      whiteSpace:
-                        'nowrap',
-                    }}
-                    title={
-                      pdfFileName ||
-                      ''
-                    }
                   >
                     {
                       pdfFileName
@@ -2593,119 +2571,81 @@ export default function TakeoffPage() {
                 </div>
 
 
-                <div
-                  style={{
-                    display:
-                      'flex',
+                {Array.from(
+                  {
+                    length:
+                      pageCount,
+                  },
+                  (
+                    _,
+                    index
+                  ) => {
 
-                    flexDirection:
-                      'column',
+                    const number =
+                      index + 1
 
-                    gap:
-                      '4px',
-                  }}
-                >
-
-                  {Array.from(
-                    {
-                      length:
-                        pageCount,
-                    },
-                    (
-                      _,
-                      index
-                    ) => {
-
-                      const number =
-                        index + 1
+                    const active =
+                      number ===
+                      pageNumber
 
 
-                      const active =
-                        number ===
-                        pageNumber
+                    return (
 
-
-                      return (
-
-                        <button
-                          key={
+                      <button
+                        key={
+                          number
+                        }
+                        type="button"
+                        onClick={() =>
+                          setPageNumber(
                             number
-                          }
-                          type="button"
-                          onClick={() =>
-                            setPageNumber(
-                              number
-                            )
-                          }
-                          style={{
-                            display:
-                              'flex',
+                          )
+                        }
+                        style={{
+                          width:
+                            '100%',
 
-                            alignItems:
-                              'center',
+                          minHeight:
+                            '34px',
 
-                            justifyContent:
-                              'space-between',
+                          border:
+                            active
+                              ? '1px solid #99e6dc'
+                              : '1px solid transparent',
 
-                            width:
-                              '100%',
+                          borderRadius:
+                            '6px',
 
-                            minHeight:
-                              '34px',
+                          background:
+                            active
+                              ? '#eafaf7'
+                              : 'transparent',
 
-                            padding:
-                              '0 9px',
+                          color:
+                            active
+                              ? '#087f73'
+                              : '#52677d',
 
-                            border:
-                              active
-                                ? '1px solid #99e6dc'
-                                : '1px solid transparent',
+                          font:
+                            'inherit',
 
-                            borderRadius:
-                              '6px',
+                          fontSize:
+                            '11px',
 
-                            background:
-                              active
-                                ? '#eafaf7'
-                                : 'transparent',
+                          fontWeight:
+                            800,
 
-                            color:
-                              active
-                                ? '#087f73'
-                                : '#52677d',
+                          cursor:
+                            'pointer',
+                        }}
+                      >
+                        Page {number}
+                      </button>
 
-                            font:
-                              'inherit',
+                    )
 
-                            fontSize:
-                              '11px',
-
-                            fontWeight:
-                              800,
-
-                            cursor:
-                              'pointer',
-                          }}
-                        >
-
-                          <span>
-                            Page {number}
-                          </span>
-
-                          {active && (
-                            <span>
-                              ●
-                            </span>
-                          )}
-
-                        </button>
-
-                      )
-
-                    }
-                  )}
-
-                </div>
+                  }
+                )}
 
               </div>
 
@@ -2715,10 +2655,6 @@ export default function TakeoffPage() {
 
         </aside>
 
-
-        {/* ====================================================
-            VIEWPORT
-        ==================================================== */}
 
         <main
           ref={
@@ -2776,7 +2712,6 @@ export default function TakeoffPage() {
             }
           >
 
-
             {!pdfDocument && (
 
               <div
@@ -2789,9 +2724,7 @@ export default function TakeoffPage() {
                   className={
                     styles.emptyViewportIcon
                   }
-                  aria-hidden="true"
                 >
-
                   <svg
                     width="52"
                     height="52"
@@ -2799,15 +2732,12 @@ export default function TakeoffPage() {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="1.3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
                   >
                     <path d="M6 2h9l5 5v15H6z" />
                     <path d="M15 2v6h5" />
                     <path d="M9 13h6" />
                     <path d="M12 10v6" />
                   </svg>
-
                 </div>
 
 
@@ -2838,9 +2768,6 @@ export default function TakeoffPage() {
 
                   <p
                     style={{
-                      margin:
-                        '0 0 14px',
-
                       color:
                         '#b42318',
 
@@ -2871,7 +2798,6 @@ export default function TakeoffPage() {
                     loadingPdf
                   }
                 >
-
                   <ToolIcon
                     type="import"
                   />
@@ -2881,7 +2807,6 @@ export default function TakeoffPage() {
                       ? 'Loading PDF...'
                       : 'Import PDF'
                   }
-
                 </button>
 
               </div>
@@ -2928,10 +2853,6 @@ export default function TakeoffPage() {
                 }}
               >
 
-                {/* ============================================
-                    PDF RENDER LAYER
-                ============================================ */}
-
                 <canvas
                   ref={
                     canvasRef
@@ -2949,11 +2870,6 @@ export default function TakeoffPage() {
                 />
 
 
-                {/* ============================================
-                    TAKEOFF GEOMETRY LAYER
-                    Reserved for SVG geometry.
-                ============================================ */}
-
                 <svg
                   viewBox={`0 0 ${Math.max(
                     1,
@@ -2963,7 +2879,6 @@ export default function TakeoffPage() {
                     renderedSize.height
                   )}`}
                   preserveAspectRatio="none"
-                  aria-hidden="true"
                   style={{
                     position:
                       'absolute',
@@ -2977,22 +2892,13 @@ export default function TakeoffPage() {
                     height:
                       '100%',
 
-                    overflow:
-                      'visible',
-
                     pointerEvents:
                       'none',
                   }}
                 />
 
 
-                {/* ============================================
-                    INTERACTION LAYER
-                    Future snaps / grips / hover feedback.
-                ============================================ */}
-
                 <div
-                  aria-hidden="true"
                   style={{
                     position:
                       'absolute',
@@ -3013,10 +2919,6 @@ export default function TakeoffPage() {
 
         </main>
 
-
-        {/* ====================================================
-            PROPERTIES
-        ==================================================== */}
 
         <aside
           className={
@@ -3059,7 +2961,6 @@ export default function TakeoffPage() {
                   styles.propertyRow
                 }
               >
-
                 <span>
                   Type
                 </span>
@@ -3071,7 +2972,6 @@ export default function TakeoffPage() {
                       : '—'
                   }
                 </strong>
-
               </div>
 
 
@@ -3080,7 +2980,6 @@ export default function TakeoffPage() {
                   styles.propertyRow
                 }
               >
-
                 <span>
                   Page
                 </span>
@@ -3092,28 +2991,6 @@ export default function TakeoffPage() {
                       : '—'
                   }
                 </strong>
-
-              </div>
-
-
-              <div
-                className={
-                  styles.propertyRow
-                }
-              >
-
-                <span>
-                  Geometry
-                </span>
-
-                <strong>
-                  {
-                    pdfDocument
-                      ? 'Analyzing later'
-                      : '—'
-                  }
-                </strong>
-
               </div>
 
             </div>
@@ -3139,7 +3016,6 @@ export default function TakeoffPage() {
                   styles.propertyRow
                 }
               >
-
                 <span>
                   Fit Mode
                 </span>
@@ -3152,7 +3028,6 @@ export default function TakeoffPage() {
                       : 'Page'
                   }
                 </strong>
-
               </div>
 
 
@@ -3161,7 +3036,6 @@ export default function TakeoffPage() {
                   styles.propertyRow
                 }
               >
-
                 <span>
                   Zoom
                 </span>
@@ -3174,7 +3048,6 @@ export default function TakeoffPage() {
                     )}%`
                   }
                 </strong>
-
               </div>
 
             </div>
@@ -3200,7 +3073,6 @@ export default function TakeoffPage() {
                   styles.propertyRow
                 }
               >
-
                 <span>
                   Status
                 </span>
@@ -3208,7 +3080,6 @@ export default function TakeoffPage() {
                 <strong>
                   Not calibrated
                 </strong>
-
               </div>
 
 
@@ -3217,7 +3088,6 @@ export default function TakeoffPage() {
                   styles.propertyRow
                 }
               >
-
                 <span>
                   Unit
                 </span>
@@ -3225,7 +3095,6 @@ export default function TakeoffPage() {
                 <strong>
                   —
                 </strong>
-
               </div>
 
             </div>
@@ -3340,19 +3209,6 @@ export default function TakeoffPage() {
               }
             </strong>
           </span>
-
-
-          {pdfDocument && (
-
-            <span
-              className={
-                styles.statusItem
-              }
-            >
-              PDF pt
-            </span>
-
-          )}
 
         </div>
 
