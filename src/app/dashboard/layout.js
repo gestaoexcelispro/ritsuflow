@@ -11,7 +11,6 @@ import Link from 'next/link'
 
 import {
   usePathname,
-  useSearchParams,
 } from 'next/navigation'
 
 import LogoutButton from '../../components/LogoutButton'
@@ -478,20 +477,79 @@ export default function DashboardLayout({
     usePathname()
 
 
-  const searchParams =
-    useSearchParams()
+  const [
+    projectSetupProjectId,
+    setProjectSetupProjectId,
+  ] =
+    useState(null)
 
 
-  const projectSetupProjectId =
-    searchParams.get(
-      'projectId'
-    )
+  const [
+    projectSetupSection,
+    setProjectSetupSection,
+  ] =
+    useState('general')
 
 
-  const projectSetupSection =
-    searchParams.get(
-      'section'
-    ) || 'general'
+  useEffect(
+    () => {
+
+      function syncProjectSetupHeaderState() {
+
+        if (
+          typeof window ===
+          'undefined'
+        ) {
+          return
+        }
+
+
+        const params =
+          new URLSearchParams(
+            window.location.search
+          )
+
+
+        setProjectSetupProjectId(
+          params.get(
+            'projectId'
+          )
+        )
+
+
+        setProjectSetupSection(
+          params.get(
+            'section'
+          ) ||
+          'general'
+        )
+
+      }
+
+
+      syncProjectSetupHeaderState()
+
+
+      window.addEventListener(
+        'popstate',
+        syncProjectSetupHeaderState
+      )
+
+
+      return () => {
+
+        window.removeEventListener(
+          'popstate',
+          syncProjectSetupHeaderState
+        )
+
+      }
+
+    },
+    [
+      pathname,
+    ]
+  )
 
 
   const isProjectSetupPage =
@@ -1538,7 +1596,7 @@ export default function DashboardLayout({
                                       position:
                                         'absolute',
 
-                                      left:
+                                    left:
                                         '-5px',
 
                                       top:
@@ -1952,6 +2010,13 @@ export default function DashboardLayout({
                             ? 'page'
                             : undefined
                         }
+                        onClick={() => {
+
+                          setProjectSetupSection(
+                            section.id
+                          )
+
+                        }}
                         style={{
 
                           display:
@@ -2051,6 +2116,17 @@ export default function DashboardLayout({
 
                 <Link
                   href="/dashboard/projects/setup"
+                  onClick={() => {
+
+                    setProjectSetupProjectId(
+                      null
+                    )
+
+                    setProjectSetupSection(
+                      'general'
+                    )
+
+                  }}
                   style={{
 
                     display:
@@ -2200,3 +2276,7 @@ export default function DashboardLayout({
 
   )
 }
+
+
+
+
