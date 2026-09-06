@@ -19,14 +19,11 @@ import styles from './takeoff.module.css'
 //
 // Standalone CAD-style PDF takeoff workspace.
 //
-// Design principle:
-//
-// THE DRAWING CANVAS IS THE PRODUCT.
-//
-// Secondary information should remain accessible without
-// permanently consuming drawing space.
+// Geometry is stored in native PDF page coordinates.
 //
 // PDF Drawing
+// ↓
+// Page Calibration
 // ↓
 // Takeoff Geometry
 // ↓
@@ -55,6 +52,22 @@ const MAX_ZOOM = 12
 const ZOOM_FACTOR = 1.15
 const VIEWPORT_MARGIN = 36
 
+const UNIT_TO_METERS = {
+  mm: 0.001,
+  cm: 0.01,
+  m: 1,
+  in: 0.0254,
+  ft: 0.3048,
+}
+
+const UNIT_LABELS = {
+  mm: 'Millimeters',
+  cm: 'Centimeters',
+  m: 'Meters',
+  in: 'Inches',
+  ft: 'Feet',
+}
+
 
 // ============================================================
 // ICONS
@@ -64,7 +77,6 @@ function Icon({
   type,
   size = 18,
 }) {
-
   const commonProps = {
     width: size,
     height: size,
@@ -77,9 +89,7 @@ function Icon({
     'aria-hidden': true,
   }
 
-
   switch (type) {
-
     case 'back':
       return (
         <svg {...commonProps}>
@@ -87,7 +97,6 @@ function Icon({
           <path d="M12 19l-7-7 7-7" />
         </svg>
       )
-
 
     case 'takeoff':
       return (
@@ -98,7 +107,6 @@ function Icon({
         </svg>
       )
 
-
     case 'import':
       return (
         <svg {...commonProps}>
@@ -107,7 +115,6 @@ function Icon({
           <path d="M4 20h16" />
         </svg>
       )
-
 
     case 'drawings':
       return (
@@ -119,14 +126,12 @@ function Icon({
         </svg>
       )
 
-
     case 'select':
       return (
         <svg {...commonProps}>
           <path d="M5 3l13 8-6 2-3 6z" />
         </svg>
       )
-
 
     case 'pan':
       return (
@@ -138,7 +143,6 @@ function Icon({
         </svg>
       )
 
-
     case 'zoom':
       return (
         <svg {...commonProps}>
@@ -149,7 +153,6 @@ function Icon({
         </svg>
       )
 
-
     case 'fit':
       return (
         <svg {...commonProps}>
@@ -159,7 +162,6 @@ function Icon({
           <path d="M16 21h5v-5" />
         </svg>
       )
-
 
     case 'fitWidth':
       return (
@@ -174,7 +176,6 @@ function Icon({
         </svg>
       )
 
-
     case 'distance':
       return (
         <svg {...commonProps}>
@@ -184,7 +185,6 @@ function Icon({
         </svg>
       )
 
-
     case 'line':
       return (
         <svg {...commonProps}>
@@ -193,7 +193,6 @@ function Icon({
           <path d="M6.2 17L17.8 7" />
         </svg>
       )
-
 
     case 'polyline':
       return (
@@ -208,7 +207,6 @@ function Icon({
         </svg>
       )
 
-
     case 'area':
       return (
         <svg {...commonProps}>
@@ -216,14 +214,12 @@ function Icon({
         </svg>
       )
 
-
     case 'rectangle':
       return (
         <svg {...commonProps}>
           <rect x="4" y="6" width="16" height="12" />
         </svg>
       )
-
 
     case 'count':
       return (
@@ -233,7 +229,6 @@ function Icon({
           <path d="M8 12h8" />
         </svg>
       )
-
 
     case 'calibrate':
       return (
@@ -245,7 +240,6 @@ function Icon({
         </svg>
       )
 
-
     case 'undo':
       return (
         <svg {...commonProps}>
@@ -254,7 +248,6 @@ function Icon({
         </svg>
       )
 
-
     case 'redo':
       return (
         <svg {...commonProps}>
@@ -262,7 +255,6 @@ function Icon({
           <path d="M20 12h-9a6 6 0 0 0-6 6" />
         </svg>
       )
-
 
     case 'properties':
       return (
@@ -274,7 +266,6 @@ function Icon({
         </svg>
       )
 
-
     case 'layers':
       return (
         <svg {...commonProps}>
@@ -283,7 +274,6 @@ function Icon({
           <path d="M4 16l8 5 8-5" />
         </svg>
       )
-
 
     case 'snap':
       return (
@@ -295,7 +285,6 @@ function Icon({
         </svg>
       )
 
-
     case 'ortho':
       return (
         <svg {...commonProps}>
@@ -303,7 +292,6 @@ function Icon({
           <path d="M5 15h4v4" />
         </svg>
       )
-
 
     case 'grid':
       return (
@@ -316,7 +304,6 @@ function Icon({
         </svg>
       )
 
-
     case 'delete':
       return (
         <svg {...commonProps}>
@@ -326,7 +313,6 @@ function Icon({
         </svg>
       )
 
-
     case 'close':
       return (
         <svg {...commonProps}>
@@ -335,14 +321,12 @@ function Icon({
         </svg>
       )
 
-
     case 'previous':
       return (
         <svg {...commonProps}>
           <path d="M15 6l-6 6 6 6" />
         </svg>
       )
-
 
     case 'next':
       return (
@@ -351,16 +335,13 @@ function Icon({
         </svg>
       )
 
-
     default:
       return (
         <svg {...commonProps}>
           <circle cx="12" cy="12" r="8" />
         </svg>
       )
-
   }
-
 }
 
 
@@ -388,7 +369,6 @@ const navigationTools = [
     shortcut: 'Z',
   },
 ]
-
 
 const measurementTools = [
   {
@@ -429,15 +409,20 @@ const measurementTools = [
   },
 ]
 
-
 const allTools = [
   ...navigationTools,
   ...measurementTools,
+  {
+    id: 'calibrate',
+    label: 'Calibrate',
+    icon: 'calibrate',
+    shortcut: null,
+  },
 ]
 
 
 // ============================================================
-// UTILITY
+// UTILITIES
 // ============================================================
 
 function clamp(
@@ -445,7 +430,6 @@ function clamp(
   minimum,
   maximum
 ) {
-
   return Math.min(
     maximum,
     Math.max(
@@ -453,7 +437,42 @@ function clamp(
       value
     )
   )
+}
 
+
+function pointDistance(
+  point1,
+  point2
+) {
+  if (
+    !point1 ||
+    !point2
+  ) {
+    return 0
+  }
+
+  return Math.hypot(
+    point2.x - point1.x,
+    point2.y - point1.y
+  )
+}
+
+
+function formatNumber(
+  value,
+  decimals = 2
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(value)
+  ) {
+    return '—'
+  }
+
+  return Number(value).toFixed(
+    decimals
+  )
 }
 
 
@@ -496,13 +515,11 @@ export default function TakeoffPage() {
   ] =
     useState(null)
 
-
   const [
     pdfDocument,
     setPdfDocument,
   ] =
     useState(null)
-
 
   const [
     pdfPage,
@@ -510,13 +527,11 @@ export default function TakeoffPage() {
   ] =
     useState(null)
 
-
   const [
     pageNumber,
     setPageNumber,
   ] =
     useState(1)
-
 
   const [
     pageCount,
@@ -524,20 +539,17 @@ export default function TakeoffPage() {
   ] =
     useState(0)
 
-
   const [
     pageBaseSize,
     setPageBaseSize,
   ] =
     useState(null)
 
-
   const [
     loadingPdf,
     setLoadingPdf,
   ] =
     useState(false)
-
 
   const [
     pdfError,
@@ -559,13 +571,11 @@ export default function TakeoffPage() {
       height: 0,
     })
 
-
   const [
     fitReference,
     setFitReference,
   ] =
     useState('page')
-
 
   const [
     baseScale,
@@ -573,13 +583,11 @@ export default function TakeoffPage() {
   ] =
     useState(1)
 
-
   const [
     zoom,
     setZoom,
   ] =
     useState(1)
-
 
   const [
     pan,
@@ -590,7 +598,6 @@ export default function TakeoffPage() {
       y: 0,
     })
 
-
   const [
     renderedSize,
     setRenderedSize,
@@ -600,7 +607,6 @@ export default function TakeoffPage() {
       height: 0,
     })
 
-
   const [
     cursorPosition,
     setCursorPosition,
@@ -609,7 +615,6 @@ export default function TakeoffPage() {
       x: null,
       y: null,
     })
-
 
   const [
     isPanning,
@@ -628,13 +633,11 @@ export default function TakeoffPage() {
   ] =
     useState('select')
 
-
   const [
     snapEnabled,
     setSnapEnabled,
   ] =
     useState(true)
-
 
   const [
     orthoEnabled,
@@ -642,12 +645,50 @@ export default function TakeoffPage() {
   ] =
     useState(false)
 
-
   const [
     gridEnabled,
     setGridEnabled,
   ] =
     useState(true)
+
+
+  // ==========================================================
+  // SCALE CALIBRATION
+  // ==========================================================
+
+  const [
+    calibrationsByPage,
+    setCalibrationsByPage,
+  ] =
+    useState({})
+
+  const [
+    calibrationDraft,
+    setCalibrationDraft,
+  ] =
+    useState({
+      point1: null,
+      point2: null,
+      previewPoint: null,
+    })
+
+  const [
+    calibrationDistance,
+    setCalibrationDistance,
+  ] =
+    useState('')
+
+  const [
+    calibrationUnit,
+    setCalibrationUnit,
+  ] =
+    useState('ft')
+
+  const [
+    calibrationError,
+    setCalibrationError,
+  ] =
+    useState(null)
 
 
   // ==========================================================
@@ -660,13 +701,11 @@ export default function TakeoffPage() {
   ] =
     useState(false)
 
-
   const [
     inspectorOpen,
     setInspectorOpen,
   ] =
     useState(true)
-
 
   const [
     inspectorTab,
@@ -683,9 +722,7 @@ export default function TakeoffPage() {
     useMemo(
       () =>
         allTools.find(
-          (
-            tool
-          ) =>
+          (tool) =>
             tool.id ===
             activeTool
         ),
@@ -694,11 +731,9 @@ export default function TakeoffPage() {
       ]
     )
 
-
   const effectiveScale =
     baseScale *
     zoom
-
 
   const viewMode =
     zoom === 1
@@ -710,35 +745,242 @@ export default function TakeoffPage() {
         )
       : 'Custom'
 
+  const currentCalibration =
+    calibrationsByPage[
+      pageNumber
+    ] || null
+
+  const calibrationPdfDistance =
+    calibrationDraft.point1 &&
+    calibrationDraft.point2
+      ? pointDistance(
+          calibrationDraft.point1,
+          calibrationDraft.point2
+        )
+      : 0
+
+  const calibrationPreviewEnd =
+    calibrationDraft.point2 ||
+    calibrationDraft.previewPoint
+
+  const calibrationWaitingForDistance =
+    activeTool ===
+      'calibrate' &&
+    Boolean(
+      calibrationDraft.point1 &&
+      calibrationDraft.point2
+    )
+
 
   // ==========================================================
   // PDF.JS
   // ==========================================================
 
   async function getPdfJs() {
-
     const pdfjs =
       await import(
         'pdfjs-dist'
       )
-
 
     if (
       !pdfjs
         .GlobalWorkerOptions
         .workerSrc
     ) {
-
       pdfjs
         .GlobalWorkerOptions
         .workerSrc =
         `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
-
     }
 
-
     return pdfjs
+  }
 
+
+  // ==========================================================
+  // CALIBRATION COMMANDS
+  // ==========================================================
+
+  const resetCalibrationDraft =
+    useCallback(
+      () => {
+        setCalibrationDraft({
+          point1: null,
+          point2: null,
+          previewPoint: null,
+        })
+
+        setCalibrationDistance(
+          ''
+        )
+
+        setCalibrationError(
+          null
+        )
+      },
+      []
+    )
+
+
+  const cancelCalibration =
+    useCallback(
+      () => {
+        resetCalibrationDraft()
+
+        setActiveTool(
+          'select'
+        )
+      },
+      [
+        resetCalibrationDraft,
+      ]
+    )
+
+
+  function startCalibration() {
+    if (!pdfDocument) {
+      return
+    }
+
+    resetCalibrationDraft()
+
+    if (
+      currentCalibration
+    ) {
+      setCalibrationUnit(
+        currentCalibration.displayUnit
+      )
+    }
+
+    setInspectorTab(
+      'properties'
+    )
+
+    setInspectorOpen(
+      true
+    )
+
+    setActiveTool(
+      'calibrate'
+    )
+  }
+
+
+  function saveCalibration() {
+    if (
+      !calibrationDraft.point1 ||
+      !calibrationDraft.point2
+    ) {
+      setCalibrationError(
+        'Select two points on the drawing first.'
+      )
+
+      return
+    }
+
+    const realDistance =
+      Number(
+        calibrationDistance
+      )
+
+    if (
+      !Number.isFinite(
+        realDistance
+      ) ||
+      realDistance <= 0
+    ) {
+      setCalibrationError(
+        'Enter a valid distance greater than zero.'
+      )
+
+      return
+    }
+
+    const pdfDistance =
+      pointDistance(
+        calibrationDraft.point1,
+        calibrationDraft.point2
+      )
+
+    if (
+      !pdfDistance ||
+      pdfDistance <= 0
+    ) {
+      setCalibrationError(
+        'The calibration points must be different.'
+      )
+
+      return
+    }
+
+    const unitFactor =
+      UNIT_TO_METERS[
+        calibrationUnit
+      ]
+
+    if (!unitFactor) {
+      setCalibrationError(
+        'Select a valid unit.'
+      )
+
+      return
+    }
+
+    const realDistanceMeters =
+      realDistance *
+      unitFactor
+
+    const metersPerPdfPoint =
+      realDistanceMeters /
+      pdfDistance
+
+    const calibration = {
+      pageNumber,
+
+      point1: {
+        ...calibrationDraft.point1,
+      },
+
+      point2: {
+        ...calibrationDraft.point2,
+      },
+
+      pdfDistance,
+
+      referenceDistance:
+        realDistance,
+
+      displayUnit:
+        calibrationUnit,
+
+      metersPerPdfPoint,
+
+      createdAt:
+        new Date()
+          .toISOString(),
+    }
+
+    setCalibrationsByPage(
+      (current) => ({
+        ...current,
+        [pageNumber]:
+          calibration,
+      })
+    )
+
+    resetCalibrationDraft()
+
+    setActiveTool(
+      'select'
+    )
+
+    setInspectorTab(
+      'properties'
+    )
+
+    setInspectorOpen(
+      true
+    )
   }
 
 
@@ -747,33 +989,27 @@ export default function TakeoffPage() {
   // ==========================================================
 
   function openFilePicker() {
-
     fileInputRef
       .current
       ?.click()
-
   }
 
 
   async function handleFileChange(
     event
   ) {
-
     const file =
       event
         .target
         .files
         ?.[0]
 
-
     event.target.value =
       ''
-
 
     if (!file) {
       return
     }
-
 
     if (
       file.type !==
@@ -784,15 +1020,12 @@ export default function TakeoffPage() {
           '.pdf'
         )
     ) {
-
       setPdfError(
         'Please select a PDF drawing.'
       )
 
       return
-
     }
-
 
     setLoadingPdf(
       true
@@ -802,52 +1035,38 @@ export default function TakeoffPage() {
       null
     )
 
-
     try {
-
       if (
         pdfDocumentRef
           .current
       ) {
-
         try {
-
           await pdfDocumentRef
             .current
             .destroy()
-
         } catch {
-
           // Ignore cleanup errors.
-
         }
-
       }
-
 
       const pdfjs =
         await getPdfJs()
-
 
       const bytes =
         new Uint8Array(
           await file.arrayBuffer()
         )
 
-
       const loadingTask =
         pdfjs.getDocument({
           data: bytes,
         })
 
-
       const document =
         await loadingTask.promise
 
-
       pdfDocumentRef.current =
         document
-
 
       setPdfDocument(
         document
@@ -887,13 +1106,21 @@ export default function TakeoffPage() {
         y: null,
       })
 
-    } catch (error) {
+      setCalibrationsByPage(
+        {}
+      )
 
+      resetCalibrationDraft()
+
+      setActiveTool(
+        'select'
+      )
+
+    } catch (error) {
       console.error(
         'PDF import failed.',
         error
       )
-
 
       setPdfDocument(
         null
@@ -915,19 +1142,21 @@ export default function TakeoffPage() {
         null
       )
 
+      setCalibrationsByPage(
+        {}
+      )
+
+      resetCalibrationDraft()
 
       setPdfError(
         'The PDF could not be opened.'
       )
 
     } finally {
-
       setLoadingPdf(
         false
       )
-
     }
-
   }
 
 
@@ -937,22 +1166,17 @@ export default function TakeoffPage() {
 
   useEffect(
     () => {
-
       const element =
         viewportRef.current
-
 
       if (!element) {
         return
       }
 
-
       function updateSize() {
-
         const rect =
           element
             .getBoundingClientRect()
-
 
         setViewportSize({
           width:
@@ -961,30 +1185,22 @@ export default function TakeoffPage() {
           height:
             rect.height,
         })
-
       }
 
-
       updateSize()
-
 
       const observer =
         new ResizeObserver(
           updateSize
         )
 
-
       observer.observe(
         element
       )
 
-
       return () => {
-
         observer.disconnect()
-
       }
-
     },
     [
       inspectorOpen,
@@ -998,13 +1214,10 @@ export default function TakeoffPage() {
 
   useEffect(
     () => {
-
       let cancelled =
         false
 
-
       async function loadPage() {
-
         if (
           !pdfDocument ||
           !pageNumber
@@ -1012,31 +1225,25 @@ export default function TakeoffPage() {
           return
         }
 
-
         try {
-
           const page =
             await pdfDocument
               .getPage(
                 pageNumber
               )
 
-
           if (cancelled) {
             return
           }
-
 
           const viewport =
             page.getViewport({
               scale: 1,
             })
 
-
           setPdfPage(
             page
           )
-
 
           setPageBaseSize({
             width:
@@ -1045,7 +1252,6 @@ export default function TakeoffPage() {
             height:
               viewport.height,
           })
-
 
           setZoom(
             1
@@ -1056,43 +1262,39 @@ export default function TakeoffPage() {
             y: 0,
           })
 
-        } catch (error) {
+          resetCalibrationDraft()
 
+          setActiveTool(
+            'select'
+          )
+
+        } catch (error) {
           console.error(
             'PDF page could not be loaded.',
             error
           )
 
-
           if (
             !cancelled
           ) {
-
             setPdfError(
               'The selected PDF page could not be rendered.'
             )
-
           }
-
         }
-
       }
-
 
       loadPage()
 
-
       return () => {
-
         cancelled =
           true
-
       }
-
     },
     [
       pdfDocument,
       pageNumber,
+      resetCalibrationDraft,
     ]
   )
 
@@ -1103,7 +1305,6 @@ export default function TakeoffPage() {
 
   useEffect(
     () => {
-
       if (
         !pageBaseSize ||
         !viewportSize.width ||
@@ -1112,14 +1313,12 @@ export default function TakeoffPage() {
         return
       }
 
-
       const availableWidth =
         Math.max(
           1,
           viewportSize.width -
           VIEWPORT_MARGIN * 2
         )
-
 
       const availableHeight =
         Math.max(
@@ -1128,16 +1327,13 @@ export default function TakeoffPage() {
           VIEWPORT_MARGIN * 2
         )
 
-
       const widthScale =
         availableWidth /
         pageBaseSize.width
 
-
       const heightScale =
         availableHeight /
         pageBaseSize.height
-
 
       const nextBaseScale =
         fitReference ===
@@ -1148,14 +1344,12 @@ export default function TakeoffPage() {
               heightScale
             )
 
-
       setBaseScale(
         Math.max(
           0.01,
           nextBaseScale
         )
       )
-
     },
     [
       pageBaseSize,
@@ -1171,16 +1365,12 @@ export default function TakeoffPage() {
 
   useEffect(
     () => {
-
       let cancelled =
         false
 
-
       async function renderPage() {
-
         const canvas =
           canvasRef.current
-
 
         if (
           !pdfPage ||
@@ -1190,25 +1380,17 @@ export default function TakeoffPage() {
           return
         }
 
-
         if (
           renderTaskRef.current
         ) {
-
           try {
-
             renderTaskRef
               .current
               .cancel()
-
           } catch {
-
             // Ignore cancellation errors.
-
           }
-
         }
-
 
         const viewport =
           pdfPage.getViewport({
@@ -1216,14 +1398,12 @@ export default function TakeoffPage() {
               effectiveScale,
           })
 
-
         const outputScale =
           Math.min(
             window.devicePixelRatio ||
               1,
             2
           )
-
 
         const context =
           canvas.getContext(
@@ -1233,11 +1413,9 @@ export default function TakeoffPage() {
             }
           )
 
-
         if (!context) {
           return
         }
-
 
         canvas.width =
           Math.max(
@@ -1248,7 +1426,6 @@ export default function TakeoffPage() {
             )
           )
 
-
         canvas.height =
           Math.max(
             1,
@@ -1258,13 +1435,11 @@ export default function TakeoffPage() {
             )
           )
 
-
         canvas.style.width =
           `${viewport.width}px`
 
         canvas.style.height =
           `${viewport.height}px`
-
 
         setRenderedSize({
           width:
@@ -1273,7 +1448,6 @@ export default function TakeoffPage() {
           height:
             viewport.height,
         })
-
 
         const transform =
           outputScale !== 1
@@ -1287,7 +1461,6 @@ export default function TakeoffPage() {
               ]
             : null
 
-
         const renderTask =
           pdfPage.render({
             canvasContext:
@@ -1298,57 +1471,39 @@ export default function TakeoffPage() {
             transform,
           })
 
-
         renderTaskRef.current =
           renderTask
 
-
         try {
-
           await renderTask.promise
-
         } catch (error) {
-
           if (
             error?.name !==
               'RenderingCancelledException' &&
             !cancelled
           ) {
-
             console.error(
               'PDF render failed.',
               error
             )
-
           }
-
         } finally {
-
           if (
             renderTaskRef.current ===
             renderTask
           ) {
-
             renderTaskRef.current =
               null
-
           }
-
         }
-
       }
-
 
       renderPage()
 
-
       return () => {
-
         cancelled =
           true
-
       }
-
     },
     [
       pdfPage,
@@ -1364,11 +1519,9 @@ export default function TakeoffPage() {
   const fitPage =
     useCallback(
       () => {
-
         if (!pdfDocument) {
           return
         }
-
 
         setFitReference(
           'page'
@@ -1382,7 +1535,6 @@ export default function TakeoffPage() {
           x: 0,
           y: 0,
         })
-
       },
       [
         pdfDocument,
@@ -1393,11 +1545,9 @@ export default function TakeoffPage() {
   const fitWidth =
     useCallback(
       () => {
-
         if (!pdfDocument) {
           return
         }
-
 
         setFitReference(
           'width'
@@ -1411,7 +1561,6 @@ export default function TakeoffPage() {
           x: 0,
           y: 0,
         })
-
       },
       [
         pdfDocument,
@@ -1424,32 +1573,24 @@ export default function TakeoffPage() {
   // ==========================================================
 
   function previousPage() {
-
     setPageNumber(
-      (
-        current
-      ) =>
+      (current) =>
         Math.max(
           1,
           current - 1
         )
     )
-
   }
 
 
   function nextPage() {
-
     setPageNumber(
-      (
-        current
-      ) =>
+      (current) =>
         Math.min(
           pageCount,
           current + 1
         )
     )
-
   }
 
 
@@ -1463,10 +1604,8 @@ export default function TakeoffPage() {
         clientX,
         clientY
       ) => {
-
         const element =
           viewportRef.current
-
 
         if (
           !element ||
@@ -1478,43 +1617,35 @@ export default function TakeoffPage() {
           return null
         }
 
-
         const rect =
           element
             .getBoundingClientRect()
-
 
         const screenX =
           clientX -
           rect.left
 
-
         const screenY =
           clientY -
           rect.top
-
 
         const documentLeft =
           rect.width / 2 +
           pan.x -
           renderedSize.width / 2
 
-
         const documentTop =
           rect.height / 2 +
           pan.y -
           renderedSize.height / 2
 
-
         const localX =
           screenX -
           documentLeft
 
-
         const localY =
           screenY -
           documentTop
-
 
         if (
           localX < 0 ||
@@ -1527,7 +1658,6 @@ export default function TakeoffPage() {
           return null
         }
 
-
         return {
           x:
             localX /
@@ -1537,7 +1667,6 @@ export default function TakeoffPage() {
             localY /
             effectiveScale,
         }
-
       },
       [
         pdfDocument,
@@ -1555,13 +1684,11 @@ export default function TakeoffPage() {
   function handlePointerMove(
     event
   ) {
-
     const point =
       clientToPdfPoint(
         event.clientX,
         event.clientY
       )
-
 
     setCursorPosition(
       point || {
@@ -1570,15 +1697,27 @@ export default function TakeoffPage() {
       }
     )
 
+    if (
+      activeTool ===
+        'calibrate' &&
+      calibrationDraft.point1 &&
+      !calibrationDraft.point2
+    ) {
+      setCalibrationDraft(
+        (current) => ({
+          ...current,
+          previewPoint:
+            point,
+        })
+      )
+    }
 
     const session =
       panSessionRef.current
 
-
     if (!session) {
       return
     }
-
 
     setPan({
       x:
@@ -1591,23 +1730,19 @@ export default function TakeoffPage() {
         event.clientY -
         session.startY,
     })
-
   }
 
 
   function handlePointerDown(
     event
   ) {
-
     if (!pdfDocument) {
       return
     }
 
-
     const usingMiddleMouse =
       event.button ===
       1
-
 
     const usingPanTool =
       activeTool ===
@@ -1615,79 +1750,159 @@ export default function TakeoffPage() {
       event.button ===
         0
 
+    if (
+      usingMiddleMouse ||
+      usingPanTool
+    ) {
+      event.preventDefault()
+
+      panSessionRef.current = {
+        startX:
+          event.clientX,
+
+        startY:
+          event.clientY,
+
+        panX:
+          pan.x,
+
+        panY:
+          pan.y,
+      }
+
+      setIsPanning(
+        true
+      )
+
+      event.currentTarget
+        .setPointerCapture(
+          event.pointerId
+        )
+
+      return
+    }
 
     if (
-      !usingMiddleMouse &&
-      !usingPanTool
+      event.button !==
+      0
     ) {
       return
     }
 
+    if (
+      activeTool !==
+      'calibrate'
+    ) {
+      return
+    }
+
+    if (
+      calibrationDraft.point1 &&
+      calibrationDraft.point2
+    ) {
+      return
+    }
+
+    const point =
+      clientToPdfPoint(
+        event.clientX,
+        event.clientY
+      )
+
+    if (!point) {
+      return
+    }
 
     event.preventDefault()
 
+    if (
+      !calibrationDraft.point1
+    ) {
+      setCalibrationDraft({
+        point1:
+          point,
 
-    panSessionRef.current = {
-      startX:
-        event.clientX,
+        point2:
+          null,
 
-      startY:
-        event.clientY,
+        previewPoint:
+          point,
+      })
 
-      panX:
-        pan.x,
-
-      panY:
-        pan.y,
-    }
-
-
-    setIsPanning(
-      true
-    )
-
-
-    event.currentTarget
-      .setPointerCapture(
-        event.pointerId
+      setCalibrationError(
+        null
       )
 
+      return
+    }
+
+    const distance =
+      pointDistance(
+        calibrationDraft.point1,
+        point
+      )
+
+    if (
+      distance <
+      0.0001
+    ) {
+      setCalibrationError(
+        'Choose a second point away from the first point.'
+      )
+
+      return
+    }
+
+    setCalibrationDraft(
+      (current) => ({
+        ...current,
+
+        point2:
+          point,
+
+        previewPoint:
+          null,
+      })
+    )
+
+    setCalibrationError(
+      null
+    )
+
+    setInspectorTab(
+      'properties'
+    )
+
+    setInspectorOpen(
+      true
+    )
   }
 
 
   function handlePointerUp(
     event
   ) {
-
     if (
       !panSessionRef.current
     ) {
       return
     }
 
-
     panSessionRef.current =
       null
-
 
     setIsPanning(
       false
     )
 
-
     try {
-
       event.currentTarget
         .releasePointerCapture(
           event.pointerId
         )
-
     } catch {
-
       // Pointer may already be released.
-
     }
-
   }
 
 
@@ -1698,47 +1913,38 @@ export default function TakeoffPage() {
   function handleWheel(
     event
   ) {
-
     if (!pdfDocument) {
       return
     }
 
-
     event.preventDefault()
-
 
     const viewport =
       viewportRef.current
-
 
     if (!viewport) {
       return
     }
 
-
     const rect =
       viewport
         .getBoundingClientRect()
-
 
     const cursorX =
       event.clientX -
       rect.left -
       rect.width / 2
 
-
     const cursorY =
       event.clientY -
       rect.top -
       rect.height / 2
-
 
     const multiplier =
       event.deltaY < 0
         ? ZOOM_FACTOR
         : 1 /
           ZOOM_FACTOR
-
 
     const nextZoom =
       clamp(
@@ -1748,7 +1954,6 @@ export default function TakeoffPage() {
         MAX_ZOOM
       )
 
-
     if (
       nextZoom ===
       zoom
@@ -1756,17 +1961,12 @@ export default function TakeoffPage() {
       return
     }
 
-
     const ratio =
       nextZoom /
       zoom
 
-
     setPan(
-      (
-        current
-      ) => ({
-
+      (current) => ({
         x:
           cursorX -
           (
@@ -1782,15 +1982,12 @@ export default function TakeoffPage() {
             current.y
           ) *
           ratio,
-
       })
     )
-
 
     setZoom(
       nextZoom
     )
-
   }
 
 
@@ -1801,21 +1998,17 @@ export default function TakeoffPage() {
   function openInspector(
     tab
   ) {
-
     if (
       inspectorOpen &&
       inspectorTab ===
         tab
     ) {
-
       setInspectorOpen(
         false
       )
 
       return
-
     }
-
 
     setInspectorTab(
       tab
@@ -1824,7 +2017,6 @@ export default function TakeoffPage() {
     setInspectorOpen(
       true
     )
-
   }
 
 
@@ -1834,37 +2026,41 @@ export default function TakeoffPage() {
 
   useEffect(
     () => {
-
       function handleKeyDown(
         event
       ) {
-
         const target =
           event.target
-
 
         const tagName =
           target
             ?.tagName
             ?.toLowerCase()
 
-
         if (
           tagName ===
             'input' ||
           tagName ===
             'textarea' ||
+          tagName ===
+            'select' ||
           target
             ?.isContentEditable
         ) {
           return
         }
 
-
         if (
           event.key ===
           'Escape'
         ) {
+          if (
+            activeTool ===
+            'calibrate'
+          ) {
+            cancelCalibration()
+            return
+          }
 
           setActiveTool(
             'select'
@@ -1875,123 +2071,96 @@ export default function TakeoffPage() {
           )
 
           return
-
         }
-
 
         const key =
           event.key
             .toLowerCase()
 
-
         if (
           key ===
           'v'
         ) {
-
           setActiveTool(
             'select'
           )
-
         } else if (
           key ===
           'h'
         ) {
-
           setActiveTool(
             'pan'
           )
-
         } else if (
           key ===
           'z'
         ) {
-
           setActiveTool(
             'zoom'
           )
-
         } else if (
           key ===
           'd'
         ) {
-
           setActiveTool(
             'distance'
           )
-
         } else if (
           key ===
           'l'
         ) {
-
           setActiveTool(
             'line'
           )
-
         } else if (
           key ===
           'a'
         ) {
-
           setActiveTool(
             'area'
           )
-
         } else if (
           key ===
           'r'
         ) {
-
           setActiveTool(
             'rectangle'
           )
-
         } else if (
           key ===
           'c'
         ) {
-
           setActiveTool(
             'count'
           )
-
         } else if (
           key ===
           'f'
         ) {
-
           fitPage()
-
         } else if (
           key ===
           'w'
         ) {
-
           fitWidth()
-
         }
-
       }
-
 
       window.addEventListener(
         'keydown',
         handleKeyDown
       )
 
-
       return () => {
-
         window.removeEventListener(
           'keydown',
           handleKeyDown
         )
-
       }
-
     },
     [
+      activeTool,
+      cancelCalibration,
       fitPage,
       fitWidth,
     ]
@@ -2004,48 +2173,31 @@ export default function TakeoffPage() {
 
   useEffect(
     () => {
-
       return () => {
-
         if (
           renderTaskRef.current
         ) {
-
           try {
-
             renderTaskRef
               .current
               .cancel()
-
           } catch {
-
             // Ignore cleanup errors.
-
           }
-
         }
-
 
         if (
           pdfDocumentRef.current
         ) {
-
           try {
-
             pdfDocumentRef
               .current
               .destroy()
-
           } catch {
-
             // Ignore cleanup errors.
-
           }
-
         }
-
       }
-
     },
     []
   )
@@ -2058,37 +2210,67 @@ export default function TakeoffPage() {
   let viewportCursor =
     'default'
 
-
   if (
     isPanning
   ) {
-
     viewportCursor =
       'grabbing'
-
   } else if (
     activeTool ===
     'pan'
   ) {
-
     viewportCursor =
       'grab'
-
   } else if (
     activeTool ===
     'zoom'
   ) {
-
     viewportCursor =
       'zoom-in'
-
+  } else if (
+    activeTool ===
+    'calibrate'
+  ) {
+    viewportCursor =
+      'crosshair'
   } else if (
     pdfDocument
   ) {
-
     viewportCursor =
       'crosshair'
+  }
 
+
+  // ==========================================================
+  // SCALE LABELS
+  // ==========================================================
+
+  const scaleHeaderLabel =
+    currentCalibration
+      ? `Calibrated · ${currentCalibration.displayUnit}`
+      : 'Not calibrated'
+
+  let calibrationInstruction =
+    null
+
+  if (
+    activeTool ===
+    'calibrate'
+  ) {
+    if (
+      !calibrationDraft.point1
+    ) {
+      calibrationInstruction =
+        'Click the first reference point.'
+    } else if (
+      !calibrationDraft.point2
+    ) {
+      calibrationInstruction =
+        'Click the second reference point.'
+    } else {
+      calibrationInstruction =
+        'Enter the known real distance.'
+    }
   }
 
 
@@ -2097,7 +2279,6 @@ export default function TakeoffPage() {
   // ==========================================================
 
   return (
-
     <div
       className={
         styles.application
@@ -2227,7 +2408,6 @@ export default function TakeoffPage() {
         >
 
           {pdfDocument && (
-
             <div
               className={
                 styles.pageControl
@@ -2274,7 +2454,6 @@ export default function TakeoffPage() {
               </button>
 
             </div>
-
           )}
 
 
@@ -2284,8 +2463,9 @@ export default function TakeoffPage() {
             }
           >
             Scale
+
             <strong>
-              Not calibrated
+              {scaleHeaderLabel}
             </strong>
           </span>
 
@@ -2296,6 +2476,7 @@ export default function TakeoffPage() {
             }
           >
             Zoom
+
             <strong>
               {
                 Math.round(
@@ -2369,9 +2550,7 @@ export default function TakeoffPage() {
               )}
             onClick={() =>
               setDrawingDrawerOpen(
-                (
-                  current
-                ) =>
+                (current) =>
                   !current
               )
             }
@@ -2403,10 +2582,7 @@ export default function TakeoffPage() {
         >
 
           {navigationTools.map(
-            (
-              tool
-            ) => (
-
+            (tool) => (
               <button
                 key={
                   tool.id
@@ -2425,11 +2601,18 @@ export default function TakeoffPage() {
                   .join(
                     ' '
                   )}
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    activeTool ===
+                    'calibrate'
+                  ) {
+                    resetCalibrationDraft()
+                  }
+
                   setActiveTool(
                     tool.id
                   )
-                }
+                }}
                 disabled={
                   !pdfDocument &&
                   tool.id !==
@@ -2449,7 +2632,6 @@ export default function TakeoffPage() {
                   }
                 </span>
               </button>
-
             )
           )}
 
@@ -2516,10 +2698,7 @@ export default function TakeoffPage() {
         >
 
           {measurementTools.map(
-            (
-              tool
-            ) => (
-
+            (tool) => (
               <button
                 key={
                   tool.id
@@ -2538,11 +2717,18 @@ export default function TakeoffPage() {
                   .join(
                     ' '
                   )}
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    activeTool ===
+                    'calibrate'
+                  ) {
+                    resetCalibrationDraft()
+                  }
+
                   setActiveTool(
                     tool.id
                   )
-                }
+                }}
                 disabled={
                   !pdfDocument
                 }
@@ -2560,7 +2746,6 @@ export default function TakeoffPage() {
                   }
                 </span>
               </button>
-
             )
           )}
 
@@ -2582,20 +2767,41 @@ export default function TakeoffPage() {
 
           <button
             type="button"
-            className={
-              styles.toolbarButtonWide
+            className={[
+              styles.toolbarButtonWide,
+              activeTool ===
+                'calibrate'
+                ? styles.toolbarButtonActive
+                : '',
+            ]
+              .filter(
+                Boolean
+              )
+              .join(
+                ' '
+              )}
+            onClick={
+              startCalibration
             }
             disabled={
               !pdfDocument
             }
-            title="Calibrate Scale"
+            title={
+              currentCalibration
+                ? 'Recalibrate current page'
+                : 'Calibrate Scale'
+            }
           >
             <Icon
               type="calibrate"
             />
 
             <span>
-              Calibrate
+              {
+                currentCalibration
+                  ? 'Recalibrate'
+                  : 'Calibrate'
+              }
             </span>
           </button>
 
@@ -2642,10 +2848,6 @@ export default function TakeoffPage() {
         }
       >
 
-        {/* ====================================================
-            VIEWPORT
-        ==================================================== */}
-
         <main
           ref={
             viewportRef
@@ -2675,18 +2877,29 @@ export default function TakeoffPage() {
             handlePointerUp
           }
           onPointerLeave={() => {
-
             if (
               !panSessionRef.current
             ) {
-
               setCursorPosition({
                 x: null,
                 y: null,
               })
 
+              if (
+                activeTool ===
+                  'calibrate' &&
+                calibrationDraft.point1 &&
+                !calibrationDraft.point2
+              ) {
+                setCalibrationDraft(
+                  (current) => ({
+                    ...current,
+                    previewPoint:
+                      null,
+                  })
+                )
+              }
             }
-
           }}
           onWheel={
             handleWheel
@@ -2703,7 +2916,6 @@ export default function TakeoffPage() {
         >
 
           {!pdfDocument && (
-
             <div
               className={
                 styles.emptyViewport
@@ -2734,7 +2946,6 @@ export default function TakeoffPage() {
 
 
               {pdfError && (
-
                 <span
                   className={
                     styles.errorMessage
@@ -2744,7 +2955,6 @@ export default function TakeoffPage() {
                     pdfError
                   }
                 </span>
-
               )}
 
 
@@ -2772,12 +2982,10 @@ export default function TakeoffPage() {
               </button>
 
             </div>
-
           )}
 
 
           {pdfDocument && (
-
             <div
               className={
                 styles.documentContainer
@@ -2825,7 +3033,174 @@ export default function TakeoffPage() {
                   1
                 }`}
                 preserveAspectRatio="none"
-              />
+              >
+
+                {/* ============================================
+                    SAVED CALIBRATION
+                ============================================ */}
+
+                {currentCalibration && (
+                  <g>
+                    <line
+                      x1={
+                        currentCalibration
+                          .point1
+                          .x
+                      }
+                      y1={
+                        currentCalibration
+                          .point1
+                          .y
+                      }
+                      x2={
+                        currentCalibration
+                          .point2
+                          .x
+                      }
+                      y2={
+                        currentCalibration
+                          .point2
+                          .y
+                      }
+                      stroke="#14b8a6"
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                    />
+
+                    <circle
+                      cx={
+                        currentCalibration
+                          .point1
+                          .x
+                      }
+                      cy={
+                        currentCalibration
+                          .point1
+                          .y
+                      }
+                      r={
+                        4 /
+                        Math.max(
+                          effectiveScale,
+                          0.01
+                        )
+                      }
+                      fill="#ffffff"
+                      stroke="#14b8a6"
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                    />
+
+                    <circle
+                      cx={
+                        currentCalibration
+                          .point2
+                          .x
+                      }
+                      cy={
+                        currentCalibration
+                          .point2
+                          .y
+                      }
+                      r={
+                        4 /
+                        Math.max(
+                          effectiveScale,
+                          0.01
+                        )
+                      }
+                      fill="#ffffff"
+                      stroke="#14b8a6"
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </g>
+                )}
+
+
+                {/* ============================================
+                    CALIBRATION DRAFT
+                ============================================ */}
+
+                {activeTool ===
+                  'calibrate' &&
+                  calibrationDraft.point1 &&
+                  calibrationPreviewEnd && (
+                    <g>
+                      <line
+                        x1={
+                          calibrationDraft
+                            .point1
+                            .x
+                        }
+                        y1={
+                          calibrationDraft
+                            .point1
+                            .y
+                        }
+                        x2={
+                          calibrationPreviewEnd
+                            .x
+                        }
+                        y2={
+                          calibrationPreviewEnd
+                            .y
+                        }
+                        stroke="#f59e0b"
+                        strokeWidth="2"
+                        strokeDasharray="7 5"
+                        vectorEffect="non-scaling-stroke"
+                      />
+
+                      <circle
+                        cx={
+                          calibrationDraft
+                            .point1
+                            .x
+                        }
+                        cy={
+                          calibrationDraft
+                            .point1
+                            .y
+                        }
+                        r={
+                          5 /
+                          Math.max(
+                            effectiveScale,
+                            0.01
+                          )
+                        }
+                        fill="#ffffff"
+                        stroke="#f59e0b"
+                        strokeWidth="2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+
+                      <circle
+                        cx={
+                          calibrationPreviewEnd
+                            .x
+                        }
+                        cy={
+                          calibrationPreviewEnd
+                            .y
+                        }
+                        r={
+                          5 /
+                          Math.max(
+                            effectiveScale,
+                            0.01
+                          )
+                        }
+                        fill="#ffffff"
+                        stroke="#f59e0b"
+                        strokeWidth="2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </g>
+                  )}
+
+              </svg>
 
 
               <div
@@ -2835,8 +3210,92 @@ export default function TakeoffPage() {
               />
 
             </div>
-
           )}
+
+
+          {/* ==================================================
+              CALIBRATION COMMAND PROMPT
+          ================================================== */}
+
+          {activeTool ===
+            'calibrate' &&
+            calibrationInstruction && (
+              <div
+                style={{
+                  position:
+                    'absolute',
+
+                  left:
+                    '50%',
+
+                  bottom:
+                    18,
+
+                  transform:
+                    'translateX(-50%)',
+
+                  zIndex:
+                    40,
+
+                  display:
+                    'flex',
+
+                  alignItems:
+                    'center',
+
+                  gap:
+                    10,
+
+                  padding:
+                    '9px 14px',
+
+                  borderRadius:
+                    7,
+
+                  background:
+                    'rgba(5, 44, 73, 0.94)',
+
+                  color:
+                    '#ffffff',
+
+                  boxShadow:
+                    '0 8px 24px rgba(0,0,0,0.18)',
+
+                  fontSize:
+                    12,
+
+                  pointerEvents:
+                    'none',
+
+                  whiteSpace:
+                    'nowrap',
+                }}
+              >
+                <strong>
+                  CALIBRATE
+                </strong>
+
+                <span
+                  style={{
+                    opacity:
+                      0.85,
+                  }}
+                >
+                  {
+                    calibrationInstruction
+                  }
+                </span>
+
+                <span
+                  style={{
+                    opacity:
+                      0.55,
+                  }}
+                >
+                  Esc to cancel
+                </span>
+              </div>
+            )}
 
 
           {/* ==================================================
@@ -2844,7 +3303,6 @@ export default function TakeoffPage() {
           ================================================== */}
 
           {drawingDrawerOpen && (
-
             <aside
               className={
                 styles.drawingDrawer
@@ -2893,7 +3351,6 @@ export default function TakeoffPage() {
               >
 
                 {!pdfDocument && (
-
                   <div
                     className={
                       styles.drawerEmpty
@@ -2901,14 +3358,11 @@ export default function TakeoffPage() {
                   >
                     No PDF loaded.
                   </div>
-
                 )}
 
 
                 {pdfDocument && (
-
                   <>
-
                     <div
                       className={
                         styles.drawingCard
@@ -2953,13 +3407,10 @@ export default function TakeoffPage() {
                           _,
                           index
                         ) => {
-
                           const number =
                             index + 1
 
-
                           return (
-
                             <button
                               key={
                                 number
@@ -2972,7 +3423,6 @@ export default function TakeoffPage() {
                                   : styles.pageItem
                               }
                               onClick={() => {
-
                                 setPageNumber(
                                   number
                                 )
@@ -2980,7 +3430,6 @@ export default function TakeoffPage() {
                                 setDrawingDrawerOpen(
                                   false
                                 )
-
                               }}
                             >
                               <span>
@@ -2995,22 +3444,17 @@ export default function TakeoffPage() {
                                 </strong>
                               }
                             </button>
-
                           )
-
                         }
                       )}
 
                     </div>
-
                   </>
-
                 )}
 
               </div>
 
             </aside>
-
           )}
 
         </main>
@@ -3021,7 +3465,6 @@ export default function TakeoffPage() {
         ==================================================== */}
 
         {inspectorOpen && (
-
           <aside
             className={
               styles.inspector
@@ -3109,8 +3552,435 @@ export default function TakeoffPage() {
 
               {inspectorTab ===
                 'properties' && (
-
                 <>
+
+                  {/* ==========================================
+                      CALIBRATION WORKFLOW
+                  ========================================== */}
+
+                  {activeTool ===
+                    'calibrate' && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+
+                      <h3>
+                        Scale Calibration
+                      </h3>
+
+
+                      <div
+                        style={{
+                          marginBottom:
+                            12,
+
+                          padding:
+                            '10px 11px',
+
+                          border:
+                            '1px solid #d8e1e8',
+
+                          borderRadius:
+                            6,
+
+                          background:
+                            '#f8fafc',
+
+                          color:
+                            '#334155',
+
+                          fontSize:
+                            12,
+
+                          lineHeight:
+                            1.45,
+                        }}
+                      >
+                        {
+                          calibrationInstruction
+                        }
+                      </div>
+
+
+                      <div
+                        className={
+                          styles.propertyRow
+                        }
+                      >
+                        <span>
+                          Point 1
+                        </span>
+
+                        <strong>
+                          {
+                            calibrationDraft
+                              .point1
+                              ? `${formatNumber(
+                                  calibrationDraft
+                                    .point1
+                                    .x
+                                )}, ${formatNumber(
+                                  calibrationDraft
+                                    .point1
+                                    .y
+                                )}`
+                              : 'Waiting'
+                          }
+                        </strong>
+                      </div>
+
+
+                      <div
+                        className={
+                          styles.propertyRow
+                        }
+                      >
+                        <span>
+                          Point 2
+                        </span>
+
+                        <strong>
+                          {
+                            calibrationDraft
+                              .point2
+                              ? `${formatNumber(
+                                  calibrationDraft
+                                    .point2
+                                    .x
+                                )}, ${formatNumber(
+                                  calibrationDraft
+                                    .point2
+                                    .y
+                                )}`
+                              : 'Waiting'
+                          }
+                        </strong>
+                      </div>
+
+
+                      {calibrationWaitingForDistance && (
+                        <div
+                          style={{
+                            display:
+                              'grid',
+
+                            gap:
+                              10,
+
+                            marginTop:
+                              14,
+                          }}
+                        >
+
+                          <label
+                            style={{
+                              display:
+                                'grid',
+
+                              gap:
+                                5,
+
+                              fontSize:
+                                12,
+
+                              color:
+                                '#475569',
+                            }}
+                          >
+                            Known distance
+
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              autoFocus
+                              value={
+                                calibrationDistance
+                              }
+                              onChange={(
+                                event
+                              ) => {
+                                setCalibrationDistance(
+                                  event
+                                    .target
+                                    .value
+                                )
+
+                                setCalibrationError(
+                                  null
+                                )
+                              }}
+                              onKeyDown={(
+                                event
+                              ) => {
+                                if (
+                                  event.key ===
+                                  'Enter'
+                                ) {
+                                  saveCalibration()
+                                }
+                              }}
+                              placeholder="Enter distance"
+                              style={{
+                                width:
+                                  '100%',
+
+                                boxSizing:
+                                  'border-box',
+
+                                height:
+                                  36,
+
+                                border:
+                                  '1px solid #cbd5e1',
+
+                                borderRadius:
+                                  5,
+
+                                padding:
+                                  '0 10px',
+
+                                background:
+                                  '#ffffff',
+
+                                color:
+                                  '#0f172a',
+
+                                outline:
+                                  'none',
+                              }}
+                            />
+                          </label>
+
+
+                          <label
+                            style={{
+                              display:
+                                'grid',
+
+                              gap:
+                                5,
+
+                              fontSize:
+                                12,
+
+                              color:
+                                '#475569',
+                            }}
+                          >
+                            Unit
+
+                            <select
+                              value={
+                                calibrationUnit
+                              }
+                              onChange={(
+                                event
+                              ) => {
+                                setCalibrationUnit(
+                                  event
+                                    .target
+                                    .value
+                                )
+
+                                setCalibrationError(
+                                  null
+                                )
+                              }}
+                              style={{
+                                width:
+                                  '100%',
+
+                                boxSizing:
+                                  'border-box',
+
+                                height:
+                                  36,
+
+                                border:
+                                  '1px solid #cbd5e1',
+
+                                borderRadius:
+                                  5,
+
+                                padding:
+                                  '0 10px',
+
+                                background:
+                                  '#ffffff',
+
+                                color:
+                                  '#0f172a',
+
+                                outline:
+                                  'none',
+                              }}
+                            >
+                              {Object.entries(
+                                UNIT_LABELS
+                              ).map(
+                                ([
+                                  value,
+                                  label,
+                                ]) => (
+                                  <option
+                                    key={
+                                      value
+                                    }
+                                    value={
+                                      value
+                                    }
+                                  >
+                                    {label} ({value})
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          </label>
+
+
+                          {calibrationError && (
+                            <div
+                              style={{
+                                padding:
+                                  '8px 10px',
+
+                                borderRadius:
+                                  5,
+
+                                background:
+                                  '#fef2f2',
+
+                                color:
+                                  '#b91c1c',
+
+                                fontSize:
+                                  12,
+                              }}
+                            >
+                              {
+                                calibrationError
+                              }
+                            </div>
+                          )}
+
+
+                          <div
+                            style={{
+                              display:
+                                'grid',
+
+                              gridTemplateColumns:
+                                '1fr 1fr',
+
+                              gap:
+                                8,
+                            }}
+                          >
+
+                            <button
+                              type="button"
+                              onClick={
+                                cancelCalibration
+                              }
+                              style={{
+                                height:
+                                  36,
+
+                                border:
+                                  '1px solid #cbd5e1',
+
+                                borderRadius:
+                                  5,
+
+                                background:
+                                  '#ffffff',
+
+                                color:
+                                  '#334155',
+
+                                cursor:
+                                  'pointer',
+
+                                fontWeight:
+                                  600,
+                              }}
+                            >
+                              Cancel
+                            </button>
+
+
+                            <button
+                              type="button"
+                              onClick={
+                                saveCalibration
+                              }
+                              style={{
+                                height:
+                                  36,
+
+                                border:
+                                  '1px solid #052c49',
+
+                                borderRadius:
+                                  5,
+
+                                background:
+                                  '#052c49',
+
+                                color:
+                                  '#ffffff',
+
+                                cursor:
+                                  'pointer',
+
+                                fontWeight:
+                                  700,
+                              }}
+                            >
+                              Save Scale
+                            </button>
+
+                          </div>
+
+                        </div>
+                      )}
+
+
+                      {!calibrationWaitingForDistance &&
+                        calibrationError && (
+                        <div
+                          style={{
+                            marginTop:
+                              10,
+
+                            padding:
+                              '8px 10px',
+
+                            borderRadius:
+                              5,
+
+                            background:
+                              '#fef2f2',
+
+                            color:
+                              '#b91c1c',
+
+                            fontSize:
+                              12,
+                          }}
+                        >
+                          {
+                            calibrationError
+                          }
+                        </div>
+                      )}
+
+                    </section>
+                  )}
+
 
                   <section
                     className={
@@ -3234,7 +4104,11 @@ export default function TakeoffPage() {
                       </span>
 
                       <strong>
-                        Not calibrated
+                        {
+                          currentCalibration
+                            ? 'Calibrated'
+                            : 'Not calibrated'
+                        }
                       </strong>
                     </div>
 
@@ -3249,9 +4123,103 @@ export default function TakeoffPage() {
                       </span>
 
                       <strong>
-                        —
+                        {
+                          currentCalibration
+                            ? currentCalibration
+                                .displayUnit
+                            : '—'
+                        }
                       </strong>
                     </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Reference
+                      </span>
+
+                      <strong>
+                        {
+                          currentCalibration
+                            ? `${formatNumber(
+                                currentCalibration
+                                  .referenceDistance
+                              )} ${currentCalibration.displayUnit}`
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
+
+                    {currentCalibration && (
+                      <div
+                        className={
+                          styles.propertyRow
+                        }
+                      >
+                        <span>
+                          PDF length
+                        </span>
+
+                        <strong>
+                          {
+                            formatNumber(
+                              currentCalibration
+                                .pdfDistance,
+                              3
+                            )
+                          } pt
+                        </strong>
+                      </div>
+                    )}
+
+
+                    {currentCalibration && (
+                      <div
+                        style={{
+                          marginTop:
+                            10,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={
+                            startCalibration
+                          }
+                          style={{
+                            width:
+                              '100%',
+
+                            height:
+                              34,
+
+                            border:
+                              '1px solid #cbd5e1',
+
+                            borderRadius:
+                              5,
+
+                            background:
+                              '#ffffff',
+
+                            color:
+                              '#052c49',
+
+                            cursor:
+                              'pointer',
+
+                            fontWeight:
+                              700,
+                          }}
+                        >
+                          Recalibrate Page
+                        </button>
+                      </div>
+                    )}
 
                   </section>
 
@@ -3279,13 +4247,11 @@ export default function TakeoffPage() {
                   </section>
 
                 </>
-
               )}
 
 
               {inspectorTab ===
                 'layers' && (
-
                 <>
 
                   <section
@@ -3345,13 +4311,11 @@ export default function TakeoffPage() {
                   </section>
 
                 </>
-
               )}
 
             </div>
 
           </aside>
-
         )}
 
 
@@ -3426,9 +4390,7 @@ export default function TakeoffPage() {
             }
             onClick={() =>
               setDrawingDrawerOpen(
-                (
-                  current
-                ) =>
+                (current) =>
                   !current
               )
             }
@@ -3460,9 +4422,7 @@ export default function TakeoffPage() {
             }
             onClick={() =>
               setSnapEnabled(
-                (
-                  current
-                ) =>
+                (current) =>
                   !current
               )
             }
@@ -3487,9 +4447,7 @@ export default function TakeoffPage() {
             }
             onClick={() =>
               setOrthoEnabled(
-                (
-                  current
-                ) =>
+                (current) =>
                   !current
               )
             }
@@ -3514,9 +4472,7 @@ export default function TakeoffPage() {
             }
             onClick={() =>
               setGridEnabled(
-                (
-                  current
-                ) =>
+                (current) =>
                   !current
               )
             }
@@ -3579,6 +4535,7 @@ export default function TakeoffPage() {
 
           <span>
             Tool
+
             <strong>
               {
                 currentTool
@@ -3598,6 +4555,7 @@ export default function TakeoffPage() {
 
           <span>
             X
+
             <strong>
               {
                 cursorPosition.x !==
@@ -3614,6 +4572,7 @@ export default function TakeoffPage() {
 
           <span>
             Y
+
             <strong>
               {
                 cursorPosition.y !==
@@ -3626,6 +4585,28 @@ export default function TakeoffPage() {
               }
             </strong>
           </span>
+
+
+          {activeTool ===
+            'calibrate' && (
+            <>
+              <span
+                className={
+                  styles.statusDivider
+                }
+              />
+
+              <span>
+                Command
+
+                <strong>
+                  {
+                    calibrationInstruction
+                  }
+                </strong>
+              </span>
+            </>
+          )}
 
         </div>
 
@@ -3645,9 +4626,7 @@ export default function TakeoffPage() {
             }
             onClick={() =>
               setSnapEnabled(
-                (
-                  current
-                ) =>
+                (current) =>
                   !current
               )
             }
@@ -3665,9 +4644,7 @@ export default function TakeoffPage() {
             }
             onClick={() =>
               setOrthoEnabled(
-                (
-                  current
-                ) =>
+                (current) =>
                   !current
               )
             }
@@ -3685,9 +4662,7 @@ export default function TakeoffPage() {
             }
             onClick={() =>
               setGridEnabled(
-                (
-                  current
-                ) =>
+                (current) =>
                   !current
               )
             }
@@ -3702,6 +4677,7 @@ export default function TakeoffPage() {
             }
           >
             Page
+
             <strong>
               {
                 pdfDocument
@@ -3718,8 +4694,9 @@ export default function TakeoffPage() {
             }
           >
             Scale
+
             <strong>
-              Not calibrated
+              {scaleHeaderLabel}
             </strong>
           </span>
 
@@ -3730,6 +4707,7 @@ export default function TakeoffPage() {
             }
           >
             Zoom
+
             <strong>
               {
                 Math.round(
@@ -3745,7 +4723,5 @@ export default function TakeoffPage() {
       </footer>
 
     </div>
-
   )
-
 }
