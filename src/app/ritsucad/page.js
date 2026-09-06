@@ -377,6 +377,39 @@ const navigationTools = [
   },
 ]
 
+const drawingTools = [
+  {
+    id: 'draw-line',
+    label: 'Line',
+    icon: 'line',
+    shortcut: '1',
+  },
+  {
+    id: 'draw-polyline',
+    label: 'Polyline',
+    icon: 'polyline',
+    shortcut: '2',
+  },
+  {
+    id: 'draw-rectangle',
+    label: 'Rectangle',
+    icon: 'rectangle',
+    shortcut: '3',
+  },
+  {
+    id: 'draw-polygon',
+    label: 'Polygon',
+    icon: 'area',
+    shortcut: '4',
+  },
+  {
+    id: 'draw-circle',
+    label: 'Circle',
+    icon: 'count',
+    shortcut: '5',
+  },
+]
+
 const measurementTools = [
   {
     id: 'distance',
@@ -418,6 +451,7 @@ const measurementTools = [
 
 const allTools = [
   ...navigationTools,
+  ...drawingTools,
   ...measurementTools,
   {
     id: 'calibrate',
@@ -426,6 +460,12 @@ const allTools = [
     shortcut: null,
   },
 ]
+
+
+const DEFAULT_NATIVE_PAGE_SIZE = {
+  width: 1200,
+  height: 800,
+}
 
 
 // ============================================================
@@ -1018,7 +1058,9 @@ function hitTestEntity(
     entity.type ===
       'distance' ||
     entity.type ===
-      'linear'
+      'linear' ||
+    entity.type ===
+      'cad-line'
   ) {
     if (
       entity.points.length <
@@ -1038,8 +1080,12 @@ function hitTestEntity(
   }
 
   if (
-    entity.type ===
-    'polyline'
+    (
+      entity.type ===
+        'polyline' ||
+      entity.type ===
+        'cad-polyline'
+    )
   ) {
     for (
       let index = 1;
@@ -1067,8 +1113,12 @@ function hitTestEntity(
   }
 
   if (
-    entity.type ===
-    'rectangle'
+    (
+      entity.type ===
+        'rectangle' ||
+      entity.type ===
+        'cad-rectangle'
+    )
   ) {
     if (
       entity.points.length <
@@ -1124,8 +1174,12 @@ function hitTestEntity(
   }
 
   if (
-    entity.type ===
-    'area'
+    (
+      entity.type ===
+        'area' ||
+      entity.type ===
+        'cad-polygon'
+    )
   ) {
     if (
       pointInPolygon(
@@ -1172,6 +1226,46 @@ function hitTestEntity(
 
   if (
     entity.type ===
+      'cad-circle'
+  ) {
+    if (
+      entity.points.length <
+      2
+    ) {
+      return false
+    }
+
+    const center =
+      entity.points[0]
+
+    const edge =
+      entity.points[1]
+
+    const radius =
+      pointDistance(
+        center,
+        edge
+      )
+
+    const distance =
+      pointDistance(
+        center,
+        point
+      )
+
+    return (
+      Math.abs(
+        distance -
+        radius
+      ) <=
+        tolerance ||
+      distance <=
+        radius
+    )
+  }
+
+  if (
+    entity.type ===
     'count'
   ) {
     return entity.points.some(
@@ -1202,8 +1296,12 @@ function entityGripPoints(
   }
 
   if (
-    entity.type ===
-      'rectangle' &&
+    (
+      entity.type ===
+        'rectangle' ||
+      entity.type ===
+        'cad-rectangle'
+    ) &&
     entity.points.length >=
       2
   ) {
@@ -1269,6 +1367,24 @@ function entityGripPoints(
     ]
   }
 
+  if (
+    entity.type ===
+      'cad-circle' &&
+    entity.points.length >=
+      2
+  ) {
+    return [
+      {
+        id: 'center',
+        point: entity.points[0],
+      },
+      {
+        id: 'radius',
+        point: entity.points[1],
+      },
+    ]
+  }
+
   return entity.points.map(
     (
       point,
@@ -1294,8 +1410,12 @@ function updateEntityGrip(
   }
 
   if (
-    entity.type ===
-      'rectangle' &&
+    (
+      entity.type ===
+        'rectangle' ||
+      entity.type ===
+        'cad-rectangle'
+    ) &&
     entity.points.length >=
       2
   ) {
@@ -1735,7 +1855,9 @@ function entitySegments(
     entity.type ===
       'distance' ||
     entity.type ===
-      'linear'
+      'linear' ||
+    entity.type ===
+      'cad-line'
   ) {
     if (
       entity.points.length <
@@ -1760,7 +1882,9 @@ function entitySegments(
 
   if (
     entity.type ===
-      'polyline'
+      'polyline' ||
+    entity.type ===
+      'cad-polyline'
   ) {
     const segments =
       []
@@ -1792,7 +1916,9 @@ function entitySegments(
 
   if (
     entity.type ===
-      'area'
+      'area' ||
+    entity.type ===
+      'cad-polygon'
   ) {
     const segments =
       []
@@ -1826,8 +1952,12 @@ function entitySegments(
   }
 
   if (
-    entity.type ===
-      'rectangle' &&
+    (
+      entity.type ===
+        'rectangle' ||
+      entity.type ===
+        'cad-rectangle'
+    ) &&
     entity.points.length >=
       2
   ) {
@@ -1927,8 +2057,12 @@ function entitySnapVertices(
   }
 
   if (
-    entity.type ===
-      'rectangle' &&
+    (
+      entity.type ===
+        'rectangle' ||
+      entity.type ===
+        'cad-rectangle'
+    ) &&
     entity.points.length >=
       2
   ) {
@@ -3196,6 +3330,18 @@ export default function RitsuCadPage() {
   ] =
     useState({})
 
+  const [
+    nativeDrawingName,
+    setNativeDrawingName,
+  ] =
+    useState(null)
+
+  const [
+    documentMode,
+    setDocumentMode,
+  ] =
+    useState('empty')
+
 
   // ==========================================================
   // VIEW
@@ -3448,6 +3594,20 @@ export default function RitsuCadPage() {
 
 
   // ==========================================================
+  // CIRCLE DRAFT
+  // ==========================================================
+
+  const [
+    circleDraft,
+    setCircleDraft,
+  ] =
+    useState({
+      center: null,
+      previewPoint: null,
+    })
+
+
+  // ==========================================================
   // COUNT DRAFT
   // ==========================================================
 
@@ -3486,6 +3646,30 @@ export default function RitsuCadPage() {
   // ==========================================================
   // DERIVED STATE
   // ==========================================================
+
+  const workspaceReady =
+    Boolean(
+      pageBaseSize
+    )
+
+  const currentPageNativeEntities =
+    useMemo(
+      () =>
+        cadEntities.filter(
+          (entity) =>
+            entity.pageNumber ===
+              pageNumber &&
+            String(
+              entity.type || ''
+            ).startsWith(
+              'cad-'
+            )
+        ),
+      [
+        cadEntities,
+        pageNumber,
+      ]
+    )
 
   const currentTool =
     useMemo(
@@ -3933,7 +4117,22 @@ export default function RitsuCadPage() {
                     : selectedEntity.type ===
                         'count'
                       ? 'Count'
-                      : 'CAD Entity'
+                      : selectedEntity.type ===
+                          'cad-line'
+                        ? 'CAD Line'
+                        : selectedEntity.type ===
+                            'cad-polyline'
+                          ? 'CAD Polyline'
+                          : selectedEntity.type ===
+                              'cad-rectangle'
+                            ? 'CAD Rectangle'
+                            : selectedEntity.type ===
+                                'cad-polygon'
+                              ? 'CAD Polygon'
+                              : selectedEntity.type ===
+                                  'cad-circle'
+                                ? 'CAD Circle'
+                                : 'CAD Entity'
         )
       : null
 
@@ -4449,6 +4648,18 @@ export default function RitsuCadPage() {
     )
 
 
+  const resetCircleDraft =
+    useCallback(
+      () => {
+        setCircleDraft({
+          center: null,
+          previewPoint: null,
+        })
+      },
+      []
+    )
+
+
   const resetCountDraft =
     useCallback(
       () => {
@@ -4468,6 +4679,7 @@ export default function RitsuCadPage() {
         resetPolylineDraft()
         resetAreaDraft()
         resetRectangleDraft()
+        resetCircleDraft()
         resetCountDraft()
       },
       [
@@ -4476,6 +4688,7 @@ export default function RitsuCadPage() {
         resetPolylineDraft,
         resetAreaDraft,
         resetRectangleDraft,
+        resetCircleDraft,
         resetCountDraft,
       ]
     )
@@ -4562,7 +4775,7 @@ export default function RitsuCadPage() {
 
 
   function startCalibration() {
-    if (!pdfDocument) {
+    if (!workspaceReady) {
       return
     }
 
@@ -4863,6 +5076,144 @@ export default function RitsuCadPage() {
 
 
   // ==========================================================
+  // NATIVE DRAWING COMMANDS
+  // ==========================================================
+
+  const finishNativePolyline =
+    useCallback(
+      () => {
+        if (
+          activeTool !==
+          'draw-polyline'
+        ) {
+          return
+        }
+
+        const cleanedPoints =
+          removeConsecutiveDuplicatePoints(
+            polylineDraft.points
+          )
+
+        if (
+          cleanedPoints.length <
+          2
+        ) {
+          return
+        }
+
+        commitCadEntities(
+          (current) => [
+            ...current,
+            {
+              id:
+                createEntityId(),
+
+              type:
+                'cad-polyline',
+
+              category:
+                'drawing',
+
+              pageNumber,
+
+              points:
+                cleanedPoints.map(
+                  (point) => ({
+                    ...point,
+                  })
+                ),
+
+              createdAt:
+                new Date()
+                  .toISOString(),
+            },
+          ]
+        )
+
+        resetPolylineDraft()
+
+        setInspectorTab(
+          'properties'
+        )
+      },
+      [
+        activeTool,
+        pageNumber,
+        polylineDraft.points,
+        resetPolylineDraft,
+        commitCadEntities,
+      ]
+    )
+
+
+  const finishNativePolygon =
+    useCallback(
+      () => {
+        if (
+          activeTool !==
+          'draw-polygon'
+        ) {
+          return
+        }
+
+        const cleanedPoints =
+          removeConsecutiveDuplicatePoints(
+            areaDraft.points
+          )
+
+        if (
+          cleanedPoints.length <
+          3
+        ) {
+          return
+        }
+
+        commitCadEntities(
+          (current) => [
+            ...current,
+            {
+              id:
+                createEntityId(),
+
+              type:
+                'cad-polygon',
+
+              category:
+                'drawing',
+
+              pageNumber,
+
+              points:
+                cleanedPoints.map(
+                  (point) => ({
+                    ...point,
+                  })
+                ),
+
+              createdAt:
+                new Date()
+                  .toISOString(),
+            },
+          ]
+        )
+
+        resetAreaDraft()
+
+        setInspectorTab(
+          'properties'
+        )
+      },
+      [
+        activeTool,
+        pageNumber,
+        areaDraft.points,
+        resetAreaDraft,
+        commitCadEntities,
+      ]
+    )
+
+
+  // ==========================================================
   // COUNT COMMANDS
   // ==========================================================
 
@@ -4922,6 +5273,110 @@ export default function RitsuCadPage() {
         commitCadEntities,
       ]
     )
+
+
+  // ==========================================================
+  // NEW DRAWING
+  // ==========================================================
+
+  function createNewDrawing() {
+    if (
+      pdfDocumentRef.current
+    ) {
+      try {
+        pdfDocumentRef.current.destroy()
+      } catch {
+        // Ignore cleanup errors.
+      }
+    }
+
+    pdfDocumentRef.current =
+      null
+
+    setPdfDocument(
+      null
+    )
+
+    setPdfPage(
+      null
+    )
+
+    setPdfFileName(
+      null
+    )
+
+    setDocumentMode(
+      'native'
+    )
+
+    setNativeDrawingName(
+      'Untitled Drawing'
+    )
+
+    setPageCount(
+      1
+    )
+
+    setPageNumber(
+      1
+    )
+
+    setPageBaseSize({
+      ...DEFAULT_NATIVE_PAGE_SIZE,
+    })
+
+    setRenderedSize({
+      width:
+        DEFAULT_NATIVE_PAGE_SIZE.width,
+      height:
+        DEFAULT_NATIVE_PAGE_SIZE.height,
+    })
+
+    setFitReference(
+      'page'
+    )
+
+    setZoom(
+      1
+    )
+
+    setPan({
+      x: 0,
+      y: 0,
+    })
+
+    setCursorPosition({
+      x: null,
+      y: null,
+    })
+
+    setCalibrationsByPage(
+      {}
+    )
+
+    setDrawingGeometryByPage(
+      {}
+    )
+
+    resetCadHistory(
+      []
+    )
+
+    resetCalibrationDraft()
+    resetAllGeometryDrafts()
+
+    setActiveTool(
+      'draw-line'
+    )
+
+    setInspectorTab(
+      'properties'
+    )
+
+    setInspectorOpen(
+      true
+    )
+  }
 
 
   // ==========================================================
@@ -5016,6 +5471,14 @@ export default function RitsuCadPage() {
         file.name
       )
 
+      setDocumentMode(
+        'pdf'
+      )
+
+      setNativeDrawingName(
+        null
+      )
+
       setPageCount(
         document.numPages
       )
@@ -5080,6 +5543,14 @@ export default function RitsuCadPage() {
       )
 
       setPdfFileName(
+        null
+      )
+
+      setDocumentMode(
+        'empty'
+      )
+
+      setNativeDrawingName(
         null
       )
 
@@ -5420,6 +5891,38 @@ export default function RitsuCadPage() {
 
 
   // ==========================================================
+  // NATIVE DRAWING RENDER SIZE
+  // ==========================================================
+
+  useEffect(
+    () => {
+      if (
+        documentMode !==
+          'native' ||
+        !pageBaseSize ||
+        !effectiveScale
+      ) {
+        return
+      }
+
+      setRenderedSize({
+        width:
+          pageBaseSize.width *
+          effectiveScale,
+        height:
+          pageBaseSize.height *
+          effectiveScale,
+      })
+    },
+    [
+      documentMode,
+      pageBaseSize,
+      effectiveScale,
+    ]
+  )
+
+
+  // ==========================================================
   // PDF RENDER
   // ==========================================================
 
@@ -5579,7 +6082,7 @@ export default function RitsuCadPage() {
   const fitPage =
     useCallback(
       () => {
-        if (!pdfDocument) {
+        if (!workspaceReady) {
           return
         }
 
@@ -5597,7 +6100,7 @@ export default function RitsuCadPage() {
         })
       },
       [
-        pdfDocument,
+        workspaceReady,
       ]
     )
 
@@ -5605,7 +6108,7 @@ export default function RitsuCadPage() {
   const fitWidth =
     useCallback(
       () => {
-        if (!pdfDocument) {
+        if (!workspaceReady) {
           return
         }
 
@@ -5623,7 +6126,7 @@ export default function RitsuCadPage() {
         })
       },
       [
-        pdfDocument,
+        workspaceReady,
       ]
     )
 
@@ -5669,7 +6172,7 @@ export default function RitsuCadPage() {
 
         if (
           !element ||
-          !pdfDocument ||
+          !workspaceReady ||
           !renderedSize.width ||
           !renderedSize.height ||
           !effectiveScale
@@ -5729,7 +6232,7 @@ export default function RitsuCadPage() {
         }
       },
       [
-        pdfDocument,
+        workspaceReady,
         renderedSize,
         effectiveScale,
         pan,
@@ -6341,7 +6844,9 @@ export default function RitsuCadPage() {
 
     } else if (
       activeTool ===
-      'line'
+        'line' ||
+      activeTool ===
+        'draw-line'
     ) {
       anchorPoint =
         lineDraft.point1
@@ -6356,7 +6861,9 @@ export default function RitsuCadPage() {
 
     } else if (
       activeTool ===
-      'polyline'
+        'polyline' ||
+      activeTool ===
+        'draw-polyline'
     ) {
       anchorPoint =
         polylineDraft.points.at(-1) ||
@@ -6372,7 +6879,9 @@ export default function RitsuCadPage() {
 
     } else if (
       activeTool ===
-      'area'
+        'area' ||
+      activeTool ===
+        'draw-polygon'
     ) {
       anchorPoint =
         areaDraft.points.at(-1) ||
@@ -6388,7 +6897,9 @@ export default function RitsuCadPage() {
 
     } else if (
       activeTool ===
-      'rectangle'
+        'rectangle' ||
+      activeTool ===
+        'draw-rectangle'
     ) {
       anchorPoint =
         rectangleDraft.point1
@@ -6458,8 +6969,12 @@ export default function RitsuCadPage() {
     }
 
     if (
-      activeTool ===
-        'line' &&
+      (
+        activeTool ===
+          'line' ||
+        activeTool ===
+          'draw-line'
+      ) &&
       lineDraft.point1
     ) {
       setLineDraft(
@@ -6472,8 +6987,12 @@ export default function RitsuCadPage() {
     }
 
     if (
-      activeTool ===
-        'polyline' &&
+      (
+        activeTool ===
+          'polyline' ||
+        activeTool ===
+          'draw-polyline'
+      ) &&
       polylineDraft.points.length
     ) {
       setPolylineDraft(
@@ -6486,8 +7005,12 @@ export default function RitsuCadPage() {
     }
 
     if (
-      activeTool ===
-        'area' &&
+      (
+        activeTool ===
+          'area' ||
+        activeTool ===
+          'draw-polygon'
+      ) &&
       areaDraft.points.length
     ) {
       setAreaDraft(
@@ -6500,11 +7023,29 @@ export default function RitsuCadPage() {
     }
 
     if (
-      activeTool ===
-        'rectangle' &&
+      (
+        activeTool ===
+          'rectangle' ||
+        activeTool ===
+          'draw-rectangle'
+      ) &&
       rectangleDraft.point1
     ) {
       setRectangleDraft(
+        (current) => ({
+          ...current,
+          previewPoint:
+            point,
+        })
+      )
+    }
+
+    if (
+      activeTool ===
+        'draw-circle' &&
+      circleDraft.center
+    ) {
+      setCircleDraft(
         (current) => ({
           ...current,
           previewPoint:
@@ -6522,7 +7063,7 @@ export default function RitsuCadPage() {
   function handlePointerDown(
     event
   ) {
-    if (!pdfDocument) {
+    if (!workspaceReady) {
       return
     }
 
@@ -6844,7 +7385,9 @@ export default function RitsuCadPage() {
 
     } else if (
       activeTool ===
-      'line'
+        'line' ||
+      activeTool ===
+        'draw-line'
     ) {
       anchorPoint =
         lineDraft.point1
@@ -6856,7 +7399,9 @@ export default function RitsuCadPage() {
 
     } else if (
       activeTool ===
-      'polyline'
+        'polyline' ||
+      activeTool ===
+        'draw-polyline'
     ) {
       anchorPoint =
         polylineDraft.points.at(-1) ||
@@ -6869,7 +7414,9 @@ export default function RitsuCadPage() {
 
     } else if (
       activeTool ===
-      'area'
+        'area' ||
+      activeTool ===
+        'draw-polygon'
     ) {
       anchorPoint =
         areaDraft.points.at(-1) ||
@@ -6882,10 +7429,22 @@ export default function RitsuCadPage() {
 
     } else if (
       activeTool ===
-      'rectangle'
+        'rectangle' ||
+      activeTool ===
+        'draw-rectangle'
     ) {
       anchorPoint =
         rectangleDraft.point1
+
+      allowOrtho =
+        false
+
+    } else if (
+      activeTool ===
+        'draw-circle'
+    ) {
+      anchorPoint =
+        circleDraft.center
 
       allowOrtho =
         false
@@ -6993,6 +7552,315 @@ export default function RitsuCadPage() {
       setInspectorOpen(
         true
       )
+
+      return
+    }
+
+
+    // ========================================================
+    // NATIVE DRAWING
+    // ========================================================
+
+    if (
+      activeTool ===
+        'draw-line'
+    ) {
+      event.preventDefault()
+
+      if (
+        !lineDraft.point1
+      ) {
+        setLineDraft({
+          point1:
+            point,
+          previewPoint:
+            point,
+        })
+
+        return
+      }
+
+      if (
+        pointDistance(
+          lineDraft.point1,
+          point
+        ) <
+          0.0001
+      ) {
+        return
+      }
+
+      commitCadEntities(
+        (current) => [
+          ...current,
+          {
+            id:
+              createEntityId(),
+
+            type:
+              'cad-line',
+
+            category:
+              'drawing',
+
+            pageNumber,
+
+            points: [
+              {
+                ...lineDraft.point1,
+              },
+              {
+                ...point,
+              },
+            ],
+
+            createdAt:
+              new Date()
+                .toISOString(),
+          },
+        ]
+      )
+
+      resetLineDraft()
+
+      return
+    }
+
+
+    if (
+      activeTool ===
+        'draw-polyline'
+    ) {
+      event.preventDefault()
+
+      setPolylineDraft(
+        (current) => {
+          if (
+            !current.points.length
+          ) {
+            return {
+              points: [
+                point,
+              ],
+              previewPoint:
+                point,
+            }
+          }
+
+          const lastPoint =
+            current.points.at(-1)
+
+          if (
+            pointDistance(
+              lastPoint,
+              point
+            ) <
+            0.0001
+          ) {
+            return current
+          }
+
+          return {
+            points: [
+              ...current.points,
+              point,
+            ],
+            previewPoint:
+              point,
+          }
+        }
+      )
+
+      return
+    }
+
+
+    if (
+      activeTool ===
+        'draw-polygon'
+    ) {
+      event.preventDefault()
+
+      setAreaDraft(
+        (current) => {
+          if (
+            !current.points.length
+          ) {
+            return {
+              points: [
+                point,
+              ],
+              previewPoint:
+                point,
+            }
+          }
+
+          const lastPoint =
+            current.points.at(-1)
+
+          if (
+            pointDistance(
+              lastPoint,
+              point
+            ) <
+            0.0001
+          ) {
+            return current
+          }
+
+          return {
+            points: [
+              ...current.points,
+              point,
+            ],
+            previewPoint:
+              point,
+          }
+        }
+      )
+
+      return
+    }
+
+
+    if (
+      activeTool ===
+        'draw-rectangle'
+    ) {
+      event.preventDefault()
+
+      if (
+        !rectangleDraft.point1
+      ) {
+        setRectangleDraft({
+          point1:
+            point,
+          previewPoint:
+            point,
+        })
+
+        return
+      }
+
+      const width =
+        Math.abs(
+          point.x -
+          rectangleDraft.point1.x
+        )
+
+      const height =
+        Math.abs(
+          point.y -
+          rectangleDraft.point1.y
+        )
+
+      if (
+        width <
+          0.0001 ||
+        height <
+          0.0001
+      ) {
+        return
+      }
+
+      commitCadEntities(
+        (current) => [
+          ...current,
+          {
+            id:
+              createEntityId(),
+
+            type:
+              'cad-rectangle',
+
+            category:
+              'drawing',
+
+            pageNumber,
+
+            points: [
+              {
+                ...rectangleDraft.point1,
+              },
+              {
+                ...point,
+              },
+            ],
+
+            createdAt:
+              new Date()
+                .toISOString(),
+          },
+        ]
+      )
+
+      resetRectangleDraft()
+
+      return
+    }
+
+
+    if (
+      activeTool ===
+        'draw-circle'
+    ) {
+      event.preventDefault()
+
+      if (
+        !circleDraft.center
+      ) {
+        setCircleDraft({
+          center:
+            point,
+          previewPoint:
+            point,
+        })
+
+        return
+      }
+
+      if (
+        pointDistance(
+          circleDraft.center,
+          point
+        ) <
+        0.0001
+      ) {
+        return
+      }
+
+      commitCadEntities(
+        (current) => [
+          ...current,
+          {
+            id:
+              createEntityId(),
+
+            type:
+              'cad-circle',
+
+            category:
+              'drawing',
+
+            pageNumber,
+
+            points: [
+              {
+                ...circleDraft.center,
+              },
+              {
+                ...point,
+              },
+            ],
+
+            createdAt:
+              new Date()
+                .toISOString(),
+          },
+        ]
+      )
+
+      resetCircleDraft()
 
       return
     }
@@ -7392,6 +8260,24 @@ export default function RitsuCadPage() {
   ) {
     if (
       activeTool ===
+      'draw-polyline'
+    ) {
+      event.preventDefault()
+      finishNativePolyline()
+      return
+    }
+
+    if (
+      activeTool ===
+      'draw-polygon'
+    ) {
+      event.preventDefault()
+      finishNativePolygon()
+      return
+    }
+
+    if (
+      activeTool ===
       'polyline'
     ) {
       event.preventDefault()
@@ -7509,7 +8395,7 @@ export default function RitsuCadPage() {
   function handleWheel(
     event
   ) {
-    if (!pdfDocument) {
+    if (!workspaceReady) {
       return
     }
 
@@ -7764,6 +8650,32 @@ export default function RitsuCadPage() {
         ) {
           if (
             activeTool ===
+              'draw-polyline' &&
+            polylineDraft.points.length >=
+              2
+          ) {
+            event.preventDefault()
+
+            finishNativePolyline()
+
+            return
+          }
+
+          if (
+            activeTool ===
+              'draw-polygon' &&
+            areaDraft.points.length >=
+              3
+          ) {
+            event.preventDefault()
+
+            finishNativePolygon()
+
+            return
+          }
+
+          if (
+            activeTool ===
               'polyline' &&
             polylineDraft.points.length >=
               2
@@ -7785,6 +8697,15 @@ export default function RitsuCadPage() {
 
             finishArea()
 
+            return
+          }
+
+          if (
+            activeTool ===
+              'draw-circle' &&
+            circleDraft.center
+          ) {
+            resetCircleDraft()
             return
           }
 
@@ -7825,8 +8746,12 @@ export default function RitsuCadPage() {
           }
 
           if (
-            activeTool ===
-              'line' &&
+            (
+              activeTool ===
+                'line' ||
+              activeTool ===
+                'draw-line'
+            ) &&
             lineDraft.point1
           ) {
             resetLineDraft()
@@ -7834,8 +8759,12 @@ export default function RitsuCadPage() {
           }
 
           if (
-            activeTool ===
-              'polyline' &&
+            (
+              activeTool ===
+                'polyline' ||
+              activeTool ===
+                'draw-polyline'
+            ) &&
             polylineDraft.points.length
           ) {
             resetPolylineDraft()
@@ -7843,8 +8772,12 @@ export default function RitsuCadPage() {
           }
 
           if (
-            activeTool ===
-              'area' &&
+            (
+              activeTool ===
+                'area' ||
+              activeTool ===
+                'draw-polygon'
+            ) &&
             areaDraft.points.length
           ) {
             resetAreaDraft()
@@ -7852,8 +8785,12 @@ export default function RitsuCadPage() {
           }
 
           if (
-            activeTool ===
-              'rectangle' &&
+            (
+              activeTool ===
+                'rectangle' ||
+              activeTool ===
+                'draw-rectangle'
+            ) &&
             rectangleDraft.point1
           ) {
             resetRectangleDraft()
@@ -7917,6 +8854,46 @@ export default function RitsuCadPage() {
         ) {
           activateTool(
             'zoom'
+          )
+
+        } else if (
+          key ===
+          '1'
+        ) {
+          activateTool(
+            'draw-line'
+          )
+
+        } else if (
+          key ===
+          '2'
+        ) {
+          activateTool(
+            'draw-polyline'
+          )
+
+        } else if (
+          key ===
+          '3'
+        ) {
+          activateTool(
+            'draw-rectangle'
+          )
+
+        } else if (
+          key ===
+          '4'
+        ) {
+          activateTool(
+            'draw-polygon'
+          )
+
+        } else if (
+          key ===
+          '5'
+        ) {
+          activateTool(
+            'draw-circle'
           )
 
         } else if (
@@ -8002,13 +8979,17 @@ export default function RitsuCadPage() {
       distanceDraft,
       finishArea,
       finishCount,
+      finishNativePolygon,
+      finishNativePolyline,
       finishPolyline,
       fitPage,
       fitWidth,
       lineDraft,
       polylineDraft,
       rectangleDraft,
+      circleDraft,
       resetAreaDraft,
+      resetCircleDraft,
       resetCountDraft,
       resetDistanceDraft,
       resetLineDraft,
@@ -8111,6 +9092,11 @@ export default function RitsuCadPage() {
       'area',
       'rectangle',
       'count',
+      'draw-line',
+      'draw-polyline',
+      'draw-rectangle',
+      'draw-polygon',
+      'draw-circle',
     ].includes(
       activeTool
     )
@@ -8119,7 +9105,7 @@ export default function RitsuCadPage() {
       'crosshair'
 
   } else if (
-    pdfDocument
+    workspaceReady
   ) {
     viewportCursor =
       'crosshair'
@@ -8457,11 +9443,13 @@ export default function RitsuCadPage() {
             }
             title={
               pdfFileName ||
+              nativeDrawingName ||
               'No drawing loaded'
             }
           >
             {
               pdfFileName ||
+              nativeDrawingName ||
               'No drawing loaded'
             }
           </span>
@@ -8474,7 +9462,7 @@ export default function RitsuCadPage() {
           }
         >
 
-          {pdfDocument && (
+          {workspaceReady && (
             <div
               className={
                 styles.pageControl
@@ -8626,6 +9614,26 @@ export default function RitsuCadPage() {
           <button
             type="button"
             className={
+              styles.toolbarButtonWide
+            }
+            onClick={
+              createNewDrawing
+            }
+            title="Create a new RitsuCAD drawing"
+          >
+            <Icon
+              type="rectangle"
+            />
+
+            <span>
+              New Drawing
+            </span>
+          </button>
+
+
+          <button
+            type="button"
+            className={
               styles.importButton
             }
             onClick={
@@ -8714,7 +9722,7 @@ export default function RitsuCadPage() {
                   )
                 }
                 disabled={
-                  !pdfDocument &&
+                  !workspaceReady &&
                   tool.id !==
                     'select'
                 }
@@ -8745,7 +9753,7 @@ export default function RitsuCadPage() {
               fitPage
             }
             disabled={
-              !pdfDocument
+              !workspaceReady
             }
             title="Fit Page (F)"
           >
@@ -8768,7 +9776,7 @@ export default function RitsuCadPage() {
               fitWidth
             }
             disabled={
-              !pdfDocument
+              !workspaceReady
             }
             title="Fit Width (W)"
           >
@@ -8780,6 +9788,63 @@ export default function RitsuCadPage() {
               Fit Width
             </span>
           </button>
+
+        </div>
+
+
+        <span
+          className={
+            styles.toolbarDivider
+          }
+        />
+
+
+        <div
+          className={
+            styles.toolbarSection
+          }
+        >
+
+          {drawingTools.map(
+            (tool) => (
+              <button
+                key={
+                  tool.id
+                }
+                type="button"
+                className={[
+                  styles.toolbarButton,
+                  activeTool ===
+                    tool.id
+                    ? styles.toolbarButtonActive
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                onClick={() =>
+                  activateTool(
+                    tool.id
+                  )
+                }
+                disabled={
+                  !workspaceReady
+                }
+                title={`${tool.label} (${tool.shortcut})`}
+              >
+                <Icon
+                  type={
+                    tool.icon
+                  }
+                />
+
+                <span>
+                  {
+                    tool.label
+                  }
+                </span>
+              </button>
+            )
+          )}
 
         </div>
 
@@ -8819,7 +9884,7 @@ export default function RitsuCadPage() {
                   )
                 }
                 disabled={
-                  !pdfDocument
+                  !workspaceReady
                 }
                 title={`${tool.label} (${tool.shortcut})`}
               >
@@ -8869,7 +9934,7 @@ export default function RitsuCadPage() {
               startCalibration
             }
             disabled={
-              !pdfDocument
+              !workspaceReady
             }
             title={
               currentCalibration
@@ -9017,7 +10082,9 @@ export default function RitsuCadPage() {
 
               if (
                 activeTool ===
-                  'line'
+                  'line' ||
+                activeTool ===
+                  'draw-line'
               ) {
                 setLineDraft(
                   (current) => ({
@@ -9030,7 +10097,9 @@ export default function RitsuCadPage() {
 
               if (
                 activeTool ===
-                  'polyline'
+                  'polyline' ||
+                activeTool ===
+                  'draw-polyline'
               ) {
                 setPolylineDraft(
                   (current) => ({
@@ -9043,7 +10112,9 @@ export default function RitsuCadPage() {
 
               if (
                 activeTool ===
-                  'area'
+                  'area' ||
+                activeTool ===
+                  'draw-polygon'
               ) {
                 setAreaDraft(
                   (current) => ({
@@ -9056,9 +10127,25 @@ export default function RitsuCadPage() {
 
               if (
                 activeTool ===
-                  'rectangle'
+                  'rectangle' ||
+                activeTool ===
+                  'draw-rectangle'
               ) {
                 setRectangleDraft(
+                  (current) => ({
+                    ...current,
+                    previewPoint:
+                      null,
+                  })
+                )
+              }
+
+
+              if (
+                activeTool ===
+                  'draw-circle'
+              ) {
+                setCircleDraft(
                   (current) => ({
                     ...current,
                     previewPoint:
@@ -9082,7 +10169,7 @@ export default function RitsuCadPage() {
           }}
         >
 
-          {!pdfDocument && (
+          {!workspaceReady && (
             <div
               className={
                 styles.emptyViewport
@@ -9101,11 +10188,11 @@ export default function RitsuCadPage() {
               </div>
 
               <h2>
-                Import a drawing
+                Start a drawing
               </h2>
 
               <p>
-                Load a PDF drawing to navigate, annotate, measure, and create takeoff geometry.
+                Create a native RitsuCAD drawing or import a PDF as a drawing reference.
               </p>
 
               {pdfError && (
@@ -9119,6 +10206,22 @@ export default function RitsuCadPage() {
                   }
                 </span>
               )}
+
+              <button
+                type="button"
+                className={
+                  styles.emptyImportButton
+                }
+                onClick={
+                  createNewDrawing
+                }
+              >
+                <Icon
+                  type="rectangle"
+                />
+
+                New Drawing
+              </button>
 
               <button
                 type="button"
@@ -9164,21 +10267,40 @@ export default function RitsuCadPage() {
               }}
             >
 
-              <canvas
-                ref={
-                  canvasRef
-                }
-                className={
-                  styles.pdfCanvas
-                }
-                style={{
-                  width:
-                    `${renderedSize.width}px`,
+              {documentMode ===
+                'native' && (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position:
+                      'absolute',
+                    inset:
+                      0,
+                    background:
+                      '#ffffff',
+                    boxShadow:
+                      '0 0 0 1px rgba(15, 23, 42, 0.12)',
+                  }}
+                />
+              )}
 
-                  height:
-                    `${renderedSize.height}px`,
-                }}
-              />
+              {pdfDocument && (
+                <canvas
+                  ref={
+                    canvasRef
+                  }
+                  className={
+                    styles.pdfCanvas
+                  }
+                  style={{
+                    width:
+                      `${renderedSize.width}px`,
+
+                    height:
+                      `${renderedSize.height}px`,
+                  }}
+                />
+              )}
 
 
               <svg
@@ -9196,6 +10318,378 @@ export default function RitsuCadPage() {
                 }`}
                 preserveAspectRatio="none"
               >
+
+                {/* ============================================
+                    NATIVE RITSUCAD GEOMETRY
+                ============================================ */}
+
+                {currentPageNativeEntities.map(
+                  (entity) => {
+                    const renderEntity =
+                      selectedRenderEntity &&
+                      selectedRenderEntity.id ===
+                        entity.id
+                        ? selectedRenderEntity
+                        : entity
+
+                    const isSelected =
+                      selectedEntityId ===
+                      entity.id
+
+                    const stroke =
+                      isSelected
+                        ? '#0f766e'
+                        : '#0f172a'
+
+                    const strokeWidth =
+                      isSelected
+                        ? 3
+                        : 2
+
+                    if (
+                      renderEntity.type ===
+                        'cad-line'
+                    ) {
+                      return (
+                        <line
+                          key={
+                            entity.id
+                          }
+                          x1={
+                            renderEntity.points[0]?.x
+                          }
+                          y1={
+                            renderEntity.points[0]?.y
+                          }
+                          x2={
+                            renderEntity.points[1]?.x
+                          }
+                          y2={
+                            renderEntity.points[1]?.y
+                          }
+                          stroke={
+                            stroke
+                          }
+                          strokeWidth={
+                            strokeWidth
+                          }
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )
+                    }
+
+                    if (
+                      renderEntity.type ===
+                        'cad-polyline'
+                    ) {
+                      return (
+                        <polyline
+                          key={
+                            entity.id
+                          }
+                          points={
+                            renderEntity.points
+                              .map(
+                                (point) =>
+                                  `${point.x},${point.y}`
+                              )
+                              .join(' ')
+                          }
+                          fill="none"
+                          stroke={
+                            stroke
+                          }
+                          strokeWidth={
+                            strokeWidth
+                          }
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )
+                    }
+
+                    if (
+                      renderEntity.type ===
+                        'cad-rectangle'
+                    ) {
+                      const point1 =
+                        renderEntity.points[0]
+
+                      const point2 =
+                        renderEntity.points[1]
+
+                      if (
+                        !point1 ||
+                        !point2
+                      ) {
+                        return null
+                      }
+
+                      return (
+                        <rect
+                          key={
+                            entity.id
+                          }
+                          x={
+                            Math.min(
+                              point1.x,
+                              point2.x
+                            )
+                          }
+                          y={
+                            Math.min(
+                              point1.y,
+                              point2.y
+                            )
+                          }
+                          width={
+                            Math.abs(
+                              point2.x -
+                              point1.x
+                            )
+                          }
+                          height={
+                            Math.abs(
+                              point2.y -
+                              point1.y
+                            )
+                          }
+                          fill="none"
+                          stroke={
+                            stroke
+                          }
+                          strokeWidth={
+                            strokeWidth
+                          }
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )
+                    }
+
+                    if (
+                      renderEntity.type ===
+                        'cad-polygon'
+                    ) {
+                      return (
+                        <polygon
+                          key={
+                            entity.id
+                          }
+                          points={
+                            renderEntity.points
+                              .map(
+                                (point) =>
+                                  `${point.x},${point.y}`
+                              )
+                              .join(' ')
+                          }
+                          fill="rgba(15, 23, 42, 0.04)"
+                          stroke={
+                            stroke
+                          }
+                          strokeWidth={
+                            strokeWidth
+                          }
+                          strokeLinejoin="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )
+                    }
+
+                    if (
+                      renderEntity.type ===
+                        'cad-circle'
+                    ) {
+                      const center =
+                        renderEntity.points[0]
+
+                      const edge =
+                        renderEntity.points[1]
+
+                      if (
+                        !center ||
+                        !edge
+                      ) {
+                        return null
+                      }
+
+                      return (
+                        <circle
+                          key={
+                            entity.id
+                          }
+                          cx={
+                            center.x
+                          }
+                          cy={
+                            center.y
+                          }
+                          r={
+                            pointDistance(
+                              center,
+                              edge
+                            )
+                          }
+                          fill="none"
+                          stroke={
+                            stroke
+                          }
+                          strokeWidth={
+                            strokeWidth
+                          }
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )
+                    }
+
+                    return null
+                  }
+                )}
+
+
+                {/* ============================================
+                    NATIVE DRAWING PREVIEW
+                ============================================ */}
+
+                {activeTool ===
+                  'draw-line' &&
+                  lineDraft.point1 &&
+                  lineDraft.previewPoint && (
+                    <line
+                      x1={
+                        lineDraft.point1.x
+                      }
+                      y1={
+                        lineDraft.point1.y
+                      }
+                      x2={
+                        lineDraft.previewPoint.x
+                      }
+                      y2={
+                        lineDraft.previewPoint.y
+                      }
+                      stroke="#0f766e"
+                      strokeWidth="2"
+                      strokeDasharray="7 5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+
+                {activeTool ===
+                  'draw-polyline' &&
+                  polylineDraft.points.length >
+                    0 && (
+                    <polyline
+                      points={[
+                        ...polylineDraft.points,
+                        ...(polylineDraft.previewPoint
+                          ? [
+                              polylineDraft.previewPoint,
+                            ]
+                          : []),
+                      ]
+                        .map(
+                          (point) =>
+                            `${point.x},${point.y}`
+                        )
+                        .join(' ')}
+                      fill="none"
+                      stroke="#0f766e"
+                      strokeWidth="2"
+                      strokeDasharray="7 5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+
+                {activeTool ===
+                  'draw-polygon' &&
+                  areaDraft.points.length >
+                    0 && (
+                    <polyline
+                      points={[
+                        ...areaDraft.points,
+                        ...(areaDraft.previewPoint
+                          ? [
+                              areaDraft.previewPoint,
+                            ]
+                          : []),
+                      ]
+                        .map(
+                          (point) =>
+                            `${point.x},${point.y}`
+                        )
+                        .join(' ')}
+                      fill="none"
+                      stroke="#0f766e"
+                      strokeWidth="2"
+                      strokeDasharray="7 5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+
+                {activeTool ===
+                  'draw-rectangle' &&
+                  rectangleDraft.point1 &&
+                  rectangleDraft.previewPoint && (
+                    <rect
+                      x={
+                        Math.min(
+                          rectangleDraft.point1.x,
+                          rectangleDraft.previewPoint.x
+                        )
+                      }
+                      y={
+                        Math.min(
+                          rectangleDraft.point1.y,
+                          rectangleDraft.previewPoint.y
+                        )
+                      }
+                      width={
+                        Math.abs(
+                          rectangleDraft.previewPoint.x -
+                          rectangleDraft.point1.x
+                        )
+                      }
+                      height={
+                        Math.abs(
+                          rectangleDraft.previewPoint.y -
+                          rectangleDraft.point1.y
+                        )
+                      }
+                      fill="none"
+                      stroke="#0f766e"
+                      strokeWidth="2"
+                      strokeDasharray="7 5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+
+                {activeTool ===
+                  'draw-circle' &&
+                  circleDraft.center &&
+                  circleDraft.previewPoint && (
+                    <circle
+                      cx={
+                        circleDraft.center.x
+                      }
+                      cy={
+                        circleDraft.center.y
+                      }
+                      r={
+                        pointDistance(
+                          circleDraft.center,
+                          circleDraft.previewPoint
+                        )
+                      }
+                      fill="none"
+                      stroke="#0f766e"
+                      strokeWidth="2"
+                      strokeDasharray="7 5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+
 
                 {/* ============================================
                     CALIBRATION
@@ -10620,13 +12114,40 @@ export default function RitsuCadPage() {
                 }
               >
 
-                {!pdfDocument && (
+                {!workspaceReady && (
                   <div
                     className={
                       styles.drawerEmpty
                     }
                   >
-                    No PDF loaded.
+                    No drawing loaded.
+                  </div>
+                )}
+
+
+                {documentMode ===
+                  'native' && (
+                  <div
+                    className={
+                      styles.drawingCard
+                    }
+                  >
+                    <Icon
+                      type="rectangle"
+                    />
+
+                    <div>
+                      <strong>
+                        {
+                          nativeDrawingName ||
+                          'Untitled Drawing'
+                        }
+                      </strong>
+
+                      <span>
+                        Native RitsuCAD drawing
+                      </span>
+                    </div>
                   </div>
                 )}
 
@@ -12077,7 +13598,10 @@ export default function RitsuCadPage() {
                                       ? 0
                                       : 2
                                   )} ${selectedEntityUnit}`
-                                : 'Unscaled'
+                                : selectedEntity.category ===
+                                    'drawing'
+                                  ? '—'
+                                  : 'Unscaled'
                             }
                           </strong>
                         </div>
@@ -12121,7 +13645,7 @@ export default function RitsuCadPage() {
                         styles.selectionEmpty
                       }
                     >
-                      RitsuCAD geometry is grouped by layer and measurement type.
+                      Native drawing geometry and measurement geometry are kept as separate RitsuCAD entity classes.
                     </div>
                   </section>
 
@@ -12147,7 +13671,12 @@ export default function RitsuCadPage() {
                       />
 
                       <span>
-                        PDF Drawing
+                        {
+                          documentMode ===
+                            'pdf'
+                            ? 'PDF Reference'
+                            : 'Native Drawing'
+                        }
                       </span>
 
                       <strong>
@@ -12155,6 +13684,42 @@ export default function RitsuCadPage() {
                       </strong>
                     </div>
                   </section>
+
+
+                  {currentPageNativeEntities.length >
+                    0 && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+                      <h3>
+                        CAD Geometry
+                      </h3>
+
+                      <div
+                        className={
+                          styles.layerRow
+                        }
+                      >
+                        <span
+                          className={
+                            styles.layerDot
+                          }
+                        />
+
+                        <span>
+                          Native Geometry
+                        </span>
+
+                        <strong>
+                          {
+                            currentPageNativeEntities.length
+                          }
+                        </strong>
+                      </div>
+                    </section>
+                  )}
 
 
                   {[
