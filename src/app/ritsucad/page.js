@@ -419,25 +419,25 @@ const measurementTools = [
   },
   {
     id: 'line',
-    label: 'Linear',
+    label: 'Linear Takeoff',
     icon: 'line',
     shortcut: 'L',
   },
   {
     id: 'polyline',
-    label: 'Polyline',
+    label: 'Polyline Takeoff',
     icon: 'polyline',
     shortcut: 'P',
   },
   {
     id: 'area',
-    label: 'Area',
+    label: 'Area Takeoff',
     icon: 'area',
     shortcut: 'A',
   },
   {
     id: 'rectangle',
-    label: 'Rectangle',
+    label: 'Rectangle Takeoff',
     icon: 'rectangle',
     shortcut: 'R',
   },
@@ -9187,7 +9187,7 @@ export default function RitsuCadPage() {
     'line'
   ) {
     commandName =
-      'LINEAR'
+      'LINEAR TAKEOFF'
 
     if (
       !currentCalibration
@@ -9212,7 +9212,7 @@ export default function RitsuCadPage() {
     'polyline'
   ) {
     commandName =
-      'POLYLINE'
+      'POLYLINE TAKEOFF'
 
     if (
       !currentCalibration
@@ -9243,7 +9243,7 @@ export default function RitsuCadPage() {
     'area'
   ) {
     commandName =
-      'AREA'
+      'AREA TAKEOFF'
 
     if (
       !currentCalibration
@@ -9274,7 +9274,7 @@ export default function RitsuCadPage() {
     'rectangle'
   ) {
     commandName =
-      'RECTANGLE'
+      'RECTANGLE TAKEOFF'
 
     if (
       !currentCalibration
