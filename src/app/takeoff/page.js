@@ -51,6 +51,9 @@ const MIN_ZOOM = 0.1
 const MAX_ZOOM = 12
 const ZOOM_FACTOR = 1.15
 const VIEWPORT_MARGIN = 36
+const PDF_VECTOR_CURVE_STEPS = 8
+const PDF_VECTOR_MAX_SEGMENTS = 50000
+const PDF_VECTOR_MIN_SEGMENT_LENGTH = 0.15
 
 const UNIT_TO_METERS = {
   mm: 0.001,
@@ -2011,6 +2014,1072 @@ function constrainOrthoPoint(
 }
 
 
+function multiplyPdfMatrices(
+  matrix1,
+  matrix2
+) {
+  return [
+    matrix1[0] *
+      matrix2[0] +
+    matrix1[2] *
+      matrix2[1],
+
+    matrix1[1] *
+      matrix2[0] +
+    matrix1[3] *
+      matrix2[1],
+
+    matrix1[0] *
+      matrix2[2] +
+    matrix1[2] *
+      matrix2[3],
+
+    matrix1[1] *
+      matrix2[2] +
+    matrix1[3] *
+      matrix2[3],
+
+    matrix1[0] *
+      matrix2[4] +
+    matrix1[2] *
+      matrix2[5] +
+    matrix1[4],
+
+    matrix1[1] *
+      matrix2[4] +
+    matrix1[3] *
+      matrix2[5] +
+    matrix1[5],
+  ]
+}
+
+
+function applyPdfMatrix(
+  point,
+  matrix
+) {
+  return {
+    x:
+      matrix[0] *
+        point.x +
+      matrix[2] *
+        point.y +
+      matrix[4],
+
+    y:
+      matrix[1] *
+        point.x +
+      matrix[3] *
+        point.y +
+      matrix[5],
+  }
+}
+
+
+function cubicBezierPoint(
+  point0,
+  point1,
+  point2,
+  point3,
+  t
+) {
+  const oneMinusT =
+    1 - t
+
+  const oneMinusTSquared =
+    oneMinusT *
+    oneMinusT
+
+  const tSquared =
+    t * t
+
+  return {
+    x:
+      oneMinusTSquared *
+        oneMinusT *
+        point0.x +
+      3 *
+        oneMinusTSquared *
+        t *
+        point1.x +
+      3 *
+        oneMinusT *
+        tSquared *
+        point2.x +
+      tSquared *
+        t *
+        point3.x,
+
+    y:
+      oneMinusTSquared *
+        oneMinusT *
+        point0.y +
+      3 *
+        oneMinusTSquared *
+        t *
+        point1.y +
+      3 *
+        oneMinusT *
+        tSquared *
+        point2.y +
+      tSquared *
+        t *
+        point3.y,
+  }
+}
+
+
+function pdfSegmentKey(
+  point1,
+  point2
+) {
+  const precision =
+    100
+
+  const first = {
+    x:
+      Math.round(
+        point1.x *
+          precision
+      ),
+
+    y:
+      Math.round(
+        point1.y *
+          precision
+      ),
+  }
+
+  const second = {
+    x:
+      Math.round(
+        point2.x *
+          precision
+      ),
+
+    y:
+      Math.round(
+        point2.y *
+          precision
+      ),
+  }
+
+  const forward =
+    `${first.x},${first.y}|${second.x},${second.y}`
+
+  const reverse =
+    `${second.x},${second.y}|${first.x},${first.y}`
+
+  return forward <
+    reverse
+    ? forward
+    : reverse
+}
+
+
+function segmentBoundingBox(
+  segment,
+  padding = 0
+) {
+  return {
+    minimumX:
+      Math.min(
+        segment.point1.x,
+        segment.point2.x
+      ) -
+      padding,
+
+    maximumX:
+      Math.max(
+        segment.point1.x,
+        segment.point2.x
+      ) +
+      padding,
+
+    minimumY:
+      Math.min(
+        segment.point1.y,
+        segment.point2.y
+      ) -
+      padding,
+
+    maximumY:
+      Math.max(
+        segment.point1.y,
+        segment.point2.y
+      ) +
+      padding,
+  }
+}
+
+
+function pointInsideBoundingBox(
+  point,
+  boundingBox
+) {
+  return (
+    point.x >=
+      boundingBox.minimumX &&
+    point.x <=
+      boundingBox.maximumX &&
+    point.y >=
+      boundingBox.minimumY &&
+    point.y <=
+      boundingBox.maximumY
+  )
+}
+
+
+function extractPdfVectorGeometry(
+  page,
+  pdfjs,
+  viewport,
+  operatorList
+) {
+  const segments =
+    []
+
+  const segmentKeys =
+    new Set()
+
+  let currentTransform = [
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+  ]
+
+  const transformStack =
+    []
+
+  let currentPathSegments =
+    []
+
+  let currentPoint =
+    null
+
+  let subpathStart =
+    null
+
+  let hasRasterImage =
+    false
+
+  let truncated =
+    false
+
+
+  function toViewportPoint(
+    x,
+    y
+  ) {
+    const transformed =
+      applyPdfMatrix(
+        {
+          x,
+          y,
+        },
+        currentTransform
+      )
+
+    const [
+      viewportX,
+      viewportY,
+    ] =
+      viewport
+        .convertToViewportPoint(
+          transformed.x,
+          transformed.y
+        )
+
+    return {
+      x:
+        viewportX,
+
+      y:
+        viewportY,
+    }
+  }
+
+
+  function addPathSegment(
+    point1,
+    point2
+  ) {
+    if (
+      !point1 ||
+      !point2
+    ) {
+      return
+    }
+
+    if (
+      pointDistance(
+        point1,
+        point2
+      ) <
+      PDF_VECTOR_MIN_SEGMENT_LENGTH
+    ) {
+      return
+    }
+
+    currentPathSegments.push({
+      point1: {
+        ...point1,
+      },
+
+      point2: {
+        ...point2,
+      },
+    })
+  }
+
+
+  function commitCurrentPath() {
+    for (
+      const segment of
+      currentPathSegments
+    ) {
+      if (
+        segments.length >=
+        PDF_VECTOR_MAX_SEGMENTS
+      ) {
+        truncated =
+          true
+
+        break
+      }
+
+      const key =
+        pdfSegmentKey(
+          segment.point1,
+          segment.point2
+        )
+
+      if (
+        segmentKeys.has(
+          key
+        )
+      ) {
+        continue
+      }
+
+      segmentKeys.add(
+        key
+      )
+
+      segments.push({
+        id:
+          `pdf-${segments.length + 1}`,
+
+        source:
+          'pdf',
+
+        point1:
+          segment.point1,
+
+        point2:
+          segment.point2,
+      })
+    }
+
+    currentPathSegments =
+      []
+
+    currentPoint =
+      null
+
+    subpathStart =
+      null
+  }
+
+
+  function discardCurrentPath() {
+    currentPathSegments =
+      []
+
+    currentPoint =
+      null
+
+    subpathStart =
+      null
+  }
+
+
+  function addBezierSegments(
+    startPoint,
+    controlPoint1,
+    controlPoint2,
+    endPoint
+  ) {
+    let previousPoint =
+      startPoint
+
+    for (
+      let step = 1;
+      step <=
+        PDF_VECTOR_CURVE_STEPS;
+      step += 1
+    ) {
+      const point =
+        cubicBezierPoint(
+          startPoint,
+          controlPoint1,
+          controlPoint2,
+          endPoint,
+          step /
+            PDF_VECTOR_CURVE_STEPS
+        )
+
+      addPathSegment(
+        previousPoint,
+        point
+      )
+
+      previousPoint =
+        point
+    }
+  }
+
+
+  function parseConstructPath(
+    args
+  ) {
+    const rawOperations =
+      args?.[0]
+
+    const rawCoordinates =
+      args?.[1]
+
+    if (
+      rawOperations ===
+        null ||
+      rawOperations ===
+        undefined ||
+      !rawCoordinates
+    ) {
+      return
+    }
+
+    const operations =
+      ArrayBuffer.isView(
+        rawOperations
+      ) ||
+      Array.isArray(
+        rawOperations
+      )
+        ? Array.from(
+            rawOperations
+          )
+        : [
+            rawOperations,
+          ]
+
+    const coordinates =
+      Array.from(
+        rawCoordinates
+      )
+
+    let coordinateIndex =
+      0
+
+    for (
+      const operation of
+      operations
+    ) {
+      if (
+        operation ===
+        pdfjs.OPS.moveTo
+      ) {
+        const point =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex
+            ],
+            coordinates[
+              coordinateIndex +
+              1
+            ]
+          )
+
+        coordinateIndex +=
+          2
+
+        currentPoint =
+          point
+
+        subpathStart =
+          point
+
+      } else if (
+        operation ===
+        pdfjs.OPS.lineTo
+      ) {
+        const point =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex
+            ],
+            coordinates[
+              coordinateIndex +
+              1
+            ]
+          )
+
+        coordinateIndex +=
+          2
+
+        if (
+          currentPoint
+        ) {
+          addPathSegment(
+            currentPoint,
+            point
+          )
+        }
+
+        currentPoint =
+          point
+
+      } else if (
+        operation ===
+        pdfjs.OPS.curveTo
+      ) {
+        const controlPoint1 =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex
+            ],
+            coordinates[
+              coordinateIndex +
+              1
+            ]
+          )
+
+        const controlPoint2 =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex +
+              2
+            ],
+            coordinates[
+              coordinateIndex +
+              3
+            ]
+          )
+
+        const endPoint =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex +
+              4
+            ],
+            coordinates[
+              coordinateIndex +
+              5
+            ]
+          )
+
+        coordinateIndex +=
+          6
+
+        if (
+          currentPoint
+        ) {
+          addBezierSegments(
+            currentPoint,
+            controlPoint1,
+            controlPoint2,
+            endPoint
+          )
+        }
+
+        currentPoint =
+          endPoint
+
+      } else if (
+        operation ===
+        pdfjs.OPS.curveTo2
+      ) {
+        const controlPoint2 =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex
+            ],
+            coordinates[
+              coordinateIndex +
+              1
+            ]
+          )
+
+        const endPoint =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex +
+              2
+            ],
+            coordinates[
+              coordinateIndex +
+              3
+            ]
+          )
+
+        coordinateIndex +=
+          4
+
+        if (
+          currentPoint
+        ) {
+          addBezierSegments(
+            currentPoint,
+            currentPoint,
+            controlPoint2,
+            endPoint
+          )
+        }
+
+        currentPoint =
+          endPoint
+
+      } else if (
+        operation ===
+        pdfjs.OPS.curveTo3
+      ) {
+        const controlPoint1 =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex
+            ],
+            coordinates[
+              coordinateIndex +
+              1
+            ]
+          )
+
+        const endPoint =
+          toViewportPoint(
+            coordinates[
+              coordinateIndex +
+              2
+            ],
+            coordinates[
+              coordinateIndex +
+              3
+            ]
+          )
+
+        coordinateIndex +=
+          4
+
+        if (
+          currentPoint
+        ) {
+          addBezierSegments(
+            currentPoint,
+            controlPoint1,
+            endPoint,
+            endPoint
+          )
+        }
+
+        currentPoint =
+          endPoint
+
+      } else if (
+        operation ===
+        pdfjs.OPS.closePath
+      ) {
+        if (
+          currentPoint &&
+          subpathStart
+        ) {
+          addPathSegment(
+            currentPoint,
+            subpathStart
+          )
+
+          currentPoint =
+            subpathStart
+        }
+
+      } else if (
+        operation ===
+        pdfjs.OPS.rectangle
+      ) {
+        const x =
+          coordinates[
+            coordinateIndex
+          ]
+
+        const y =
+          coordinates[
+            coordinateIndex +
+            1
+          ]
+
+        const width =
+          coordinates[
+            coordinateIndex +
+            2
+          ]
+
+        const height =
+          coordinates[
+            coordinateIndex +
+            3
+          ]
+
+        coordinateIndex +=
+          4
+
+        const corner1 =
+          toViewportPoint(
+            x,
+            y
+          )
+
+        const corner2 =
+          toViewportPoint(
+            x + width,
+            y
+          )
+
+        const corner3 =
+          toViewportPoint(
+            x + width,
+            y + height
+          )
+
+        const corner4 =
+          toViewportPoint(
+            x,
+            y + height
+          )
+
+        addPathSegment(
+          corner1,
+          corner2
+        )
+
+        addPathSegment(
+          corner2,
+          corner3
+        )
+
+        addPathSegment(
+          corner3,
+          corner4
+        )
+
+        addPathSegment(
+          corner4,
+          corner1
+        )
+
+        currentPoint =
+          corner1
+
+        subpathStart =
+          corner1
+      }
+    }
+  }
+
+
+  for (
+    let index = 0;
+    index <
+      operatorList.fnArray.length;
+    index += 1
+  ) {
+    const operation =
+      operatorList.fnArray[
+        index
+      ]
+
+    const args =
+      operatorList.argsArray[
+        index
+      ]
+
+
+    if (
+      operation ===
+      pdfjs.OPS.save
+    ) {
+      transformStack.push(
+        [
+          ...currentTransform,
+        ]
+      )
+
+      continue
+    }
+
+
+    if (
+      operation ===
+      pdfjs.OPS.restore
+    ) {
+      currentTransform =
+        transformStack.pop() ||
+        [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0,
+        ]
+
+      continue
+    }
+
+
+    if (
+      operation ===
+      pdfjs.OPS.transform
+    ) {
+      const transformArgs =
+        ArrayBuffer.isView(
+          args
+        ) ||
+        Array.isArray(
+          args
+        )
+          ? Array.from(
+              args
+            )
+          : []
+
+      if (
+        transformArgs.length >=
+        6
+      ) {
+        currentTransform =
+          multiplyPdfMatrices(
+            currentTransform,
+            transformArgs
+          )
+      }
+
+      continue
+    }
+
+
+    if (
+      operation ===
+      pdfjs.OPS.constructPath
+    ) {
+      parseConstructPath(
+        args
+      )
+
+      continue
+    }
+
+
+    if (
+      operation ===
+        pdfjs.OPS.stroke ||
+      operation ===
+        pdfjs.OPS.closeStroke ||
+      operation ===
+        pdfjs.OPS.fillStroke ||
+      operation ===
+        pdfjs.OPS.eoFillStroke ||
+      operation ===
+        pdfjs.OPS.closeFillStroke ||
+      operation ===
+        pdfjs.OPS.closeEOFillStroke
+    ) {
+      commitCurrentPath()
+
+      if (
+        truncated
+      ) {
+        break
+      }
+
+      continue
+    }
+
+
+    if (
+      operation ===
+        pdfjs.OPS.fill ||
+      operation ===
+        pdfjs.OPS.eoFill ||
+      operation ===
+        pdfjs.OPS.endPath ||
+      operation ===
+        pdfjs.OPS.clip ||
+      operation ===
+        pdfjs.OPS.eoClip
+    ) {
+      discardCurrentPath()
+
+      continue
+    }
+
+
+    if (
+      operation ===
+        pdfjs.OPS.paintImageXObject ||
+      operation ===
+        pdfjs.OPS.paintInlineImageXObject ||
+      operation ===
+        pdfjs.OPS.paintImageMaskXObject ||
+      operation ===
+        pdfjs.OPS.paintSolidColorImageMask
+    ) {
+      hasRasterImage =
+        true
+    }
+  }
+
+
+  if (
+    currentPathSegments.length
+  ) {
+    discardCurrentPath()
+  }
+
+
+  const vertices =
+    []
+
+  const midpoints =
+    []
+
+  for (
+    const segment of
+    segments
+  ) {
+    vertices.push(
+      {
+        source:
+          'pdf',
+
+        segmentId:
+          segment.id,
+
+        point: {
+          ...segment.point1,
+        },
+      },
+      {
+        source:
+          'pdf',
+
+        segmentId:
+          segment.id,
+
+        point: {
+          ...segment.point2,
+        },
+      }
+    )
+
+    midpoints.push({
+      source:
+        'pdf',
+
+      segmentId:
+        segment.id,
+
+      point: {
+        x:
+          (
+            segment.point1.x +
+            segment.point2.x
+          ) / 2,
+
+        y:
+          (
+            segment.point1.y +
+            segment.point2.y
+          ) / 2,
+      },
+    })
+  }
+
+
+  return {
+    pageNumber:
+      page.pageNumber,
+
+    status:
+      segments.length
+        ? 'vector'
+        : hasRasterImage
+          ? 'raster'
+          : 'empty',
+
+    segments,
+    vertices,
+    midpoints,
+    segmentCount:
+      segments.length,
+
+    hasRasterImage,
+    truncated,
+
+    analyzedAt:
+      new Date()
+        .toISOString(),
+  }
+}
+
+
+function drawingGeometryStatusLabel(
+  geometry
+) {
+  if (
+    !geometry
+  ) {
+    return 'Not analyzed'
+  }
+
+  if (
+    geometry.status ===
+    'loading'
+  ) {
+    return 'Analyzing drawing geometry…'
+  }
+
+  if (
+    geometry.status ===
+    'vector'
+  ) {
+    return `Vector · ${geometry.segmentCount.toLocaleString()}${
+      geometry.truncated
+        ? '+'
+        : ''
+    } segments indexed`
+  }
+
+  if (
+    geometry.status ===
+    'raster'
+  ) {
+    return 'Raster · Native drawing snap unavailable'
+  }
+
+  if (
+    geometry.status ===
+    'error'
+  ) {
+    return 'Geometry analysis failed'
+  }
+
+  return 'No native vector linework detected'
+}
+
+
+
+
 function createEntityId() {
   if (
     typeof crypto !==
@@ -2116,6 +3185,12 @@ export default function TakeoffPage() {
     setPdfError,
   ] =
     useState(null)
+
+  const [
+    drawingGeometryByPage,
+    setDrawingGeometryByPage,
+  ] =
+    useState({})
 
 
   // ==========================================================
@@ -2555,6 +3630,12 @@ export default function TakeoffPage() {
     )
 
 
+  const currentDrawingGeometry =
+    drawingGeometryByPage[
+      pageNumber
+    ] || null
+
+
   const currentPageSnapData =
     useMemo(
       () => {
@@ -2570,6 +3651,13 @@ export default function TakeoffPage() {
             (entity) =>
               entitySnapVertices(
                 entity
+              ).map(
+                (candidate) => ({
+                  ...candidate,
+
+                  source:
+                    'takeoff',
+                })
               )
           )
 
@@ -2578,6 +3666,13 @@ export default function TakeoffPage() {
             (entity) =>
               entitySegments(
                 entity
+              ).map(
+                (segment) => ({
+                  ...segment,
+
+                  source:
+                    'takeoff',
+                })
               )
           )
 
@@ -2586,6 +3681,9 @@ export default function TakeoffPage() {
             (segment) => ({
               entityId:
                 segment.entityId,
+
+              source:
+                'takeoff',
 
               point: {
                 x:
@@ -2650,6 +3748,9 @@ export default function TakeoffPage() {
                   firstSegment.entityId,
                   secondSegment.entityId,
                 ],
+
+                source:
+                  'takeoff',
 
                 point:
                   intersection,
@@ -3945,6 +5046,10 @@ export default function TakeoffPage() {
         {}
       )
 
+      setDrawingGeometryByPage(
+        {}
+      )
+
       resetTakeoffHistory(
         []
       )
@@ -3983,6 +5088,10 @@ export default function TakeoffPage() {
       )
 
       setCalibrationsByPage(
+        {}
+      )
+
+      setDrawingGeometryByPage(
         {}
       )
 
@@ -4117,6 +5226,102 @@ export default function TakeoffPage() {
           setActiveTool(
             'select'
           )
+
+          setDrawingGeometryByPage(
+            (current) => ({
+              ...current,
+
+              [pageNumber]: {
+                pageNumber,
+
+                status:
+                  'loading',
+
+                segments: [],
+                vertices: [],
+                midpoints: [],
+                segmentCount:
+                  0,
+
+                hasRasterImage:
+                  false,
+
+                truncated:
+                  false,
+              },
+            })
+          )
+
+          try {
+            const [
+              pdfjs,
+              operatorList,
+            ] =
+              await Promise.all([
+                getPdfJs(),
+                page.getOperatorList(),
+              ])
+
+            if (
+              cancelled
+            ) {
+              return
+            }
+
+            const geometry =
+              extractPdfVectorGeometry(
+                page,
+                pdfjs,
+                viewport,
+                operatorList
+              )
+
+            setDrawingGeometryByPage(
+              (current) => ({
+                ...current,
+
+                [pageNumber]:
+                  geometry,
+              })
+            )
+
+          } catch (
+            geometryError
+          ) {
+            console.error(
+              'PDF vector geometry analysis failed.',
+              geometryError
+            )
+
+            if (
+              !cancelled
+            ) {
+              setDrawingGeometryByPage(
+                (current) => ({
+                  ...current,
+
+                  [pageNumber]: {
+                    pageNumber,
+
+                    status:
+                      'error',
+
+                    segments: [],
+                    vertices: [],
+                    midpoints: [],
+                    segmentCount:
+                      0,
+
+                    hasRasterImage:
+                      false,
+
+                    truncated:
+                      false,
+                  },
+                })
+              )
+            }
+          }
 
         } catch (error) {
           console.error(
@@ -4573,41 +5778,195 @@ export default function TakeoffPage() {
           snapEnabled &&
           allowSnap
         ) {
+          const drawingVertices =
+            currentDrawingGeometry
+              ?.status ===
+              'vector'
+              ? currentDrawingGeometry.vertices
+              : []
+
+          const drawingMidpoints =
+            currentDrawingGeometry
+              ?.status ===
+              'vector'
+              ? currentDrawingGeometry.midpoints
+              : []
+
+          const drawingSegments =
+            currentDrawingGeometry
+              ?.status ===
+              'vector'
+              ? currentDrawingGeometry.segments
+              : []
+
+          const combinedSegments = [
+            ...currentPageSnapData.segments.filter(
+              (segment) =>
+                segment.entityId !==
+                excludeEntityId
+            ),
+            ...drawingSegments,
+          ]
+
+          const localSegments =
+            combinedSegments
+              .filter(
+                (segment) =>
+                  pointInsideBoundingBox(
+                    rawPoint,
+                    segmentBoundingBox(
+                      segment,
+                      snapTolerance *
+                        1.25
+                    )
+                  )
+              )
+              .map(
+                (segment) => ({
+                  segment,
+
+                  cursorDistance:
+                    distancePointToSegment(
+                      rawPoint,
+                      segment.point1,
+                      segment.point2
+                    ),
+                })
+              )
+              .sort(
+                (
+                  first,
+                  second
+                ) =>
+                  first.cursorDistance -
+                  second.cursorDistance
+              )
+              .slice(
+                0,
+                120
+              )
+              .map(
+                (entry) =>
+                  entry.segment
+              )
+
+          const localIntersections = [
+            ...currentPageSnapData.intersections.filter(
+              (candidate) =>
+                !excludeEntityId ||
+                !candidate.entityIds.includes(
+                  excludeEntityId
+                )
+            ),
+          ]
+
+          for (
+            let firstIndex = 0;
+            firstIndex <
+              localSegments.length;
+            firstIndex += 1
+          ) {
+            for (
+              let secondIndex =
+                firstIndex + 1;
+              secondIndex <
+                localSegments.length;
+              secondIndex += 1
+            ) {
+              const firstSegment =
+                localSegments[
+                  firstIndex
+                ]
+
+              const secondSegment =
+                localSegments[
+                  secondIndex
+                ]
+
+              if (
+                firstSegment.source ===
+                  'takeoff' &&
+                secondSegment.source ===
+                  'takeoff' &&
+                firstSegment.entityId &&
+                firstSegment.entityId ===
+                  secondSegment.entityId
+              ) {
+                continue
+              }
+
+              const intersection =
+                segmentIntersection(
+                  firstSegment,
+                  secondSegment
+                )
+
+              if (
+                !intersection ||
+                pointDistance(
+                  rawPoint,
+                  intersection
+                ) >
+                  snapTolerance
+              ) {
+                continue
+              }
+
+              localIntersections.push({
+                source:
+                  firstSegment.source ===
+                    'pdf' ||
+                  secondSegment.source ===
+                    'pdf'
+                    ? 'pdf'
+                    : 'takeoff',
+
+                entityIds: [
+                  firstSegment.entityId,
+                  secondSegment.entityId,
+                ].filter(
+                  Boolean
+                ),
+
+                point:
+                  intersection,
+              })
+            }
+          }
+
           const candidateGroups = [
             {
               type:
                 'Endpoint',
 
-              candidates:
-                currentPageSnapData.vertices.filter(
+              candidates: [
+                ...currentPageSnapData.vertices.filter(
                   (candidate) =>
                     candidate.entityId !==
                     excludeEntityId
                 ),
+                ...drawingVertices,
+              ],
             },
             {
               type:
                 'Midpoint',
 
-              candidates:
-                currentPageSnapData.midpoints.filter(
+              candidates: [
+                ...currentPageSnapData.midpoints.filter(
                   (candidate) =>
                     candidate.entityId !==
                     excludeEntityId
                 ),
+                ...drawingMidpoints,
+              ],
             },
             {
               type:
                 'Intersection',
 
               candidates:
-                currentPageSnapData.intersections.filter(
-                  (candidate) =>
-                    !excludeEntityId ||
-                    !candidate.entityIds.includes(
-                      excludeEntityId
-                    )
-                ),
+                localIntersections,
             },
           ]
 
@@ -4657,6 +6016,10 @@ export default function TakeoffPage() {
                   type:
                     group.type,
 
+                  source:
+                    bestCandidate.source ||
+                    'takeoff',
+
                   point: {
                     ...bestCandidate.point,
                   },
@@ -4676,15 +6039,8 @@ export default function TakeoffPage() {
 
           for (
             const segment of
-            currentPageSnapData.segments
+            combinedSegments
           ) {
-            if (
-              segment.entityId ===
-              excludeEntityId
-            ) {
-              continue
-            }
-
             const nearest =
               nearestPointOnSegment(
                 rawPoint,
@@ -4699,8 +6055,13 @@ export default function TakeoffPage() {
               nearest.distance <
                 nearestDistance
             ) {
-              nearestCandidate =
-                nearest
+              nearestCandidate = {
+                ...nearest,
+
+                source:
+                  segment.source ||
+                  'takeoff',
+              }
 
               nearestDistance =
                 nearest.distance
@@ -4718,6 +6079,9 @@ export default function TakeoffPage() {
               snap: {
                 type:
                   'Nearest',
+
+                source:
+                  nearestCandidate.source,
 
                 point: {
                   ...nearestCandidate.point,
@@ -4776,6 +6140,7 @@ export default function TakeoffPage() {
         }
       },
       [
+        currentDrawingGeometry,
         currentPageSnapData,
         effectiveScale,
         snapEnabled,
@@ -8773,7 +10138,10 @@ export default function TakeoffPage() {
                         paintOrder="stroke"
                       >
                         {
-                          snapMarker.type
+                          snapMarker.source ===
+                            'pdf'
+                            ? `${snapMarker.type} · Drawing`
+                            : snapMarker.type
                         }
                       </text>
                     </g>
@@ -10162,6 +11530,26 @@ export default function TakeoffPage() {
                         }
                       </strong>
                     </div>
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Geometry
+                      </span>
+
+                      <strong>
+                        {
+                          pdfDocument
+                            ? drawingGeometryStatusLabel(
+                                currentDrawingGeometry
+                              )
+                            : '—'
+                        }
+                      </strong>
+                    </div>
                   </section>
 
 
@@ -11166,7 +12554,10 @@ export default function TakeoffPage() {
 
                 <strong>
                   {
-                    snapMarker.type
+                    snapMarker.source ===
+                      'pdf'
+                      ? `${snapMarker.type} · Drawing`
+                      : snapMarker.type
                   }
                 </strong>
               </span>
@@ -11352,6 +12743,25 @@ export default function TakeoffPage() {
           >
             GRID
           </button>
+
+
+          <span
+            className={
+              styles.statusMetric
+            }
+          >
+            Geometry
+
+            <strong>
+              {
+                pdfDocument
+                  ? drawingGeometryStatusLabel(
+                      currentDrawingGeometry
+                    )
+                  : '—'
+              }
+            </strong>
+          </span>
 
 
           <span
