@@ -387,7 +387,7 @@ const measurementTools = [
     id: 'polyline',
     label: 'Polyline',
     icon: 'polyline',
-    shortcut: 'PL',
+    shortcut: 'P',
   },
   {
     id: 'area',
@@ -422,7 +422,7 @@ const allTools = [
 
 
 // ============================================================
-// UTILITIES
+// GEOMETRY UTILITIES
 // ============================================================
 
 function clamp(
@@ -574,6 +574,225 @@ function realPolylineLength(
 
   return meters /
     unitFactor
+}
+
+
+function polygonPdfArea(
+  points
+) {
+  if (
+    !Array.isArray(points) ||
+    points.length < 3
+  ) {
+    return 0
+  }
+
+  let total =
+    0
+
+  for (
+    let index = 0;
+    index < points.length;
+    index += 1
+  ) {
+    const current =
+      points[index]
+
+    const next =
+      points[
+        (
+          index + 1
+        ) %
+        points.length
+      ]
+
+    total +=
+      current.x *
+        next.y -
+      next.x *
+        current.y
+  }
+
+  return Math.abs(
+    total
+  ) / 2
+}
+
+
+function realAreaFromPdfArea(
+  pdfArea,
+  calibration
+) {
+  if (
+    !calibration ||
+    !Number.isFinite(
+      pdfArea
+    )
+  ) {
+    return null
+  }
+
+  const squareMeters =
+    pdfArea *
+    calibration.metersPerPdfPoint *
+    calibration.metersPerPdfPoint
+
+  const unitFactor =
+    UNIT_TO_METERS[
+      calibration.displayUnit
+    ]
+
+  if (!unitFactor) {
+    return null
+  }
+
+  return squareMeters /
+    (
+      unitFactor *
+      unitFactor
+    )
+}
+
+
+function realPolygonArea(
+  points,
+  calibration
+) {
+  return realAreaFromPdfArea(
+    polygonPdfArea(
+      points
+    ),
+    calibration
+  )
+}
+
+
+function rectanglePdfArea(
+  point1,
+  point2
+) {
+  if (
+    !point1 ||
+    !point2
+  ) {
+    return 0
+  }
+
+  return Math.abs(
+    point2.x -
+    point1.x
+  ) *
+    Math.abs(
+      point2.y -
+      point1.y
+    )
+}
+
+
+function realRectangleArea(
+  point1,
+  point2,
+  calibration
+) {
+  return realAreaFromPdfArea(
+    rectanglePdfArea(
+      point1,
+      point2
+    ),
+    calibration
+  )
+}
+
+
+function rectangleDimensions(
+  point1,
+  point2,
+  calibration
+) {
+  if (
+    !point1 ||
+    !point2 ||
+    !calibration
+  ) {
+    return null
+  }
+
+  const widthPoint = {
+    x:
+      point2.x,
+
+    y:
+      point1.y,
+  }
+
+  const heightPoint = {
+    x:
+      point1.x,
+
+    y:
+      point2.y,
+  }
+
+  return {
+    width:
+      realDistanceFromPoints(
+        point1,
+        widthPoint,
+        calibration
+      ),
+
+    height:
+      realDistanceFromPoints(
+        point1,
+        heightPoint,
+        calibration
+      ),
+  }
+}
+
+
+function polygonCentroid(
+  points
+) {
+  if (
+    !Array.isArray(points) ||
+    !points.length
+  ) {
+    return {
+      x: 0,
+      y: 0,
+    }
+  }
+
+  const totals =
+    points.reduce(
+      (
+        accumulator,
+        point
+      ) => ({
+        x:
+          accumulator.x +
+          point.x,
+
+        y:
+          accumulator.y +
+          point.y,
+      }),
+      {
+        x: 0,
+        y: 0,
+      }
+    )
+
+  return {
+    x:
+      totals.x /
+      points.length,
+
+    y:
+      totals.y /
+      points.length,
+  }
 }
 
 
@@ -906,6 +1125,34 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
+  // AREA DRAFT
+  // ==========================================================
+
+  const [
+    areaDraft,
+    setAreaDraft,
+  ] =
+    useState({
+      points: [],
+      previewPoint: null,
+    })
+
+
+  // ==========================================================
+  // RECTANGLE DRAFT
+  // ==========================================================
+
+  const [
+    rectangleDraft,
+    setRectangleDraft,
+  ] =
+    useState({
+      point1: null,
+      previewPoint: null,
+    })
+
+
+  // ==========================================================
   // PANELS
   // ==========================================================
 
@@ -1028,31 +1275,59 @@ export default function TakeoffPage() {
     )
 
 
-  const latestDistance =
-    currentPageDistances.length
-      ? currentPageDistances[
-          currentPageDistances.length -
-          1
-        ]
-      : null
+  const currentPageAreas =
+    useMemo(
+      () =>
+        takeoffEntities.filter(
+          (entity) =>
+            entity.pageNumber ===
+              pageNumber &&
+            entity.type ===
+              'area'
+        ),
+      [
+        takeoffEntities,
+        pageNumber,
+      ]
+    )
 
+
+  const currentPageRectangles =
+    useMemo(
+      () =>
+        takeoffEntities.filter(
+          (entity) =>
+            entity.pageNumber ===
+              pageNumber &&
+            entity.type ===
+              'rectangle'
+        ),
+      [
+        takeoffEntities,
+        pageNumber,
+      ]
+    )
+
+
+  const latestDistance =
+    currentPageDistances.at(-1) ||
+    null
 
   const latestLinear =
-    currentPageLinears.length
-      ? currentPageLinears[
-          currentPageLinears.length -
-          1
-        ]
-      : null
-
+    currentPageLinears.at(-1) ||
+    null
 
   const latestPolyline =
-    currentPagePolylines.length
-      ? currentPagePolylines[
-          currentPagePolylines.length -
-          1
-        ]
-      : null
+    currentPagePolylines.at(-1) ||
+    null
+
+  const latestArea =
+    currentPageAreas.at(-1) ||
+    null
+
+  const latestRectangle =
+    currentPageRectangles.at(-1) ||
+    null
 
 
   const previewDistance =
@@ -1119,6 +1394,75 @@ export default function TakeoffPage() {
     previewPolylinePoints.length >= 2
       ? realPolylineLength(
           previewPolylinePoints,
+          currentCalibration
+        )
+      : null
+
+
+  const previewAreaPoints =
+    useMemo(
+      () => {
+        if (
+          activeTool !==
+            'area' ||
+          !areaDraft.points.length
+        ) {
+          return []
+        }
+
+        if (
+          areaDraft.previewPoint
+        ) {
+          return [
+            ...areaDraft.points,
+            areaDraft.previewPoint,
+          ]
+        }
+
+        return [
+          ...areaDraft.points,
+        ]
+      },
+      [
+        activeTool,
+        areaDraft,
+      ]
+    )
+
+
+  const previewArea =
+    currentCalibration &&
+    previewAreaPoints.length >= 3
+      ? realPolygonArea(
+          previewAreaPoints,
+          currentCalibration
+        )
+      : null
+
+
+  const previewRectangleArea =
+    activeTool ===
+      'rectangle' &&
+    rectangleDraft.point1 &&
+    rectangleDraft.previewPoint &&
+    currentCalibration
+      ? realRectangleArea(
+          rectangleDraft.point1,
+          rectangleDraft.previewPoint,
+          currentCalibration
+        )
+      : null
+
+
+  const previewRectangleDimensions =
+    activeTool ===
+      'rectangle' &&
+    rectangleDraft.point1 &&
+    rectangleDraft.previewPoint &&
+    currentCalibration
+      ? rectangleDimensions(
+          rectangleDraft.point1,
+          rectangleDraft.previewPoint,
           currentCalibration
         )
       : null
@@ -1210,6 +1554,49 @@ export default function TakeoffPage() {
     )
 
 
+  const resetAreaDraft =
+    useCallback(
+      () => {
+        setAreaDraft({
+          points: [],
+          previewPoint: null,
+        })
+      },
+      []
+    )
+
+
+  const resetRectangleDraft =
+    useCallback(
+      () => {
+        setRectangleDraft({
+          point1: null,
+          previewPoint: null,
+        })
+      },
+      []
+    )
+
+
+  const resetAllGeometryDrafts =
+    useCallback(
+      () => {
+        resetDistanceDraft()
+        resetLineDraft()
+        resetPolylineDraft()
+        resetAreaDraft()
+        resetRectangleDraft()
+      },
+      [
+        resetDistanceDraft,
+        resetLineDraft,
+        resetPolylineDraft,
+        resetAreaDraft,
+        resetRectangleDraft,
+      ]
+    )
+
+
   // ==========================================================
   // TOOL ACTIVATION
   // ==========================================================
@@ -1227,30 +1614,10 @@ export default function TakeoffPage() {
     }
 
     if (
-      activeTool ===
-      'distance' &&
-      toolId !==
-      'distance'
+      activeTool !==
+      toolId
     ) {
-      resetDistanceDraft()
-    }
-
-    if (
-      activeTool ===
-      'line' &&
-      toolId !==
-      'line'
-    ) {
-      resetLineDraft()
-    }
-
-    if (
-      activeTool ===
-      'polyline' &&
-      toolId !==
-      'polyline'
-    ) {
-      resetPolylineDraft()
+      resetAllGeometryDrafts()
     }
 
     setActiveTool(
@@ -1283,9 +1650,7 @@ export default function TakeoffPage() {
       return
     }
 
-    resetDistanceDraft()
-    resetLineDraft()
-    resetPolylineDraft()
+    resetAllGeometryDrafts()
     resetCalibrationDraft()
 
     if (
@@ -1499,6 +1864,87 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
+  // AREA COMMANDS
+  // ==========================================================
+
+  const finishArea =
+    useCallback(
+      () => {
+        if (
+          activeTool !==
+          'area'
+        ) {
+          return
+        }
+
+        const cleanedPoints =
+          removeConsecutiveDuplicatePoints(
+            areaDraft.points
+          )
+
+        if (
+          cleanedPoints.length <
+          3
+        ) {
+          return
+        }
+
+        const pdfArea =
+          polygonPdfArea(
+            cleanedPoints
+          )
+
+        if (
+          pdfArea <=
+          0.0001
+        ) {
+          return
+        }
+
+        const entity = {
+          id:
+            createEntityId(),
+
+          type:
+            'area',
+
+          pageNumber,
+
+          points:
+            cleanedPoints.map(
+              (point) => ({
+                ...point,
+              })
+            ),
+
+          createdAt:
+            new Date()
+              .toISOString(),
+        }
+
+        setTakeoffEntities(
+          (current) => [
+            ...current,
+            entity,
+          ]
+        )
+
+        resetAreaDraft()
+
+        setInspectorTab(
+          'properties'
+        )
+      },
+      [
+        activeTool,
+        areaDraft.points,
+        pageNumber,
+        resetAreaDraft,
+      ]
+    )
+
+
+  // ==========================================================
   // IMPORT
   // ==========================================================
 
@@ -1629,9 +2075,7 @@ export default function TakeoffPage() {
       )
 
       resetCalibrationDraft()
-      resetDistanceDraft()
-      resetLineDraft()
-      resetPolylineDraft()
+      resetAllGeometryDrafts()
 
       setActiveTool(
         'select'
@@ -1672,9 +2116,7 @@ export default function TakeoffPage() {
       )
 
       resetCalibrationDraft()
-      resetDistanceDraft()
-      resetLineDraft()
-      resetPolylineDraft()
+      resetAllGeometryDrafts()
 
       setPdfError(
         'The PDF could not be opened.'
@@ -1791,9 +2233,7 @@ export default function TakeoffPage() {
           })
 
           resetCalibrationDraft()
-          resetDistanceDraft()
-          resetLineDraft()
-          resetPolylineDraft()
+          resetAllGeometryDrafts()
 
           setActiveTool(
             'select'
@@ -1826,9 +2266,7 @@ export default function TakeoffPage() {
       pdfDocument,
       pageNumber,
       resetCalibrationDraft,
-      resetDistanceDraft,
-      resetLineDraft,
-      resetPolylineDraft,
+      resetAllGeometryDrafts,
     ]
   )
 
@@ -2240,7 +2678,6 @@ export default function TakeoffPage() {
       setCalibrationDraft(
         (current) => ({
           ...current,
-
           previewPoint:
             point,
         })
@@ -2255,7 +2692,6 @@ export default function TakeoffPage() {
       setDistanceDraft(
         (current) => ({
           ...current,
-
           previewPoint:
             point,
         })
@@ -2270,7 +2706,6 @@ export default function TakeoffPage() {
       setLineDraft(
         (current) => ({
           ...current,
-
           previewPoint:
             point,
         })
@@ -2285,7 +2720,34 @@ export default function TakeoffPage() {
       setPolylineDraft(
         (current) => ({
           ...current,
+          previewPoint:
+            point,
+        })
+      )
+    }
 
+    if (
+      activeTool ===
+        'area' &&
+      areaDraft.points.length
+    ) {
+      setAreaDraft(
+        (current) => ({
+          ...current,
+          previewPoint:
+            point,
+        })
+      )
+    }
+
+    if (
+      activeTool ===
+        'rectangle' &&
+      rectangleDraft.point1
+    ) {
+      setRectangleDraft(
+        (current) => ({
+          ...current,
           previewPoint:
             point,
         })
@@ -2468,6 +2930,34 @@ export default function TakeoffPage() {
 
 
     // ========================================================
+    // REQUIRE CALIBRATION
+    // ========================================================
+
+    if (
+      [
+        'distance',
+        'line',
+        'polyline',
+        'area',
+        'rectangle',
+      ].includes(
+        activeTool
+      ) &&
+      !currentCalibration
+    ) {
+      setInspectorTab(
+        'properties'
+      )
+
+      setInspectorOpen(
+        true
+      )
+
+      return
+    }
+
+
+    // ========================================================
     // DISTANCE
     // ========================================================
 
@@ -2476,20 +2966,6 @@ export default function TakeoffPage() {
       'distance'
     ) {
       event.preventDefault()
-
-      if (
-        !currentCalibration
-      ) {
-        setInspectorTab(
-          'properties'
-        )
-
-        setInspectorOpen(
-          true
-        )
-
-        return
-      }
 
       if (
         !distanceDraft.point1
@@ -2505,54 +2981,45 @@ export default function TakeoffPage() {
         return
       }
 
-      const pdfLength =
+      if (
         pointDistance(
           distanceDraft.point1,
           point
-        )
-
-      if (
-        pdfLength <
+        ) <
         0.0001
       ) {
         return
       }
 
-      const entity = {
-        id:
-          createEntityId(),
-
-        type:
-          'distance',
-
-        pageNumber,
-
-        points: [
-          {
-            ...distanceDraft.point1,
-          },
-          {
-            ...point,
-          },
-        ],
-
-        createdAt:
-          new Date()
-            .toISOString(),
-      }
-
       setTakeoffEntities(
         (current) => [
           ...current,
-          entity,
+          {
+            id:
+              createEntityId(),
+
+            type:
+              'distance',
+
+            pageNumber,
+
+            points: [
+              {
+                ...distanceDraft.point1,
+              },
+              {
+                ...point,
+              },
+            ],
+
+            createdAt:
+              new Date()
+                .toISOString(),
+          },
         ]
       )
 
       resetDistanceDraft()
-
-      setInspectorTab(
-        'properties'
-      )
 
       return
     }
@@ -2569,20 +3036,6 @@ export default function TakeoffPage() {
       event.preventDefault()
 
       if (
-        !currentCalibration
-      ) {
-        setInspectorTab(
-          'properties'
-        )
-
-        setInspectorOpen(
-          true
-        )
-
-        return
-      }
-
-      if (
         !lineDraft.point1
       ) {
         setLineDraft({
@@ -2596,54 +3049,45 @@ export default function TakeoffPage() {
         return
       }
 
-      const pdfLength =
+      if (
         pointDistance(
           lineDraft.point1,
           point
-        )
-
-      if (
-        pdfLength <
+        ) <
         0.0001
       ) {
         return
       }
 
-      const entity = {
-        id:
-          createEntityId(),
-
-        type:
-          'linear',
-
-        pageNumber,
-
-        points: [
-          {
-            ...lineDraft.point1,
-          },
-          {
-            ...point,
-          },
-        ],
-
-        createdAt:
-          new Date()
-            .toISOString(),
-      }
-
       setTakeoffEntities(
         (current) => [
           ...current,
-          entity,
+          {
+            id:
+              createEntityId(),
+
+            type:
+              'linear',
+
+            pageNumber,
+
+            points: [
+              {
+                ...lineDraft.point1,
+              },
+              {
+                ...point,
+              },
+            ],
+
+            createdAt:
+              new Date()
+                .toISOString(),
+          },
         ]
       )
 
       resetLineDraft()
-
-      setInspectorTab(
-        'properties'
-      )
 
       return
     }
@@ -2658,20 +3102,6 @@ export default function TakeoffPage() {
       'polyline'
     ) {
       event.preventDefault()
-
-      if (
-        !currentCalibration
-      ) {
-        setInspectorTab(
-          'properties'
-        )
-
-        setInspectorOpen(
-          true
-        )
-
-        return
-      }
 
       setPolylineDraft(
         (current) => {
@@ -2689,10 +3119,7 @@ export default function TakeoffPage() {
           }
 
           const lastPoint =
-            current.points[
-              current.points.length -
-              1
-            ]
+            current.points.at(-1)
 
           if (
             pointDistance(
@@ -2718,6 +3145,139 @@ export default function TakeoffPage() {
 
       return
     }
+
+
+    // ========================================================
+    // AREA
+    // ========================================================
+
+    if (
+      activeTool ===
+      'area'
+    ) {
+      event.preventDefault()
+
+      setAreaDraft(
+        (current) => {
+          if (
+            !current.points.length
+          ) {
+            return {
+              points: [
+                point,
+              ],
+
+              previewPoint:
+                point,
+            }
+          }
+
+          const lastPoint =
+            current.points.at(-1)
+
+          if (
+            pointDistance(
+              lastPoint,
+              point
+            ) <
+            0.0001
+          ) {
+            return current
+          }
+
+          return {
+            points: [
+              ...current.points,
+              point,
+            ],
+
+            previewPoint:
+              point,
+          }
+        }
+      )
+
+      return
+    }
+
+
+    // ========================================================
+    // RECTANGLE
+    // ========================================================
+
+    if (
+      activeTool ===
+      'rectangle'
+    ) {
+      event.preventDefault()
+
+      if (
+        !rectangleDraft.point1
+      ) {
+        setRectangleDraft({
+          point1:
+            point,
+
+          previewPoint:
+            point,
+        })
+
+        return
+      }
+
+      const width =
+        Math.abs(
+          point.x -
+          rectangleDraft.point1.x
+        )
+
+      const height =
+        Math.abs(
+          point.y -
+          rectangleDraft.point1.y
+        )
+
+      if (
+        width <
+          0.0001 ||
+        height <
+          0.0001
+      ) {
+        return
+      }
+
+      setTakeoffEntities(
+        (current) => [
+          ...current,
+          {
+            id:
+              createEntityId(),
+
+            type:
+              'rectangle',
+
+            pageNumber,
+
+            points: [
+              {
+                ...rectangleDraft.point1,
+              },
+              {
+                ...point,
+              },
+            ],
+
+            createdAt:
+              new Date()
+                .toISOString(),
+          },
+        ]
+      )
+
+      resetRectangleDraft()
+
+      return
+    }
   }
 
 
@@ -2729,15 +3289,21 @@ export default function TakeoffPage() {
     event
   ) {
     if (
-      activeTool !==
+      activeTool ===
       'polyline'
     ) {
+      event.preventDefault()
+      finishPolyline()
       return
     }
 
-    event.preventDefault()
-
-    finishPolyline()
+    if (
+      activeTool ===
+      'area'
+    ) {
+      event.preventDefault()
+      finishArea()
+    }
   }
 
 
@@ -2917,17 +3483,13 @@ export default function TakeoffPage() {
         }
 
 
-        // ====================================================
-        // ENTER
-        // ====================================================
-
         if (
           event.key ===
           'Enter'
         ) {
           if (
             activeTool ===
-            'polyline' &&
+              'polyline' &&
             polylineDraft.points.length >=
               2
           ) {
@@ -2937,12 +3499,21 @@ export default function TakeoffPage() {
 
             return
           }
+
+          if (
+            activeTool ===
+              'area' &&
+            areaDraft.points.length >=
+              3
+          ) {
+            event.preventDefault()
+
+            finishArea()
+
+            return
+          }
         }
 
-
-        // ====================================================
-        // ESCAPE
-        // ====================================================
 
         if (
           event.key ===
@@ -2959,58 +3530,46 @@ export default function TakeoffPage() {
 
           if (
             activeTool ===
-            'distance'
+              'distance' &&
+            distanceDraft.point1
           ) {
-            if (
-              distanceDraft.point1
-            ) {
-              resetDistanceDraft()
-
-              return
-            }
-
-            setActiveTool(
-              'select'
-            )
-
+            resetDistanceDraft()
             return
           }
 
           if (
             activeTool ===
-            'line'
+              'line' &&
+            lineDraft.point1
           ) {
-            if (
-              lineDraft.point1
-            ) {
-              resetLineDraft()
-
-              return
-            }
-
-            setActiveTool(
-              'select'
-            )
-
+            resetLineDraft()
             return
           }
 
           if (
             activeTool ===
-            'polyline'
+              'polyline' &&
+            polylineDraft.points.length
           ) {
-            if (
-              polylineDraft.points.length
-            ) {
-              resetPolylineDraft()
+            resetPolylineDraft()
+            return
+          }
 
-              return
-            }
+          if (
+            activeTool ===
+              'area' &&
+            areaDraft.points.length
+          ) {
+            resetAreaDraft()
+            return
+          }
 
-            setActiveTool(
-              'select'
-            )
-
+          if (
+            activeTool ===
+              'rectangle' &&
+            rectangleDraft.point1
+          ) {
+            resetRectangleDraft()
             return
           }
 
@@ -3029,7 +3588,6 @@ export default function TakeoffPage() {
         const key =
           event.key
             .toLowerCase()
-
 
         if (
           key ===
@@ -3131,16 +3689,21 @@ export default function TakeoffPage() {
     },
     [
       activeTool,
+      areaDraft,
       cancelCalibration,
       distanceDraft,
-      lineDraft,
-      polylineDraft,
+      finishArea,
       finishPolyline,
       fitPage,
       fitWidth,
+      lineDraft,
+      polylineDraft,
+      rectangleDraft,
+      resetAreaDraft,
       resetDistanceDraft,
       resetLineDraft,
       resetPolylineDraft,
+      resetRectangleDraft,
     ]
   )
 
@@ -3209,14 +3772,16 @@ export default function TakeoffPage() {
       'zoom-in'
 
   } else if (
-    activeTool ===
-      'calibrate' ||
-    activeTool ===
-      'distance' ||
-    activeTool ===
-      'line' ||
-    activeTool ===
-      'polyline'
+    [
+      'calibrate',
+      'distance',
+      'line',
+      'polyline',
+      'area',
+      'rectangle',
+    ].includes(
+      activeTool
+    )
   ) {
     viewportCursor =
       'crosshair'
@@ -3239,143 +3804,18 @@ export default function TakeoffPage() {
       : 'Not calibrated'
 
 
-  let calibrationInstruction =
+  let commandName =
     null
-
-  if (
-    activeTool ===
-    'calibrate'
-  ) {
-    if (
-      !calibrationDraft.point1
-    ) {
-      calibrationInstruction =
-        'Click the first reference point.'
-    } else if (
-      !calibrationDraft.point2
-    ) {
-      calibrationInstruction =
-        'Click the second reference point.'
-    } else {
-      calibrationInstruction =
-        'Enter the known real distance.'
-    }
-  }
-
-
-  let distanceInstruction =
-    null
-
-  if (
-    activeTool ===
-    'distance'
-  ) {
-    if (
-      !currentCalibration
-    ) {
-      distanceInstruction =
-        'Calibrate this page before measuring distance.'
-    } else if (
-      !distanceDraft.point1
-    ) {
-      distanceInstruction =
-        'Click the first measurement point.'
-    } else {
-      distanceInstruction =
-        'Click the second measurement point.'
-    }
-  }
-
-
-  let lineInstruction =
-    null
-
-  if (
-    activeTool ===
-    'line'
-  ) {
-    if (
-      !currentCalibration
-    ) {
-      lineInstruction =
-        'Calibrate this page before creating linear takeoff.'
-    } else if (
-      !lineDraft.point1
-    ) {
-      lineInstruction =
-        'Click the first linear takeoff point.'
-    } else {
-      lineInstruction =
-        'Click the second point to save the linear quantity.'
-    }
-  }
-
-
-  let polylineInstruction =
-    null
-
-  if (
-    activeTool ===
-    'polyline'
-  ) {
-    if (
-      !currentCalibration
-    ) {
-      polylineInstruction =
-        'Calibrate this page before creating polyline takeoff.'
-    } else if (
-      !polylineDraft.points.length
-    ) {
-      polylineInstruction =
-        'Click the first polyline point.'
-    } else if (
-      polylineDraft.points.length ===
-      1
-    ) {
-      polylineInstruction =
-        'Click the next point. Continue adding vertices.'
-    } else {
-      polylineInstruction =
-        'Continue clicking vertices. Enter or double-click to finish.'
-    }
-  }
-
 
   let commandInstruction =
     null
 
-  if (
-    activeTool ===
-    'calibrate'
-  ) {
-    commandInstruction =
-      calibrationInstruction
-
-  } else if (
-    activeTool ===
-    'distance'
-  ) {
-    commandInstruction =
-      distanceInstruction
-
-  } else if (
-    activeTool ===
-    'line'
-  ) {
-    commandInstruction =
-      lineInstruction
-
-  } else if (
-    activeTool ===
-    'polyline'
-  ) {
-    commandInstruction =
-      polylineInstruction
-  }
-
-
-  let commandName =
+  let liveLength =
     null
+
+  let liveArea =
+    null
+
 
   if (
     activeTool ===
@@ -3384,12 +3824,45 @@ export default function TakeoffPage() {
     commandName =
       'CALIBRATE'
 
+    if (
+      !calibrationDraft.point1
+    ) {
+      commandInstruction =
+        'Click the first reference point.'
+    } else if (
+      !calibrationDraft.point2
+    ) {
+      commandInstruction =
+        'Click the second reference point.'
+    } else {
+      commandInstruction =
+        'Enter the known real distance.'
+    }
+
   } else if (
     activeTool ===
     'distance'
   ) {
     commandName =
       'DISTANCE'
+
+    if (
+      !currentCalibration
+    ) {
+      commandInstruction =
+        'Calibrate this page before measuring distance.'
+    } else if (
+      !distanceDraft.point1
+    ) {
+      commandInstruction =
+        'Click the first measurement point.'
+    } else {
+      commandInstruction =
+        'Click the second measurement point.'
+    }
+
+    liveLength =
+      previewDistance
 
   } else if (
     activeTool ===
@@ -3398,39 +3871,127 @@ export default function TakeoffPage() {
     commandName =
       'LINEAR'
 
-  } else if (
-    activeTool ===
-    'polyline'
-  ) {
-    commandName =
-      'POLYLINE'
-  }
+    if (
+      !currentCalibration
+    ) {
+      commandInstruction =
+        'Calibrate this page before creating linear takeoff.'
+    } else if (
+      !lineDraft.point1
+    ) {
+      commandInstruction =
+        'Click the first linear takeoff point.'
+    } else {
+      commandInstruction =
+        'Click the second point to save the linear quantity.'
+    }
 
-
-  let liveQuantity =
-    null
-
-  if (
-    activeTool ===
-    'distance'
-  ) {
-    liveQuantity =
-      previewDistance
-
-  } else if (
-    activeTool ===
-    'line'
-  ) {
-    liveQuantity =
+    liveLength =
       previewLinear
 
   } else if (
     activeTool ===
     'polyline'
   ) {
-    liveQuantity =
+    commandName =
+      'POLYLINE'
+
+    if (
+      !currentCalibration
+    ) {
+      commandInstruction =
+        'Calibrate this page before creating polyline takeoff.'
+    } else if (
+      !polylineDraft.points.length
+    ) {
+      commandInstruction =
+        'Click the first polyline point.'
+    } else if (
+      polylineDraft.points.length ===
+      1
+    ) {
+      commandInstruction =
+        'Click the next point. Continue adding vertices.'
+    } else {
+      commandInstruction =
+        'Continue clicking vertices. Enter or double-click to finish.'
+    }
+
+    liveLength =
       previewPolyline
+
+  } else if (
+    activeTool ===
+    'area'
+  ) {
+    commandName =
+      'AREA'
+
+    if (
+      !currentCalibration
+    ) {
+      commandInstruction =
+        'Calibrate this page before creating area takeoff.'
+    } else if (
+      !areaDraft.points.length
+    ) {
+      commandInstruction =
+        'Click the first polygon point.'
+    } else if (
+      areaDraft.points.length <
+      3
+    ) {
+      commandInstruction =
+        'Continue adding polygon points.'
+    } else {
+      commandInstruction =
+        'Continue clicking vertices. Enter or double-click to finish.'
+    }
+
+    liveArea =
+      previewArea
+
+  } else if (
+    activeTool ===
+    'rectangle'
+  ) {
+    commandName =
+      'RECTANGLE'
+
+    if (
+      !currentCalibration
+    ) {
+      commandInstruction =
+        'Calibrate this page before creating rectangle takeoff.'
+    } else if (
+      !rectangleDraft.point1
+    ) {
+      commandInstruction =
+        'Click the first rectangle corner.'
+    } else {
+      commandInstruction =
+        'Click the opposite corner to save the area.'
+    }
+
+    liveArea =
+      previewRectangleArea
   }
+
+
+  // ==========================================================
+  // RENDER HELPERS
+  // ==========================================================
+
+  const geometryScale =
+    Math.max(
+      effectiveScale,
+      0.01
+    )
+
+  const areaUnit =
+    currentCalibration
+      ? `${currentCalibration.displayUnit}²`
+      : '—'
 
 
   // ==========================================================
@@ -3541,7 +4102,6 @@ export default function TakeoffPage() {
             styles.headerCenter
           }
         >
-
           <span
             className={
               styles.headerDrawingName
@@ -3556,7 +4116,6 @@ export default function TakeoffPage() {
               'No drawing loaded'
             }
           </span>
-
         </div>
 
 
@@ -3572,7 +4131,6 @@ export default function TakeoffPage() {
                 styles.pageControl
               }
             >
-
               <button
                 type="button"
                 onClick={
@@ -3589,11 +4147,9 @@ export default function TakeoffPage() {
                 />
               </button>
 
-
               <strong>
                 {pageNumber}/{pageCount}
               </strong>
-
 
               <button
                 type="button"
@@ -3611,7 +4167,6 @@ export default function TakeoffPage() {
                   size={16}
                 />
               </button>
-
             </div>
           )}
 
@@ -3656,37 +4211,26 @@ export default function TakeoffPage() {
             style={{
               display:
                 'inline-flex',
-
               alignItems:
                 'center',
-
               justifyContent:
                 'center',
-
               flex:
                 '0 0 auto',
-
               height:
                 34,
-
               padding:
                 '3px 8px',
-
               marginLeft:
                 4,
-
               border:
                 '1px solid #a7e5dc',
-
               borderRadius:
                 8,
-
               background:
                 '#ffffff',
-
               textDecoration:
                 'none',
-
               overflow:
                 'hidden',
             }}
@@ -3697,16 +4241,12 @@ export default function TakeoffPage() {
               style={{
                 display:
                   'block',
-
                 width:
                   'auto',
-
                 height:
                   24,
-
                 maxWidth:
                   140,
-
                 objectFit:
                   'contain',
               }}
@@ -3768,12 +4308,8 @@ export default function TakeoffPage() {
                 ? styles.toolbarButtonActive
                 : '',
             ]
-              .filter(
-                Boolean
-              )
-              .join(
-                ' '
-              )}
+              .filter(Boolean)
+              .join(' ')}
             onClick={() =>
               setDrawingDrawerOpen(
                 (current) =>
@@ -3821,12 +4357,8 @@ export default function TakeoffPage() {
                     ? styles.toolbarButtonActive
                     : '',
                 ]
-                  .filter(
-                    Boolean
-                  )
-                  .join(
-                    ' '
-                  )}
+                  .filter(Boolean)
+                  .join(' ')}
                 onClick={() =>
                   activateTool(
                     tool.id
@@ -3930,12 +4462,8 @@ export default function TakeoffPage() {
                     ? styles.toolbarButtonActive
                     : '',
                 ]
-                  .filter(
-                    Boolean
-                  )
-                  .join(
-                    ' '
-                  )}
+                  .filter(Boolean)
+                  .join(' ')}
                 onClick={() =>
                   activateTool(
                     tool.id
@@ -3986,12 +4514,8 @@ export default function TakeoffPage() {
                 ? styles.toolbarButtonActive
                 : '',
             ]
-              .filter(
-                Boolean
-              )
-              .join(
-                ' '
-              )}
+              .filter(Boolean)
+              .join(' ')}
             onClick={
               startCalibration
             }
@@ -4070,12 +4594,8 @@ export default function TakeoffPage() {
               ? styles.viewportGrid
               : '',
           ]
-            .filter(
-              Boolean
-            )
-            .join(
-              ' '
-            )}
+            .filter(Boolean)
+            .join(' ')}
           onPointerDown={
             handlePointerDown
           }
@@ -4102,14 +4622,11 @@ export default function TakeoffPage() {
 
               if (
                 activeTool ===
-                  'calibrate' &&
-                calibrationDraft.point1 &&
-                !calibrationDraft.point2
+                  'calibrate'
               ) {
                 setCalibrationDraft(
                   (current) => ({
                     ...current,
-
                     previewPoint:
                       null,
                   })
@@ -4118,13 +4635,11 @@ export default function TakeoffPage() {
 
               if (
                 activeTool ===
-                  'distance' &&
-                distanceDraft.point1
+                  'distance'
               ) {
                 setDistanceDraft(
                   (current) => ({
                     ...current,
-
                     previewPoint:
                       null,
                   })
@@ -4133,13 +4648,11 @@ export default function TakeoffPage() {
 
               if (
                 activeTool ===
-                  'line' &&
-                lineDraft.point1
+                  'line'
               ) {
                 setLineDraft(
                   (current) => ({
                     ...current,
-
                     previewPoint:
                       null,
                   })
@@ -4148,13 +4661,37 @@ export default function TakeoffPage() {
 
               if (
                 activeTool ===
-                  'polyline' &&
-                polylineDraft.points.length
+                  'polyline'
               ) {
                 setPolylineDraft(
                   (current) => ({
                     ...current,
+                    previewPoint:
+                      null,
+                  })
+                )
+              }
 
+              if (
+                activeTool ===
+                  'area'
+              ) {
+                setAreaDraft(
+                  (current) => ({
+                    ...current,
+                    previewPoint:
+                      null,
+                  })
+                )
+              }
+
+              if (
+                activeTool ===
+                  'rectangle'
+              ) {
+                setRectangleDraft(
+                  (current) => ({
+                    ...current,
                     previewPoint:
                       null,
                   })
@@ -4194,17 +4731,14 @@ export default function TakeoffPage() {
                 />
               </div>
 
-
               <h2>
                 Import a drawing
               </h2>
-
 
               <p>
                 Load a PDF drawing to start CAD navigation,
                 scale calibration, and takeoff.
               </p>
-
 
               {pdfError && (
                 <span
@@ -4217,7 +4751,6 @@ export default function TakeoffPage() {
                   }
                 </span>
               )}
-
 
               <button
                 type="button"
@@ -4297,101 +4830,71 @@ export default function TakeoffPage() {
               >
 
                 {/* ============================================
-                    SAVED CALIBRATION
+                    CALIBRATION
                 ============================================ */}
 
                 {currentCalibration && (
                   <g>
                     <line
                       x1={
-                        currentCalibration
-                          .point1
-                          .x
+                        currentCalibration.point1.x
                       }
                       y1={
-                        currentCalibration
-                          .point1
-                          .y
+                        currentCalibration.point1.y
                       }
                       x2={
-                        currentCalibration
-                          .point2
-                          .x
+                        currentCalibration.point2.x
                       }
                       y2={
-                        currentCalibration
-                          .point2
-                          .y
+                        currentCalibration.point2.y
                       }
                       stroke="#14b8a6"
                       strokeWidth="2"
                       vectorEffect="non-scaling-stroke"
                     />
 
-                    <circle
-                      cx={
-                        currentCalibration
-                          .point1
-                          .x
-                      }
-                      cy={
-                        currentCalibration
-                          .point1
-                          .y
-                      }
-                      r={
-                        4 /
-                        Math.max(
-                          effectiveScale,
-                          0.01
+                    {[currentCalibration.point1, currentCalibration.point2]
+                      .map(
+                        (
+                          point,
+                          index
+                        ) => (
+                          <circle
+                            key={`calibration-${index}`}
+                            cx={
+                              point.x
+                            }
+                            cy={
+                              point.y
+                            }
+                            r={
+                              4 /
+                              geometryScale
+                            }
+                            fill="#ffffff"
+                            stroke="#14b8a6"
+                            strokeWidth="2"
+                            vectorEffect="non-scaling-stroke"
+                          />
                         )
-                      }
-                      fill="#ffffff"
-                      stroke="#14b8a6"
-                      strokeWidth="2"
-                      vectorEffect="non-scaling-stroke"
-                    />
-
-                    <circle
-                      cx={
-                        currentCalibration
-                          .point2
-                          .x
-                      }
-                      cy={
-                        currentCalibration
-                          .point2
-                          .y
-                      }
-                      r={
-                        4 /
-                        Math.max(
-                          effectiveScale,
-                          0.01
-                        )
-                      }
-                      fill="#ffffff"
-                      stroke="#14b8a6"
-                      strokeWidth="2"
-                      vectorEffect="non-scaling-stroke"
-                    />
+                      )}
                   </g>
                 )}
 
 
                 {/* ============================================
-                    SAVED DISTANCES
+                    DISTANCE
                 ============================================ */}
 
                 {currentPageDistances.map(
                   (entity) => {
-                    const point1 =
-                      entity.points[0]
+                    const [
+                      point1,
+                      point2,
+                    ] =
+                      entity.points
 
-                    const point2 =
-                      entity.points[1]
-
-                    const distance =
+                    const quantity =
                       realDistanceFromPoints(
                         point1,
                         point2,
@@ -4403,25 +4906,13 @@ export default function TakeoffPage() {
                         (
                           point1.x +
                           point2.x
-                        ) /
-                        2,
-
+                        ) / 2,
                       y:
                         (
                           point1.y +
                           point2.y
-                        ) /
-                        2,
+                        ) / 2,
                     }
-
-                    const label =
-                      currentCalibration &&
-                      distance !== null
-                        ? `${formatNumber(
-                            distance,
-                            2
-                          )} ${currentCalibration.displayUnit}`
-                        : 'Unscaled'
 
                     return (
                       <g
@@ -4447,114 +4938,38 @@ export default function TakeoffPage() {
                           vectorEffect="non-scaling-stroke"
                         />
 
-                        <circle
-                          cx={
-                            point1.x
+                        <text
+                          x={
+                            midpoint.x
                           }
-                          cy={
-                            point1.y
+                          y={
+                            midpoint.y -
+                            8 /
+                            geometryScale
                           }
-                          r={
-                            4 /
-                            Math.max(
-                              effectiveScale,
-                              0.01
-                            )
+                          textAnchor="middle"
+                          fill="#052c49"
+                          fontSize={
+                            11 /
+                            geometryScale
                           }
-                          fill="#ffffff"
-                          stroke="#2563eb"
-                          strokeWidth="2"
-                          vectorEffect="non-scaling-stroke"
-                        />
-
-                        <circle
-                          cx={
-                            point2.x
+                          fontWeight="800"
+                          stroke="#ffffff"
+                          strokeWidth={
+                            3 /
+                            geometryScale
                           }
-                          cy={
-                            point2.y
-                          }
-                          r={
-                            4 /
-                            Math.max(
-                              effectiveScale,
-                              0.01
-                            )
-                          }
-                          fill="#ffffff"
-                          stroke="#2563eb"
-                          strokeWidth="2"
-                          vectorEffect="non-scaling-stroke"
-                        />
-
-                        <g
-                          transform={`translate(${midpoint.x} ${midpoint.y})`}
+                          paintOrder="stroke"
                         >
-                          <rect
-                            x={
-                              -38 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            y={
-                              -11 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            width={
-                              76 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            height={
-                              22 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            rx={
-                              4 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            fill="rgba(5, 44, 73, 0.94)"
-                          />
-
-                          <text
-                            x="0"
-                            y={
-                              4 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            textAnchor="middle"
-                            fill="#ffffff"
-                            fontSize={
-                              10 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            fontWeight="700"
-                          >
-                            {
-                              label
-                            }
-                          </text>
-                        </g>
-
+                          {
+                            quantity !==
+                              null
+                              ? `${formatNumber(
+                                  quantity
+                                )} ${currentCalibration.displayUnit}`
+                              : 'Unscaled'
+                          }
+                        </text>
                       </g>
                     )
                   }
@@ -4562,18 +4977,18 @@ export default function TakeoffPage() {
 
 
                 {/* ============================================
-                    SAVED LINEAR TAKEOFFS
+                    LINEAR
                 ============================================ */}
 
                 {currentPageLinears.map(
                   (entity) => {
-                    const point1 =
-                      entity.points[0]
+                    const [
+                      point1,
+                      point2,
+                    ] =
+                      entity.points
 
-                    const point2 =
-                      entity.points[1]
-
-                    const length =
+                    const quantity =
                       realDistanceFromPoints(
                         point1,
                         point2,
@@ -4585,25 +5000,13 @@ export default function TakeoffPage() {
                         (
                           point1.x +
                           point2.x
-                        ) /
-                        2,
-
+                        ) / 2,
                       y:
                         (
                           point1.y +
                           point2.y
-                        ) /
-                        2,
+                        ) / 2,
                     }
-
-                    const label =
-                      currentCalibration &&
-                      length !== null
-                        ? `${formatNumber(
-                            length,
-                            2
-                          )} ${currentCalibration.displayUnit}`
-                        : 'Unscaled'
 
                     return (
                       <g
@@ -4629,113 +5032,38 @@ export default function TakeoffPage() {
                           vectorEffect="non-scaling-stroke"
                         />
 
-                        <circle
-                          cx={
-                            point1.x
+                        <text
+                          x={
+                            midpoint.x
                           }
-                          cy={
-                            point1.y
+                          y={
+                            midpoint.y -
+                            8 /
+                            geometryScale
                           }
-                          r={
-                            4 /
-                            Math.max(
-                              effectiveScale,
-                              0.01
-                            )
+                          textAnchor="middle"
+                          fill="#6d28d9"
+                          fontSize={
+                            11 /
+                            geometryScale
                           }
-                          fill="#ffffff"
-                          stroke="#7c3aed"
-                          strokeWidth="2"
-                          vectorEffect="non-scaling-stroke"
-                        />
-
-                        <circle
-                          cx={
-                            point2.x
+                          fontWeight="800"
+                          stroke="#ffffff"
+                          strokeWidth={
+                            3 /
+                            geometryScale
                           }
-                          cy={
-                            point2.y
-                          }
-                          r={
-                            4 /
-                            Math.max(
-                              effectiveScale,
-                              0.01
-                            )
-                          }
-                          fill="#ffffff"
-                          stroke="#7c3aed"
-                          strokeWidth="2"
-                          vectorEffect="non-scaling-stroke"
-                        />
-
-                        <g
-                          transform={`translate(${midpoint.x} ${midpoint.y})`}
+                          paintOrder="stroke"
                         >
-                          <rect
-                            x={
-                              -40 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            y={
-                              -11 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            width={
-                              80 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            height={
-                              22 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            rx={
-                              4 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            fill="rgba(76, 29, 149, 0.94)"
-                          />
-
-                          <text
-                            x="0"
-                            y={
-                              4 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            textAnchor="middle"
-                            fill="#ffffff"
-                            fontSize={
-                              10 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            fontWeight="700"
-                          >
-                            {
-                              label
-                            }
-                          </text>
-                        </g>
+                          {
+                            quantity !==
+                              null
+                              ? `${formatNumber(
+                                  quantity
+                                )} ${currentCalibration.displayUnit}`
+                              : 'Unscaled'
+                          }
+                        </text>
                       </g>
                     )
                   }
@@ -4743,39 +5071,19 @@ export default function TakeoffPage() {
 
 
                 {/* ============================================
-                    SAVED POLYLINES
+                    POLYLINE
                 ============================================ */}
 
                 {currentPagePolylines.map(
                   (entity) => {
-                    const length =
+                    const quantity =
                       realPolylineLength(
                         entity.points,
                         currentCalibration
                       )
 
                     const lastPoint =
-                      entity.points[
-                        entity.points.length -
-                        1
-                      ]
-
-                    const label =
-                      currentCalibration &&
-                      length !== null
-                        ? `${formatNumber(
-                            length,
-                            2
-                          )} ${currentCalibration.displayUnit}`
-                        : 'Unscaled'
-
-                    const pointsAttribute =
-                      entity.points
-                        .map(
-                          (point) =>
-                            `${point.x},${point.y}`
-                        )
-                        .join(' ')
+                      entity.points.at(-1)
 
                     return (
                       <g
@@ -4785,7 +5093,12 @@ export default function TakeoffPage() {
                       >
                         <polyline
                           points={
-                            pointsAttribute
+                            entity.points
+                              .map(
+                                (point) =>
+                                  `${point.x},${point.y}`
+                              )
+                              .join(' ')
                           }
                           fill="none"
                           stroke="#ea580c"
@@ -4795,111 +5108,222 @@ export default function TakeoffPage() {
                           vectorEffect="non-scaling-stroke"
                         />
 
-
-                        {entity.points.map(
-                          (
-                            point,
-                            index
-                          ) => (
-                            <circle
-                              key={
-                                `${entity.id}-${index}`
-                              }
-                              cx={
-                                point.x
-                              }
-                              cy={
-                                point.y
-                              }
-                              r={
-                                4 /
-                                Math.max(
-                                  effectiveScale,
-                                  0.01
-                                )
-                              }
-                              fill="#ffffff"
-                              stroke="#ea580c"
-                              strokeWidth="2"
-                              vectorEffect="non-scaling-stroke"
-                            />
-                          )
-                        )}
-
-
-                        <g
-                          transform={`translate(${lastPoint.x} ${lastPoint.y})`}
+                        <text
+                          x={
+                            lastPoint.x +
+                            8 /
+                            geometryScale
+                          }
+                          y={
+                            lastPoint.y -
+                            8 /
+                            geometryScale
+                          }
+                          fill="#c2410c"
+                          fontSize={
+                            11 /
+                            geometryScale
+                          }
+                          fontWeight="800"
+                          stroke="#ffffff"
+                          strokeWidth={
+                            3 /
+                            geometryScale
+                          }
+                          paintOrder="stroke"
                         >
-                          <rect
-                            x={
-                              8 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            y={
-                              -11 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            width={
-                              82 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            height={
-                              22 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            rx={
-                              4 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            fill="rgba(154, 52, 18, 0.94)"
-                          />
+                          {
+                            quantity !==
+                              null
+                              ? `${formatNumber(
+                                  quantity
+                                )} ${currentCalibration.displayUnit}`
+                              : 'Unscaled'
+                          }
+                        </text>
+                      </g>
+                    )
+                  }
+                )}
 
-                          <text
-                            x={
-                              49 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
+
+                {/* ============================================
+                    AREA
+                ============================================ */}
+
+                {currentPageAreas.map(
+                  (entity) => {
+                    const quantity =
+                      realPolygonArea(
+                        entity.points,
+                        currentCalibration
+                      )
+
+                    const centroid =
+                      polygonCentroid(
+                        entity.points
+                      )
+
+                    return (
+                      <g
+                        key={
+                          entity.id
+                        }
+                      >
+                        <polygon
+                          points={
+                            entity.points
+                              .map(
+                                (point) =>
+                                  `${point.x},${point.y}`
                               )
-                            }
-                            y={
-                              4 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            textAnchor="middle"
-                            fill="#ffffff"
-                            fontSize={
-                              10 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            fontWeight="700"
-                          >
-                            {
-                              label
-                            }
-                          </text>
-                        </g>
+                              .join(' ')
+                          }
+                          fill="rgba(20, 184, 166, 0.20)"
+                          stroke="#0f9f91"
+                          strokeWidth="3"
+                          strokeLinejoin="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <text
+                          x={
+                            centroid.x
+                          }
+                          y={
+                            centroid.y
+                          }
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fill="#087f73"
+                          fontSize={
+                            12 /
+                            geometryScale
+                          }
+                          fontWeight="900"
+                          stroke="#ffffff"
+                          strokeWidth={
+                            3 /
+                            geometryScale
+                          }
+                          paintOrder="stroke"
+                        >
+                          {
+                            quantity !==
+                              null
+                              ? `${formatNumber(
+                                  quantity
+                                )} ${currentCalibration.displayUnit}²`
+                              : 'Unscaled'
+                          }
+                        </text>
+                      </g>
+                    )
+                  }
+                )}
+
+
+                {/* ============================================
+                    RECTANGLE
+                ============================================ */}
+
+                {currentPageRectangles.map(
+                  (entity) => {
+                    const [
+                      point1,
+                      point2,
+                    ] =
+                      entity.points
+
+                    const x =
+                      Math.min(
+                        point1.x,
+                        point2.x
+                      )
+
+                    const y =
+                      Math.min(
+                        point1.y,
+                        point2.y
+                      )
+
+                    const width =
+                      Math.abs(
+                        point2.x -
+                        point1.x
+                      )
+
+                    const height =
+                      Math.abs(
+                        point2.y -
+                        point1.y
+                      )
+
+                    const quantity =
+                      realRectangleArea(
+                        point1,
+                        point2,
+                        currentCalibration
+                      )
+
+                    return (
+                      <g
+                        key={
+                          entity.id
+                        }
+                      >
+                        <rect
+                          x={
+                            x
+                          }
+                          y={
+                            y
+                          }
+                          width={
+                            width
+                          }
+                          height={
+                            height
+                          }
+                          fill="rgba(37, 99, 235, 0.16)"
+                          stroke="#1d4ed8"
+                          strokeWidth="3"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <text
+                          x={
+                            x +
+                            width / 2
+                          }
+                          y={
+                            y +
+                            height / 2
+                          }
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fill="#1d4ed8"
+                          fontSize={
+                            12 /
+                            geometryScale
+                          }
+                          fontWeight="900"
+                          stroke="#ffffff"
+                          strokeWidth={
+                            3 /
+                            geometryScale
+                          }
+                          paintOrder="stroke"
+                        >
+                          {
+                            quantity !==
+                              null
+                              ? `${formatNumber(
+                                  quantity
+                                )} ${currentCalibration.displayUnit}²`
+                              : 'Unscaled'
+                          }
+                        </text>
                       </g>
                     )
                   }
@@ -4914,78 +5338,24 @@ export default function TakeoffPage() {
                   'calibrate' &&
                   calibrationDraft.point1 &&
                   calibrationPreviewEnd && (
-                    <g>
-                      <line
-                        x1={
-                          calibrationDraft
-                            .point1
-                            .x
-                        }
-                        y1={
-                          calibrationDraft
-                            .point1
-                            .y
-                        }
-                        x2={
-                          calibrationPreviewEnd
-                            .x
-                        }
-                        y2={
-                          calibrationPreviewEnd
-                            .y
-                        }
-                        stroke="#f59e0b"
-                        strokeWidth="2"
-                        strokeDasharray="7 5"
-                        vectorEffect="non-scaling-stroke"
-                      />
-
-                      <circle
-                        cx={
-                          calibrationDraft
-                            .point1
-                            .x
-                        }
-                        cy={
-                          calibrationDraft
-                            .point1
-                            .y
-                        }
-                        r={
-                          5 /
-                          Math.max(
-                            effectiveScale,
-                            0.01
-                          )
-                        }
-                        fill="#ffffff"
-                        stroke="#f59e0b"
-                        strokeWidth="2"
-                        vectorEffect="non-scaling-stroke"
-                      />
-
-                      <circle
-                        cx={
-                          calibrationPreviewEnd
-                            .x
-                        }
-                        cy={
-                          calibrationPreviewEnd
-                            .y
-                        }
-                        r={
-                          5 /
-                          Math.max(
-                            effectiveScale,
-                            0.01
-                          )
-                        }
-                        fill="#ffffff"
-                        stroke="#f59e0b"
-                        strokeWidth="2"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    </g>
+                    <line
+                      x1={
+                        calibrationDraft.point1.x
+                      }
+                      y1={
+                        calibrationDraft.point1.y
+                      }
+                      x2={
+                        calibrationPreviewEnd.x
+                      }
+                      y2={
+                        calibrationPreviewEnd.y
+                      }
+                      stroke="#f59e0b"
+                      strokeWidth="2"
+                      strokeDasharray="7 5"
+                      vectorEffect="non-scaling-stroke"
+                    />
                   )}
 
 
@@ -4998,82 +5368,24 @@ export default function TakeoffPage() {
                   distanceDraft.point1 &&
                   distanceDraft.previewPoint &&
                   currentCalibration && (
-                    <g>
-                      <line
-                        x1={
-                          distanceDraft
-                            .point1
-                            .x
-                        }
-                        y1={
-                          distanceDraft
-                            .point1
-                            .y
-                        }
-                        x2={
-                          distanceDraft
-                            .previewPoint
-                            .x
-                        }
-                        y2={
-                          distanceDraft
-                            .previewPoint
-                            .y
-                        }
-                        stroke="#2563eb"
-                        strokeWidth="2"
-                        strokeDasharray="6 4"
-                        vectorEffect="non-scaling-stroke"
-                      />
-
-                      <circle
-                        cx={
-                          distanceDraft
-                            .point1
-                            .x
-                        }
-                        cy={
-                          distanceDraft
-                            .point1
-                            .y
-                        }
-                        r={
-                          5 /
-                          Math.max(
-                            effectiveScale,
-                            0.01
-                          )
-                        }
-                        fill="#ffffff"
-                        stroke="#2563eb"
-                        strokeWidth="2"
-                        vectorEffect="non-scaling-stroke"
-                      />
-
-                      <circle
-                        cx={
-                          distanceDraft
-                            .previewPoint
-                            .x
-                        }
-                        cy={
-                          distanceDraft
-                            .previewPoint
-                            .y
-                        }
-                        r={
-                          5 /
-                          Math.max(
-                            effectiveScale,
-                            0.01
-                          )
-                        }
-                        fill="#ffffff"
-                        stroke="#2563eb"
-                        strokeWidth="2"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    </g>
+                    <line
+                      x1={
+                        distanceDraft.point1.x
+                      }
+                      y1={
+                        distanceDraft.point1.y
+                      }
+                      x2={
+                        distanceDraft.previewPoint.x
+                      }
+                      y2={
+                        distanceDraft.previewPoint.y
+                      }
+                      stroke="#2563eb"
+                      strokeWidth="2"
+                      strokeDasharray="6 4"
+                      vectorEffect="non-scaling-stroke"
+                    />
                   )}
 
 
@@ -5086,82 +5398,24 @@ export default function TakeoffPage() {
                   lineDraft.point1 &&
                   lineDraft.previewPoint &&
                   currentCalibration && (
-                    <g>
-                      <line
-                        x1={
-                          lineDraft
-                            .point1
-                            .x
-                        }
-                        y1={
-                          lineDraft
-                            .point1
-                            .y
-                        }
-                        x2={
-                          lineDraft
-                            .previewPoint
-                            .x
-                        }
-                        y2={
-                          lineDraft
-                            .previewPoint
-                            .y
-                        }
-                        stroke="#7c3aed"
-                        strokeWidth="3"
-                        strokeDasharray="6 4"
-                        vectorEffect="non-scaling-stroke"
-                      />
-
-                      <circle
-                        cx={
-                          lineDraft
-                            .point1
-                            .x
-                        }
-                        cy={
-                          lineDraft
-                            .point1
-                            .y
-                        }
-                        r={
-                          5 /
-                          Math.max(
-                            effectiveScale,
-                            0.01
-                          )
-                        }
-                        fill="#ffffff"
-                        stroke="#7c3aed"
-                        strokeWidth="2"
-                        vectorEffect="non-scaling-stroke"
-                      />
-
-                      <circle
-                        cx={
-                          lineDraft
-                            .previewPoint
-                            .x
-                        }
-                        cy={
-                          lineDraft
-                            .previewPoint
-                            .y
-                        }
-                        r={
-                          5 /
-                          Math.max(
-                            effectiveScale,
-                            0.01
-                          )
-                        }
-                        fill="#ffffff"
-                        stroke="#7c3aed"
-                        strokeWidth="2"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    </g>
+                    <line
+                      x1={
+                        lineDraft.point1.x
+                      }
+                      y1={
+                        lineDraft.point1.y
+                      }
+                      x2={
+                        lineDraft.previewPoint.x
+                      }
+                      y2={
+                        lineDraft.previewPoint.y
+                      }
+                      stroke="#7c3aed"
+                      strokeWidth="3"
+                      strokeDasharray="6 4"
+                      vectorEffect="non-scaling-stroke"
+                    />
                   )}
 
 
@@ -5174,83 +5428,99 @@ export default function TakeoffPage() {
                   previewPolylinePoints.length >=
                     2 &&
                   currentCalibration && (
-                    <g>
-                      <polyline
-                        points={
-                          previewPolylinePoints
-                            .map(
-                              (point) =>
-                                `${point.x},${point.y}`
-                            )
-                            .join(' ')
-                        }
-                        fill="none"
-                        stroke="#ea580c"
-                        strokeWidth="3"
-                        strokeDasharray="6 4"
-                        strokeLinejoin="round"
-                        strokeLinecap="round"
-                        vectorEffect="non-scaling-stroke"
-                      />
+                    <polyline
+                      points={
+                        previewPolylinePoints
+                          .map(
+                            (point) =>
+                              `${point.x},${point.y}`
+                          )
+                          .join(' ')
+                      }
+                      fill="none"
+                      stroke="#ea580c"
+                      strokeWidth="3"
+                      strokeDasharray="6 4"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
 
 
-                      {polylineDraft.points.map(
-                        (
-                          point,
-                          index
-                        ) => (
-                          <circle
-                            key={
-                              `draft-polyline-${index}`
-                            }
-                            cx={
-                              point.x
-                            }
-                            cy={
-                              point.y
-                            }
-                            r={
-                              5 /
-                              Math.max(
-                                effectiveScale,
-                                0.01
-                              )
-                            }
-                            fill="#ffffff"
-                            stroke="#ea580c"
-                            strokeWidth="2"
-                            vectorEffect="non-scaling-stroke"
-                          />
+                {/* ============================================
+                    AREA DRAFT
+                ============================================ */}
+
+                {activeTool ===
+                  'area' &&
+                  previewAreaPoints.length >=
+                    2 &&
+                  currentCalibration && (
+                    <polygon
+                      points={
+                        previewAreaPoints
+                          .map(
+                            (point) =>
+                              `${point.x},${point.y}`
+                          )
+                          .join(' ')
+                      }
+                      fill={
+                        previewAreaPoints.length >=
+                          3
+                          ? 'rgba(20, 184, 166, 0.12)'
+                          : 'none'
+                      }
+                      stroke="#0f9f91"
+                      strokeWidth="3"
+                      strokeDasharray="6 4"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+
+
+                {/* ============================================
+                    RECTANGLE DRAFT
+                ============================================ */}
+
+                {activeTool ===
+                  'rectangle' &&
+                  rectangleDraft.point1 &&
+                  rectangleDraft.previewPoint &&
+                  currentCalibration && (
+                    <rect
+                      x={
+                        Math.min(
+                          rectangleDraft.point1.x,
+                          rectangleDraft.previewPoint.x
                         )
-                      )}
-
-
-                      {polylineDraft.previewPoint && (
-                        <circle
-                          cx={
-                            polylineDraft
-                              .previewPoint
-                              .x
-                          }
-                          cy={
-                            polylineDraft
-                              .previewPoint
-                              .y
-                          }
-                          r={
-                            5 /
-                            Math.max(
-                              effectiveScale,
-                              0.01
-                            )
-                          }
-                          fill="#ffffff"
-                          stroke="#ea580c"
-                          strokeWidth="2"
-                          vectorEffect="non-scaling-stroke"
-                        />
-                      )}
-                    </g>
+                      }
+                      y={
+                        Math.min(
+                          rectangleDraft.point1.y,
+                          rectangleDraft.previewPoint.y
+                        )
+                      }
+                      width={
+                        Math.abs(
+                          rectangleDraft.previewPoint.x -
+                          rectangleDraft.point1.x
+                        )
+                      }
+                      height={
+                        Math.abs(
+                          rectangleDraft.previewPoint.y -
+                          rectangleDraft.point1.y
+                        )
+                      }
+                      fill="rgba(37, 99, 235, 0.10)"
+                      stroke="#1d4ed8"
+                      strokeWidth="3"
+                      strokeDasharray="6 4"
+                      vectorEffect="non-scaling-stroke"
+                    />
                   )}
 
               </svg>
@@ -5275,49 +5545,34 @@ export default function TakeoffPage() {
               style={{
                 position:
                   'absolute',
-
                 left:
                   '50%',
-
                 bottom:
                   18,
-
                 transform:
                   'translateX(-50%)',
-
                 zIndex:
                   40,
-
                 display:
                   'flex',
-
                 alignItems:
                   'center',
-
                 gap:
                   10,
-
                 padding:
                   '9px 14px',
-
                 borderRadius:
                   7,
-
                 background:
                   'rgba(5, 44, 73, 0.94)',
-
                 color:
                   '#ffffff',
-
                 boxShadow:
                   '0 8px 24px rgba(0,0,0,0.18)',
-
                 fontSize:
                   12,
-
                 pointerEvents:
                   'none',
-
                 whiteSpace:
                   'nowrap',
               }}
@@ -5340,7 +5595,7 @@ export default function TakeoffPage() {
               </span>
 
 
-              {liveQuantity !==
+              {liveLength !==
                 null &&
                 currentCalibration && (
                 <strong
@@ -5351,12 +5606,30 @@ export default function TakeoffPage() {
                 >
                   {
                     formatNumber(
-                      liveQuantity,
-                      2
+                      liveLength
                     )
                   } {
-                    currentCalibration
-                      .displayUnit
+                    currentCalibration.displayUnit
+                  }
+                </strong>
+              )}
+
+
+              {liveArea !==
+                null &&
+                currentCalibration && (
+                <strong
+                  style={{
+                    color:
+                      '#5eead4',
+                  }}
+                >
+                  {
+                    formatNumber(
+                      liveArea
+                    )
+                  } {
+                    areaUnit
                   }
                 </strong>
               )}
@@ -5375,7 +5648,7 @@ export default function TakeoffPage() {
 
 
           {/* ==================================================
-              DRAWING DRAWER
+              DRAWINGS DRAWER
           ================================================== */}
 
           {drawingDrawerOpen && (
@@ -5390,7 +5663,6 @@ export default function TakeoffPage() {
                   styles.drawerHeader
                 }
               >
-
                 <div>
                   <strong>
                     Drawings
@@ -5400,7 +5672,6 @@ export default function TakeoffPage() {
                     Pages & files
                   </span>
                 </div>
-
 
                 <button
                   type="button"
@@ -5416,7 +5687,6 @@ export default function TakeoffPage() {
                     size={16}
                   />
                 </button>
-
               </div>
 
 
@@ -5444,7 +5714,6 @@ export default function TakeoffPage() {
                         styles.drawingCard
                       }
                     >
-
                       <Icon
                         type="drawings"
                       />
@@ -5464,7 +5733,6 @@ export default function TakeoffPage() {
                           }
                         </span>
                       </div>
-
                     </div>
 
 
@@ -5473,7 +5741,6 @@ export default function TakeoffPage() {
                         styles.pageList
                       }
                     >
-
                       {Array.from(
                         {
                           length:
@@ -5523,7 +5790,6 @@ export default function TakeoffPage() {
                           )
                         }
                       )}
-
                     </div>
                   </>
                 )}
@@ -5631,7 +5897,7 @@ export default function TakeoffPage() {
                 <>
 
                   {/* ==========================================
-                      CALIBRATION WORKFLOW
+                      CALIBRATION
                   ========================================== */}
 
                   {activeTool ===
@@ -5641,41 +5907,32 @@ export default function TakeoffPage() {
                         styles.propertySection
                       }
                     >
-
                       <h3>
                         Scale Calibration
                       </h3>
-
 
                       <div
                         style={{
                           marginBottom:
                             12,
-
                           padding:
                             '10px 11px',
-
                           border:
                             '1px solid #d8e1e8',
-
                           borderRadius:
                             6,
-
                           background:
                             '#f8fafc',
-
                           color:
                             '#334155',
-
                           fontSize:
                             12,
-
                           lineHeight:
                             1.45,
                         }}
                       >
                         {
-                          calibrationInstruction
+                          commandInstruction
                         }
                       </div>
 
@@ -5691,16 +5948,11 @@ export default function TakeoffPage() {
 
                         <strong>
                           {
-                            calibrationDraft
-                              .point1
+                            calibrationDraft.point1
                               ? `${formatNumber(
-                                  calibrationDraft
-                                    .point1
-                                    .x
+                                  calibrationDraft.point1.x
                                 )}, ${formatNumber(
-                                  calibrationDraft
-                                    .point1
-                                    .y
+                                  calibrationDraft.point1.y
                                 )}`
                               : 'Waiting'
                           }
@@ -5719,16 +5971,11 @@ export default function TakeoffPage() {
 
                         <strong>
                           {
-                            calibrationDraft
-                              .point2
+                            calibrationDraft.point2
                               ? `${formatNumber(
-                                  calibrationDraft
-                                    .point2
-                                    .x
+                                  calibrationDraft.point2.x
                                 )}, ${formatNumber(
-                                  calibrationDraft
-                                    .point2
-                                    .y
+                                  calibrationDraft.point2.y
                                 )}`
                               : 'Waiting'
                           }
@@ -5741,26 +5988,20 @@ export default function TakeoffPage() {
                           style={{
                             display:
                               'grid',
-
                             gap:
                               10,
-
                             marginTop:
                               14,
                           }}
                         >
-
                           <label
                             style={{
                               display:
                                 'grid',
-
                               gap:
                                 5,
-
                               fontSize:
                                 12,
-
                               color:
                                 '#475569',
                             }}
@@ -5779,9 +6020,7 @@ export default function TakeoffPage() {
                                 event
                               ) => {
                                 setCalibrationDistance(
-                                  event
-                                    .target
-                                    .value
+                                  event.target.value
                                 )
 
                                 setCalibrationError(
@@ -5802,28 +6041,20 @@ export default function TakeoffPage() {
                               style={{
                                 width:
                                   '100%',
-
                                 boxSizing:
                                   'border-box',
-
                                 height:
                                   36,
-
                                 border:
                                   '1px solid #cbd5e1',
-
                                 borderRadius:
                                   5,
-
                                 padding:
                                   '0 10px',
-
                                 background:
                                   '#ffffff',
-
                                 color:
                                   '#0f172a',
-
                                 outline:
                                   'none',
                               }}
@@ -5835,13 +6066,10 @@ export default function TakeoffPage() {
                             style={{
                               display:
                                 'grid',
-
                               gap:
                                 5,
-
                               fontSize:
                                 12,
-
                               color:
                                 '#475569',
                             }}
@@ -5856,9 +6084,7 @@ export default function TakeoffPage() {
                                 event
                               ) => {
                                 setCalibrationUnit(
-                                  event
-                                    .target
-                                    .value
+                                  event.target.value
                                 )
 
                                 setCalibrationError(
@@ -5868,30 +6094,20 @@ export default function TakeoffPage() {
                               style={{
                                 width:
                                   '100%',
-
                                 boxSizing:
                                   'border-box',
-
                                 height:
                                   36,
-
                                 border:
                                   '1px solid #cbd5e1',
-
                                 borderRadius:
                                   5,
-
                                 padding:
                                   '0 10px',
-
                                 background:
                                   '#ffffff',
-
                                 color:
                                   '#0f172a',
-
-                                outline:
-                                  'none',
                               }}
                             >
                               {Object.entries(
@@ -5922,16 +6138,12 @@ export default function TakeoffPage() {
                               style={{
                                 padding:
                                   '8px 10px',
-
                                 borderRadius:
                                   5,
-
                                 background:
                                   '#fef2f2',
-
                                 color:
                                   '#b91c1c',
-
                                 fontSize:
                                   12,
                               }}
@@ -5947,78 +6159,29 @@ export default function TakeoffPage() {
                             style={{
                               display:
                                 'grid',
-
                               gridTemplateColumns:
                                 '1fr 1fr',
-
                               gap:
                                 8,
                             }}
                           >
-
                             <button
                               type="button"
                               onClick={
                                 cancelCalibration
                               }
-                              style={{
-                                height:
-                                  36,
-
-                                border:
-                                  '1px solid #cbd5e1',
-
-                                borderRadius:
-                                  5,
-
-                                background:
-                                  '#ffffff',
-
-                                color:
-                                  '#334155',
-
-                                cursor:
-                                  'pointer',
-
-                                fontWeight:
-                                  600,
-                              }}
                             >
                               Cancel
                             </button>
-
 
                             <button
                               type="button"
                               onClick={
                                 saveCalibration
                               }
-                              style={{
-                                height:
-                                  36,
-
-                                border:
-                                  '1px solid #052c49',
-
-                                borderRadius:
-                                  5,
-
-                                background:
-                                  '#052c49',
-
-                                color:
-                                  '#ffffff',
-
-                                cursor:
-                                  'pointer',
-
-                                fontWeight:
-                                  700,
-                              }}
                             >
                               Save Scale
                             </button>
-
                           </div>
 
                         </div>
@@ -6029,11 +6192,18 @@ export default function TakeoffPage() {
 
 
                   {/* ==========================================
-                      DISTANCE TOOL
+                      ACTIVE TOOL
                   ========================================== */}
 
-                  {activeTool ===
-                    'distance' && (
+                  {[
+                    'distance',
+                    'line',
+                    'polyline',
+                    'area',
+                    'rectangle',
+                  ].includes(
+                    activeTool
+                  ) && (
                     <section
                       className={
                         styles.propertySection
@@ -6041,175 +6211,55 @@ export default function TakeoffPage() {
                     >
 
                       <h3>
-                        Distance
+                        {
+                          activeTool ===
+                            'distance'
+                            ? 'Distance'
+                            : activeTool ===
+                                'line'
+                              ? 'Linear Takeoff'
+                              : activeTool ===
+                                  'polyline'
+                                ? 'Polyline Takeoff'
+                                : activeTool ===
+                                    'area'
+                                  ? 'Area Takeoff'
+                                  : 'Rectangle Takeoff'
+                        }
                       </h3>
+
 
                       <div
                         style={{
                           padding:
                             '10px 11px',
-
                           border:
                             '1px solid #d8e1e8',
-
                           borderRadius:
                             6,
-
                           background:
                             currentCalibration
                               ? '#f8fafc'
                               : '#fff7ed',
-
                           color:
                             currentCalibration
                               ? '#334155'
                               : '#9a3412',
-
                           fontSize:
                             12,
-
                           lineHeight:
                             1.45,
                         }}
                       >
                         {
-                          distanceInstruction
-                        }
-                      </div>
-
-                    </section>
-                  )}
-
-
-                  {/* ==========================================
-                      LINEAR TOOL
-                  ========================================== */}
-
-                  {activeTool ===
-                    'line' && (
-                    <section
-                      className={
-                        styles.propertySection
-                      }
-                    >
-
-                      <h3>
-                        Linear Takeoff
-                      </h3>
-
-                      <div
-                        style={{
-                          padding:
-                            '10px 11px',
-
-                          border:
-                            '1px solid #d8e1e8',
-
-                          borderRadius:
-                            6,
-
-                          background:
-                            currentCalibration
-                              ? '#f8fafc'
-                              : '#fff7ed',
-
-                          color:
-                            currentCalibration
-                              ? '#334155'
-                              : '#9a3412',
-
-                          fontSize:
-                            12,
-
-                          lineHeight:
-                            1.45,
-                        }}
-                      >
-                        {
-                          lineInstruction
+                          commandInstruction
                         }
                       </div>
 
 
-                      {lineDraft.point1 && (
-                        <div
-                          className={
-                            styles.propertyRow
-                          }
-                        >
-                          <span>
-                            Live length
-                          </span>
-
-                          <strong>
-                            {
-                              previewLinear !==
-                                null
-                                ? `${formatNumber(
-                                    previewLinear,
-                                    2
-                                  )} ${currentCalibration.displayUnit}`
-                                : 'Move cursor'
-                            }
-                          </strong>
-                        </div>
-                      )}
-
-                    </section>
-                  )}
-
-
-                  {/* ==========================================
-                      POLYLINE TOOL
-                  ========================================== */}
-
-                  {activeTool ===
-                    'polyline' && (
-                    <section
-                      className={
-                        styles.propertySection
-                      }
-                    >
-
-                      <h3>
-                        Polyline Takeoff
-                      </h3>
-
-                      <div
-                        style={{
-                          padding:
-                            '10px 11px',
-
-                          border:
-                            '1px solid #d8e1e8',
-
-                          borderRadius:
-                            6,
-
-                          background:
-                            currentCalibration
-                              ? '#f8fafc'
-                              : '#fff7ed',
-
-                          color:
-                            currentCalibration
-                              ? '#334155'
-                              : '#9a3412',
-
-                          fontSize:
-                            12,
-
-                          lineHeight:
-                            1.45,
-                        }}
-                      >
-                        {
-                          polylineInstruction
-                        }
-                      </div>
-
-
-                      {currentCalibration && (
+                      {activeTool ===
+                        'polyline' &&
+                        currentCalibration && (
                         <>
                           <div
                             className={
@@ -6222,13 +6272,10 @@ export default function TakeoffPage() {
 
                             <strong>
                               {
-                                polylineDraft
-                                  .points
-                                  .length
+                                polylineDraft.points.length
                               }
                             </strong>
                           </div>
-
 
                           <div
                             className={
@@ -6236,7 +6283,7 @@ export default function TakeoffPage() {
                             }
                           >
                             <span>
-                              Live total
+                              Live length
                             </span>
 
                             <strong>
@@ -6244,111 +6291,164 @@ export default function TakeoffPage() {
                                 previewPolyline !==
                                   null
                                   ? `${formatNumber(
-                                      previewPolyline,
-                                      2
+                                      previewPolyline
                                     )} ${currentCalibration.displayUnit}`
                                   : '—'
                               }
                             </strong>
                           </div>
 
-
-                          {polylineDraft
-                            .points
-                            .length >=
+                          {polylineDraft.points.length >=
                             2 && (
                             <button
                               type="button"
                               onClick={
                                 finishPolyline
                               }
-                              style={{
-                                width:
-                                  '100%',
-
-                                height:
-                                  34,
-
-                                marginTop:
-                                  10,
-
-                                border:
-                                  '1px solid #052c49',
-
-                                borderRadius:
-                                  5,
-
-                                background:
-                                  '#052c49',
-
-                                color:
-                                  '#ffffff',
-
-                                cursor:
-                                  'pointer',
-
-                                fontWeight:
-                                  700,
-                              }}
                             >
                               Finish Polyline
                             </button>
                           )}
-
                         </>
                       )}
 
-                    </section>
-                  )}
+
+                      {activeTool ===
+                        'area' &&
+                        currentCalibration && (
+                        <>
+                          <div
+                            className={
+                              styles.propertyRow
+                            }
+                          >
+                            <span>
+                              Vertices
+                            </span>
+
+                            <strong>
+                              {
+                                areaDraft.points.length
+                              }
+                            </strong>
+                          </div>
+
+                          <div
+                            className={
+                              styles.propertyRow
+                            }
+                          >
+                            <span>
+                              Live area
+                            </span>
+
+                            <strong>
+                              {
+                                previewArea !==
+                                  null
+                                  ? `${formatNumber(
+                                      previewArea
+                                    )} ${areaUnit}`
+                                  : '—'
+                              }
+                            </strong>
+                          </div>
+
+                          {areaDraft.points.length >=
+                            3 && (
+                            <button
+                              type="button"
+                              onClick={
+                                finishArea
+                              }
+                            >
+                              Finish Area
+                            </button>
+                          )}
+                        </>
+                      )}
 
 
-                  {!currentCalibration &&
-                    (
-                      activeTool ===
-                        'distance' ||
-                      activeTool ===
-                        'line' ||
-                      activeTool ===
-                        'polyline'
-                    ) && (
-                    <section
-                      className={
-                        styles.propertySection
-                      }
-                    >
-                      <button
-                        type="button"
-                        onClick={
-                          startCalibration
-                        }
-                        style={{
-                          width:
-                            '100%',
+                      {activeTool ===
+                        'rectangle' &&
+                        previewRectangleDimensions &&
+                        currentCalibration && (
+                        <>
+                          <div
+                            className={
+                              styles.propertyRow
+                            }
+                          >
+                            <span>
+                              Width
+                            </span>
 
-                          height:
-                            34,
+                            <strong>
+                              {
+                                formatNumber(
+                                  previewRectangleDimensions.width
+                                )
+                              } {
+                                currentCalibration.displayUnit
+                              }
+                            </strong>
+                          </div>
 
-                          border:
-                            '1px solid #052c49',
+                          <div
+                            className={
+                              styles.propertyRow
+                            }
+                          >
+                            <span>
+                              Height
+                            </span>
 
-                          borderRadius:
-                            5,
+                            <strong>
+                              {
+                                formatNumber(
+                                  previewRectangleDimensions.height
+                                )
+                              } {
+                                currentCalibration.displayUnit
+                              }
+                            </strong>
+                          </div>
 
-                          background:
-                            '#052c49',
+                          <div
+                            className={
+                              styles.propertyRow
+                            }
+                          >
+                            <span>
+                              Area
+                            </span>
 
-                          color:
-                            '#ffffff',
+                            <strong>
+                              {
+                                previewRectangleArea !==
+                                  null
+                                  ? `${formatNumber(
+                                      previewRectangleArea
+                                    )} ${areaUnit}`
+                                  : '—'
+                              }
+                            </strong>
+                          </div>
+                        </>
+                      )}
 
-                          cursor:
-                            'pointer',
 
-                          fontWeight:
-                            700,
-                        }}
-                      >
-                        Calibrate Page
-                      </button>
+                      {!currentCalibration && (
+                        <button
+                          type="button"
+                          onClick={
+                            startCalibration
+                          }
+                        >
+                          Calibrate Page
+                        </button>
+                      )}
+
                     </section>
                   )}
 
@@ -6362,7 +6462,6 @@ export default function TakeoffPage() {
                       styles.propertySection
                     }
                   >
-
                     <h3>
                       Drawing
                     </h3>
@@ -6402,7 +6501,6 @@ export default function TakeoffPage() {
                         }
                       </strong>
                     </div>
-
                   </section>
 
 
@@ -6415,7 +6513,6 @@ export default function TakeoffPage() {
                       styles.propertySection
                     }
                   >
-
                     <h3>
                       View
                     </h3>
@@ -6454,7 +6551,6 @@ export default function TakeoffPage() {
                         }%
                       </strong>
                     </div>
-
                   </section>
 
 
@@ -6467,7 +6563,6 @@ export default function TakeoffPage() {
                       styles.propertySection
                     }
                   >
-
                     <h3>
                       Scale
                     </h3>
@@ -6496,14 +6591,31 @@ export default function TakeoffPage() {
                       }
                     >
                       <span>
-                        Unit
+                        Linear unit
                       </span>
 
                       <strong>
                         {
                           currentCalibration
-                            ? currentCalibration
-                                .displayUnit
+                            ? currentCalibration.displayUnit
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Area unit
+                      </span>
+
+                      <strong>
+                        {
+                          currentCalibration
+                            ? areaUnit
                             : '—'
                         }
                       </strong>
@@ -6522,58 +6634,23 @@ export default function TakeoffPage() {
                         {
                           currentCalibration
                             ? `${formatNumber(
-                                currentCalibration
-                                  .referenceDistance
+                                currentCalibration.referenceDistance
                               )} ${currentCalibration.displayUnit}`
                             : '—'
                         }
                       </strong>
                     </div>
 
-
                     {currentCalibration && (
-                      <div
-                        style={{
-                          marginTop:
-                            10,
-                        }}
+                      <button
+                        type="button"
+                        onClick={
+                          startCalibration
+                        }
                       >
-                        <button
-                          type="button"
-                          onClick={
-                            startCalibration
-                          }
-                          style={{
-                            width:
-                              '100%',
-
-                            height:
-                              34,
-
-                            border:
-                              '1px solid #cbd5e1',
-
-                            borderRadius:
-                              5,
-
-                            background:
-                              '#ffffff',
-
-                            color:
-                              '#052c49',
-
-                            cursor:
-                              'pointer',
-
-                            fontWeight:
-                              700,
-                          }}
-                        >
-                          Recalibrate Page
-                        </button>
-                      </div>
+                        Recalibrate Page
+                      </button>
                     )}
-
                   </section>
 
 
@@ -6586,7 +6663,6 @@ export default function TakeoffPage() {
                       styles.propertySection
                     }
                   >
-
                     <h3>
                       Takeoff
                     </h3>
@@ -6602,8 +6678,7 @@ export default function TakeoffPage() {
 
                       <strong>
                         {
-                          currentPageDistances
-                            .length
+                          currentPageDistances.length
                         }
                       </strong>
                     </div>
@@ -6619,8 +6694,7 @@ export default function TakeoffPage() {
 
                       <strong>
                         {
-                          currentPageLinears
-                            .length
+                          currentPageLinears.length
                         }
                       </strong>
                     </div>
@@ -6636,8 +6710,39 @@ export default function TakeoffPage() {
 
                       <strong>
                         {
-                          currentPagePolylines
-                            .length
+                          currentPagePolylines.length
+                        }
+                      </strong>
+                    </div>
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Areas
+                      </span>
+
+                      <strong>
+                        {
+                          currentPageAreas.length
+                        }
+                      </strong>
+                    </div>
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Rectangles
+                      </span>
+
+                      <strong>
+                        {
+                          currentPageRectangles.length
                         }
                       </strong>
                     </div>
@@ -6649,23 +6754,45 @@ export default function TakeoffPage() {
                       }
                     >
                       <span>
-                        Latest distance
+                        Latest area
                       </span>
 
                       <strong>
                         {
-                          latestDistance &&
+                          latestArea &&
                           currentCalibration
                             ? `${formatNumber(
-                                realDistanceFromPoints(
-                                  latestDistance
-                                    .points[0],
-                                  latestDistance
-                                    .points[1],
+                                realPolygonArea(
+                                  latestArea.points,
                                   currentCalibration
-                                ),
-                                2
-                              )} ${currentCalibration.displayUnit}`
+                                )
+                              )} ${areaUnit}`
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Latest rectangle
+                      </span>
+
+                      <strong>
+                        {
+                          latestRectangle &&
+                          currentCalibration
+                            ? `${formatNumber(
+                                realRectangleArea(
+                                  latestRectangle.points[0],
+                                  latestRectangle.points[1],
+                                  currentCalibration
+                                )
+                              )} ${areaUnit}`
                             : '—'
                         }
                       </strong>
@@ -6687,13 +6814,10 @@ export default function TakeoffPage() {
                           currentCalibration
                             ? `${formatNumber(
                                 realDistanceFromPoints(
-                                  latestLinear
-                                    .points[0],
-                                  latestLinear
-                                    .points[1],
+                                  latestLinear.points[0],
+                                  latestLinear.points[1],
                                   currentCalibration
-                                ),
-                                2
+                                )
                               )} ${currentCalibration.displayUnit}`
                             : '—'
                         }
@@ -6716,11 +6840,35 @@ export default function TakeoffPage() {
                           currentCalibration
                             ? `${formatNumber(
                                 realPolylineLength(
-                                  latestPolyline
-                                    .points,
+                                  latestPolyline.points,
                                   currentCalibration
-                                ),
-                                2
+                                )
+                              )} ${currentCalibration.displayUnit}`
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Latest distance
+                      </span>
+
+                      <strong>
+                        {
+                          latestDistance &&
+                          currentCalibration
+                            ? `${formatNumber(
+                                realDistanceFromPoints(
+                                  latestDistance.points[0],
+                                  latestDistance.points[1],
+                                  currentCalibration
+                                )
                               )} ${currentCalibration.displayUnit}`
                             : '—'
                         }
@@ -6730,16 +6878,11 @@ export default function TakeoffPage() {
                   </section>
 
 
-                  {/* ==========================================
-                      SELECTION
-                  ========================================== */}
-
                   <section
                     className={
                       styles.propertySection
                     }
                   >
-
                     <h3>
                       Selection
                     </h3>
@@ -6752,7 +6895,6 @@ export default function TakeoffPage() {
                       Select takeoff geometry to inspect
                       and edit its properties.
                     </div>
-
                   </section>
 
                 </>
@@ -6772,7 +6914,6 @@ export default function TakeoffPage() {
                       styles.propertySection
                     }
                   >
-
                     <h3>
                       Layers
                     </h3>
@@ -6782,10 +6923,8 @@ export default function TakeoffPage() {
                         styles.selectionEmpty
                       }
                     >
-                      Takeoff layers will appear here as
-                      geometry is created.
+                      Takeoff geometry is grouped by measurement type.
                     </div>
-
                   </section>
 
 
@@ -6794,7 +6933,6 @@ export default function TakeoffPage() {
                       styles.propertySection
                     }
                   >
-
                     <h3>
                       Drawing
                     </h3>
@@ -6818,125 +6956,86 @@ export default function TakeoffPage() {
                         Visible
                       </strong>
                     </div>
-
                   </section>
 
 
-                  {currentPageDistances.length >
-                    0 && (
-                    <section
-                      className={
-                        styles.propertySection
-                      }
-                    >
-
-                      <h3>
-                        Distance
-                      </h3>
-
-                      <div
-                        className={
-                          styles.layerRow
-                        }
-                      >
-                        <span
+                  {[
+                    [
+                      'Distance',
+                      currentPageDistances.length,
+                    ],
+                    [
+                      'Linear',
+                      currentPageLinears.length,
+                    ],
+                    [
+                      'Polyline',
+                      currentPagePolylines.length,
+                    ],
+                    [
+                      'Area',
+                      currentPageAreas.length,
+                    ],
+                    [
+                      'Rectangle',
+                      currentPageRectangles.length,
+                    ],
+                  ]
+                    .filter(
+                      (
+                        [
+                          ,
+                          count,
+                        ]
+                      ) =>
+                        count >
+                        0
+                    )
+                    .map(
+                      ([
+                        label,
+                        count,
+                      ]) => (
+                        <section
+                          key={
+                            label
+                          }
                           className={
-                            styles.layerDot
+                            styles.propertySection
                           }
-                        />
+                        >
+                          <h3>
+                            {
+                              label
+                            }
+                          </h3>
 
-                        <span>
-                          Distance Measurements
-                        </span>
+                          <div
+                            className={
+                              styles.layerRow
+                            }
+                          >
+                            <span
+                              className={
+                                styles.layerDot
+                              }
+                            />
 
-                        <strong>
-                          {
-                            currentPageDistances
-                              .length
-                          }
-                        </strong>
-                      </div>
+                            <span>
+                              {
+                                label
+                              } Takeoff
+                            </span>
 
-                    </section>
-                  )}
-
-
-                  {currentPageLinears.length >
-                    0 && (
-                    <section
-                      className={
-                        styles.propertySection
-                      }
-                    >
-
-                      <h3>
-                        Linear
-                      </h3>
-
-                      <div
-                        className={
-                          styles.layerRow
-                        }
-                      >
-                        <span
-                          className={
-                            styles.layerDot
-                          }
-                        />
-
-                        <span>
-                          Linear Takeoff
-                        </span>
-
-                        <strong>
-                          {
-                            currentPageLinears
-                              .length
-                          }
-                        </strong>
-                      </div>
-
-                    </section>
-                  )}
-
-
-                  {currentPagePolylines.length >
-                    0 && (
-                    <section
-                      className={
-                        styles.propertySection
-                      }
-                    >
-
-                      <h3>
-                        Polyline
-                      </h3>
-
-                      <div
-                        className={
-                          styles.layerRow
-                        }
-                      >
-                        <span
-                          className={
-                            styles.layerDot
-                          }
-                        />
-
-                        <span>
-                          Polyline Takeoff
-                        </span>
-
-                        <strong>
-                          {
-                            currentPagePolylines
-                              .length
-                          }
-                        </strong>
-                      </div>
-
-                    </section>
-                  )}
+                            <strong>
+                              {
+                                count
+                              }
+                            </strong>
+                          </div>
+                        </section>
+                      )
+                    )}
 
                 </>
               )}
@@ -7236,7 +7335,7 @@ export default function TakeoffPage() {
           )}
 
 
-          {liveQuantity !==
+          {liveLength !==
             null &&
             currentCalibration && (
             <>
@@ -7252,12 +7351,37 @@ export default function TakeoffPage() {
                 <strong>
                   {
                     formatNumber(
-                      liveQuantity,
-                      2
+                      liveLength
                     )
                   } {
-                    currentCalibration
-                      .displayUnit
+                    currentCalibration.displayUnit
+                  }
+                </strong>
+              </span>
+            </>
+          )}
+
+
+          {liveArea !==
+            null &&
+            currentCalibration && (
+            <>
+              <span
+                className={
+                  styles.statusDivider
+                }
+              />
+
+              <span>
+                Area
+
+                <strong>
+                  {
+                    formatNumber(
+                      liveArea
+                    )
+                  } {
+                    areaUnit
                   }
                 </strong>
               </span>
