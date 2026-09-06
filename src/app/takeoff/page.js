@@ -1503,6 +1503,514 @@ function entityGeometryChanged(
 }
 
 
+function nearestPointOnSegment(
+  point,
+  point1,
+  point2
+) {
+  if (
+    !point ||
+    !point1 ||
+    !point2
+  ) {
+    return null
+  }
+
+  const dx =
+    point2.x -
+    point1.x
+
+  const dy =
+    point2.y -
+    point1.y
+
+  const lengthSquared =
+    dx * dx +
+    dy * dy
+
+  if (
+    lengthSquared <=
+    0.0000001
+  ) {
+    return {
+      point: {
+        ...point1,
+      },
+
+      distance:
+        pointDistance(
+          point,
+          point1
+        ),
+    }
+  }
+
+  const projection =
+    clamp(
+      (
+        (
+          point.x -
+          point1.x
+        ) *
+          dx +
+        (
+          point.y -
+          point1.y
+        ) *
+          dy
+      ) /
+        lengthSquared,
+      0,
+      1
+    )
+
+  const nearestPoint = {
+    x:
+      point1.x +
+      dx *
+      projection,
+
+    y:
+      point1.y +
+      dy *
+      projection,
+  }
+
+  return {
+    point:
+      nearestPoint,
+
+    distance:
+      pointDistance(
+        point,
+        nearestPoint
+      ),
+  }
+}
+
+
+function segmentIntersection(
+  segment1,
+  segment2
+) {
+  if (
+    !segment1 ||
+    !segment2
+  ) {
+    return null
+  }
+
+  const x1 =
+    segment1.point1.x
+
+  const y1 =
+    segment1.point1.y
+
+  const x2 =
+    segment1.point2.x
+
+  const y2 =
+    segment1.point2.y
+
+  const x3 =
+    segment2.point1.x
+
+  const y3 =
+    segment2.point1.y
+
+  const x4 =
+    segment2.point2.x
+
+  const y4 =
+    segment2.point2.y
+
+  const denominator =
+    (
+      x1 - x2
+    ) *
+      (
+        y3 - y4
+      ) -
+    (
+      y1 - y2
+    ) *
+      (
+        x3 - x4
+      )
+
+  if (
+    Math.abs(
+      denominator
+    ) <
+    0.0000001
+  ) {
+    return null
+  }
+
+  const t =
+    (
+      (
+        x1 - x3
+      ) *
+        (
+          y3 - y4
+        ) -
+      (
+        y1 - y3
+      ) *
+        (
+          x3 - x4
+        )
+    ) /
+    denominator
+
+  const u =
+    -(
+      (
+        x1 - x2
+      ) *
+        (
+          y1 - y3
+        ) -
+      (
+        y1 - y2
+      ) *
+        (
+          x1 - x3
+        )
+    ) /
+    denominator
+
+  if (
+    t <
+      -0.000001 ||
+    t >
+      1.000001 ||
+    u <
+      -0.000001 ||
+    u >
+      1.000001
+  ) {
+    return null
+  }
+
+  return {
+    x:
+      x1 +
+      t *
+      (
+        x2 - x1
+      ),
+
+    y:
+      y1 +
+      t *
+      (
+        y2 - y1
+      ),
+  }
+}
+
+
+function entitySegments(
+  entity
+) {
+  if (
+    !entity ||
+    !Array.isArray(
+      entity.points
+    )
+  ) {
+    return []
+  }
+
+  if (
+    entity.type ===
+      'distance' ||
+    entity.type ===
+      'linear'
+  ) {
+    if (
+      entity.points.length <
+      2
+    ) {
+      return []
+    }
+
+    return [
+      {
+        entityId:
+          entity.id,
+
+        point1:
+          entity.points[0],
+
+        point2:
+          entity.points[1],
+      },
+    ]
+  }
+
+  if (
+    entity.type ===
+      'polyline'
+  ) {
+    const segments =
+      []
+
+    for (
+      let index = 1;
+      index <
+        entity.points.length;
+      index += 1
+    ) {
+      segments.push({
+        entityId:
+          entity.id,
+
+        point1:
+          entity.points[
+            index - 1
+          ],
+
+        point2:
+          entity.points[
+            index
+          ],
+      })
+    }
+
+    return segments
+  }
+
+  if (
+    entity.type ===
+      'area'
+  ) {
+    const segments =
+      []
+
+    for (
+      let index = 0;
+      index <
+        entity.points.length;
+      index += 1
+    ) {
+      segments.push({
+        entityId:
+          entity.id,
+
+        point1:
+          entity.points[
+            index
+          ],
+
+        point2:
+          entity.points[
+            (
+              index + 1
+            ) %
+            entity.points.length
+          ],
+      })
+    }
+
+    return segments
+  }
+
+  if (
+    entity.type ===
+      'rectangle' &&
+    entity.points.length >=
+      2
+  ) {
+    const point1 =
+      entity.points[0]
+
+    const point2 =
+      entity.points[1]
+
+    const corners = [
+      {
+        x:
+          Math.min(
+            point1.x,
+            point2.x
+          ),
+        y:
+          Math.min(
+            point1.y,
+            point2.y
+          ),
+      },
+      {
+        x:
+          Math.max(
+            point1.x,
+            point2.x
+          ),
+        y:
+          Math.min(
+            point1.y,
+            point2.y
+          ),
+      },
+      {
+        x:
+          Math.max(
+            point1.x,
+            point2.x
+          ),
+        y:
+          Math.max(
+            point1.y,
+            point2.y
+          ),
+      },
+      {
+        x:
+          Math.min(
+            point1.x,
+            point2.x
+          ),
+        y:
+          Math.max(
+            point1.y,
+            point2.y
+          ),
+      },
+    ]
+
+    return corners.map(
+      (
+        corner,
+        index
+      ) => ({
+        entityId:
+          entity.id,
+
+        point1:
+          corner,
+
+        point2:
+          corners[
+            (
+              index + 1
+            ) %
+            corners.length
+          ],
+      })
+    )
+  }
+
+  return []
+}
+
+
+function entitySnapVertices(
+  entity
+) {
+  if (
+    !entity ||
+    !Array.isArray(
+      entity.points
+    )
+  ) {
+    return []
+  }
+
+  if (
+    entity.type ===
+      'rectangle' &&
+    entity.points.length >=
+      2
+  ) {
+    return entityGripPoints(
+      entity
+    ).map(
+      (grip) => ({
+        entityId:
+          entity.id,
+
+        point:
+          grip.point,
+      })
+    )
+  }
+
+  return entity.points.map(
+    (point) => ({
+      entityId:
+        entity.id,
+
+      point,
+    })
+  )
+}
+
+
+function constrainOrthoPoint(
+  anchorPoint,
+  targetPoint
+) {
+  if (
+    !anchorPoint ||
+    !targetPoint
+  ) {
+    return {
+      point:
+        targetPoint,
+
+      axis:
+        null,
+    }
+  }
+
+  const deltaX =
+    targetPoint.x -
+    anchorPoint.x
+
+  const deltaY =
+    targetPoint.y -
+    anchorPoint.y
+
+  if (
+    Math.abs(
+      deltaX
+    ) >=
+    Math.abs(
+      deltaY
+    )
+  ) {
+    return {
+      point: {
+        x:
+          targetPoint.x,
+
+        y:
+          anchorPoint.y,
+      },
+
+      axis:
+        'Horizontal',
+    }
+  }
+
+  return {
+    point: {
+      x:
+        anchorPoint.x,
+
+      y:
+        targetPoint.y,
+    },
+
+    axis:
+      'Vertical',
+  }
+}
+
+
 function createEntityId() {
   if (
     typeof crypto !==
@@ -1690,6 +2198,18 @@ export default function TakeoffPage() {
     setSnapEnabled,
   ] =
     useState(true)
+
+  const [
+    snapMarker,
+    setSnapMarker,
+  ] =
+    useState(null)
+
+  const [
+    orthoTracking,
+    setOrthoTracking,
+  ] =
+    useState(null)
 
   const [
     orthoEnabled,
@@ -2035,6 +2555,123 @@ export default function TakeoffPage() {
     )
 
 
+  const currentPageSnapData =
+    useMemo(
+      () => {
+        const pageEntities =
+          takeoffEntities.filter(
+            (entity) =>
+              entity.pageNumber ===
+              pageNumber
+          )
+
+        const vertices =
+          pageEntities.flatMap(
+            (entity) =>
+              entitySnapVertices(
+                entity
+              )
+          )
+
+        const segments =
+          pageEntities.flatMap(
+            (entity) =>
+              entitySegments(
+                entity
+              )
+          )
+
+        const midpoints =
+          segments.map(
+            (segment) => ({
+              entityId:
+                segment.entityId,
+
+              point: {
+                x:
+                  (
+                    segment.point1.x +
+                    segment.point2.x
+                  ) / 2,
+
+                y:
+                  (
+                    segment.point1.y +
+                    segment.point2.y
+                  ) / 2,
+              },
+            })
+          )
+
+        const intersections =
+          []
+
+        for (
+          let firstIndex = 0;
+          firstIndex <
+            segments.length;
+          firstIndex += 1
+        ) {
+          for (
+            let secondIndex =
+              firstIndex + 1;
+            secondIndex <
+              segments.length;
+            secondIndex += 1
+          ) {
+            const firstSegment =
+              segments[
+                firstIndex
+              ]
+
+            const secondSegment =
+              segments[
+                secondIndex
+              ]
+
+            if (
+              firstSegment.entityId ===
+              secondSegment.entityId
+            ) {
+              continue
+            }
+
+            const intersection =
+              segmentIntersection(
+                firstSegment,
+                secondSegment
+              )
+
+            if (
+              intersection
+            ) {
+              intersections.push({
+                entityIds: [
+                  firstSegment.entityId,
+                  secondSegment.entityId,
+                ],
+
+                point:
+                  intersection,
+              })
+            }
+          }
+        }
+
+        return {
+          vertices,
+          midpoints,
+          intersections,
+          segments,
+        }
+      },
+      [
+        takeoffEntities,
+        pageNumber,
+      ]
+    )
+
+
   const pageCountQuantity =
     useMemo(
       () =>
@@ -2354,6 +2991,38 @@ export default function TakeoffPage() {
           currentCalibration
         )
       : null
+
+
+  useEffect(
+    () => {
+      if (
+        !snapEnabled
+      ) {
+        setSnapMarker(
+          null
+        )
+      }
+    },
+    [
+      snapEnabled,
+    ]
+  )
+
+
+  useEffect(
+    () => {
+      if (
+        !orthoEnabled
+      ) {
+        setOrthoTracking(
+          null
+        )
+      }
+    },
+    [
+      orthoEnabled,
+    ]
+  )
 
 
   // ==========================================================
@@ -2745,6 +3414,14 @@ export default function TakeoffPage() {
           null
 
         setEditPreviewEntity(
+          null
+        )
+
+        setSnapMarker(
+          null
+        )
+
+        setOrthoTracking(
           null
         )
 
@@ -3851,6 +4528,279 @@ export default function TakeoffPage() {
     )
 
 
+  const resolveCadPoint =
+    useCallback(
+      (
+        rawPoint,
+        anchorPoint = null,
+        options = {}
+      ) => {
+        if (
+          !rawPoint
+        ) {
+          return {
+            point:
+              null,
+
+            snap:
+              null,
+
+            ortho:
+              null,
+          }
+        }
+
+        const {
+          excludeEntityId =
+            null,
+
+          allowSnap =
+            true,
+
+          allowOrtho =
+            true,
+        } =
+          options
+
+        const snapTolerance =
+          12 /
+          Math.max(
+            effectiveScale,
+            0.01
+          )
+
+        if (
+          snapEnabled &&
+          allowSnap
+        ) {
+          const candidateGroups = [
+            {
+              type:
+                'Endpoint',
+
+              candidates:
+                currentPageSnapData.vertices.filter(
+                  (candidate) =>
+                    candidate.entityId !==
+                    excludeEntityId
+                ),
+            },
+            {
+              type:
+                'Midpoint',
+
+              candidates:
+                currentPageSnapData.midpoints.filter(
+                  (candidate) =>
+                    candidate.entityId !==
+                    excludeEntityId
+                ),
+            },
+            {
+              type:
+                'Intersection',
+
+              candidates:
+                currentPageSnapData.intersections.filter(
+                  (candidate) =>
+                    !excludeEntityId ||
+                    !candidate.entityIds.includes(
+                      excludeEntityId
+                    )
+                ),
+            },
+          ]
+
+          for (
+            const group of
+            candidateGroups
+          ) {
+            let bestCandidate =
+              null
+
+            let bestDistance =
+              Infinity
+
+            for (
+              const candidate of
+              group.candidates
+            ) {
+              const distance =
+                pointDistance(
+                  rawPoint,
+                  candidate.point
+                )
+
+              if (
+                distance <=
+                  snapTolerance &&
+                distance <
+                  bestDistance
+              ) {
+                bestCandidate =
+                  candidate
+
+                bestDistance =
+                  distance
+              }
+            }
+
+            if (
+              bestCandidate
+            ) {
+              return {
+                point: {
+                  ...bestCandidate.point,
+                },
+
+                snap: {
+                  type:
+                    group.type,
+
+                  point: {
+                    ...bestCandidate.point,
+                  },
+                },
+
+                ortho:
+                  null,
+              }
+            }
+          }
+
+          let nearestCandidate =
+            null
+
+          let nearestDistance =
+            Infinity
+
+          for (
+            const segment of
+            currentPageSnapData.segments
+          ) {
+            if (
+              segment.entityId ===
+              excludeEntityId
+            ) {
+              continue
+            }
+
+            const nearest =
+              nearestPointOnSegment(
+                rawPoint,
+                segment.point1,
+                segment.point2
+              )
+
+            if (
+              nearest &&
+              nearest.distance <=
+                snapTolerance &&
+              nearest.distance <
+                nearestDistance
+            ) {
+              nearestCandidate =
+                nearest
+
+              nearestDistance =
+                nearest.distance
+            }
+          }
+
+          if (
+            nearestCandidate
+          ) {
+            return {
+              point: {
+                ...nearestCandidate.point,
+              },
+
+              snap: {
+                type:
+                  'Nearest',
+
+                point: {
+                  ...nearestCandidate.point,
+                },
+              },
+
+              ortho:
+                null,
+            }
+          }
+        }
+
+        if (
+          orthoEnabled &&
+          allowOrtho &&
+          anchorPoint
+        ) {
+          const constrained =
+            constrainOrthoPoint(
+              anchorPoint,
+              rawPoint
+            )
+
+          return {
+            point:
+              constrained.point,
+
+            snap:
+              null,
+
+            ortho: {
+              axis:
+                constrained.axis,
+
+              anchorPoint: {
+                ...anchorPoint,
+              },
+
+              point: {
+                ...constrained.point,
+              },
+            },
+          }
+        }
+
+        return {
+          point: {
+            ...rawPoint,
+          },
+
+          snap:
+            null,
+
+          ortho:
+            null,
+        }
+      },
+      [
+        currentPageSnapData,
+        effectiveScale,
+        snapEnabled,
+        orthoEnabled,
+      ]
+    )
+
+
+  function updateCadFeedback(
+    resolution
+  ) {
+    setSnapMarker(
+      resolution
+        ?.snap ||
+      null
+    )
+
+    setOrthoTracking(
+      resolution
+        ?.ortho ||
+      null
+    )
+  }
+
+
   // ==========================================================
   // POINTER MOVE
   // ==========================================================
@@ -3858,26 +4808,80 @@ export default function TakeoffPage() {
   function handlePointerMove(
     event
   ) {
-    const point =
+    const rawPoint =
       clientToPdfPoint(
         event.clientX,
         event.clientY
       )
 
-    setCursorPosition(
-      point || {
-        x: null,
-        y: null,
-      }
-    )
+    const panSession =
+      panSessionRef.current
+
+    if (
+      panSession
+    ) {
+      setSnapMarker(
+        null
+      )
+
+      setOrthoTracking(
+        null
+      )
+
+      setCursorPosition(
+        rawPoint || {
+          x: null,
+          y: null,
+        }
+      )
+
+      setPan({
+        x:
+          panSession.panX +
+          event.clientX -
+          panSession.startX,
+
+        y:
+          panSession.panY +
+          event.clientY -
+          panSession.startY,
+      })
+
+      return
+    }
 
     const editSession =
       editSessionRef.current
 
     if (
       editSession &&
-      point
+      rawPoint
     ) {
+      const resolution =
+        resolveCadPoint(
+          rawPoint,
+          editSession.startPoint,
+          {
+            excludeEntityId:
+              editSession.entityId,
+
+            allowSnap:
+              editSession.mode ===
+              'grip',
+
+            allowOrtho:
+              true,
+          }
+        )
+
+      updateCadFeedback(
+        resolution
+      )
+
+      setCursorPosition(
+        resolution.point
+      )
+
       if (
         editSession.mode ===
         'grip'
@@ -3886,7 +4890,7 @@ export default function TakeoffPage() {
           updateEntityGrip(
             editSession.originalEntity,
             editSession.gripId,
-            point
+            resolution.point
           )
         )
 
@@ -3897,9 +4901,9 @@ export default function TakeoffPage() {
         setEditPreviewEntity(
           translateEntity(
             editSession.originalEntity,
-            point.x -
+            resolution.point.x -
               editSession.startPoint.x,
-            point.y -
+            resolution.point.y -
               editSession.startPoint.y
           )
         )
@@ -3907,6 +4911,153 @@ export default function TakeoffPage() {
 
       return
     }
+
+    if (
+      !rawPoint
+    ) {
+      setCursorPosition({
+        x: null,
+        y: null,
+      })
+
+      setSnapMarker(
+        null
+      )
+
+      setOrthoTracking(
+        null
+      )
+
+      return
+    }
+
+    let anchorPoint =
+      null
+
+    let allowSnap =
+      false
+
+    let allowOrtho =
+      false
+
+    if (
+      activeTool ===
+      'calibrate'
+    ) {
+      anchorPoint =
+        calibrationDraft.point1
+
+      allowSnap =
+        true
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'distance'
+    ) {
+      anchorPoint =
+        distanceDraft.point1
+
+      allowSnap =
+        true
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'line'
+    ) {
+      anchorPoint =
+        lineDraft.point1
+
+      allowSnap =
+        true
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'polyline'
+    ) {
+      anchorPoint =
+        polylineDraft.points.at(-1) ||
+        null
+
+      allowSnap =
+        true
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'area'
+    ) {
+      anchorPoint =
+        areaDraft.points.at(-1) ||
+        null
+
+      allowSnap =
+        true
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'rectangle'
+    ) {
+      anchorPoint =
+        rectangleDraft.point1
+
+      allowSnap =
+        true
+
+      allowOrtho =
+        false
+
+    } else if (
+      activeTool ===
+      'count'
+    ) {
+      allowSnap =
+        true
+    }
+
+    const resolution =
+      resolveCadPoint(
+        rawPoint,
+        anchorPoint,
+        {
+          allowSnap,
+          allowOrtho,
+        }
+      )
+
+    const point =
+      resolution.point
+
+    updateCadFeedback(
+      resolution
+    )
+
+    setCursorPosition(
+      point
+    )
 
     if (
       activeTool ===
@@ -3992,25 +5143,6 @@ export default function TakeoffPage() {
         })
       )
     }
-
-    const session =
-      panSessionRef.current
-
-    if (!session) {
-      return
-    }
-
-    setPan({
-      x:
-        session.panX +
-        event.clientX -
-        session.startX,
-
-      y:
-        session.panY +
-        event.clientY -
-        session.startY,
-    })
   }
 
 
@@ -4074,13 +5206,13 @@ export default function TakeoffPage() {
       return
     }
 
-    const point =
+    const rawPoint =
       clientToPdfPoint(
         event.clientX,
         event.clientY
       )
 
-    if (!point) {
+    if (!rawPoint) {
       if (
         activeTool ===
         'select'
@@ -4135,7 +5267,7 @@ export default function TakeoffPage() {
           (grip) => {
             const distance =
               pointDistance(
-                point,
+                rawPoint,
                 grip.point
               )
 
@@ -4169,7 +5301,7 @@ export default function TakeoffPage() {
               hitGrip.id,
 
             startPoint: {
-              ...point,
+              ...rawPoint,
             },
 
             originalEntity: {
@@ -4206,7 +5338,7 @@ export default function TakeoffPage() {
         if (
           hitTestEntity(
             selectedEntity,
-            point,
+            rawPoint,
             tolerance
           )
         ) {
@@ -4218,7 +5350,7 @@ export default function TakeoffPage() {
               selectedEntity.id,
 
             startPoint: {
-              ...point,
+              ...rawPoint,
             },
 
             originalEntity: {
@@ -4274,7 +5406,7 @@ export default function TakeoffPage() {
         if (
           hitTestEntity(
             pageEntities[index],
-            point,
+            rawPoint,
             tolerance
           )
         ) {
@@ -4309,6 +5441,110 @@ export default function TakeoffPage() {
 
       return
     }
+
+
+    let anchorPoint =
+      null
+
+    let allowOrtho =
+      false
+
+    if (
+      activeTool ===
+      'calibrate'
+    ) {
+      anchorPoint =
+        calibrationDraft.point1
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'distance'
+    ) {
+      anchorPoint =
+        distanceDraft.point1
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'line'
+    ) {
+      anchorPoint =
+        lineDraft.point1
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'polyline'
+    ) {
+      anchorPoint =
+        polylineDraft.points.at(-1) ||
+        null
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'area'
+    ) {
+      anchorPoint =
+        areaDraft.points.at(-1) ||
+        null
+
+      allowOrtho =
+        Boolean(
+          anchorPoint
+        )
+
+    } else if (
+      activeTool ===
+      'rectangle'
+    ) {
+      anchorPoint =
+        rectangleDraft.point1
+
+      allowOrtho =
+        false
+    }
+
+    const resolution =
+      resolveCadPoint(
+        rawPoint,
+        anchorPoint,
+        {
+          allowSnap:
+            true,
+
+          allowOrtho,
+        }
+      )
+
+    const point =
+      resolution.point
+
+    updateCadFeedback(
+      resolution
+    )
+
+    setCursorPosition(
+      point
+    )
+
 
     // ========================================================
     // CALIBRATION
@@ -4846,6 +6082,14 @@ export default function TakeoffPage() {
         null
       )
 
+      setSnapMarker(
+        null
+      )
+
+      setOrthoTracking(
+        null
+      )
+
       try {
         event.currentTarget
           .releasePointerCapture(
@@ -4869,6 +6113,14 @@ export default function TakeoffPage() {
 
     setIsPanning(
       false
+    )
+
+    setSnapMarker(
+      null
+    )
+
+    setOrthoTracking(
+      null
     )
 
     try {
@@ -5038,6 +6290,44 @@ export default function TakeoffPage() {
 
           setEditPreviewEntity(
             null
+          )
+
+          setSnapMarker(
+            null
+          )
+
+          setOrthoTracking(
+            null
+          )
+
+          return
+        }
+
+
+        if (
+          event.key ===
+          'F3'
+        ) {
+          event.preventDefault()
+
+          setSnapEnabled(
+            (current) =>
+              !current
+          )
+
+          return
+        }
+
+
+        if (
+          event.key ===
+          'F8'
+        ) {
+          event.preventDefault()
+
+          setOrthoEnabled(
+            (current) =>
+              !current
           )
 
           return
@@ -5359,6 +6649,23 @@ export default function TakeoffPage() {
       deleteSelectedEntity,
       undoTakeoff,
       redoTakeoff,
+    ]
+  )
+
+
+  useEffect(
+    () => {
+      setSnapMarker(
+        null
+      )
+
+      setOrthoTracking(
+        null
+      )
+    },
+    [
+      pageNumber,
+      pdfDocument,
     ]
   )
 
@@ -6304,6 +7611,14 @@ export default function TakeoffPage() {
                 x: null,
                 y: null,
               })
+
+              setSnapMarker(
+                null
+              )
+
+              setOrthoTracking(
+                null
+              )
 
               if (
                 activeTool ===
@@ -7291,6 +8606,208 @@ export default function TakeoffPage() {
                         )
                       )}
                     </g>
+                  )}
+
+
+                {/* ============================================
+                    SNAP MARKER
+                ============================================ */}
+
+                {snapEnabled &&
+                  snapMarker &&
+                  snapMarker.point && (
+                    <g
+                      pointerEvents="none"
+                    >
+                      {snapMarker.type ===
+                        'Endpoint' && (
+                        <rect
+                          x={
+                            snapMarker.point.x -
+                            5 /
+                            geometryScale
+                          }
+                          y={
+                            snapMarker.point.y -
+                            5 /
+                            geometryScale
+                          }
+                          width={
+                            10 /
+                            geometryScale
+                          }
+                          height={
+                            10 /
+                            geometryScale
+                          }
+                          fill="rgba(255,255,255,0.90)"
+                          stroke="#06b6d4"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+
+                      {snapMarker.type ===
+                        'Midpoint' && (
+                        <polygon
+                          points={`${snapMarker.point.x},${snapMarker.point.y - 6 / geometryScale} ${snapMarker.point.x + 6 / geometryScale},${snapMarker.point.y + 5 / geometryScale} ${snapMarker.point.x - 6 / geometryScale},${snapMarker.point.y + 5 / geometryScale}`}
+                          fill="rgba(255,255,255,0.90)"
+                          stroke="#06b6d4"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+
+                      {snapMarker.type ===
+                        'Intersection' && (
+                        <>
+                          <line
+                            x1={
+                              snapMarker.point.x -
+                              6 /
+                              geometryScale
+                            }
+                            y1={
+                              snapMarker.point.y -
+                              6 /
+                              geometryScale
+                            }
+                            x2={
+                              snapMarker.point.x +
+                              6 /
+                              geometryScale
+                            }
+                            y2={
+                              snapMarker.point.y +
+                              6 /
+                              geometryScale
+                            }
+                            stroke="#06b6d4"
+                            strokeWidth="2.5"
+                            vectorEffect="non-scaling-stroke"
+                          />
+
+                          <line
+                            x1={
+                              snapMarker.point.x +
+                              6 /
+                              geometryScale
+                            }
+                            y1={
+                              snapMarker.point.y -
+                              6 /
+                              geometryScale
+                            }
+                            x2={
+                              snapMarker.point.x -
+                              6 /
+                              geometryScale
+                            }
+                            y2={
+                              snapMarker.point.y +
+                              6 /
+                              geometryScale
+                            }
+                            stroke="#06b6d4"
+                            strokeWidth="2.5"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        </>
+                      )}
+
+
+                      {snapMarker.type ===
+                        'Nearest' && (
+                        <rect
+                          x={
+                            snapMarker.point.x -
+                            4.5 /
+                            geometryScale
+                          }
+                          y={
+                            snapMarker.point.y -
+                            4.5 /
+                            geometryScale
+                          }
+                          width={
+                            9 /
+                            geometryScale
+                          }
+                          height={
+                            9 /
+                            geometryScale
+                          }
+                          transform={`rotate(45 ${snapMarker.point.x} ${snapMarker.point.y})`}
+                          fill="rgba(255,255,255,0.90)"
+                          stroke="#06b6d4"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+
+                      <text
+                        x={
+                          snapMarker.point.x +
+                          10 /
+                          geometryScale
+                        }
+                        y={
+                          snapMarker.point.y -
+                          10 /
+                          geometryScale
+                        }
+                        fill="#0891b2"
+                        fontSize={
+                          10 /
+                          geometryScale
+                        }
+                        fontWeight="900"
+                        stroke="#ffffff"
+                        strokeWidth={
+                          3 /
+                          geometryScale
+                        }
+                        paintOrder="stroke"
+                      >
+                        {
+                          snapMarker.type
+                        }
+                      </text>
+                    </g>
+                  )}
+
+
+                {/* ============================================
+                    ORTHO TRACKING
+                ============================================ */}
+
+                {orthoEnabled &&
+                  orthoTracking &&
+                  orthoTracking.anchorPoint &&
+                  orthoTracking.point && (
+                    <line
+                      x1={
+                        orthoTracking.anchorPoint.x
+                      }
+                      y1={
+                        orthoTracking.anchorPoint.y
+                      }
+                      x2={
+                        orthoTracking.point.x
+                      }
+                      y2={
+                        orthoTracking.point.y
+                      }
+                      stroke="#0ea5e9"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                      opacity="0.8"
+                      vectorEffect="non-scaling-stroke"
+                      pointerEvents="none"
+                    />
                   )}
 
 
@@ -9447,7 +10964,7 @@ export default function TakeoffPage() {
                   !current
               )
             }
-            title="Object Snap"
+            title="Object Snap (F3)"
           >
             <Icon
               type="snap"
@@ -9472,7 +10989,7 @@ export default function TakeoffPage() {
                   !current
               )
             }
-            title="Ortho"
+            title="Ortho (F8)"
           >
             <Icon
               type="ortho"
@@ -9634,6 +11151,48 @@ export default function TakeoffPage() {
               }
             </strong>
           </span>
+
+
+          {snapMarker && (
+            <>
+              <span
+                className={
+                  styles.statusDivider
+                }
+              />
+
+              <span>
+                Snap
+
+                <strong>
+                  {
+                    snapMarker.type
+                  }
+                </strong>
+              </span>
+            </>
+          )}
+
+
+          {orthoTracking && (
+            <>
+              <span
+                className={
+                  styles.statusDivider
+                }
+              />
+
+              <span>
+                Ortho
+
+                <strong>
+                  {
+                    orthoTracking.axis
+                  }
+                </strong>
+              </span>
+            </>
+          )}
 
 
           {commandInstruction && (
