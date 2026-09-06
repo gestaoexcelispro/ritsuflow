@@ -97,6 +97,20 @@ function NavIcon({
       )
 
 
+    case 'cad':
+      return (
+        <svg {...commonProps}>
+          <path d="M4 4h12l4 4v12H4z" />
+          <path d="M16 4v4h4" />
+          <path d="M7 16l4-5 2 2 4-5" />
+          <circle cx="7" cy="16" r="1" />
+          <circle cx="11" cy="11" r="1" />
+          <circle cx="13" cy="13" r="1" />
+          <circle cx="17" cy="8" r="1" />
+        </svg>
+      )
+
+
     case 'operations':
       return (
         <svg {...commonProps}>
@@ -308,6 +322,12 @@ const baseNavigationGroups = [
         label: 'Project Setup',
         href: '/dashboard/projects/setup',
         icon: 'setup',
+      },
+
+      {
+        label: 'RitsuCAD',
+        href: '/ritsucad',
+        icon: 'cad',
       },
 
     ],
