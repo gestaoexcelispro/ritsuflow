@@ -513,6 +513,114 @@ function realDistanceFromPoints(
 }
 
 
+function polylinePdfLength(
+  points
+) {
+  if (
+    !Array.isArray(points) ||
+    points.length < 2
+  ) {
+    return 0
+  }
+
+  let total =
+    0
+
+  for (
+    let index = 1;
+    index < points.length;
+    index += 1
+  ) {
+    total +=
+      pointDistance(
+        points[index - 1],
+        points[index]
+      )
+  }
+
+  return total
+}
+
+
+function realPolylineLength(
+  points,
+  calibration
+) {
+  if (
+    !calibration ||
+    !Array.isArray(points) ||
+    points.length < 2
+  ) {
+    return null
+  }
+
+  const pdfLength =
+    polylinePdfLength(
+      points
+    )
+
+  const meters =
+    pdfLength *
+    calibration.metersPerPdfPoint
+
+  const unitFactor =
+    UNIT_TO_METERS[
+      calibration.displayUnit
+    ]
+
+  if (!unitFactor) {
+    return null
+  }
+
+  return meters /
+    unitFactor
+}
+
+
+function removeConsecutiveDuplicatePoints(
+  points
+) {
+  if (
+    !Array.isArray(points) ||
+    !points.length
+  ) {
+    return []
+  }
+
+  const result = [
+    points[0],
+  ]
+
+  for (
+    let index = 1;
+    index < points.length;
+    index += 1
+  ) {
+    const previous =
+      result[
+        result.length - 1
+      ]
+
+    const current =
+      points[index]
+
+    if (
+      pointDistance(
+        previous,
+        current
+      ) >
+      0.0001
+    ) {
+      result.push(
+        current
+      )
+    }
+  }
+
+  return result
+}
+
+
 function createEntityId() {
   if (
     typeof crypto !==
@@ -745,7 +853,7 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
-  // DISTANCE TAKEOFF
+  // TAKEOFF ENTITIES
   // ==========================================================
 
   const [
@@ -754,12 +862,45 @@ export default function TakeoffPage() {
   ] =
     useState([])
 
+
+  // ==========================================================
+  // DISTANCE DRAFT
+  // ==========================================================
+
   const [
     distanceDraft,
     setDistanceDraft,
   ] =
     useState({
       point1: null,
+      previewPoint: null,
+    })
+
+
+  // ==========================================================
+  // LINEAR DRAFT
+  // ==========================================================
+
+  const [
+    lineDraft,
+    setLineDraft,
+  ] =
+    useState({
+      point1: null,
+      previewPoint: null,
+    })
+
+
+  // ==========================================================
+  // POLYLINE DRAFT
+  // ==========================================================
+
+  const [
+    polylineDraft,
+    setPolylineDraft,
+  ] =
+    useState({
+      points: [],
       previewPoint: null,
     })
 
@@ -835,6 +976,7 @@ export default function TakeoffPage() {
       calibrationDraft.point2
     )
 
+
   const currentPageDistances =
     useMemo(
       () =>
@@ -851,6 +993,41 @@ export default function TakeoffPage() {
       ]
     )
 
+
+  const currentPageLinears =
+    useMemo(
+      () =>
+        takeoffEntities.filter(
+          (entity) =>
+            entity.pageNumber ===
+              pageNumber &&
+            entity.type ===
+              'linear'
+        ),
+      [
+        takeoffEntities,
+        pageNumber,
+      ]
+    )
+
+
+  const currentPagePolylines =
+    useMemo(
+      () =>
+        takeoffEntities.filter(
+          (entity) =>
+            entity.pageNumber ===
+              pageNumber &&
+            entity.type ===
+              'polyline'
+        ),
+      [
+        takeoffEntities,
+        pageNumber,
+      ]
+    )
+
+
   const latestDistance =
     currentPageDistances.length
       ? currentPageDistances[
@@ -858,6 +1035,25 @@ export default function TakeoffPage() {
           1
         ]
       : null
+
+
+  const latestLinear =
+    currentPageLinears.length
+      ? currentPageLinears[
+          currentPageLinears.length -
+          1
+        ]
+      : null
+
+
+  const latestPolyline =
+    currentPagePolylines.length
+      ? currentPagePolylines[
+          currentPagePolylines.length -
+          1
+        ]
+      : null
+
 
   const previewDistance =
     activeTool ===
@@ -868,6 +1064,61 @@ export default function TakeoffPage() {
       ? realDistanceFromPoints(
           distanceDraft.point1,
           distanceDraft.previewPoint,
+          currentCalibration
+        )
+      : null
+
+
+  const previewLinear =
+    activeTool ===
+      'line' &&
+    lineDraft.point1 &&
+    lineDraft.previewPoint &&
+    currentCalibration
+      ? realDistanceFromPoints(
+          lineDraft.point1,
+          lineDraft.previewPoint,
+          currentCalibration
+        )
+      : null
+
+
+  const previewPolylinePoints =
+    useMemo(
+      () => {
+        if (
+          activeTool !==
+            'polyline' ||
+          !polylineDraft.points.length
+        ) {
+          return []
+        }
+
+        if (
+          polylineDraft.previewPoint
+        ) {
+          return [
+            ...polylineDraft.points,
+            polylineDraft.previewPoint,
+          ]
+        }
+
+        return [
+          ...polylineDraft.points,
+        ]
+      },
+      [
+        activeTool,
+        polylineDraft,
+      ]
+    )
+
+
+  const previewPolyline =
+    currentCalibration &&
+    previewPolylinePoints.length >= 2
+      ? realPolylineLength(
+          previewPolylinePoints,
           currentCalibration
         )
       : null
@@ -935,6 +1186,30 @@ export default function TakeoffPage() {
     )
 
 
+  const resetLineDraft =
+    useCallback(
+      () => {
+        setLineDraft({
+          point1: null,
+          previewPoint: null,
+        })
+      },
+      []
+    )
+
+
+  const resetPolylineDraft =
+    useCallback(
+      () => {
+        setPolylineDraft({
+          points: [],
+          previewPoint: null,
+        })
+      },
+      []
+    )
+
+
   // ==========================================================
   // TOOL ACTIVATION
   // ==========================================================
@@ -958,6 +1233,24 @@ export default function TakeoffPage() {
       'distance'
     ) {
       resetDistanceDraft()
+    }
+
+    if (
+      activeTool ===
+      'line' &&
+      toolId !==
+      'line'
+    ) {
+      resetLineDraft()
+    }
+
+    if (
+      activeTool ===
+      'polyline' &&
+      toolId !==
+      'polyline'
+    ) {
+      resetPolylineDraft()
     }
 
     setActiveTool(
@@ -991,6 +1284,8 @@ export default function TakeoffPage() {
     }
 
     resetDistanceDraft()
+    resetLineDraft()
+    resetPolylineDraft()
     resetCalibrationDraft()
 
     if (
@@ -1135,6 +1430,75 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
+  // POLYLINE COMMANDS
+  // ==========================================================
+
+  const finishPolyline =
+    useCallback(
+      () => {
+        if (
+          activeTool !==
+          'polyline'
+        ) {
+          return
+        }
+
+        const cleanedPoints =
+          removeConsecutiveDuplicatePoints(
+            polylineDraft.points
+          )
+
+        if (
+          cleanedPoints.length <
+          2
+        ) {
+          return
+        }
+
+        const entity = {
+          id:
+            createEntityId(),
+
+          type:
+            'polyline',
+
+          pageNumber,
+
+          points:
+            cleanedPoints.map(
+              (point) => ({
+                ...point,
+              })
+            ),
+
+          createdAt:
+            new Date()
+              .toISOString(),
+        }
+
+        setTakeoffEntities(
+          (current) => [
+            ...current,
+            entity,
+          ]
+        )
+
+        resetPolylineDraft()
+
+        setInspectorTab(
+          'properties'
+        )
+      },
+      [
+        activeTool,
+        pageNumber,
+        polylineDraft.points,
+        resetPolylineDraft,
+      ]
+    )
+
+
+  // ==========================================================
   // IMPORT
   // ==========================================================
 
@@ -1266,6 +1630,8 @@ export default function TakeoffPage() {
 
       resetCalibrationDraft()
       resetDistanceDraft()
+      resetLineDraft()
+      resetPolylineDraft()
 
       setActiveTool(
         'select'
@@ -1307,6 +1673,8 @@ export default function TakeoffPage() {
 
       resetCalibrationDraft()
       resetDistanceDraft()
+      resetLineDraft()
+      resetPolylineDraft()
 
       setPdfError(
         'The PDF could not be opened.'
@@ -1424,6 +1792,8 @@ export default function TakeoffPage() {
 
           resetCalibrationDraft()
           resetDistanceDraft()
+          resetLineDraft()
+          resetPolylineDraft()
 
           setActiveTool(
             'select'
@@ -1457,6 +1827,8 @@ export default function TakeoffPage() {
       pageNumber,
       resetCalibrationDraft,
       resetDistanceDraft,
+      resetLineDraft,
+      resetPolylineDraft,
     ]
   )
 
@@ -1890,6 +2262,36 @@ export default function TakeoffPage() {
       )
     }
 
+    if (
+      activeTool ===
+        'line' &&
+      lineDraft.point1
+    ) {
+      setLineDraft(
+        (current) => ({
+          ...current,
+
+          previewPoint:
+            point,
+        })
+      )
+    }
+
+    if (
+      activeTool ===
+        'polyline' &&
+      polylineDraft.points.length
+    ) {
+      setPolylineDraft(
+        (current) => ({
+          ...current,
+
+          previewPoint:
+            point,
+        })
+      )
+    }
+
     const session =
       panSessionRef.current
 
@@ -2154,8 +2556,194 @@ export default function TakeoffPage() {
 
       return
     }
+
+
+    // ========================================================
+    // LINEAR
+    // ========================================================
+
+    if (
+      activeTool ===
+      'line'
+    ) {
+      event.preventDefault()
+
+      if (
+        !currentCalibration
+      ) {
+        setInspectorTab(
+          'properties'
+        )
+
+        setInspectorOpen(
+          true
+        )
+
+        return
+      }
+
+      if (
+        !lineDraft.point1
+      ) {
+        setLineDraft({
+          point1:
+            point,
+
+          previewPoint:
+            point,
+        })
+
+        return
+      }
+
+      const pdfLength =
+        pointDistance(
+          lineDraft.point1,
+          point
+        )
+
+      if (
+        pdfLength <
+        0.0001
+      ) {
+        return
+      }
+
+      const entity = {
+        id:
+          createEntityId(),
+
+        type:
+          'linear',
+
+        pageNumber,
+
+        points: [
+          {
+            ...lineDraft.point1,
+          },
+          {
+            ...point,
+          },
+        ],
+
+        createdAt:
+          new Date()
+            .toISOString(),
+      }
+
+      setTakeoffEntities(
+        (current) => [
+          ...current,
+          entity,
+        ]
+      )
+
+      resetLineDraft()
+
+      setInspectorTab(
+        'properties'
+      )
+
+      return
+    }
+
+
+    // ========================================================
+    // POLYLINE
+    // ========================================================
+
+    if (
+      activeTool ===
+      'polyline'
+    ) {
+      event.preventDefault()
+
+      if (
+        !currentCalibration
+      ) {
+        setInspectorTab(
+          'properties'
+        )
+
+        setInspectorOpen(
+          true
+        )
+
+        return
+      }
+
+      setPolylineDraft(
+        (current) => {
+          if (
+            !current.points.length
+          ) {
+            return {
+              points: [
+                point,
+              ],
+
+              previewPoint:
+                point,
+            }
+          }
+
+          const lastPoint =
+            current.points[
+              current.points.length -
+              1
+            ]
+
+          if (
+            pointDistance(
+              lastPoint,
+              point
+            ) <
+            0.0001
+          ) {
+            return current
+          }
+
+          return {
+            points: [
+              ...current.points,
+              point,
+            ],
+
+            previewPoint:
+              point,
+          }
+        }
+      )
+
+      return
+    }
   }
 
+
+  // ==========================================================
+  // DOUBLE CLICK
+  // ==========================================================
+
+  function handleDoubleClick(
+    event
+  ) {
+    if (
+      activeTool !==
+      'polyline'
+    ) {
+      return
+    }
+
+    event.preventDefault()
+
+    finishPolyline()
+  }
+
+
+  // ==========================================================
+  // POINTER UP
+  // ==========================================================
 
   function handlePointerUp(
     event
@@ -2328,6 +2916,34 @@ export default function TakeoffPage() {
           return
         }
 
+
+        // ====================================================
+        // ENTER
+        // ====================================================
+
+        if (
+          event.key ===
+          'Enter'
+        ) {
+          if (
+            activeTool ===
+            'polyline' &&
+            polylineDraft.points.length >=
+              2
+          ) {
+            event.preventDefault()
+
+            finishPolyline()
+
+            return
+          }
+        }
+
+
+        // ====================================================
+        // ESCAPE
+        // ====================================================
+
         if (
           event.key ===
           'Escape'
@@ -2337,6 +2953,7 @@ export default function TakeoffPage() {
             'calibrate'
           ) {
             cancelCalibration()
+
             return
           }
 
@@ -2348,6 +2965,45 @@ export default function TakeoffPage() {
               distanceDraft.point1
             ) {
               resetDistanceDraft()
+
+              return
+            }
+
+            setActiveTool(
+              'select'
+            )
+
+            return
+          }
+
+          if (
+            activeTool ===
+            'line'
+          ) {
+            if (
+              lineDraft.point1
+            ) {
+              resetLineDraft()
+
+              return
+            }
+
+            setActiveTool(
+              'select'
+            )
+
+            return
+          }
+
+          if (
+            activeTool ===
+            'polyline'
+          ) {
+            if (
+              polylineDraft.points.length
+            ) {
+              resetPolylineDraft()
+
               return
             }
 
@@ -2369,9 +3025,11 @@ export default function TakeoffPage() {
           return
         }
 
+
         const key =
           event.key
             .toLowerCase()
+
 
         if (
           key ===
@@ -2380,6 +3038,7 @@ export default function TakeoffPage() {
           activateTool(
             'select'
           )
+
         } else if (
           key ===
           'h'
@@ -2387,6 +3046,7 @@ export default function TakeoffPage() {
           activateTool(
             'pan'
           )
+
         } else if (
           key ===
           'z'
@@ -2394,6 +3054,7 @@ export default function TakeoffPage() {
           activateTool(
             'zoom'
           )
+
         } else if (
           key ===
           'd'
@@ -2401,6 +3062,7 @@ export default function TakeoffPage() {
           activateTool(
             'distance'
           )
+
         } else if (
           key ===
           'l'
@@ -2408,6 +3070,15 @@ export default function TakeoffPage() {
           activateTool(
             'line'
           )
+
+        } else if (
+          key ===
+          'p'
+        ) {
+          activateTool(
+            'polyline'
+          )
+
         } else if (
           key ===
           'a'
@@ -2415,6 +3086,7 @@ export default function TakeoffPage() {
           activateTool(
             'area'
           )
+
         } else if (
           key ===
           'r'
@@ -2422,6 +3094,7 @@ export default function TakeoffPage() {
           activateTool(
             'rectangle'
           )
+
         } else if (
           key ===
           'c'
@@ -2429,11 +3102,13 @@ export default function TakeoffPage() {
           activateTool(
             'count'
           )
+
         } else if (
           key ===
           'f'
         ) {
           fitPage()
+
         } else if (
           key ===
           'w'
@@ -2458,9 +3133,14 @@ export default function TakeoffPage() {
       activeTool,
       cancelCalibration,
       distanceDraft,
+      lineDraft,
+      polylineDraft,
+      finishPolyline,
       fitPage,
       fitWidth,
       resetDistanceDraft,
+      resetLineDraft,
+      resetPolylineDraft,
     ]
   )
 
@@ -2513,26 +3193,34 @@ export default function TakeoffPage() {
   ) {
     viewportCursor =
       'grabbing'
+
   } else if (
     activeTool ===
     'pan'
   ) {
     viewportCursor =
       'grab'
+
   } else if (
     activeTool ===
     'zoom'
   ) {
     viewportCursor =
       'zoom-in'
+
   } else if (
     activeTool ===
       'calibrate' ||
     activeTool ===
-      'distance'
+      'distance' ||
+    activeTool ===
+      'line' ||
+    activeTool ===
+      'polyline'
   ) {
     viewportCursor =
       'crosshair'
+
   } else if (
     pdfDocument
   ) {
@@ -2549,6 +3237,7 @@ export default function TakeoffPage() {
     currentCalibration
       ? `Calibrated · ${currentCalibration.displayUnit}`
       : 'Not calibrated'
+
 
   let calibrationInstruction =
     null
@@ -2573,6 +3262,7 @@ export default function TakeoffPage() {
     }
   }
 
+
   let distanceInstruction =
     null
 
@@ -2596,14 +3286,151 @@ export default function TakeoffPage() {
     }
   }
 
-  const commandInstruction =
+
+  let lineInstruction =
+    null
+
+  if (
     activeTool ===
-      'calibrate'
-      ? calibrationInstruction
-      : activeTool ===
-          'distance'
-        ? distanceInstruction
-        : null
+    'line'
+  ) {
+    if (
+      !currentCalibration
+    ) {
+      lineInstruction =
+        'Calibrate this page before creating linear takeoff.'
+    } else if (
+      !lineDraft.point1
+    ) {
+      lineInstruction =
+        'Click the first linear takeoff point.'
+    } else {
+      lineInstruction =
+        'Click the second point to save the linear quantity.'
+    }
+  }
+
+
+  let polylineInstruction =
+    null
+
+  if (
+    activeTool ===
+    'polyline'
+  ) {
+    if (
+      !currentCalibration
+    ) {
+      polylineInstruction =
+        'Calibrate this page before creating polyline takeoff.'
+    } else if (
+      !polylineDraft.points.length
+    ) {
+      polylineInstruction =
+        'Click the first polyline point.'
+    } else if (
+      polylineDraft.points.length ===
+      1
+    ) {
+      polylineInstruction =
+        'Click the next point. Continue adding vertices.'
+    } else {
+      polylineInstruction =
+        'Continue clicking vertices. Enter or double-click to finish.'
+    }
+  }
+
+
+  let commandInstruction =
+    null
+
+  if (
+    activeTool ===
+    'calibrate'
+  ) {
+    commandInstruction =
+      calibrationInstruction
+
+  } else if (
+    activeTool ===
+    'distance'
+  ) {
+    commandInstruction =
+      distanceInstruction
+
+  } else if (
+    activeTool ===
+    'line'
+  ) {
+    commandInstruction =
+      lineInstruction
+
+  } else if (
+    activeTool ===
+    'polyline'
+  ) {
+    commandInstruction =
+      polylineInstruction
+  }
+
+
+  let commandName =
+    null
+
+  if (
+    activeTool ===
+    'calibrate'
+  ) {
+    commandName =
+      'CALIBRATE'
+
+  } else if (
+    activeTool ===
+    'distance'
+  ) {
+    commandName =
+      'DISTANCE'
+
+  } else if (
+    activeTool ===
+    'line'
+  ) {
+    commandName =
+      'LINEAR'
+
+  } else if (
+    activeTool ===
+    'polyline'
+  ) {
+    commandName =
+      'POLYLINE'
+  }
+
+
+  let liveQuantity =
+    null
+
+  if (
+    activeTool ===
+    'distance'
+  ) {
+    liveQuantity =
+      previewDistance
+
+  } else if (
+    activeTool ===
+    'line'
+  ) {
+    liveQuantity =
+      previewLinear
+
+  } else if (
+    activeTool ===
+    'polyline'
+  ) {
+    liveQuantity =
+      previewPolyline
+  }
 
 
   // ==========================================================
@@ -3261,6 +4088,9 @@ export default function TakeoffPage() {
           onPointerCancel={
             handlePointerUp
           }
+          onDoubleClick={
+            handleDoubleClick
+          }
           onPointerLeave={() => {
             if (
               !panSessionRef.current
@@ -3292,6 +4122,36 @@ export default function TakeoffPage() {
                 distanceDraft.point1
               ) {
                 setDistanceDraft(
+                  (current) => ({
+                    ...current,
+
+                    previewPoint:
+                      null,
+                  })
+                )
+              }
+
+              if (
+                activeTool ===
+                  'line' &&
+                lineDraft.point1
+              ) {
+                setLineDraft(
+                  (current) => ({
+                    ...current,
+
+                    previewPoint:
+                      null,
+                  })
+                )
+              }
+
+              if (
+                activeTool ===
+                  'polyline' &&
+                polylineDraft.points.length
+              ) {
+                setPolylineDraft(
                   (current) => ({
                     ...current,
 
@@ -3702,6 +4562,351 @@ export default function TakeoffPage() {
 
 
                 {/* ============================================
+                    SAVED LINEAR TAKEOFFS
+                ============================================ */}
+
+                {currentPageLinears.map(
+                  (entity) => {
+                    const point1 =
+                      entity.points[0]
+
+                    const point2 =
+                      entity.points[1]
+
+                    const length =
+                      realDistanceFromPoints(
+                        point1,
+                        point2,
+                        currentCalibration
+                      )
+
+                    const midpoint = {
+                      x:
+                        (
+                          point1.x +
+                          point2.x
+                        ) /
+                        2,
+
+                      y:
+                        (
+                          point1.y +
+                          point2.y
+                        ) /
+                        2,
+                    }
+
+                    const label =
+                      currentCalibration &&
+                      length !== null
+                        ? `${formatNumber(
+                            length,
+                            2
+                          )} ${currentCalibration.displayUnit}`
+                        : 'Unscaled'
+
+                    return (
+                      <g
+                        key={
+                          entity.id
+                        }
+                      >
+                        <line
+                          x1={
+                            point1.x
+                          }
+                          y1={
+                            point1.y
+                          }
+                          x2={
+                            point2.x
+                          }
+                          y2={
+                            point2.y
+                          }
+                          stroke="#7c3aed"
+                          strokeWidth="3"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <circle
+                          cx={
+                            point1.x
+                          }
+                          cy={
+                            point1.y
+                          }
+                          r={
+                            4 /
+                            Math.max(
+                              effectiveScale,
+                              0.01
+                            )
+                          }
+                          fill="#ffffff"
+                          stroke="#7c3aed"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <circle
+                          cx={
+                            point2.x
+                          }
+                          cy={
+                            point2.y
+                          }
+                          r={
+                            4 /
+                            Math.max(
+                              effectiveScale,
+                              0.01
+                            )
+                          }
+                          fill="#ffffff"
+                          stroke="#7c3aed"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <g
+                          transform={`translate(${midpoint.x} ${midpoint.y})`}
+                        >
+                          <rect
+                            x={
+                              -40 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            y={
+                              -11 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            width={
+                              80 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            height={
+                              22 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            rx={
+                              4 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            fill="rgba(76, 29, 149, 0.94)"
+                          />
+
+                          <text
+                            x="0"
+                            y={
+                              4 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            textAnchor="middle"
+                            fill="#ffffff"
+                            fontSize={
+                              10 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            fontWeight="700"
+                          >
+                            {
+                              label
+                            }
+                          </text>
+                        </g>
+                      </g>
+                    )
+                  }
+                )}
+
+
+                {/* ============================================
+                    SAVED POLYLINES
+                ============================================ */}
+
+                {currentPagePolylines.map(
+                  (entity) => {
+                    const length =
+                      realPolylineLength(
+                        entity.points,
+                        currentCalibration
+                      )
+
+                    const lastPoint =
+                      entity.points[
+                        entity.points.length -
+                        1
+                      ]
+
+                    const label =
+                      currentCalibration &&
+                      length !== null
+                        ? `${formatNumber(
+                            length,
+                            2
+                          )} ${currentCalibration.displayUnit}`
+                        : 'Unscaled'
+
+                    const pointsAttribute =
+                      entity.points
+                        .map(
+                          (point) =>
+                            `${point.x},${point.y}`
+                        )
+                        .join(' ')
+
+                    return (
+                      <g
+                        key={
+                          entity.id
+                        }
+                      >
+                        <polyline
+                          points={
+                            pointsAttribute
+                          }
+                          fill="none"
+                          stroke="#ea580c"
+                          strokeWidth="3"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+
+                        {entity.points.map(
+                          (
+                            point,
+                            index
+                          ) => (
+                            <circle
+                              key={
+                                `${entity.id}-${index}`
+                              }
+                              cx={
+                                point.x
+                              }
+                              cy={
+                                point.y
+                              }
+                              r={
+                                4 /
+                                Math.max(
+                                  effectiveScale,
+                                  0.01
+                                )
+                              }
+                              fill="#ffffff"
+                              stroke="#ea580c"
+                              strokeWidth="2"
+                              vectorEffect="non-scaling-stroke"
+                            />
+                          )
+                        )}
+
+
+                        <g
+                          transform={`translate(${lastPoint.x} ${lastPoint.y})`}
+                        >
+                          <rect
+                            x={
+                              8 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            y={
+                              -11 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            width={
+                              82 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            height={
+                              22 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            rx={
+                              4 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            fill="rgba(154, 52, 18, 0.94)"
+                          />
+
+                          <text
+                            x={
+                              49 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            y={
+                              4 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            textAnchor="middle"
+                            fill="#ffffff"
+                            fontSize={
+                              10 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            fontWeight="700"
+                          >
+                            {
+                              label
+                            }
+                          </text>
+                        </g>
+                      </g>
+                    )
+                  }
+                )}
+
+
+                {/* ============================================
                     CALIBRATION DRAFT
                 ============================================ */}
 
@@ -3871,6 +5076,183 @@ export default function TakeoffPage() {
                     </g>
                   )}
 
+
+                {/* ============================================
+                    LINEAR DRAFT
+                ============================================ */}
+
+                {activeTool ===
+                  'line' &&
+                  lineDraft.point1 &&
+                  lineDraft.previewPoint &&
+                  currentCalibration && (
+                    <g>
+                      <line
+                        x1={
+                          lineDraft
+                            .point1
+                            .x
+                        }
+                        y1={
+                          lineDraft
+                            .point1
+                            .y
+                        }
+                        x2={
+                          lineDraft
+                            .previewPoint
+                            .x
+                        }
+                        y2={
+                          lineDraft
+                            .previewPoint
+                            .y
+                        }
+                        stroke="#7c3aed"
+                        strokeWidth="3"
+                        strokeDasharray="6 4"
+                        vectorEffect="non-scaling-stroke"
+                      />
+
+                      <circle
+                        cx={
+                          lineDraft
+                            .point1
+                            .x
+                        }
+                        cy={
+                          lineDraft
+                            .point1
+                            .y
+                        }
+                        r={
+                          5 /
+                          Math.max(
+                            effectiveScale,
+                            0.01
+                          )
+                        }
+                        fill="#ffffff"
+                        stroke="#7c3aed"
+                        strokeWidth="2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+
+                      <circle
+                        cx={
+                          lineDraft
+                            .previewPoint
+                            .x
+                        }
+                        cy={
+                          lineDraft
+                            .previewPoint
+                            .y
+                        }
+                        r={
+                          5 /
+                          Math.max(
+                            effectiveScale,
+                            0.01
+                          )
+                        }
+                        fill="#ffffff"
+                        stroke="#7c3aed"
+                        strokeWidth="2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </g>
+                  )}
+
+
+                {/* ============================================
+                    POLYLINE DRAFT
+                ============================================ */}
+
+                {activeTool ===
+                  'polyline' &&
+                  previewPolylinePoints.length >=
+                    2 &&
+                  currentCalibration && (
+                    <g>
+                      <polyline
+                        points={
+                          previewPolylinePoints
+                            .map(
+                              (point) =>
+                                `${point.x},${point.y}`
+                            )
+                            .join(' ')
+                        }
+                        fill="none"
+                        stroke="#ea580c"
+                        strokeWidth="3"
+                        strokeDasharray="6 4"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+
+
+                      {polylineDraft.points.map(
+                        (
+                          point,
+                          index
+                        ) => (
+                          <circle
+                            key={
+                              `draft-polyline-${index}`
+                            }
+                            cx={
+                              point.x
+                            }
+                            cy={
+                              point.y
+                            }
+                            r={
+                              5 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            fill="#ffffff"
+                            stroke="#ea580c"
+                            strokeWidth="2"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        )
+                      )}
+
+
+                      {polylineDraft.previewPoint && (
+                        <circle
+                          cx={
+                            polylineDraft
+                              .previewPoint
+                              .x
+                          }
+                          cy={
+                            polylineDraft
+                              .previewPoint
+                              .y
+                          }
+                          r={
+                            5 /
+                            Math.max(
+                              effectiveScale,
+                              0.01
+                            )
+                          }
+                          fill="#ffffff"
+                          stroke="#ea580c"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+                    </g>
+                  )}
+
               </svg>
 
 
@@ -3942,10 +5324,7 @@ export default function TakeoffPage() {
             >
               <strong>
                 {
-                  activeTool ===
-                    'calibrate'
-                    ? 'CALIBRATE'
-                    : 'DISTANCE'
+                  commandName
                 }
               </strong>
 
@@ -3961,8 +5340,9 @@ export default function TakeoffPage() {
               </span>
 
 
-              {previewDistance !==
-                null && (
+              {liveQuantity !==
+                null &&
+                currentCalibration && (
                 <strong
                   style={{
                     color:
@@ -3971,12 +5351,12 @@ export default function TakeoffPage() {
                 >
                   {
                     formatNumber(
-                      previewDistance,
+                      liveQuantity,
                       2
                     )
                   } {
                     currentCalibration
-                      ?.displayUnit
+                      .displayUnit
                   }
                 </strong>
               )}
@@ -4664,7 +6044,6 @@ export default function TakeoffPage() {
                         Distance
                       </h3>
 
-
                       <div
                         style={{
                           padding:
@@ -4698,6 +6077,137 @@ export default function TakeoffPage() {
                         }
                       </div>
 
+                    </section>
+                  )}
+
+
+                  {/* ==========================================
+                      LINEAR TOOL
+                  ========================================== */}
+
+                  {activeTool ===
+                    'line' && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+
+                      <h3>
+                        Linear Takeoff
+                      </h3>
+
+                      <div
+                        style={{
+                          padding:
+                            '10px 11px',
+
+                          border:
+                            '1px solid #d8e1e8',
+
+                          borderRadius:
+                            6,
+
+                          background:
+                            currentCalibration
+                              ? '#f8fafc'
+                              : '#fff7ed',
+
+                          color:
+                            currentCalibration
+                              ? '#334155'
+                              : '#9a3412',
+
+                          fontSize:
+                            12,
+
+                          lineHeight:
+                            1.45,
+                        }}
+                      >
+                        {
+                          lineInstruction
+                        }
+                      </div>
+
+
+                      {lineDraft.point1 && (
+                        <div
+                          className={
+                            styles.propertyRow
+                          }
+                        >
+                          <span>
+                            Live length
+                          </span>
+
+                          <strong>
+                            {
+                              previewLinear !==
+                                null
+                                ? `${formatNumber(
+                                    previewLinear,
+                                    2
+                                  )} ${currentCalibration.displayUnit}`
+                                : 'Move cursor'
+                            }
+                          </strong>
+                        </div>
+                      )}
+
+                    </section>
+                  )}
+
+
+                  {/* ==========================================
+                      POLYLINE TOOL
+                  ========================================== */}
+
+                  {activeTool ===
+                    'polyline' && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+
+                      <h3>
+                        Polyline Takeoff
+                      </h3>
+
+                      <div
+                        style={{
+                          padding:
+                            '10px 11px',
+
+                          border:
+                            '1px solid #d8e1e8',
+
+                          borderRadius:
+                            6,
+
+                          background:
+                            currentCalibration
+                              ? '#f8fafc'
+                              : '#fff7ed',
+
+                          color:
+                            currentCalibration
+                              ? '#334155'
+                              : '#9a3412',
+
+                          fontSize:
+                            12,
+
+                          lineHeight:
+                            1.45,
+                        }}
+                      >
+                        {
+                          polylineInstruction
+                        }
+                      </div>
+
 
                       {currentCalibration && (
                         <>
@@ -4707,87 +6217,145 @@ export default function TakeoffPage() {
                             }
                           >
                             <span>
-                              Page measurements
+                              Vertices
                             </span>
 
                             <strong>
                               {
-                                currentPageDistances
+                                polylineDraft
+                                  .points
                                   .length
                               }
                             </strong>
                           </div>
 
 
-                          {distanceDraft.point1 && (
-                            <div
-                              className={
-                                styles.propertyRow
+                          <div
+                            className={
+                              styles.propertyRow
+                            }
+                          >
+                            <span>
+                              Live total
+                            </span>
+
+                            <strong>
+                              {
+                                previewPolyline !==
+                                  null
+                                  ? `${formatNumber(
+                                      previewPolyline,
+                                      2
+                                    )} ${currentCalibration.displayUnit}`
+                                  : '—'
                               }
+                            </strong>
+                          </div>
+
+
+                          {polylineDraft
+                            .points
+                            .length >=
+                            2 && (
+                            <button
+                              type="button"
+                              onClick={
+                                finishPolyline
+                              }
+                              style={{
+                                width:
+                                  '100%',
+
+                                height:
+                                  34,
+
+                                marginTop:
+                                  10,
+
+                                border:
+                                  '1px solid #052c49',
+
+                                borderRadius:
+                                  5,
+
+                                background:
+                                  '#052c49',
+
+                                color:
+                                  '#ffffff',
+
+                                cursor:
+                                  'pointer',
+
+                                fontWeight:
+                                  700,
+                              }}
                             >
-                              <span>
-                                Live distance
-                              </span>
-
-                              <strong>
-                                {
-                                  previewDistance !==
-                                    null
-                                    ? `${formatNumber(
-                                        previewDistance,
-                                        2
-                                      )} ${currentCalibration.displayUnit}`
-                                    : 'Move cursor'
-                                }
-                              </strong>
-                            </div>
+                              Finish Polyline
+                            </button>
                           )}
+
                         </>
-                      )}
-
-
-                      {!currentCalibration && (
-                        <button
-                          type="button"
-                          onClick={
-                            startCalibration
-                          }
-                          style={{
-                            width:
-                              '100%',
-
-                            height:
-                              34,
-
-                            marginTop:
-                              10,
-
-                            border:
-                              '1px solid #052c49',
-
-                            borderRadius:
-                              5,
-
-                            background:
-                              '#052c49',
-
-                            color:
-                              '#ffffff',
-
-                            cursor:
-                              'pointer',
-
-                            fontWeight:
-                              700,
-                          }}
-                        >
-                          Calibrate Page
-                        </button>
                       )}
 
                     </section>
                   )}
 
+
+                  {!currentCalibration &&
+                    (
+                      activeTool ===
+                        'distance' ||
+                      activeTool ===
+                        'line' ||
+                      activeTool ===
+                        'polyline'
+                    ) && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+                      <button
+                        type="button"
+                        onClick={
+                          startCalibration
+                        }
+                        style={{
+                          width:
+                            '100%',
+
+                          height:
+                            34,
+
+                          border:
+                            '1px solid #052c49',
+
+                          borderRadius:
+                            5,
+
+                          background:
+                            '#052c49',
+
+                          color:
+                            '#ffffff',
+
+                          cursor:
+                            'pointer',
+
+                          fontWeight:
+                            700,
+                        }}
+                      >
+                        Calibrate Page
+                      </button>
+                    </section>
+                  )}
+
+
+                  {/* ==========================================
+                      DRAWING
+                  ========================================== */}
 
                   <section
                     className={
@@ -4798,7 +6366,6 @@ export default function TakeoffPage() {
                     <h3>
                       Drawing
                     </h3>
-
 
                     <div
                       className={
@@ -4817,7 +6384,6 @@ export default function TakeoffPage() {
                         }
                       </strong>
                     </div>
-
 
                     <div
                       className={
@@ -4840,6 +6406,10 @@ export default function TakeoffPage() {
                   </section>
 
 
+                  {/* ==========================================
+                      VIEW
+                  ========================================== */}
+
                   <section
                     className={
                       styles.propertySection
@@ -4849,7 +6419,6 @@ export default function TakeoffPage() {
                     <h3>
                       View
                     </h3>
-
 
                     <div
                       className={
@@ -4866,7 +6435,6 @@ export default function TakeoffPage() {
                         }
                       </strong>
                     </div>
-
 
                     <div
                       className={
@@ -4890,6 +6458,10 @@ export default function TakeoffPage() {
                   </section>
 
 
+                  {/* ==========================================
+                      SCALE
+                  ========================================== */}
+
                   <section
                     className={
                       styles.propertySection
@@ -4899,7 +6471,6 @@ export default function TakeoffPage() {
                     <h3>
                       Scale
                     </h3>
-
 
                     <div
                       className={
@@ -4919,7 +6490,6 @@ export default function TakeoffPage() {
                       </strong>
                     </div>
 
-
                     <div
                       className={
                         styles.propertyRow
@@ -4938,7 +6508,6 @@ export default function TakeoffPage() {
                         }
                       </strong>
                     </div>
-
 
                     <div
                       className={
@@ -5008,6 +6577,10 @@ export default function TakeoffPage() {
                   </section>
 
 
+                  {/* ==========================================
+                      TAKEOFF SUMMARY
+                  ========================================== */}
+
                   <section
                     className={
                       styles.propertySection
@@ -5017,7 +6590,6 @@ export default function TakeoffPage() {
                     <h3>
                       Takeoff
                     </h3>
-
 
                     <div
                       className={
@@ -5036,6 +6608,22 @@ export default function TakeoffPage() {
                       </strong>
                     </div>
 
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Linear
+                      </span>
+
+                      <strong>
+                        {
+                          currentPageLinears
+                            .length
+                        }
+                      </strong>
+                    </div>
 
                     <div
                       className={
@@ -5043,7 +6631,25 @@ export default function TakeoffPage() {
                       }
                     >
                       <span>
-                        Latest
+                        Polylines
+                      </span>
+
+                      <strong>
+                        {
+                          currentPagePolylines
+                            .length
+                        }
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Latest distance
                       </span>
 
                       <strong>
@@ -5065,8 +6671,68 @@ export default function TakeoffPage() {
                       </strong>
                     </div>
 
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Latest linear
+                      </span>
+
+                      <strong>
+                        {
+                          latestLinear &&
+                          currentCalibration
+                            ? `${formatNumber(
+                                realDistanceFromPoints(
+                                  latestLinear
+                                    .points[0],
+                                  latestLinear
+                                    .points[1],
+                                  currentCalibration
+                                ),
+                                2
+                              )} ${currentCalibration.displayUnit}`
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Latest polyline
+                      </span>
+
+                      <strong>
+                        {
+                          latestPolyline &&
+                          currentCalibration
+                            ? `${formatNumber(
+                                realPolylineLength(
+                                  latestPolyline
+                                    .points,
+                                  currentCalibration
+                                ),
+                                2
+                              )} ${currentCalibration.displayUnit}`
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
                   </section>
 
+
+                  {/* ==========================================
+                      SELECTION
+                  ========================================== */}
 
                   <section
                     className={
@@ -5077,7 +6743,6 @@ export default function TakeoffPage() {
                     <h3>
                       Selection
                     </h3>
-
 
                     <div
                       className={
@@ -5094,6 +6759,10 @@ export default function TakeoffPage() {
               )}
 
 
+              {/* ==============================================
+                  LAYERS
+              ============================================== */}
+
               {inspectorTab ===
                 'layers' && (
                 <>
@@ -5107,7 +6776,6 @@ export default function TakeoffPage() {
                     <h3>
                       Layers
                     </h3>
-
 
                     <div
                       className={
@@ -5130,7 +6798,6 @@ export default function TakeoffPage() {
                     <h3>
                       Drawing
                     </h3>
-
 
                     <div
                       className={
@@ -5164,9 +6831,8 @@ export default function TakeoffPage() {
                     >
 
                       <h3>
-                        Takeoff
+                        Distance
                       </h3>
-
 
                       <div
                         className={
@@ -5186,6 +6852,84 @@ export default function TakeoffPage() {
                         <strong>
                           {
                             currentPageDistances
+                              .length
+                          }
+                        </strong>
+                      </div>
+
+                    </section>
+                  )}
+
+
+                  {currentPageLinears.length >
+                    0 && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+
+                      <h3>
+                        Linear
+                      </h3>
+
+                      <div
+                        className={
+                          styles.layerRow
+                        }
+                      >
+                        <span
+                          className={
+                            styles.layerDot
+                          }
+                        />
+
+                        <span>
+                          Linear Takeoff
+                        </span>
+
+                        <strong>
+                          {
+                            currentPageLinears
+                              .length
+                          }
+                        </strong>
+                      </div>
+
+                    </section>
+                  )}
+
+
+                  {currentPagePolylines.length >
+                    0 && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+
+                      <h3>
+                        Polyline
+                      </h3>
+
+                      <div
+                        className={
+                          styles.layerRow
+                        }
+                      >
+                        <span
+                          className={
+                            styles.layerDot
+                          }
+                        />
+
+                        <span>
+                          Polyline Takeoff
+                        </span>
+
+                        <strong>
+                          {
+                            currentPagePolylines
                               .length
                           }
                         </strong>
@@ -5492,8 +7236,9 @@ export default function TakeoffPage() {
           )}
 
 
-          {previewDistance !==
-            null && (
+          {liveQuantity !==
+            null &&
+            currentCalibration && (
             <>
               <span
                 className={
@@ -5502,17 +7247,17 @@ export default function TakeoffPage() {
               />
 
               <span>
-                Distance
+                Length
 
                 <strong>
                   {
                     formatNumber(
-                      previewDistance,
+                      liveQuantity,
                       2
                     )
                   } {
                     currentCalibration
-                      ?.displayUnit
+                      .displayUnit
                   }
                 </strong>
               </span>
