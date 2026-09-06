@@ -10,7 +10,7 @@ import {
 
 import Link from 'next/link'
 
-import styles from '../dashboard/takeoff/takeoff.module.css'
+import styles from './takeoff.module.css'
 
 
 // ============================================================
@@ -19,11 +19,12 @@ import styles from '../dashboard/takeoff/takeoff.module.css'
 //
 // Standalone CAD-style PDF takeoff workspace.
 //
-// Takeoff is intentionally separated from the normal RitsuFlow
-// dashboard shell so that it can operate as a specialized
-// construction drawing application.
+// Design principle:
 //
-// Geometry remains independent from construction meaning:
+// THE DRAWING CANVAS IS THE PRODUCT.
+//
+// Secondary information should remain accessible without
+// permanently consuming drawing space.
 //
 // PDF Drawing
 // ↓
@@ -49,73 +50,17 @@ import styles from '../dashboard/takeoff/takeoff.module.css'
 // CONSTANTS
 // ============================================================
 
-const MIN_ZOOM =
-  0.1
-
-const MAX_ZOOM =
-  12
-
-const ZOOM_FACTOR =
-  1.15
-
-const VIEWPORT_MARGIN =
-  44
+const MIN_ZOOM = 0.1
+const MAX_ZOOM = 12
+const ZOOM_FACTOR = 1.15
+const VIEWPORT_MARGIN = 36
 
 
 // ============================================================
-// APPLICATION HEADER ICONS
+// ICONS
 // ============================================================
 
-function BackIcon() {
-
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M19 12H5" />
-      <path d="M12 19l-7-7 7-7" />
-    </svg>
-  )
-
-}
-
-
-function TakeoffApplicationIcon() {
-
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M5 3h10l4 4v14H5z" />
-      <path d="M15 3v5h4" />
-      <path d="M8 17l3-4 2 2 4-6" />
-    </svg>
-  )
-
-}
-
-
-// ============================================================
-// CAD TOOL ICONS
-// ============================================================
-
-function ToolIcon({
+function Icon({
   type,
   size = 18,
 }) {
@@ -135,12 +80,42 @@ function ToolIcon({
 
   switch (type) {
 
+    case 'back':
+      return (
+        <svg {...commonProps}>
+          <path d="M19 12H5" />
+          <path d="M12 19l-7-7 7-7" />
+        </svg>
+      )
+
+
+    case 'takeoff':
+      return (
+        <svg {...commonProps}>
+          <path d="M5 3h10l4 4v14H5z" />
+          <path d="M15 3v5h4" />
+          <path d="M8 17l3-4 2 2 4-6" />
+        </svg>
+      )
+
+
     case 'import':
       return (
         <svg {...commonProps}>
           <path d="M12 3v12" />
           <path d="M8 11l4 4 4-4" />
           <path d="M4 20h16" />
+        </svg>
+      )
+
+
+    case 'drawings':
+      return (
+        <svg {...commonProps}>
+          <path d="M5 3h10l4 4v14H5z" />
+          <path d="M15 3v5h4" />
+          <path d="M8 12h8" />
+          <path d="M8 16h6" />
         </svg>
       )
 
@@ -234,23 +209,18 @@ function ToolIcon({
       )
 
 
-    case 'rectangle':
-      return (
-        <svg {...commonProps}>
-          <rect x="4" y="6" width="16" height="12" />
-        </svg>
-      )
-
-
     case 'area':
       return (
         <svg {...commonProps}>
           <path d="M5 18L4 8l7-5 8 5-2 11z" />
-          <circle cx="5" cy="18" r="1" />
-          <circle cx="4" cy="8" r="1" />
-          <circle cx="11" cy="3" r="1" />
-          <circle cx="19" cy="8" r="1" />
-          <circle cx="17" cy="19" r="1" />
+        </svg>
+      )
+
+
+    case 'rectangle':
+      return (
+        <svg {...commonProps}>
+          <rect x="4" y="6" width="16" height="12" />
         </svg>
       )
 
@@ -294,14 +264,23 @@ function ToolIcon({
       )
 
 
-    case 'delete':
+    case 'properties':
       return (
         <svg {...commonProps}>
-          <path d="M4 7h16" />
-          <path d="M9 3h6l1 4H8z" />
-          <path d="M7 7l1 14h8l1-14" />
-          <path d="M10 11v6" />
-          <path d="M14 11v6" />
+          <path d="M5 3h14v18H5z" />
+          <path d="M9 8h6" />
+          <path d="M9 12h6" />
+          <path d="M9 16h4" />
+        </svg>
+      )
+
+
+    case 'layers':
+      return (
+        <svg {...commonProps}>
+          <path d="M12 3l8 5-8 5-8-5z" />
+          <path d="M4 12l8 5 8-5" />
+          <path d="M4 16l8 5 8-5" />
         </svg>
       )
 
@@ -313,6 +292,46 @@ function ToolIcon({
           <path d="M14 14h6v6h-6z" />
           <path d="M10 7h4" />
           <path d="M17 10v4" />
+        </svg>
+      )
+
+
+    case 'ortho':
+      return (
+        <svg {...commonProps}>
+          <path d="M5 5v14h14" />
+          <path d="M5 15h4v4" />
+        </svg>
+      )
+
+
+    case 'grid':
+      return (
+        <svg {...commonProps}>
+          <path d="M4 4h16v16H4z" />
+          <path d="M9 4v16" />
+          <path d="M15 4v16" />
+          <path d="M4 9h16" />
+          <path d="M4 15h16" />
+        </svg>
+      )
+
+
+    case 'delete':
+      return (
+        <svg {...commonProps}>
+          <path d="M4 7h16" />
+          <path d="M9 3h6l1 4H8z" />
+          <path d="M7 7l1 14h8l1-14" />
+        </svg>
+      )
+
+
+    case 'close':
+      return (
+        <svg {...commonProps}>
+          <path d="M6 6l12 12" />
+          <path d="M18 6L6 18" />
         </svg>
       )
 
@@ -346,107 +365,74 @@ function ToolIcon({
 
 
 // ============================================================
-// TOOL DEFINITIONS
+// CAD TOOL DEFINITIONS
 // ============================================================
 
-const toolGroups = [
-
+const navigationTools = [
   {
-    id: 'navigation',
-    label: 'Navigation',
-
-    tools: [
-
-      {
-        id: 'select',
-        label: 'Select',
-        icon: 'select',
-        shortcut: 'V',
-      },
-
-      {
-        id: 'pan',
-        label: 'Pan',
-        icon: 'pan',
-        shortcut: 'H',
-      },
-
-      {
-        id: 'zoom',
-        label: 'Zoom',
-        icon: 'zoom',
-        shortcut: 'Z',
-      },
-
-      {
-        id: 'fit',
-        label: 'Fit Page',
-        icon: 'fit',
-        shortcut: 'F',
-      },
-
-      {
-        id: 'fitWidth',
-        label: 'Fit Width',
-        icon: 'fitWidth',
-        shortcut: 'W',
-      },
-
-    ],
+    id: 'select',
+    label: 'Select',
+    icon: 'select',
+    shortcut: 'V',
   },
-
-
   {
-    id: 'measurement',
-    label: 'Measurement',
-
-    tools: [
-
-      {
-        id: 'distance',
-        label: 'Distance',
-        icon: 'distance',
-        shortcut: 'D',
-      },
-
-      {
-        id: 'line',
-        label: 'Linear',
-        icon: 'line',
-        shortcut: 'L',
-      },
-
-      {
-        id: 'polyline',
-        label: 'Polyline',
-        icon: 'polyline',
-        shortcut: 'PL',
-      },
-
-      {
-        id: 'area',
-        label: 'Area',
-        icon: 'area',
-        shortcut: 'A',
-      },
-
-      {
-        id: 'rectangle',
-        label: 'Rectangle',
-        icon: 'rectangle',
-        shortcut: 'R',
-      },
-
-      {
-        id: 'count',
-        label: 'Count',
-        icon: 'count',
-        shortcut: 'C',
-      },
-
-    ],
+    id: 'pan',
+    label: 'Pan',
+    icon: 'pan',
+    shortcut: 'H',
   },
+  {
+    id: 'zoom',
+    label: 'Zoom',
+    icon: 'zoom',
+    shortcut: 'Z',
+  },
+]
 
+
+const measurementTools = [
+  {
+    id: 'distance',
+    label: 'Distance',
+    icon: 'distance',
+    shortcut: 'D',
+  },
+  {
+    id: 'line',
+    label: 'Linear',
+    icon: 'line',
+    shortcut: 'L',
+  },
+  {
+    id: 'polyline',
+    label: 'Polyline',
+    icon: 'polyline',
+    shortcut: 'PL',
+  },
+  {
+    id: 'area',
+    label: 'Area',
+    icon: 'area',
+    shortcut: 'A',
+  },
+  {
+    id: 'rectangle',
+    label: 'Rectangle',
+    icon: 'rectangle',
+    shortcut: 'R',
+  },
+  {
+    id: 'count',
+    label: 'Count',
+    icon: 'count',
+    shortcut: 'C',
+  },
+]
+
+
+const allTools = [
+  ...navigationTools,
+  ...measurementTools,
 ]
 
 
@@ -496,9 +482,6 @@ export default function TakeoffPage() {
   const pdfDocumentRef =
     useRef(null)
 
-  const pdfPageRef =
-    useRef(null)
-
   const panSessionRef =
     useRef(null)
 
@@ -517,6 +500,13 @@ export default function TakeoffPage() {
   const [
     pdfDocument,
     setPdfDocument,
+  ] =
+    useState(null)
+
+
+  const [
+    pdfPage,
+    setPdfPage,
   ] =
     useState(null)
 
@@ -557,7 +547,7 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
-  // VIEWPORT
+  // VIEW
   // ==========================================================
 
   const [
@@ -571,8 +561,8 @@ export default function TakeoffPage() {
 
 
   const [
-    fitMode,
-    setFitMode,
+    fitReference,
+    setFitReference,
   ] =
     useState('page')
 
@@ -629,7 +619,7 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
-  // CAD
+  // CAD MODES
   // ==========================================================
 
   const [
@@ -646,40 +636,79 @@ export default function TakeoffPage() {
     useState(true)
 
 
+  const [
+    orthoEnabled,
+    setOrthoEnabled,
+  ] =
+    useState(false)
+
+
+  const [
+    gridEnabled,
+    setGridEnabled,
+  ] =
+    useState(true)
+
+
   // ==========================================================
-  // CURRENT TOOL
+  // PANELS
+  // ==========================================================
+
+  const [
+    drawingDrawerOpen,
+    setDrawingDrawerOpen,
+  ] =
+    useState(false)
+
+
+  const [
+    inspectorOpen,
+    setInspectorOpen,
+  ] =
+    useState(true)
+
+
+  const [
+    inspectorTab,
+    setInspectorTab,
+  ] =
+    useState('properties')
+
+
+  // ==========================================================
+  // DERIVED STATE
   // ==========================================================
 
   const currentTool =
     useMemo(
       () =>
-        toolGroups
-          .flatMap(
-            (
-              group
-            ) =>
-              group.tools
-          )
-          .find(
-            (
-              tool
-            ) =>
-              tool.id ===
-              activeTool
-          ),
+        allTools.find(
+          (
+            tool
+          ) =>
+            tool.id ===
+            activeTool
+        ),
       [
         activeTool,
       ]
     )
 
 
-  // ==========================================================
-  // EFFECTIVE SCALE
-  // ==========================================================
-
   const effectiveScale =
     baseScale *
     zoom
+
+
+  const viewMode =
+    zoom === 1
+      ? (
+          fitReference ===
+          'width'
+            ? 'Fit Width'
+            : 'Fit Page'
+        )
+      : 'Custom'
 
 
   // ==========================================================
@@ -836,7 +865,11 @@ export default function TakeoffPage() {
         1
       )
 
-      setFitMode(
+      setPdfPage(
+        null
+      )
+
+      setFitReference(
         'page'
       )
 
@@ -863,6 +896,10 @@ export default function TakeoffPage() {
 
 
       setPdfDocument(
+        null
+      )
+
+      setPdfPage(
         null
       )
 
@@ -949,7 +986,9 @@ export default function TakeoffPage() {
       }
 
     },
-    []
+    [
+      inspectorOpen,
+    ]
   )
 
 
@@ -988,14 +1027,15 @@ export default function TakeoffPage() {
           }
 
 
-          pdfPageRef.current =
-            page
-
-
           const viewport =
             page.getViewport({
               scale: 1,
             })
+
+
+          setPdfPage(
+            page
+          )
 
 
           setPageBaseSize({
@@ -1100,7 +1140,7 @@ export default function TakeoffPage() {
 
 
       const nextBaseScale =
-        fitMode ===
+        fitReference ===
           'width'
           ? widthScale
           : Math.min(
@@ -1120,13 +1160,13 @@ export default function TakeoffPage() {
     [
       pageBaseSize,
       viewportSize,
-      fitMode,
+      fitReference,
     ]
   )
 
 
   // ==========================================================
-  // RENDER PDF
+  // PDF RENDER
   // ==========================================================
 
   useEffect(
@@ -1138,15 +1178,12 @@ export default function TakeoffPage() {
 
       async function renderPage() {
 
-        const page =
-          pdfPageRef.current
-
         const canvas =
           canvasRef.current
 
 
         if (
-          !page ||
+          !pdfPage ||
           !canvas ||
           !effectiveScale
         ) {
@@ -1174,7 +1211,7 @@ export default function TakeoffPage() {
 
 
         const viewport =
-          page.getViewport({
+          pdfPage.getViewport({
             scale:
               effectiveScale,
           })
@@ -1252,7 +1289,7 @@ export default function TakeoffPage() {
 
 
         const renderTask =
-          page.render({
+          pdfPage.render({
             canvasContext:
               context,
 
@@ -1314,8 +1351,7 @@ export default function TakeoffPage() {
 
     },
     [
-      pdfDocument,
-      pageNumber,
+      pdfPage,
       effectiveScale,
     ]
   )
@@ -1334,7 +1370,7 @@ export default function TakeoffPage() {
         }
 
 
-        setFitMode(
+        setFitReference(
           'page'
         )
 
@@ -1363,7 +1399,7 @@ export default function TakeoffPage() {
         }
 
 
-        setFitMode(
+        setFitReference(
           'width'
         )
 
@@ -1381,45 +1417,6 @@ export default function TakeoffPage() {
         pdfDocument,
       ]
     )
-
-
-  // ==========================================================
-  // TOOL COMMAND
-  // ==========================================================
-
-  function activateTool(
-    toolId
-  ) {
-
-    if (
-      toolId ===
-      'fit'
-    ) {
-
-      fitPage()
-
-      return
-
-    }
-
-
-    if (
-      toolId ===
-      'fitWidth'
-    ) {
-
-      fitWidth()
-
-      return
-
-    }
-
-
-    setActiveTool(
-      toolId
-    )
-
-  }
 
 
   // ==========================================================
@@ -1457,10 +1454,10 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
-  // CURSOR COORDINATES
+  // PDF COORDINATES
   // ==========================================================
 
-  const updateCursorCoordinates =
+  const clientToPdfPoint =
     useCallback(
       (
         clientX,
@@ -1478,14 +1475,7 @@ export default function TakeoffPage() {
           !renderedSize.height ||
           !effectiveScale
         ) {
-
-          setCursorPosition({
-            x: null,
-            y: null,
-          })
-
-          return
-
+          return null
         }
 
 
@@ -1534,18 +1524,11 @@ export default function TakeoffPage() {
           localY >
             renderedSize.height
         ) {
-
-          setCursorPosition({
-            x: null,
-            y: null,
-          })
-
-          return
-
+          return null
         }
 
 
-        setCursorPosition({
+        return {
           x:
             localX /
             effectiveScale,
@@ -1553,29 +1536,38 @@ export default function TakeoffPage() {
           y:
             localY /
             effectiveScale,
-        })
+        }
 
       },
       [
         pdfDocument,
         renderedSize,
-        pan,
         effectiveScale,
+        pan,
       ]
     )
 
 
   // ==========================================================
-  // POINTER MOVE
+  // POINTER
   // ==========================================================
 
   function handlePointerMove(
     event
   ) {
 
-    updateCursorCoordinates(
-      event.clientX,
-      event.clientY
+    const point =
+      clientToPdfPoint(
+        event.clientX,
+        event.clientY
+      )
+
+
+    setCursorPosition(
+      point || {
+        x: null,
+        y: null,
+      }
     )
 
 
@@ -1588,32 +1580,20 @@ export default function TakeoffPage() {
     }
 
 
-    const deltaX =
-      event.clientX -
-      session.startX
-
-
-    const deltaY =
-      event.clientY -
-      session.startY
-
-
     setPan({
       x:
         session.panX +
-        deltaX,
+        event.clientX -
+        session.startX,
 
       y:
         session.panY +
-        deltaY,
+        event.clientY -
+        session.startY,
     })
 
   }
 
-
-  // ==========================================================
-  // PAN START
-  // ==========================================================
 
   function handlePointerDown(
     event
@@ -1675,39 +1655,36 @@ export default function TakeoffPage() {
   }
 
 
-  // ==========================================================
-  // PAN END
-  // ==========================================================
-
   function handlePointerUp(
     event
   ) {
 
     if (
-      panSessionRef.current
+      !panSessionRef.current
     ) {
-
-      panSessionRef.current =
-        null
-
-
-      setIsPanning(
-        false
-      )
+      return
+    }
 
 
-      try {
+    panSessionRef.current =
+      null
 
-        event.currentTarget
-          .releasePointerCapture(
-            event.pointerId
-          )
 
-      } catch {
+    setIsPanning(
+      false
+    )
 
-        // Pointer may already be released.
 
-      }
+    try {
+
+      event.currentTarget
+        .releasePointerCapture(
+          event.pointerId
+        )
+
+    } catch {
+
+      // Pointer may already be released.
 
     }
 
@@ -1818,6 +1795,40 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
+  // PANEL COMMANDS
+  // ==========================================================
+
+  function openInspector(
+    tab
+  ) {
+
+    if (
+      inspectorOpen &&
+      inspectorTab ===
+        tab
+    ) {
+
+      setInspectorOpen(
+        false
+      )
+
+      return
+
+    }
+
+
+    setInspectorTab(
+      tab
+    )
+
+    setInspectorOpen(
+      true
+    )
+
+  }
+
+
+  // ==========================================================
   // KEYBOARD
   // ==========================================================
 
@@ -1859,6 +1870,10 @@ export default function TakeoffPage() {
             'select'
           )
 
+          setDrawingDrawerOpen(
+            false
+          )
+
           return
 
         }
@@ -1894,6 +1909,51 @@ export default function TakeoffPage() {
 
           setActiveTool(
             'zoom'
+          )
+
+        } else if (
+          key ===
+          'd'
+        ) {
+
+          setActiveTool(
+            'distance'
+          )
+
+        } else if (
+          key ===
+          'l'
+        ) {
+
+          setActiveTool(
+            'line'
+          )
+
+        } else if (
+          key ===
+          'a'
+        ) {
+
+          setActiveTool(
+            'area'
+          )
+
+        } else if (
+          key ===
+          'r'
+        ) {
+
+          setActiveTool(
+            'rectangle'
+          )
+
+        } else if (
+          key ===
+          'c'
+        ) {
+
+          setActiveTool(
+            'count'
           )
 
         } else if (
@@ -1999,7 +2059,9 @@ export default function TakeoffPage() {
     'default'
 
 
-  if (isPanning) {
+  if (
+    isPanning
+  ) {
 
     viewportCursor =
       'grabbing'
@@ -2037,271 +2099,96 @@ export default function TakeoffPage() {
   return (
 
     <div
-      style={{
-        display:
-          'flex',
-
-        flexDirection:
-          'column',
-
-        width:
-          '100%',
-
-        height:
-          '100vh',
-
-        minWidth:
-          0,
-
-        minHeight:
-          0,
-
-        overflow:
-          'hidden',
-
-        background:
-          '#dfe6ec',
-      }}
+      className={
+        styles.application
+      }
     >
 
+      <input
+        ref={
+          fileInputRef
+        }
+        type="file"
+        accept="application/pdf,.pdf"
+        onChange={
+          handleFileChange
+        }
+        className={
+          styles.hiddenInput
+        }
+      />
+
+
       {/* ======================================================
-          TAKEOFF APPLICATION HEADER
+          APPLICATION HEADER
       ====================================================== */}
 
       <header
-        style={{
-          display:
-            'flex',
-
-          alignItems:
-            'center',
-
-          justifyContent:
-            'space-between',
-
-          width:
-            '100%',
-
-          height:
-            '48px',
-
-          minHeight:
-            '48px',
-
-          padding:
-            '0 10px',
-
-          boxSizing:
-            'border-box',
-
-          borderBottom:
-            '1px solid #cdd8e2',
-
-          background:
-            '#ffffff',
-
-          zIndex:
-            100,
-        }}
+        className={
+          styles.applicationHeader
+        }
       >
 
         <div
-          style={{
-            display:
-              'flex',
-
-            alignItems:
-              'center',
-
-            gap:
-              '10px',
-
-            minWidth:
-              0,
-          }}
+          className={
+            styles.headerLeft
+          }
         >
 
           <Link
             href="/dashboard"
+            className={
+              styles.backButton
+            }
             title="Return to RitsuFlow"
-            style={{
-              display:
-                'inline-flex',
-
-              alignItems:
-                'center',
-
-              justifyContent:
-                'center',
-
-              gap:
-                '7px',
-
-              minHeight:
-                '32px',
-
-              padding:
-                '0 10px',
-
-              boxSizing:
-                'border-box',
-
-              border:
-                '1px solid #d1dce5',
-
-              borderRadius:
-                '7px',
-
-              background:
-                '#ffffff',
-
-              color:
-                '#425a70',
-
-              fontSize:
-                '12px',
-
-              fontWeight:
-                800,
-
-              textDecoration:
-                'none',
-            }}
           >
-
-            <BackIcon />
+            <Icon
+              type="back"
+            />
 
             <span>
               RitsuFlow
             </span>
-
           </Link>
 
 
-          <div
-            aria-hidden="true"
-            style={{
-              width:
-                '1px',
-
-              height:
-                '26px',
-
-              background:
-                '#dce5ed',
-            }}
+          <span
+            className={
+              styles.headerDivider
+            }
           />
 
 
           <div
-            style={{
-              display:
-                'flex',
-
-              alignItems:
-                'center',
-
-              gap:
-                '8px',
-
-              minWidth:
-                0,
-            }}
+            className={
+              styles.productIdentity
+            }
           >
 
             <span
-              style={{
-                display:
-                  'inline-flex',
-
-                alignItems:
-                  'center',
-
-                justifyContent:
-                  'center',
-
-                width:
-                  '32px',
-
-                height:
-                  '32px',
-
-                flexShrink:
-                  0,
-
-                borderRadius:
-                  '7px',
-
-                background:
-                  '#052c49',
-
-                color:
-                  '#ffffff',
-              }}
+              className={
+                styles.productIcon
+              }
             >
-              <TakeoffApplicationIcon />
+              <Icon
+                type="takeoff"
+                size={19}
+              />
             </span>
 
 
             <div
-              style={{
-                display:
-                  'flex',
-
-                flexDirection:
-                  'column',
-
-                minWidth:
-                  0,
-              }}
+              className={
+                styles.productText
+              }
             >
-
-              <strong
-                style={{
-                  color:
-                    '#0f172a',
-
-                  fontSize:
-                    '13px',
-
-                  lineHeight:
-                    1.1,
-
-                  fontWeight:
-                    900,
-                }}
-              >
+              <strong>
                 Takeoff
               </strong>
 
-
-              <span
-                style={{
-                  marginTop:
-                    '2px',
-
-                  color:
-                    '#7b8da0',
-
-                  fontSize:
-                    '9px',
-
-                  lineHeight:
-                    1,
-
-                  fontWeight:
-                    800,
-
-                  letterSpacing:
-                    '0.04em',
-
-                  textTransform:
-                    'uppercase',
-                }}
-              >
+              <span>
                 Drawing Workspace
               </span>
-
             </div>
 
           </div>
@@ -2309,501 +2196,227 @@ export default function TakeoffPage() {
         </div>
 
 
-        <span
-          style={{
-            color:
-              '#64748b',
-
-            fontSize:
-              '11px',
-
-            fontWeight:
-              800,
-          }}
-        >
-          CAD Takeoff Prototype
-        </span>
-
-
-        <span
-          style={{
-            display:
-              'inline-flex',
-
-            alignItems:
-              'center',
-
-            justifyContent:
-              'center',
-
-            minHeight:
-              '28px',
-
-            padding:
-              '0 9px',
-
-            boxSizing:
-              'border-box',
-
-            border:
-              '1px solid #99e6dc',
-
-            borderRadius:
-              '999px',
-
-            background:
-              '#effcf9',
-
-            color:
-              '#087f73',
-
-            fontSize:
-              '9px',
-
-            fontWeight:
-              900,
-
-            letterSpacing:
-              '0.06em',
-
-            textTransform:
-              'uppercase',
-          }}
-        >
-          RitsuFlow
-        </span>
-
-      </header>
-
-
-      {/* ======================================================
-          CAD WORKSPACE
-      ====================================================== */}
-
-      <div
-        className={
-          styles.takeoffShell
-        }
-        style={{
-          flex:
-            '1 1 auto',
-
-          width:
-            '100%',
-
-          height:
-            'auto',
-
-          minHeight:
-            0,
-
-          borderRadius:
-            0,
-        }}
-      >
-
-        <input
-          ref={
-            fileInputRef
-          }
-          type="file"
-          accept="application/pdf,.pdf"
-          onChange={
-            handleFileChange
-          }
-          style={{
-            display:
-              'none',
-          }}
-        />
-
-
-        {/* ====================================================
-            COMMAND BAR
-        ==================================================== */}
-
         <div
           className={
-            styles.commandBar
+            styles.headerCenter
           }
         >
 
-          <div
+          <span
             className={
-              styles.commandBarLeft
+              styles.headerDrawingName
+            }
+            title={
+              pdfFileName ||
+              'No drawing loaded'
             }
           >
-
-            <button
-              type="button"
-              className={
-                styles.primaryAction
-              }
-              onClick={
-                openFilePicker
-              }
-              disabled={
-                loadingPdf
-              }
-            >
-
-              <ToolIcon
-                type="import"
-              />
-
-              <span>
-                {
-                  loadingPdf
-                    ? 'Loading PDF...'
-                    : 'Import PDF'
-                }
-              </span>
-
-            </button>
-
-
-            <div
-              className={
-                styles.commandDivider
-              }
-            />
-
-
-            <div
-              className={
-                styles.drawingIdentity
-              }
-            >
-
-              <span
-                className={
-                  styles.drawingName
-                }
-              >
-                {
-                  pdfFileName ||
-                  'No drawing loaded'
-                }
-              </span>
-
-
-              <span
-                className={
-                  styles.drawingMeta
-                }
-              >
-                {
-                  pdfDocument
-                    ? `${pageCount} ${
-                        pageCount === 1
-                          ? 'page'
-                          : 'pages'
-                      }`
-                    : 'PDF Takeoff Workspace'
-                }
-              </span>
-
-            </div>
-
-          </div>
-
-
-          <div
-            className={
-              styles.commandBarRight
+            {
+              pdfFileName ||
+              'No drawing loaded'
             }
-          >
-
-            {pdfDocument && (
-
-              <div
-                style={{
-                  display:
-                    'flex',
-
-                  alignItems:
-                    'center',
-
-                  gap:
-                    '4px',
-
-                  marginRight:
-                    '4px',
-                }}
-              >
-
-                <button
-                  type="button"
-                  className={
-                    styles.iconButton
-                  }
-                  onClick={
-                    previousPage
-                  }
-                  disabled={
-                    pageNumber <= 1
-                  }
-                  title="Previous page"
-                  aria-label="Previous page"
-                >
-                  <ToolIcon
-                    type="previous"
-                  />
-                </button>
-
-
-                <span
-                  style={{
-                    display:
-                      'inline-flex',
-
-                    alignItems:
-                      'center',
-
-                    justifyContent:
-                      'center',
-
-                    minWidth:
-                      '72px',
-
-                    color:
-                      '#425a70',
-
-                    fontSize:
-                      '11px',
-
-                    fontWeight:
-                      800,
-
-                    whiteSpace:
-                      'nowrap',
-                  }}
-                >
-                  {pageNumber} / {pageCount}
-                </span>
-
-
-                <button
-                  type="button"
-                  className={
-                    styles.iconButton
-                  }
-                  onClick={
-                    nextPage
-                  }
-                  disabled={
-                    pageNumber >=
-                    pageCount
-                  }
-                  title="Next page"
-                  aria-label="Next page"
-                >
-                  <ToolIcon
-                    type="next"
-                  />
-                </button>
-
-              </div>
-
-            )}
-
-
-            <button
-              type="button"
-              className={
-                styles.commandButton
-              }
-              disabled={
-                !pdfDocument
-              }
-              title="Calibrate drawing scale"
-            >
-
-              <ToolIcon
-                type="calibrate"
-              />
-
-              <span>
-                Calibrate Scale
-              </span>
-
-            </button>
-
-
-            <button
-              type="button"
-              className={
-                styles.iconButton
-              }
-              disabled
-              title="Undo"
-              aria-label="Undo"
-            >
-              <ToolIcon
-                type="undo"
-              />
-            </button>
-
-
-            <button
-              type="button"
-              className={
-                styles.iconButton
-              }
-              disabled
-              title="Redo"
-              aria-label="Redo"
-            >
-              <ToolIcon
-                type="redo"
-              />
-            </button>
-
-          </div>
+          </span>
 
         </div>
 
 
-        {/* ====================================================
-            TOOL RIBBON
-        ==================================================== */}
-
         <div
           className={
-            styles.toolRibbon
+            styles.headerRight
           }
         >
 
-          {toolGroups.map(
-            (
-              group
-            ) => (
-
-              <div
-                key={
-                  group.id
-                }
-                className={
-                  styles.toolGroup
-                }
-              >
-
-                <div
-                  className={
-                    styles.toolGroupButtons
-                  }
-                >
-
-                  {group.tools.map(
-                    (
-                      tool
-                    ) => {
-
-                      const active =
-                        activeTool ===
-                        tool.id
-
-
-                      const isFitCommand =
-                        tool.id ===
-                          'fit' ||
-                        tool.id ===
-                          'fitWidth'
-
-
-                      return (
-
-                        <button
-                          key={
-                            tool.id
-                          }
-                          type="button"
-                          className={[
-                            styles.toolButton,
-                            active &&
-                            !isFitCommand
-                              ? styles.toolButtonActive
-                              : '',
-                          ]
-                            .filter(
-                              Boolean
-                            )
-                            .join(
-                              ' '
-                            )}
-                          onClick={() =>
-                            activateTool(
-                              tool.id
-                            )
-                          }
-                          disabled={
-                            !pdfDocument &&
-                            tool.id !==
-                              'select'
-                          }
-                          title={`${tool.label} (${tool.shortcut})`}
-                        >
-
-                          <ToolIcon
-                            type={
-                              tool.icon
-                            }
-                          />
-
-                          <span
-                            className={
-                              styles.toolButtonLabel
-                            }
-                          >
-                            {
-                              tool.label
-                            }
-                          </span>
-
-                        </button>
-
-                      )
-
-                    }
-                  )}
-
-                </div>
-
-
-                <span
-                  className={
-                    styles.toolGroupLabel
-                  }
-                >
-                  {
-                    group.label
-                  }
-                </span>
-
-              </div>
-
-            )
-          )}
-
-
-          <div
-            className={
-              styles.toolGroup
-            }
-          >
+          {pdfDocument && (
 
             <div
               className={
-                styles.toolGroupButtons
+                styles.pageControl
               }
             >
 
               <button
                 type="button"
+                onClick={
+                  previousPage
+                }
+                disabled={
+                  pageNumber <= 1
+                }
+                title="Previous page"
+              >
+                <Icon
+                  type="previous"
+                  size={16}
+                />
+              </button>
+
+
+              <strong>
+                {pageNumber}/{pageCount}
+              </strong>
+
+
+              <button
+                type="button"
+                onClick={
+                  nextPage
+                }
+                disabled={
+                  pageNumber >=
+                  pageCount
+                }
+                title="Next page"
+              >
+                <Icon
+                  type="next"
+                  size={16}
+                />
+              </button>
+
+            </div>
+
+          )}
+
+
+          <span
+            className={
+              styles.headerMetric
+            }
+          >
+            Scale
+            <strong>
+              Not calibrated
+            </strong>
+          </span>
+
+
+          <span
+            className={
+              styles.headerMetric
+            }
+          >
+            Zoom
+            <strong>
+              {
+                Math.round(
+                  zoom *
+                  100
+                )
+              }%
+            </strong>
+          </span>
+
+        </div>
+
+      </header>
+
+
+      {/* ======================================================
+          CAD TOOLBAR
+      ====================================================== */}
+
+      <div
+        className={
+          styles.cadToolbar
+        }
+      >
+
+        <div
+          className={
+            styles.toolbarSection
+          }
+        >
+
+          <button
+            type="button"
+            className={
+              styles.importButton
+            }
+            onClick={
+              openFilePicker
+            }
+            disabled={
+              loadingPdf
+            }
+          >
+            <Icon
+              type="import"
+            />
+
+            <span>
+              {
+                loadingPdf
+                  ? 'Loading...'
+                  : 'Import PDF'
+              }
+            </span>
+          </button>
+
+
+          <button
+            type="button"
+            className={[
+              styles.toolbarButton,
+              drawingDrawerOpen
+                ? styles.toolbarButtonActive
+                : '',
+            ]
+              .filter(
+                Boolean
+              )
+              .join(
+                ' '
+              )}
+            onClick={() =>
+              setDrawingDrawerOpen(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+            title="Drawings"
+          >
+            <Icon
+              type="drawings"
+            />
+
+            <span>
+              Drawings
+            </span>
+          </button>
+
+        </div>
+
+
+        <span
+          className={
+            styles.toolbarDivider
+          }
+        />
+
+
+        <div
+          className={
+            styles.toolbarSection
+          }
+        >
+
+          {navigationTools.map(
+            (
+              tool
+            ) => (
+
+              <button
+                key={
+                  tool.id
+                }
+                type="button"
                 className={[
-                  styles.toolButton,
-                  snapEnabled
-                    ? styles.toolButtonActive
+                  styles.toolbarButton,
+                  activeTool ===
+                    tool.id
+                    ? styles.toolbarButtonActive
                     : '',
                 ]
                   .filter(
@@ -2813,900 +2426,1323 @@ export default function TakeoffPage() {
                     ' '
                   )}
                 onClick={() =>
-                  setSnapEnabled(
-                    (
-                      current
-                    ) =>
-                      !current
+                  setActiveTool(
+                    tool.id
                   )
                 }
-                title="Object Snap"
+                disabled={
+                  !pdfDocument &&
+                  tool.id !==
+                    'select'
+                }
+                title={`${tool.label} (${tool.shortcut})`}
               >
-
-                <ToolIcon
-                  type="snap"
+                <Icon
+                  type={
+                    tool.icon
+                  }
                 />
+
+                <span>
+                  {
+                    tool.label
+                  }
+                </span>
+              </button>
+
+            )
+          )}
+
+
+          <button
+            type="button"
+            className={
+              styles.toolbarButton
+            }
+            onClick={
+              fitPage
+            }
+            disabled={
+              !pdfDocument
+            }
+            title="Fit Page (F)"
+          >
+            <Icon
+              type="fit"
+            />
+
+            <span>
+              Fit Page
+            </span>
+          </button>
+
+
+          <button
+            type="button"
+            className={
+              styles.toolbarButton
+            }
+            onClick={
+              fitWidth
+            }
+            disabled={
+              !pdfDocument
+            }
+            title="Fit Width (W)"
+          >
+            <Icon
+              type="fitWidth"
+            />
+
+            <span>
+              Fit Width
+            </span>
+          </button>
+
+        </div>
+
+
+        <span
+          className={
+            styles.toolbarDivider
+          }
+        />
+
+
+        <div
+          className={
+            styles.toolbarSection
+          }
+        >
+
+          {measurementTools.map(
+            (
+              tool
+            ) => (
+
+              <button
+                key={
+                  tool.id
+                }
+                type="button"
+                className={[
+                  styles.toolbarButton,
+                  activeTool ===
+                    tool.id
+                    ? styles.toolbarButtonActive
+                    : '',
+                ]
+                  .filter(
+                    Boolean
+                  )
+                  .join(
+                    ' '
+                  )}
+                onClick={() =>
+                  setActiveTool(
+                    tool.id
+                  )
+                }
+                disabled={
+                  !pdfDocument
+                }
+                title={`${tool.label} (${tool.shortcut})`}
+              >
+                <Icon
+                  type={
+                    tool.icon
+                  }
+                />
+
+                <span>
+                  {
+                    tool.label
+                  }
+                </span>
+              </button>
+
+            )
+          )}
+
+        </div>
+
+
+        <span
+          className={
+            styles.toolbarDivider
+          }
+        />
+
+
+        <div
+          className={
+            styles.toolbarSection
+          }
+        >
+
+          <button
+            type="button"
+            className={
+              styles.toolbarButtonWide
+            }
+            disabled={
+              !pdfDocument
+            }
+            title="Calibrate Scale"
+          >
+            <Icon
+              type="calibrate"
+            />
+
+            <span>
+              Calibrate
+            </span>
+          </button>
+
+
+          <button
+            type="button"
+            className={
+              styles.toolbarIconButton
+            }
+            disabled
+            title="Undo"
+          >
+            <Icon
+              type="undo"
+            />
+          </button>
+
+
+          <button
+            type="button"
+            className={
+              styles.toolbarIconButton
+            }
+            disabled
+            title="Redo"
+          >
+            <Icon
+              type="redo"
+            />
+          </button>
+
+        </div>
+
+      </div>
+
+
+      {/* ======================================================
+          MAIN CAD AREA
+      ====================================================== */}
+
+      <div
+        className={
+          styles.cadArea
+        }
+      >
+
+        {/* ====================================================
+            VIEWPORT
+        ==================================================== */}
+
+        <main
+          ref={
+            viewportRef
+          }
+          className={[
+            styles.viewport,
+            gridEnabled
+              ? styles.viewportGrid
+              : '',
+          ]
+            .filter(
+              Boolean
+            )
+            .join(
+              ' '
+            )}
+          onPointerDown={
+            handlePointerDown
+          }
+          onPointerMove={
+            handlePointerMove
+          }
+          onPointerUp={
+            handlePointerUp
+          }
+          onPointerCancel={
+            handlePointerUp
+          }
+          onPointerLeave={() => {
+
+            if (
+              !panSessionRef.current
+            ) {
+
+              setCursorPosition({
+                x: null,
+                y: null,
+              })
+
+            }
+
+          }}
+          onWheel={
+            handleWheel
+          }
+          onContextMenu={(
+            event
+          ) =>
+            event.preventDefault()
+          }
+          style={{
+            cursor:
+              viewportCursor,
+          }}
+        >
+
+          {!pdfDocument && (
+
+            <div
+              className={
+                styles.emptyViewport
+              }
+            >
+
+              <div
+                className={
+                  styles.emptyViewportIcon
+                }
+              >
+                <Icon
+                  type="drawings"
+                  size={44}
+                />
+              </div>
+
+
+              <h2>
+                Import a drawing
+              </h2>
+
+
+              <p>
+                Load a PDF drawing to start CAD navigation,
+                scale calibration, and takeoff.
+              </p>
+
+
+              {pdfError && (
 
                 <span
                   className={
-                    styles.toolButtonLabel
+                    styles.errorMessage
                   }
                 >
-                  Snap
+                  {
+                    pdfError
+                  }
                 </span>
 
+              )}
+
+
+              <button
+                type="button"
+                className={
+                  styles.emptyImportButton
+                }
+                onClick={
+                  openFilePicker
+                }
+                disabled={
+                  loadingPdf
+                }
+              >
+                <Icon
+                  type="import"
+                />
+
+                {
+                  loadingPdf
+                    ? 'Loading PDF...'
+                    : 'Import PDF'
+                }
+              </button>
+
+            </div>
+
+          )}
+
+
+          {pdfDocument && (
+
+            <div
+              className={
+                styles.documentContainer
+              }
+              style={{
+                width:
+                  `${renderedSize.width}px`,
+
+                height:
+                  `${renderedSize.height}px`,
+
+                transform:
+                  `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px)`,
+              }}
+            >
+
+              <canvas
+                ref={
+                  canvasRef
+                }
+                className={
+                  styles.pdfCanvas
+                }
+                style={{
+                  width:
+                    `${renderedSize.width}px`,
+
+                  height:
+                    `${renderedSize.height}px`,
+                }}
+              />
+
+
+              <svg
+                className={
+                  styles.geometryLayer
+                }
+                viewBox={`0 0 ${
+                  pageBaseSize
+                    ?.width ||
+                  1
+                } ${
+                  pageBaseSize
+                    ?.height ||
+                  1
+                }`}
+                preserveAspectRatio="none"
+              />
+
+
+              <div
+                className={
+                  styles.interactionLayer
+                }
+              />
+
+            </div>
+
+          )}
+
+
+          {/* ==================================================
+              DRAWING DRAWER
+          ================================================== */}
+
+          {drawingDrawerOpen && (
+
+            <aside
+              className={
+                styles.drawingDrawer
+              }
+            >
+
+              <div
+                className={
+                  styles.drawerHeader
+                }
+              >
+
+                <div>
+                  <strong>
+                    Drawings
+                  </strong>
+
+                  <span>
+                    Pages & files
+                  </span>
+                </div>
+
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDrawingDrawerOpen(
+                      false
+                    )
+                  }
+                  title="Close drawings"
+                >
+                  <Icon
+                    type="close"
+                    size={16}
+                  />
+                </button>
+
+              </div>
+
+
+              <div
+                className={
+                  styles.drawerContent
+                }
+              >
+
+                {!pdfDocument && (
+
+                  <div
+                    className={
+                      styles.drawerEmpty
+                    }
+                  >
+                    No PDF loaded.
+                  </div>
+
+                )}
+
+
+                {pdfDocument && (
+
+                  <>
+
+                    <div
+                      className={
+                        styles.drawingCard
+                      }
+                    >
+
+                      <Icon
+                        type="drawings"
+                      />
+
+                      <div>
+                        <strong>
+                          {
+                            pdfFileName
+                          }
+                        </strong>
+
+                        <span>
+                          {pageCount} {
+                            pageCount === 1
+                              ? 'page'
+                              : 'pages'
+                          }
+                        </span>
+                      </div>
+
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.pageList
+                      }
+                    >
+
+                      {Array.from(
+                        {
+                          length:
+                            pageCount,
+                        },
+                        (
+                          _,
+                          index
+                        ) => {
+
+                          const number =
+                            index + 1
+
+
+                          return (
+
+                            <button
+                              key={
+                                number
+                              }
+                              type="button"
+                              className={
+                                number ===
+                                  pageNumber
+                                  ? styles.pageItemActive
+                                  : styles.pageItem
+                              }
+                              onClick={() => {
+
+                                setPageNumber(
+                                  number
+                                )
+
+                                setDrawingDrawerOpen(
+                                  false
+                                )
+
+                              }}
+                            >
+                              <span>
+                                Page {number}
+                              </span>
+
+                              {
+                                number ===
+                                  pageNumber &&
+                                <strong>
+                                  Current
+                                </strong>
+                              }
+                            </button>
+
+                          )
+
+                        }
+                      )}
+
+                    </div>
+
+                  </>
+
+                )}
+
+              </div>
+
+            </aside>
+
+          )}
+
+        </main>
+
+
+        {/* ====================================================
+            INSPECTOR
+        ==================================================== */}
+
+        {inspectorOpen && (
+
+          <aside
+            className={
+              styles.inspector
+            }
+          >
+
+            <div
+              className={
+                styles.inspectorTabs
+              }
+            >
+
+              <button
+                type="button"
+                className={
+                  inspectorTab ===
+                    'properties'
+                    ? styles.inspectorTabActive
+                    : styles.inspectorTab
+                }
+                onClick={() =>
+                  setInspectorTab(
+                    'properties'
+                  )
+                }
+              >
+                <Icon
+                  type="properties"
+                  size={16}
+                />
+
+                Properties
               </button>
 
 
               <button
                 type="button"
                 className={
-                  styles.toolButton
+                  inspectorTab ===
+                    'layers'
+                    ? styles.inspectorTabActive
+                    : styles.inspectorTab
                 }
-                disabled
-                title="Delete selected geometry"
+                onClick={() =>
+                  setInspectorTab(
+                    'layers'
+                  )
+                }
               >
-
-                <ToolIcon
-                  type="delete"
+                <Icon
+                  type="layers"
+                  size={16}
                 />
 
-                <span
-                  className={
-                    styles.toolButtonLabel
-                  }
-                >
-                  Delete
-                </span>
+                Layers
+              </button>
 
+
+              <button
+                type="button"
+                className={
+                  styles.inspectorClose
+                }
+                onClick={() =>
+                  setInspectorOpen(
+                    false
+                  )
+                }
+                title="Close panel"
+              >
+                <Icon
+                  type="close"
+                  size={16}
+                />
               </button>
 
             </div>
 
 
-            <span
+            <div
               className={
-                styles.toolGroupLabel
+                styles.inspectorContent
               }
             >
-              Edit
-            </span>
 
-          </div>
+              {inspectorTab ===
+                'properties' && (
 
-        </div>
+                <>
+
+                  <section
+                    className={
+                      styles.propertySection
+                    }
+                  >
+
+                    <h3>
+                      Drawing
+                    </h3>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Type
+                      </span>
+
+                      <strong>
+                        {
+                          pdfDocument
+                            ? 'PDF'
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Page
+                      </span>
+
+                      <strong>
+                        {
+                          pdfDocument
+                            ? `${pageNumber} / ${pageCount}`
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
+                  </section>
+
+
+                  <section
+                    className={
+                      styles.propertySection
+                    }
+                  >
+
+                    <h3>
+                      View
+                    </h3>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Mode
+                      </span>
+
+                      <strong>
+                        {
+                          viewMode
+                        }
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Zoom
+                      </span>
+
+                      <strong>
+                        {
+                          Math.round(
+                            zoom *
+                            100
+                          )
+                        }%
+                      </strong>
+                    </div>
+
+                  </section>
+
+
+                  <section
+                    className={
+                      styles.propertySection
+                    }
+                  >
+
+                    <h3>
+                      Scale
+                    </h3>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Status
+                      </span>
+
+                      <strong>
+                        Not calibrated
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Unit
+                      </span>
+
+                      <strong>
+                        —
+                      </strong>
+                    </div>
+
+                  </section>
+
+
+                  <section
+                    className={
+                      styles.propertySection
+                    }
+                  >
+
+                    <h3>
+                      Selection
+                    </h3>
+
+
+                    <div
+                      className={
+                        styles.selectionEmpty
+                      }
+                    >
+                      Select takeoff geometry to inspect
+                      and edit its properties.
+                    </div>
+
+                  </section>
+
+                </>
+
+              )}
+
+
+              {inspectorTab ===
+                'layers' && (
+
+                <>
+
+                  <section
+                    className={
+                      styles.propertySection
+                    }
+                  >
+
+                    <h3>
+                      Layers
+                    </h3>
+
+
+                    <div
+                      className={
+                        styles.selectionEmpty
+                      }
+                    >
+                      Takeoff layers will appear here as
+                      geometry is created.
+                    </div>
+
+                  </section>
+
+
+                  <section
+                    className={
+                      styles.propertySection
+                    }
+                  >
+
+                    <h3>
+                      Drawing
+                    </h3>
+
+
+                    <div
+                      className={
+                        styles.layerRow
+                      }
+                    >
+                      <span
+                        className={
+                          styles.layerDot
+                        }
+                      />
+
+                      <span>
+                        PDF Drawing
+                      </span>
+
+                      <strong>
+                        Visible
+                      </strong>
+                    </div>
+
+                  </section>
+
+                </>
+
+              )}
+
+            </div>
+
+          </aside>
+
+        )}
 
 
         {/* ====================================================
-            MAIN WORKSPACE
+            RIGHT TOOL RAIL
         ==================================================== */}
+
+        <aside
+          className={
+            styles.toolRail
+          }
+        >
+
+          <button
+            type="button"
+            className={
+              inspectorOpen &&
+              inspectorTab ===
+                'properties'
+                ? styles.railButtonActive
+                : styles.railButton
+            }
+            onClick={() =>
+              openInspector(
+                'properties'
+              )
+            }
+            title="Properties"
+          >
+            <Icon
+              type="properties"
+            />
+
+            <span>
+              Properties
+            </span>
+          </button>
+
+
+          <button
+            type="button"
+            className={
+              inspectorOpen &&
+              inspectorTab ===
+                'layers'
+                ? styles.railButtonActive
+                : styles.railButton
+            }
+            onClick={() =>
+              openInspector(
+                'layers'
+              )
+            }
+            title="Layers"
+          >
+            <Icon
+              type="layers"
+            />
+
+            <span>
+              Layers
+            </span>
+          </button>
+
+
+          <button
+            type="button"
+            className={
+              drawingDrawerOpen
+                ? styles.railButtonActive
+                : styles.railButton
+            }
+            onClick={() =>
+              setDrawingDrawerOpen(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+            title="Drawings"
+          >
+            <Icon
+              type="drawings"
+            />
+
+            <span>
+              Drawings
+            </span>
+          </button>
+
+
+          <span
+            className={
+              styles.railDivider
+            }
+          />
+
+
+          <button
+            type="button"
+            className={
+              snapEnabled
+                ? styles.railButtonActive
+                : styles.railButton
+            }
+            onClick={() =>
+              setSnapEnabled(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+            title="Object Snap"
+          >
+            <Icon
+              type="snap"
+            />
+
+            <span>
+              Snap
+            </span>
+          </button>
+
+
+          <button
+            type="button"
+            className={
+              orthoEnabled
+                ? styles.railButtonActive
+                : styles.railButton
+            }
+            onClick={() =>
+              setOrthoEnabled(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+            title="Ortho"
+          >
+            <Icon
+              type="ortho"
+            />
+
+            <span>
+              Ortho
+            </span>
+          </button>
+
+
+          <button
+            type="button"
+            className={
+              gridEnabled
+                ? styles.railButtonActive
+                : styles.railButton
+            }
+            onClick={() =>
+              setGridEnabled(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+            title="Grid"
+          >
+            <Icon
+              type="grid"
+            />
+
+            <span>
+              Grid
+            </span>
+          </button>
+
+
+          <span
+            className={
+              styles.railDivider
+            }
+          />
+
+
+          <button
+            type="button"
+            className={
+              styles.railButton
+            }
+            disabled
+            title="Delete selected geometry"
+          >
+            <Icon
+              type="delete"
+            />
+
+            <span>
+              Delete
+            </span>
+          </button>
+
+        </aside>
+
+      </div>
+
+
+      {/* ======================================================
+          STATUS BAR
+      ====================================================== */}
+
+      <footer
+        className={
+          styles.statusBar
+        }
+      >
 
         <div
           className={
-            styles.workspace
+            styles.statusLeft
           }
         >
 
-          <aside
+          <span>
+            Tool
+            <strong>
+              {
+                currentTool
+                  ?.label ||
+                'Select'
+              }
+            </strong>
+          </span>
+
+
+          <span
             className={
-              styles.leftPanel
+              styles.statusDivider
             }
-          >
-
-            <div
-              className={
-                styles.panelHeader
-              }
-            >
-              Drawing
-            </div>
+          />
 
 
-            <div
-              className={
-                styles.panelContent
-              }
-            >
-
-              {!pdfDocument && (
-
-                <div
-                  className={
-                    styles.emptyPanelState
-                  }
-                >
-
-                  <span
-                    className={
-                      styles.emptyPanelTitle
-                    }
-                  >
-                    No PDF loaded
-                  </span>
-
-                  <span
-                    className={
-                      styles.emptyPanelText
-                    }
-                  >
-                    Drawing pages and takeoff layers will appear here.
-                  </span>
-
-                </div>
-
-              )}
-
-
-              {pdfDocument && (
-
-                <div
-                  style={{
-                    display:
-                      'flex',
-
-                    flexDirection:
-                      'column',
-
-                    gap:
-                      '10px',
-                  }}
-                >
-
-                  <div
-                    className={
-                      styles.emptyPanelState
-                    }
-                  >
-
-                    <span
-                      className={
-                        styles.emptyPanelTitle
-                      }
-                    >
-                      {
-                        pdfFileName
-                      }
-                    </span>
-
-                    <span
-                      className={
-                        styles.emptyPanelText
-                      }
-                    >
-                      {pageCount} drawing {
-                        pageCount === 1
-                          ? 'page'
-                          : 'pages'
-                      }
-                    </span>
-
-                  </div>
-
-
-                  {Array.from(
-                    {
-                      length:
-                        pageCount,
-                    },
-                    (
-                      _,
-                      index
-                    ) => {
-
-                      const number =
-                        index + 1
-
-                      const active =
-                        number ===
-                        pageNumber
-
-
-                      return (
-
-                        <button
-                          key={
-                            number
-                          }
-                          type="button"
-                          onClick={() =>
-                            setPageNumber(
-                              number
-                            )
-                          }
-                          style={{
-                            width:
-                              '100%',
-
-                            minHeight:
-                              '34px',
-
-                            border:
-                              active
-                                ? '1px solid #99e6dc'
-                                : '1px solid transparent',
-
-                            borderRadius:
-                              '6px',
-
-                            background:
-                              active
-                                ? '#eafaf7'
-                                : 'transparent',
-
-                            color:
-                              active
-                                ? '#087f73'
-                                : '#52677d',
-
-                            font:
-                              'inherit',
-
-                            fontSize:
-                              '11px',
-
-                            fontWeight:
-                              800,
-
-                            cursor:
-                              'pointer',
-                          }}
-                        >
-                          Page {number}
-                        </button>
-
+          <span>
+            X
+            <strong>
+              {
+                cursorPosition.x !==
+                  null
+                  ? cursorPosition.x
+                      .toFixed(
+                        2
                       )
-
-                    }
-                  )}
-
-                </div>
-
-              )}
-
-            </div>
-
-          </aside>
-
-
-          <main
-            ref={
-              viewportRef
-            }
-            className={
-              styles.viewport
-            }
-            onPointerDown={
-              handlePointerDown
-            }
-            onPointerMove={
-              handlePointerMove
-            }
-            onPointerUp={
-              handlePointerUp
-            }
-            onPointerCancel={
-              handlePointerUp
-            }
-            onPointerLeave={() => {
-
-              if (
-                !panSessionRef.current
-              ) {
-
-                setCursorPosition({
-                  x: null,
-                  y: null,
-                })
-
+                  : '—'
               }
+            </strong>
+          </span>
 
-            }}
-            onWheel={
-              handleWheel
-            }
-            onContextMenu={(
-              event
-            ) =>
-              event.preventDefault()
-            }
-            style={{
-              cursor:
-                viewportCursor,
 
-              touchAction:
-                'none',
-            }}
-          >
-
-            <div
-              className={
-                styles.viewportCanvas
+          <span>
+            Y
+            <strong>
+              {
+                cursorPosition.y !==
+                  null
+                  ? cursorPosition.y
+                      .toFixed(
+                        2
+                      )
+                  : '—'
               }
-            >
-
-              {!pdfDocument && (
-
-                <div
-                  className={
-                    styles.emptyViewport
-                  }
-                >
-
-                  <div
-                    className={
-                      styles.emptyViewportIcon
-                    }
-                  >
-                    <svg
-                      width="52"
-                      height="52"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.3"
-                    >
-                      <path d="M6 2h9l5 5v15H6z" />
-                      <path d="M15 2v6h5" />
-                      <path d="M9 13h6" />
-                      <path d="M12 10v6" />
-                    </svg>
-                  </div>
-
-
-                  <h2
-                    className={
-                      styles.emptyViewportTitle
-                    }
-                  >
-                    {
-                      loadingPdf
-                        ? 'Loading drawing...'
-                        : 'Import a drawing'
-                    }
-                  </h2>
-
-
-                  <p
-                    className={
-                      styles.emptyViewportDescription
-                    }
-                  >
-                    PDF rendering, CAD navigation, scale calibration,
-                    snapping, and takeoff geometry operate inside this viewport.
-                  </p>
-
-
-                  {pdfError && (
-
-                    <p
-                      style={{
-                        color:
-                          '#b42318',
-
-                        fontSize:
-                          '11px',
-
-                        fontWeight:
-                          800,
-                      }}
-                    >
-                      {
-                        pdfError
-                      }
-                    </p>
-
-                  )}
-
-
-                  <button
-                    type="button"
-                    className={
-                      styles.viewportImportButton
-                    }
-                    onClick={
-                      openFilePicker
-                    }
-                    disabled={
-                      loadingPdf
-                    }
-                  >
-                    <ToolIcon
-                      type="import"
-                    />
-
-                    {
-                      loadingPdf
-                        ? 'Loading PDF...'
-                        : 'Import PDF'
-                    }
-                  </button>
-
-                </div>
-
-              )}
-
-
-              {pdfDocument && (
-
-                <div
-                  style={{
-                    position:
-                      'absolute',
-
-                    left:
-                      '50%',
-
-                    top:
-                      '50%',
-
-                    width:
-                      `${renderedSize.width}px`,
-
-                    height:
-                      `${renderedSize.height}px`,
-
-                    transform:
-                      `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px)`,
-
-                    transformOrigin:
-                      'center center',
-
-                    boxShadow:
-                      '0 8px 28px rgba(15, 23, 42, 0.24)',
-
-                    background:
-                      '#ffffff',
-
-                    pointerEvents:
-                      'none',
-
-                    userSelect:
-                      'none',
-                  }}
-                >
-
-                  <canvas
-                    ref={
-                      canvasRef
-                    }
-                    style={{
-                      display:
-                        'block',
-
-                      width:
-                        `${renderedSize.width}px`,
-
-                      height:
-                        `${renderedSize.height}px`,
-                    }}
-                  />
-
-
-                  <svg
-                    viewBox={`0 0 ${Math.max(
-                      1,
-                      renderedSize.width
-                    )} ${Math.max(
-                      1,
-                      renderedSize.height
-                    )}`}
-                    preserveAspectRatio="none"
-                    style={{
-                      position:
-                        'absolute',
-
-                      inset:
-                        0,
-
-                      width:
-                        '100%',
-
-                      height:
-                        '100%',
-
-                      pointerEvents:
-                        'none',
-                    }}
-                  />
-
-
-                  <div
-                    style={{
-                      position:
-                        'absolute',
-
-                      inset:
-                        0,
-
-                      pointerEvents:
-                        'none',
-                    }}
-                  />
-
-                </div>
-
-              )}
-
-            </div>
-
-          </main>
-
-
-          <aside
-            className={
-              styles.rightPanel
-            }
-          >
-
-            <div
-              className={
-                styles.panelHeader
-              }
-            >
-              Properties
-            </div>
-
-
-            <div
-              className={
-                styles.panelContent
-              }
-            >
-
-              <div
-                className={
-                  styles.propertySection
-                }
-              >
-
-                <span
-                  className={
-                    styles.propertySectionTitle
-                  }
-                >
-                  Drawing
-                </span>
-
-
-                <div
-                  className={
-                    styles.propertyRow
-                  }
-                >
-                  <span>
-                    Type
-                  </span>
-
-                  <strong>
-                    {
-                      pdfDocument
-                        ? 'PDF'
-                        : '—'
-                    }
-                  </strong>
-                </div>
-
-
-                <div
-                  className={
-                    styles.propertyRow
-                  }
-                >
-                  <span>
-                    Page
-                  </span>
-
-                  <strong>
-                    {
-                      pdfDocument
-                        ? `${pageNumber} / ${pageCount}`
-                        : '—'
-                    }
-                  </strong>
-                </div>
-
-              </div>
-
-
-              <div
-                className={
-                  styles.propertySection
-                }
-              >
-
-                <span
-                  className={
-                    styles.propertySectionTitle
-                  }
-                >
-                  View
-                </span>
-
-
-                <div
-                  className={
-                    styles.propertyRow
-                  }
-                >
-                  <span>
-                    Fit Mode
-                  </span>
-
-                  <strong>
-                    {
-                      fitMode ===
-                      'width'
-                        ? 'Width'
-                        : 'Page'
-                    }
-                  </strong>
-                </div>
-
-
-                <div
-                  className={
-                    styles.propertyRow
-                  }
-                >
-                  <span>
-                    Zoom
-                  </span>
-
-                  <strong>
-                    {
-                      `${Math.round(
-                        zoom *
-                        100
-                      )}%`
-                    }
-                  </strong>
-                </div>
-
-              </div>
-
-
-              <div
-                className={
-                  styles.propertySection
-                }
-              >
-
-                <span
-                  className={
-                    styles.propertySectionTitle
-                  }
-                >
-                  Scale
-                </span>
-
-
-                <div
-                  className={
-                    styles.propertyRow
-                  }
-                >
-                  <span>
-                    Status
-                  </span>
-
-                  <strong>
-                    Not calibrated
-                  </strong>
-                </div>
-
-
-                <div
-                  className={
-                    styles.propertyRow
-                  }
-                >
-                  <span>
-                    Unit
-                  </span>
-
-                  <strong>
-                    —
-                  </strong>
-                </div>
-
-              </div>
-
-
-              <div
-                className={
-                  styles.propertySection
-                }
-              >
-
-                <span
-                  className={
-                    styles.propertySectionTitle
-                  }
-                >
-                  Selection
-                </span>
-
-
-                <div
-                  className={
-                    styles.emptyProperties
-                  }
-                >
-                  Select takeoff geometry to inspect and edit its properties.
-                </div>
-
-              </div>
-
-            </div>
-
-          </aside>
+            </strong>
+          </span>
 
         </div>
 
 
-        {/* ====================================================
-            STATUS BAR
-        ==================================================== */}
-
-        <footer
+        <div
           className={
-            styles.statusBar
+            styles.statusRight
           }
         >
 
-          <div
+          <button
+            type="button"
             className={
-              styles.statusLeft
+              snapEnabled
+                ? styles.statusModeActive
+                : styles.statusMode
+            }
+            onClick={() =>
+              setSnapEnabled(
+                (
+                  current
+                ) =>
+                  !current
+              )
             }
           >
-
-            <span
-              className={
-                styles.statusItem
-              }
-            >
-              Tool:
-              <strong>
-                {
-                  currentTool
-                    ?.label ||
-                  'Select'
-                }
-              </strong>
-            </span>
+            SNAP
+          </button>
 
 
-            <span
-              className={
-                styles.statusSeparator
-              }
-            />
-
-
-            <span
-              className={
-                styles.statusItem
-              }
-            >
-              X:
-              <strong>
-                {
-                  cursorPosition.x !==
-                    null
-                    ? cursorPosition.x
-                        .toFixed(
-                          2
-                        )
-                    : '—'
-                }
-              </strong>
-            </span>
-
-
-            <span
-              className={
-                styles.statusItem
-              }
-            >
-              Y:
-              <strong>
-                {
-                  cursorPosition.y !==
-                    null
-                    ? cursorPosition.y
-                        .toFixed(
-                          2
-                        )
-                    : '—'
-                }
-              </strong>
-            </span>
-
-          </div>
-
-
-          <div
+          <button
+            type="button"
             className={
-              styles.statusRight
+              orthoEnabled
+                ? styles.statusModeActive
+                : styles.statusMode
+            }
+            onClick={() =>
+              setOrthoEnabled(
+                (
+                  current
+                ) =>
+                  !current
+              )
             }
           >
+            ORTHO
+          </button>
 
-            <button
-              type="button"
-              className={[
-                styles.statusToggle,
-                snapEnabled
-                  ? styles.statusToggleActive
-                  : '',
-              ]
-                .filter(
-                  Boolean
+
+          <button
+            type="button"
+            className={
+              gridEnabled
+                ? styles.statusModeActive
+                : styles.statusMode
+            }
+            onClick={() =>
+              setGridEnabled(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+          >
+            GRID
+          </button>
+
+
+          <span
+            className={
+              styles.statusMetric
+            }
+          >
+            Page
+            <strong>
+              {
+                pdfDocument
+                  ? `${pageNumber}/${pageCount}`
+                  : '—'
+              }
+            </strong>
+          </span>
+
+
+          <span
+            className={
+              styles.statusMetric
+            }
+          >
+            Scale
+            <strong>
+              Not calibrated
+            </strong>
+          </span>
+
+
+          <span
+            className={
+              styles.statusMetric
+            }
+          >
+            Zoom
+            <strong>
+              {
+                Math.round(
+                  zoom *
+                  100
                 )
-                .join(
-                  ' '
-                )}
-              onClick={() =>
-                setSnapEnabled(
-                  (
-                    current
-                  ) =>
-                    !current
-                )
-              }
-            >
-              SNAP
-            </button>
+              }%
+            </strong>
+          </span>
 
+        </div>
 
-            <span
-              className={
-                styles.statusItem
-              }
-            >
-              Page:
-              <strong>
-                {
-                  pdfDocument
-                    ? `${pageNumber}/${pageCount}`
-                    : '—'
-                }
-              </strong>
-            </span>
-
-
-            <span
-              className={
-                styles.statusItem
-              }
-            >
-              Scale:
-              <strong>
-                Not calibrated
-              </strong>
-            </span>
-
-
-            <span
-              className={
-                styles.statusItem
-              }
-            >
-              Zoom:
-              <strong>
-                {
-                  `${Math.round(
-                    zoom *
-                    100
-                  )}%`
-                }
-              </strong>
-            </span>
-
-          </div>
-
-        </footer>
-
-      </div>
+      </footer>
 
     </div>
 
