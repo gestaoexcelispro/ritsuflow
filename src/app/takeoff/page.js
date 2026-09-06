@@ -1153,6 +1153,19 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
+  // COUNT DRAFT
+  // ==========================================================
+
+  const [
+    countDraft,
+    setCountDraft,
+  ] =
+    useState({
+      points: [],
+    })
+
+
+  // ==========================================================
   // PANELS
   // ==========================================================
 
@@ -1309,6 +1322,41 @@ export default function TakeoffPage() {
     )
 
 
+  const currentPageCounts =
+    useMemo(
+      () =>
+        takeoffEntities.filter(
+          (entity) =>
+            entity.pageNumber ===
+              pageNumber &&
+            entity.type ===
+              'count'
+        ),
+      [
+        takeoffEntities,
+        pageNumber,
+      ]
+    )
+
+
+  const pageCountQuantity =
+    useMemo(
+      () =>
+        currentPageCounts.reduce(
+          (
+            total,
+            entity
+          ) =>
+            total +
+            entity.points.length,
+          0
+        ),
+      [
+        currentPageCounts,
+      ]
+    )
+
+
   const latestDistance =
     currentPageDistances.at(-1) ||
     null
@@ -1327,6 +1375,10 @@ export default function TakeoffPage() {
 
   const latestRectangle =
     currentPageRectangles.at(-1) ||
+    null
+
+  const latestCount =
+    currentPageCounts.at(-1) ||
     null
 
 
@@ -1578,6 +1630,17 @@ export default function TakeoffPage() {
     )
 
 
+  const resetCountDraft =
+    useCallback(
+      () => {
+        setCountDraft({
+          points: [],
+        })
+      },
+      []
+    )
+
+
   const resetAllGeometryDrafts =
     useCallback(
       () => {
@@ -1586,6 +1649,7 @@ export default function TakeoffPage() {
         resetPolylineDraft()
         resetAreaDraft()
         resetRectangleDraft()
+        resetCountDraft()
       },
       [
         resetDistanceDraft,
@@ -1593,6 +1657,7 @@ export default function TakeoffPage() {
         resetPolylineDraft,
         resetAreaDraft,
         resetRectangleDraft,
+        resetCountDraft,
       ]
     )
 
@@ -1940,6 +2005,67 @@ export default function TakeoffPage() {
         areaDraft.points,
         pageNumber,
         resetAreaDraft,
+      ]
+    )
+
+
+  // ==========================================================
+  // COUNT COMMANDS
+  // ==========================================================
+
+  const finishCount =
+    useCallback(
+      () => {
+        if (
+          activeTool !==
+          'count' ||
+          !countDraft.points.length
+        ) {
+          return
+        }
+
+        const entity = {
+          id:
+            createEntityId(),
+
+          type:
+            'count',
+
+          pageNumber,
+
+          points:
+            countDraft.points.map(
+              (point) => ({
+                ...point,
+              })
+            ),
+
+          quantity:
+            countDraft.points.length,
+
+          createdAt:
+            new Date()
+              .toISOString(),
+        }
+
+        setTakeoffEntities(
+          (current) => [
+            ...current,
+            entity,
+          ]
+        )
+
+        resetCountDraft()
+
+        setInspectorTab(
+          'properties'
+        )
+      },
+      [
+        activeTool,
+        countDraft.points,
+        pageNumber,
+        resetCountDraft,
       ]
     )
 
@@ -2930,6 +3056,39 @@ export default function TakeoffPage() {
 
 
     // ========================================================
+    // COUNT
+    // ========================================================
+
+    if (
+      activeTool ===
+      'count'
+    ) {
+      event.preventDefault()
+
+      setCountDraft(
+        (current) => ({
+          points: [
+            ...current.points,
+            {
+              ...point,
+            },
+          ],
+        })
+      )
+
+      setInspectorTab(
+        'properties'
+      )
+
+      setInspectorOpen(
+        true
+      )
+
+      return
+    }
+
+
+    // ========================================================
     // REQUIRE CALIBRATION
     // ========================================================
 
@@ -3512,6 +3671,18 @@ export default function TakeoffPage() {
 
             return
           }
+
+          if (
+            activeTool ===
+              'count' &&
+            countDraft.points.length
+          ) {
+            event.preventDefault()
+
+            finishCount()
+
+            return
+          }
         }
 
 
@@ -3570,6 +3741,15 @@ export default function TakeoffPage() {
             rectangleDraft.point1
           ) {
             resetRectangleDraft()
+            return
+          }
+
+          if (
+            activeTool ===
+              'count' &&
+            countDraft.points.length
+          ) {
+            resetCountDraft()
             return
           }
 
@@ -3691,8 +3871,10 @@ export default function TakeoffPage() {
       activeTool,
       areaDraft,
       cancelCalibration,
+      countDraft,
       distanceDraft,
       finishArea,
+      finishCount,
       finishPolyline,
       fitPage,
       fitWidth,
@@ -3700,6 +3882,7 @@ export default function TakeoffPage() {
       polylineDraft,
       rectangleDraft,
       resetAreaDraft,
+      resetCountDraft,
       resetDistanceDraft,
       resetLineDraft,
       resetPolylineDraft,
@@ -3779,6 +3962,7 @@ export default function TakeoffPage() {
       'polyline',
       'area',
       'rectangle',
+      'count',
     ].includes(
       activeTool
     )
@@ -3975,6 +4159,23 @@ export default function TakeoffPage() {
 
     liveArea =
       previewRectangleArea
+
+  } else if (
+    activeTool ===
+    'count'
+  ) {
+    commandName =
+      'COUNT'
+
+    if (
+      !countDraft.points.length
+    ) {
+      commandInstruction =
+        'Click each item to start a count group.'
+    } else {
+      commandInstruction =
+        'Continue clicking items. Press Enter to finish this group.'
+    }
   }
 
 
@@ -5331,6 +5532,108 @@ export default function TakeoffPage() {
 
 
                 {/* ============================================
+                    COUNT
+                ============================================ */}
+
+                {currentPageCounts.map(
+                  (
+                    entity,
+                    groupIndex
+                  ) => (
+                    <g
+                      key={
+                        entity.id
+                      }
+                    >
+                      {entity.points.map(
+                        (
+                          point,
+                          index
+                        ) => (
+                          <g
+                            key={`${entity.id}-${index}`}
+                          >
+                            <circle
+                              cx={
+                                point.x
+                              }
+                              cy={
+                                point.y
+                              }
+                              r={
+                                10 /
+                                geometryScale
+                              }
+                              fill="rgba(220, 38, 38, 0.92)"
+                              stroke="#ffffff"
+                              strokeWidth="2"
+                              vectorEffect="non-scaling-stroke"
+                            />
+
+                            <text
+                              x={
+                                point.x
+                              }
+                              y={
+                                point.y
+                              }
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                              fill="#ffffff"
+                              fontSize={
+                                9 /
+                                geometryScale
+                              }
+                              fontWeight="900"
+                            >
+                              {
+                                index +
+                                1
+                              }
+                            </text>
+                          </g>
+                        )
+                      )}
+
+                      {entity.points.length >
+                        0 && (
+                        <text
+                          x={
+                            entity.points.at(-1).x +
+                            15 /
+                            geometryScale
+                          }
+                          y={
+                            entity.points.at(-1).y
+                          }
+                          dominantBaseline="middle"
+                          fill="#b91c1c"
+                          fontSize={
+                            11 /
+                            geometryScale
+                          }
+                          fontWeight="900"
+                          stroke="#ffffff"
+                          strokeWidth={
+                            3 /
+                            geometryScale
+                          }
+                          paintOrder="stroke"
+                        >
+                          Group {
+                            groupIndex +
+                            1
+                          }: {
+                            entity.points.length
+                          } ea
+                        </text>
+                      )}
+                    </g>
+                  )
+                )}
+
+
+                {/* ============================================
                     CALIBRATION DRAFT
                 ============================================ */}
 
@@ -5523,6 +5826,63 @@ export default function TakeoffPage() {
                     />
                   )}
 
+
+                {/* ============================================
+                    COUNT DRAFT
+                ============================================ */}
+
+                {activeTool ===
+                  'count' &&
+                  countDraft.points.map(
+                    (
+                      point,
+                      index
+                    ) => (
+                      <g
+                        key={`count-draft-${index}`}
+                      >
+                        <circle
+                          cx={
+                            point.x
+                          }
+                          cy={
+                            point.y
+                          }
+                          r={
+                            11 /
+                            geometryScale
+                          }
+                          fill="#dc2626"
+                          stroke="#fef2f2"
+                          strokeWidth="3"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <text
+                          x={
+                            point.x
+                          }
+                          y={
+                            point.y
+                          }
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fill="#ffffff"
+                          fontSize={
+                            9 /
+                            geometryScale
+                          }
+                          fontWeight="900"
+                        >
+                          {
+                            index +
+                            1
+                          }
+                        </text>
+                      </g>
+                    )
+                  )}
+
               </svg>
 
 
@@ -5631,6 +5991,21 @@ export default function TakeoffPage() {
                   } {
                     areaUnit
                   }
+                </strong>
+              )}
+
+
+              {activeTool ===
+                'count' && (
+                <strong
+                  style={{
+                    color:
+                      '#fca5a5',
+                  }}
+                >
+                  {
+                    countDraft.points.length
+                  } ea
                 </strong>
               )}
 
@@ -6185,6 +6560,114 @@ export default function TakeoffPage() {
                           </div>
 
                         </div>
+                      )}
+
+                    </section>
+                  )}
+
+
+                  {/* ==========================================
+                      COUNT TOOL
+                  ========================================== */}
+
+                  {activeTool ===
+                    'count' && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+
+                      <h3>
+                        Count Takeoff
+                      </h3>
+
+
+                      <div
+                        style={{
+                          padding:
+                            '10px 11px',
+                          border:
+                            '1px solid #d8e1e8',
+                          borderRadius:
+                            6,
+                          background:
+                            '#f8fafc',
+                          color:
+                            '#334155',
+                          fontSize:
+                            12,
+                          lineHeight:
+                            1.45,
+                        }}
+                      >
+                        {
+                          commandInstruction
+                        }
+                      </div>
+
+
+                      <div
+                        className={
+                          styles.propertyRow
+                        }
+                      >
+                        <span>
+                          Current group
+                        </span>
+
+                        <strong>
+                          {
+                            countDraft.points.length
+                          } ea
+                        </strong>
+                      </div>
+
+
+                      <div
+                        className={
+                          styles.propertyRow
+                        }
+                      >
+                        <span>
+                          Saved groups
+                        </span>
+
+                        <strong>
+                          {
+                            currentPageCounts.length
+                          }
+                        </strong>
+                      </div>
+
+
+                      <div
+                        className={
+                          styles.propertyRow
+                        }
+                      >
+                        <span>
+                          Saved quantity
+                        </span>
+
+                        <strong>
+                          {
+                            pageCountQuantity
+                          } ea
+                        </strong>
+                      </div>
+
+
+                      {countDraft.points.length >
+                        0 && (
+                        <button
+                          type="button"
+                          onClick={
+                            finishCount
+                          }
+                        >
+                          Finish Count Group
+                        </button>
                       )}
 
                     </section>
@@ -6754,6 +7237,40 @@ export default function TakeoffPage() {
                       }
                     >
                       <span>
+                        Count groups
+                      </span>
+
+                      <strong>
+                        {
+                          currentPageCounts.length
+                        }
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Count quantity
+                      </span>
+
+                      <strong>
+                        {
+                          pageCountQuantity
+                        } ea
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
                         Latest area
                       </span>
 
@@ -6875,6 +7392,25 @@ export default function TakeoffPage() {
                       </strong>
                     </div>
 
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Latest count
+                      </span>
+
+                      <strong>
+                        {
+                          latestCount
+                            ? `${latestCount.points.length} ea`
+                            : '—'
+                        }
+                      </strong>
+                    </div>
+
                   </section>
 
 
@@ -6979,6 +7515,10 @@ export default function TakeoffPage() {
                     [
                       'Rectangle',
                       currentPageRectangles.length,
+                    ],
+                    [
+                      'Count',
+                      currentPageCounts.length,
                     ],
                   ]
                     .filter(
@@ -7383,6 +7923,28 @@ export default function TakeoffPage() {
                   } {
                     areaUnit
                   }
+                </strong>
+              </span>
+            </>
+          )}
+
+
+          {activeTool ===
+            'count' && (
+            <>
+              <span
+                className={
+                  styles.statusDivider
+                }
+              />
+
+              <span>
+                Count
+
+                <strong>
+                  {
+                    countDraft.points.length
+                  } ea
                 </strong>
               </span>
             </>
