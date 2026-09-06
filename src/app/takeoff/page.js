@@ -476,6 +476,59 @@ function formatNumber(
 }
 
 
+function realDistanceFromPoints(
+  point1,
+  point2,
+  calibration
+) {
+  if (
+    !point1 ||
+    !point2 ||
+    !calibration
+  ) {
+    return null
+  }
+
+  const pdfDistance =
+    pointDistance(
+      point1,
+      point2
+    )
+
+  const meters =
+    pdfDistance *
+    calibration.metersPerPdfPoint
+
+  const unitFactor =
+    UNIT_TO_METERS[
+      calibration.displayUnit
+    ]
+
+  if (!unitFactor) {
+    return null
+  }
+
+  return meters /
+    unitFactor
+}
+
+
+function createEntityId() {
+  if (
+    typeof crypto !==
+      'undefined' &&
+    typeof crypto.randomUUID ===
+      'function'
+  ) {
+    return crypto.randomUUID()
+  }
+
+  return `takeoff-${Date.now()}-${Math.random()
+    .toString(16)
+    .slice(2)}`
+}
+
+
 // ============================================================
 // TAKEOFF PAGE
 // ============================================================
@@ -692,6 +745,26 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
+  // DISTANCE TAKEOFF
+  // ==========================================================
+
+  const [
+    takeoffEntities,
+    setTakeoffEntities,
+  ] =
+    useState([])
+
+  const [
+    distanceDraft,
+    setDistanceDraft,
+  ] =
+    useState({
+      point1: null,
+      previewPoint: null,
+    })
+
+
+  // ==========================================================
   // PANELS
   // ==========================================================
 
@@ -762,6 +835,43 @@ export default function TakeoffPage() {
       calibrationDraft.point2
     )
 
+  const currentPageDistances =
+    useMemo(
+      () =>
+        takeoffEntities.filter(
+          (entity) =>
+            entity.pageNumber ===
+              pageNumber &&
+            entity.type ===
+              'distance'
+        ),
+      [
+        takeoffEntities,
+        pageNumber,
+      ]
+    )
+
+  const latestDistance =
+    currentPageDistances.length
+      ? currentPageDistances[
+          currentPageDistances.length -
+          1
+        ]
+      : null
+
+  const previewDistance =
+    activeTool ===
+      'distance' &&
+    distanceDraft.point1 &&
+    distanceDraft.previewPoint &&
+    currentCalibration
+      ? realDistanceFromPoints(
+          distanceDraft.point1,
+          distanceDraft.previewPoint,
+          currentCalibration
+        )
+      : null
+
 
   // ==========================================================
   // PDF.JS
@@ -789,7 +899,7 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
-  // CALIBRATION COMMANDS
+  // DRAFT RESET
   // ==========================================================
 
   const resetCalibrationDraft =
@@ -813,6 +923,53 @@ export default function TakeoffPage() {
     )
 
 
+  const resetDistanceDraft =
+    useCallback(
+      () => {
+        setDistanceDraft({
+          point1: null,
+          previewPoint: null,
+        })
+      },
+      []
+    )
+
+
+  // ==========================================================
+  // TOOL ACTIVATION
+  // ==========================================================
+
+  function activateTool(
+    toolId
+  ) {
+    if (
+      activeTool ===
+      'calibrate' &&
+      toolId !==
+      'calibrate'
+    ) {
+      resetCalibrationDraft()
+    }
+
+    if (
+      activeTool ===
+      'distance' &&
+      toolId !==
+      'distance'
+    ) {
+      resetDistanceDraft()
+    }
+
+    setActiveTool(
+      toolId
+    )
+  }
+
+
+  // ==========================================================
+  // CALIBRATION COMMANDS
+  // ==========================================================
+
   const cancelCalibration =
     useCallback(
       () => {
@@ -833,6 +990,7 @@ export default function TakeoffPage() {
       return
     }
 
+    resetDistanceDraft()
     resetCalibrationDraft()
 
     if (
@@ -954,6 +1112,7 @@ export default function TakeoffPage() {
     setCalibrationsByPage(
       (current) => ({
         ...current,
+
         [pageNumber]:
           calibration,
       })
@@ -1101,7 +1260,12 @@ export default function TakeoffPage() {
         {}
       )
 
+      setTakeoffEntities(
+        []
+      )
+
       resetCalibrationDraft()
+      resetDistanceDraft()
 
       setActiveTool(
         'select'
@@ -1137,7 +1301,12 @@ export default function TakeoffPage() {
         {}
       )
 
+      setTakeoffEntities(
+        []
+      )
+
       resetCalibrationDraft()
+      resetDistanceDraft()
 
       setPdfError(
         'The PDF could not be opened.'
@@ -1254,6 +1423,7 @@ export default function TakeoffPage() {
           })
 
           resetCalibrationDraft()
+          resetDistanceDraft()
 
           setActiveTool(
             'select'
@@ -1286,6 +1456,7 @@ export default function TakeoffPage() {
       pdfDocument,
       pageNumber,
       resetCalibrationDraft,
+      resetDistanceDraft,
     ]
   )
 
@@ -1669,7 +1840,7 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
-  // POINTER
+  // POINTER MOVE
   // ==========================================================
 
   function handlePointerMove(
@@ -1697,6 +1868,22 @@ export default function TakeoffPage() {
       setCalibrationDraft(
         (current) => ({
           ...current,
+
+          previewPoint:
+            point,
+        })
+      )
+    }
+
+    if (
+      activeTool ===
+        'distance' &&
+      distanceDraft.point1
+    ) {
+      setDistanceDraft(
+        (current) => ({
+          ...current,
+
           previewPoint:
             point,
         })
@@ -1723,6 +1910,10 @@ export default function TakeoffPage() {
     })
   }
 
+
+  // ==========================================================
+  // POINTER DOWN
+  // ==========================================================
 
   function handlePointerDown(
     event
@@ -1780,20 +1971,6 @@ export default function TakeoffPage() {
       return
     }
 
-    if (
-      activeTool !==
-      'calibrate'
-    ) {
-      return
-    }
-
-    if (
-      calibrationDraft.point1 &&
-      calibrationDraft.point2
-    ) {
-      return
-    }
-
     const point =
       clientToPdfPoint(
         event.clientX,
@@ -1804,69 +1981,179 @@ export default function TakeoffPage() {
       return
     }
 
-    event.preventDefault()
+
+    // ========================================================
+    // CALIBRATION
+    // ========================================================
 
     if (
-      !calibrationDraft.point1
+      activeTool ===
+      'calibrate'
     ) {
-      setCalibrationDraft({
-        point1:
-          point,
+      event.preventDefault()
 
-        point2:
-          null,
+      if (
+        calibrationDraft.point1 &&
+        calibrationDraft.point2
+      ) {
+        return
+      }
 
-        previewPoint:
-          point,
-      })
+      if (
+        !calibrationDraft.point1
+      ) {
+        setCalibrationDraft({
+          point1:
+            point,
+
+          point2:
+            null,
+
+          previewPoint:
+            point,
+        })
+
+        setCalibrationError(
+          null
+        )
+
+        return
+      }
+
+      const distance =
+        pointDistance(
+          calibrationDraft.point1,
+          point
+        )
+
+      if (
+        distance <
+        0.0001
+      ) {
+        setCalibrationError(
+          'Choose a second point away from the first point.'
+        )
+
+        return
+      }
+
+      setCalibrationDraft(
+        (current) => ({
+          ...current,
+
+          point2:
+            point,
+
+          previewPoint:
+            null,
+        })
+      )
 
       setCalibrationError(
         null
       )
 
+      setInspectorTab(
+        'properties'
+      )
+
+      setInspectorOpen(
+        true
+      )
+
       return
     }
 
-    const distance =
-      pointDistance(
-        calibrationDraft.point1,
-        point
-      )
+
+    // ========================================================
+    // DISTANCE
+    // ========================================================
 
     if (
-      distance <
-      0.0001
+      activeTool ===
+      'distance'
     ) {
-      setCalibrationError(
-        'Choose a second point away from the first point.'
+      event.preventDefault()
+
+      if (
+        !currentCalibration
+      ) {
+        setInspectorTab(
+          'properties'
+        )
+
+        setInspectorOpen(
+          true
+        )
+
+        return
+      }
+
+      if (
+        !distanceDraft.point1
+      ) {
+        setDistanceDraft({
+          point1:
+            point,
+
+          previewPoint:
+            point,
+        })
+
+        return
+      }
+
+      const pdfLength =
+        pointDistance(
+          distanceDraft.point1,
+          point
+        )
+
+      if (
+        pdfLength <
+        0.0001
+      ) {
+        return
+      }
+
+      const entity = {
+        id:
+          createEntityId(),
+
+        type:
+          'distance',
+
+        pageNumber,
+
+        points: [
+          {
+            ...distanceDraft.point1,
+          },
+          {
+            ...point,
+          },
+        ],
+
+        createdAt:
+          new Date()
+            .toISOString(),
+      }
+
+      setTakeoffEntities(
+        (current) => [
+          ...current,
+          entity,
+        ]
+      )
+
+      resetDistanceDraft()
+
+      setInspectorTab(
+        'properties'
       )
 
       return
     }
-
-    setCalibrationDraft(
-      (current) => ({
-        ...current,
-
-        point2:
-          point,
-
-        previewPoint:
-          null,
-      })
-    )
-
-    setCalibrationError(
-      null
-    )
-
-    setInspectorTab(
-      'properties'
-    )
-
-    setInspectorOpen(
-      true
-    )
   }
 
 
@@ -2053,6 +2340,24 @@ export default function TakeoffPage() {
             return
           }
 
+          if (
+            activeTool ===
+            'distance'
+          ) {
+            if (
+              distanceDraft.point1
+            ) {
+              resetDistanceDraft()
+              return
+            }
+
+            setActiveTool(
+              'select'
+            )
+
+            return
+          }
+
           setActiveTool(
             'select'
           )
@@ -2072,56 +2377,56 @@ export default function TakeoffPage() {
           key ===
           'v'
         ) {
-          setActiveTool(
+          activateTool(
             'select'
           )
         } else if (
           key ===
           'h'
         ) {
-          setActiveTool(
+          activateTool(
             'pan'
           )
         } else if (
           key ===
           'z'
         ) {
-          setActiveTool(
+          activateTool(
             'zoom'
           )
         } else if (
           key ===
           'd'
         ) {
-          setActiveTool(
+          activateTool(
             'distance'
           )
         } else if (
           key ===
           'l'
         ) {
-          setActiveTool(
+          activateTool(
             'line'
           )
         } else if (
           key ===
           'a'
         ) {
-          setActiveTool(
+          activateTool(
             'area'
           )
         } else if (
           key ===
           'r'
         ) {
-          setActiveTool(
+          activateTool(
             'rectangle'
           )
         } else if (
           key ===
           'c'
         ) {
-          setActiveTool(
+          activateTool(
             'count'
           )
         } else if (
@@ -2152,8 +2457,10 @@ export default function TakeoffPage() {
     [
       activeTool,
       cancelCalibration,
+      distanceDraft,
       fitPage,
       fitWidth,
+      resetDistanceDraft,
     ]
   )
 
@@ -2220,7 +2527,9 @@ export default function TakeoffPage() {
       'zoom-in'
   } else if (
     activeTool ===
-    'calibrate'
+      'calibrate' ||
+    activeTool ===
+      'distance'
   ) {
     viewportCursor =
       'crosshair'
@@ -2233,7 +2542,7 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
-  // SCALE LABELS
+  // COMMAND LABELS
   // ==========================================================
 
   const scaleHeaderLabel =
@@ -2263,6 +2572,38 @@ export default function TakeoffPage() {
         'Enter the known real distance.'
     }
   }
+
+  let distanceInstruction =
+    null
+
+  if (
+    activeTool ===
+    'distance'
+  ) {
+    if (
+      !currentCalibration
+    ) {
+      distanceInstruction =
+        'Calibrate this page before measuring distance.'
+    } else if (
+      !distanceDraft.point1
+    ) {
+      distanceInstruction =
+        'Click the first measurement point.'
+    } else {
+      distanceInstruction =
+        'Click the second measurement point.'
+    }
+  }
+
+  const commandInstruction =
+    activeTool ===
+      'calibrate'
+      ? calibrationInstruction
+      : activeTool ===
+          'distance'
+        ? distanceInstruction
+        : null
 
 
   // ==========================================================
@@ -2456,7 +2797,9 @@ export default function TakeoffPage() {
             Scale
 
             <strong>
-              {scaleHeaderLabel}
+              {
+                scaleHeaderLabel
+              }
             </strong>
           </span>
 
@@ -2478,10 +2821,6 @@ export default function TakeoffPage() {
             </strong>
           </span>
 
-
-          {/* ==================================================
-              RITSUFLOW BRAND
-          ================================================== */}
 
           <Link
             href="/dashboard"
@@ -2661,18 +3000,11 @@ export default function TakeoffPage() {
                   .join(
                     ' '
                   )}
-                onClick={() => {
-                  if (
-                    activeTool ===
-                    'calibrate'
-                  ) {
-                    resetCalibrationDraft()
-                  }
-
-                  setActiveTool(
+                onClick={() =>
+                  activateTool(
                     tool.id
                   )
-                }}
+                }
                 disabled={
                   !pdfDocument &&
                   tool.id !==
@@ -2777,18 +3109,11 @@ export default function TakeoffPage() {
                   .join(
                     ' '
                   )}
-                onClick={() => {
-                  if (
-                    activeTool ===
-                    'calibrate'
-                  ) {
-                    resetCalibrationDraft()
-                  }
-
-                  setActiveTool(
+                onClick={() =>
+                  activateTool(
                     tool.id
                   )
-                }}
+                }
                 disabled={
                   !pdfDocument
                 }
@@ -2954,6 +3279,22 @@ export default function TakeoffPage() {
                 setCalibrationDraft(
                   (current) => ({
                     ...current,
+
+                    previewPoint:
+                      null,
+                  })
+                )
+              }
+
+              if (
+                activeTool ===
+                  'distance' &&
+                distanceDraft.point1
+              ) {
+                setDistanceDraft(
+                  (current) => ({
+                    ...current,
+
                     previewPoint:
                       null,
                   })
@@ -3095,6 +3436,10 @@ export default function TakeoffPage() {
                 preserveAspectRatio="none"
               >
 
+                {/* ============================================
+                    SAVED CALIBRATION
+                ============================================ */}
+
                 {currentCalibration && (
                   <g>
                     <line
@@ -3174,6 +3519,192 @@ export default function TakeoffPage() {
                 )}
 
 
+                {/* ============================================
+                    SAVED DISTANCES
+                ============================================ */}
+
+                {currentPageDistances.map(
+                  (entity) => {
+                    const point1 =
+                      entity.points[0]
+
+                    const point2 =
+                      entity.points[1]
+
+                    const distance =
+                      realDistanceFromPoints(
+                        point1,
+                        point2,
+                        currentCalibration
+                      )
+
+                    const midpoint = {
+                      x:
+                        (
+                          point1.x +
+                          point2.x
+                        ) /
+                        2,
+
+                      y:
+                        (
+                          point1.y +
+                          point2.y
+                        ) /
+                        2,
+                    }
+
+                    const label =
+                      currentCalibration &&
+                      distance !== null
+                        ? `${formatNumber(
+                            distance,
+                            2
+                          )} ${currentCalibration.displayUnit}`
+                        : 'Unscaled'
+
+                    return (
+                      <g
+                        key={
+                          entity.id
+                        }
+                      >
+                        <line
+                          x1={
+                            point1.x
+                          }
+                          y1={
+                            point1.y
+                          }
+                          x2={
+                            point2.x
+                          }
+                          y2={
+                            point2.y
+                          }
+                          stroke="#2563eb"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <circle
+                          cx={
+                            point1.x
+                          }
+                          cy={
+                            point1.y
+                          }
+                          r={
+                            4 /
+                            Math.max(
+                              effectiveScale,
+                              0.01
+                            )
+                          }
+                          fill="#ffffff"
+                          stroke="#2563eb"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <circle
+                          cx={
+                            point2.x
+                          }
+                          cy={
+                            point2.y
+                          }
+                          r={
+                            4 /
+                            Math.max(
+                              effectiveScale,
+                              0.01
+                            )
+                          }
+                          fill="#ffffff"
+                          stroke="#2563eb"
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                        />
+
+                        <g
+                          transform={`translate(${midpoint.x} ${midpoint.y})`}
+                        >
+                          <rect
+                            x={
+                              -38 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            y={
+                              -11 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            width={
+                              76 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            height={
+                              22 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            rx={
+                              4 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            fill="rgba(5, 44, 73, 0.94)"
+                          />
+
+                          <text
+                            x="0"
+                            y={
+                              4 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            textAnchor="middle"
+                            fill="#ffffff"
+                            fontSize={
+                              10 /
+                              Math.max(
+                                effectiveScale,
+                                0.01
+                              )
+                            }
+                            fontWeight="700"
+                          >
+                            {
+                              label
+                            }
+                          </text>
+                        </g>
+
+                      </g>
+                    )
+                  }
+                )}
+
+
+                {/* ============================================
+                    CALIBRATION DRAFT
+                ============================================ */}
+
                 {activeTool ===
                   'calibrate' &&
                   calibrationDraft.point1 &&
@@ -3252,6 +3783,94 @@ export default function TakeoffPage() {
                     </g>
                   )}
 
+
+                {/* ============================================
+                    DISTANCE DRAFT
+                ============================================ */}
+
+                {activeTool ===
+                  'distance' &&
+                  distanceDraft.point1 &&
+                  distanceDraft.previewPoint &&
+                  currentCalibration && (
+                    <g>
+                      <line
+                        x1={
+                          distanceDraft
+                            .point1
+                            .x
+                        }
+                        y1={
+                          distanceDraft
+                            .point1
+                            .y
+                        }
+                        x2={
+                          distanceDraft
+                            .previewPoint
+                            .x
+                        }
+                        y2={
+                          distanceDraft
+                            .previewPoint
+                            .y
+                        }
+                        stroke="#2563eb"
+                        strokeWidth="2"
+                        strokeDasharray="6 4"
+                        vectorEffect="non-scaling-stroke"
+                      />
+
+                      <circle
+                        cx={
+                          distanceDraft
+                            .point1
+                            .x
+                        }
+                        cy={
+                          distanceDraft
+                            .point1
+                            .y
+                        }
+                        r={
+                          5 /
+                          Math.max(
+                            effectiveScale,
+                            0.01
+                          )
+                        }
+                        fill="#ffffff"
+                        stroke="#2563eb"
+                        strokeWidth="2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+
+                      <circle
+                        cx={
+                          distanceDraft
+                            .previewPoint
+                            .x
+                        }
+                        cy={
+                          distanceDraft
+                            .previewPoint
+                            .y
+                        }
+                        r={
+                          5 /
+                          Math.max(
+                            effectiveScale,
+                            0.01
+                          )
+                        }
+                        fill="#ffffff"
+                        stroke="#2563eb"
+                        strokeWidth="2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </g>
+                  )}
+
               </svg>
 
 
@@ -3265,86 +3884,119 @@ export default function TakeoffPage() {
           )}
 
 
-          {activeTool ===
-            'calibrate' &&
-            calibrationInstruction && (
-              <div
+          {/* ==================================================
+              COMMAND PROMPT
+          ================================================== */}
+
+          {commandInstruction && (
+            <div
+              style={{
+                position:
+                  'absolute',
+
+                left:
+                  '50%',
+
+                bottom:
+                  18,
+
+                transform:
+                  'translateX(-50%)',
+
+                zIndex:
+                  40,
+
+                display:
+                  'flex',
+
+                alignItems:
+                  'center',
+
+                gap:
+                  10,
+
+                padding:
+                  '9px 14px',
+
+                borderRadius:
+                  7,
+
+                background:
+                  'rgba(5, 44, 73, 0.94)',
+
+                color:
+                  '#ffffff',
+
+                boxShadow:
+                  '0 8px 24px rgba(0,0,0,0.18)',
+
+                fontSize:
+                  12,
+
+                pointerEvents:
+                  'none',
+
+                whiteSpace:
+                  'nowrap',
+              }}
+            >
+              <strong>
+                {
+                  activeTool ===
+                    'calibrate'
+                    ? 'CALIBRATE'
+                    : 'DISTANCE'
+                }
+              </strong>
+
+              <span
                 style={{
-                  position:
-                    'absolute',
-
-                  left:
-                    '50%',
-
-                  bottom:
-                    18,
-
-                  transform:
-                    'translateX(-50%)',
-
-                  zIndex:
-                    40,
-
-                  display:
-                    'flex',
-
-                  alignItems:
-                    'center',
-
-                  gap:
-                    10,
-
-                  padding:
-                    '9px 14px',
-
-                  borderRadius:
-                    7,
-
-                  background:
-                    'rgba(5, 44, 73, 0.94)',
-
-                  color:
-                    '#ffffff',
-
-                  boxShadow:
-                    '0 8px 24px rgba(0,0,0,0.18)',
-
-                  fontSize:
-                    12,
-
-                  pointerEvents:
-                    'none',
-
-                  whiteSpace:
-                    'nowrap',
+                  opacity:
+                    0.85,
                 }}
               >
-                <strong>
-                  CALIBRATE
-                </strong>
+                {
+                  commandInstruction
+                }
+              </span>
 
-                <span
+
+              {previewDistance !==
+                null && (
+                <strong
                   style={{
-                    opacity:
-                      0.85,
+                    color:
+                      '#7dd3fc',
                   }}
                 >
                   {
-                    calibrationInstruction
+                    formatNumber(
+                      previewDistance,
+                      2
+                    )
+                  } {
+                    currentCalibration
+                      ?.displayUnit
                   }
-                </span>
+                </strong>
+              )}
 
-                <span
-                  style={{
-                    opacity:
-                      0.55,
-                  }}
-                >
-                  Esc to cancel
-                </span>
-              </div>
-            )}
 
+              <span
+                style={{
+                  opacity:
+                    0.55,
+                }}
+              >
+                Esc to cancel
+              </span>
+            </div>
+          )}
+
+
+          {/* ==================================================
+              DRAWING DRAWER
+          ================================================== */}
 
           {drawingDrawerOpen && (
             <aside
@@ -3504,6 +4156,10 @@ export default function TakeoffPage() {
         </main>
 
 
+        {/* ====================================================
+            INSPECTOR
+        ==================================================== */}
+
         {inspectorOpen && (
           <aside
             className={
@@ -3593,6 +4249,10 @@ export default function TakeoffPage() {
               {inspectorTab ===
                 'properties' && (
                 <>
+
+                  {/* ==========================================
+                      CALIBRATION WORKFLOW
+                  ========================================== */}
 
                   {activeTool ===
                     'calibrate' && (
@@ -3984,34 +4644,145 @@ export default function TakeoffPage() {
                         </div>
                       )}
 
+                    </section>
+                  )}
 
-                      {!calibrationWaitingForDistance &&
-                        calibrationError && (
-                        <div
+
+                  {/* ==========================================
+                      DISTANCE TOOL
+                  ========================================== */}
+
+                  {activeTool ===
+                    'distance' && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+
+                      <h3>
+                        Distance
+                      </h3>
+
+
+                      <div
+                        style={{
+                          padding:
+                            '10px 11px',
+
+                          border:
+                            '1px solid #d8e1e8',
+
+                          borderRadius:
+                            6,
+
+                          background:
+                            currentCalibration
+                              ? '#f8fafc'
+                              : '#fff7ed',
+
+                          color:
+                            currentCalibration
+                              ? '#334155'
+                              : '#9a3412',
+
+                          fontSize:
+                            12,
+
+                          lineHeight:
+                            1.45,
+                        }}
+                      >
+                        {
+                          distanceInstruction
+                        }
+                      </div>
+
+
+                      {currentCalibration && (
+                        <>
+                          <div
+                            className={
+                              styles.propertyRow
+                            }
+                          >
+                            <span>
+                              Page measurements
+                            </span>
+
+                            <strong>
+                              {
+                                currentPageDistances
+                                  .length
+                              }
+                            </strong>
+                          </div>
+
+
+                          {distanceDraft.point1 && (
+                            <div
+                              className={
+                                styles.propertyRow
+                              }
+                            >
+                              <span>
+                                Live distance
+                              </span>
+
+                              <strong>
+                                {
+                                  previewDistance !==
+                                    null
+                                    ? `${formatNumber(
+                                        previewDistance,
+                                        2
+                                      )} ${currentCalibration.displayUnit}`
+                                    : 'Move cursor'
+                                }
+                              </strong>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+
+                      {!currentCalibration && (
+                        <button
+                          type="button"
+                          onClick={
+                            startCalibration
+                          }
                           style={{
+                            width:
+                              '100%',
+
+                            height:
+                              34,
+
                             marginTop:
                               10,
 
-                            padding:
-                              '8px 10px',
+                            border:
+                              '1px solid #052c49',
 
                             borderRadius:
                               5,
 
                             background:
-                              '#fef2f2',
+                              '#052c49',
 
                             color:
-                              '#b91c1c',
+                              '#ffffff',
 
-                            fontSize:
-                              12,
+                            cursor:
+                              'pointer',
+
+                            fontWeight:
+                              700,
                           }}
                         >
-                          {
-                            calibrationError
-                          }
-                        </div>
+                          Calibrate Page
+                        </button>
                       )}
 
                     </section>
@@ -4193,29 +4964,6 @@ export default function TakeoffPage() {
 
                     {currentCalibration && (
                       <div
-                        className={
-                          styles.propertyRow
-                        }
-                      >
-                        <span>
-                          PDF length
-                        </span>
-
-                        <strong>
-                          {
-                            formatNumber(
-                              currentCalibration
-                                .pdfDistance,
-                              3
-                            )
-                          } pt
-                        </strong>
-                      </div>
-                    )}
-
-
-                    {currentCalibration && (
-                      <div
                         style={{
                           marginTop:
                             10,
@@ -4256,6 +5004,66 @@ export default function TakeoffPage() {
                         </button>
                       </div>
                     )}
+
+                  </section>
+
+
+                  <section
+                    className={
+                      styles.propertySection
+                    }
+                  >
+
+                    <h3>
+                      Takeoff
+                    </h3>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Distances
+                      </span>
+
+                      <strong>
+                        {
+                          currentPageDistances
+                            .length
+                        }
+                      </strong>
+                    </div>
+
+
+                    <div
+                      className={
+                        styles.propertyRow
+                      }
+                    >
+                      <span>
+                        Latest
+                      </span>
+
+                      <strong>
+                        {
+                          latestDistance &&
+                          currentCalibration
+                            ? `${formatNumber(
+                                realDistanceFromPoints(
+                                  latestDistance
+                                    .points[0],
+                                  latestDistance
+                                    .points[1],
+                                  currentCalibration
+                                ),
+                                2
+                              )} ${currentCalibration.displayUnit}`
+                            : '—'
+                        }
+                      </strong>
+                    </div>
 
                   </section>
 
@@ -4346,6 +5154,46 @@ export default function TakeoffPage() {
 
                   </section>
 
+
+                  {currentPageDistances.length >
+                    0 && (
+                    <section
+                      className={
+                        styles.propertySection
+                      }
+                    >
+
+                      <h3>
+                        Takeoff
+                      </h3>
+
+
+                      <div
+                        className={
+                          styles.layerRow
+                        }
+                      >
+                        <span
+                          className={
+                            styles.layerDot
+                          }
+                        />
+
+                        <span>
+                          Distance Measurements
+                        </span>
+
+                        <strong>
+                          {
+                            currentPageDistances
+                              .length
+                          }
+                        </strong>
+                      </div>
+
+                    </section>
+                  )}
+
                 </>
               )}
 
@@ -4354,6 +5202,10 @@ export default function TakeoffPage() {
           </aside>
         )}
 
+
+        {/* ====================================================
+            RIGHT TOOL RAIL
+        ==================================================== */}
 
         <aside
           className={
@@ -4549,6 +5401,10 @@ export default function TakeoffPage() {
       </div>
 
 
+      {/* ======================================================
+          STATUS BAR
+      ====================================================== */}
+
       <footer
         className={
           styles.statusBar
@@ -4615,8 +5471,7 @@ export default function TakeoffPage() {
           </span>
 
 
-          {activeTool ===
-            'calibrate' && (
+          {commandInstruction && (
             <>
               <span
                 className={
@@ -4629,7 +5484,35 @@ export default function TakeoffPage() {
 
                 <strong>
                   {
-                    calibrationInstruction
+                    commandInstruction
+                  }
+                </strong>
+              </span>
+            </>
+          )}
+
+
+          {previewDistance !==
+            null && (
+            <>
+              <span
+                className={
+                  styles.statusDivider
+                }
+              />
+
+              <span>
+                Distance
+
+                <strong>
+                  {
+                    formatNumber(
+                      previewDistance,
+                      2
+                    )
+                  } {
+                    currentCalibration
+                      ?.displayUnit
                   }
                 </strong>
               </span>
@@ -4724,7 +5607,9 @@ export default function TakeoffPage() {
             Scale
 
             <strong>
-              {scaleHeaderLabel}
+              {
+                scaleHeaderLabel
+              }
             </strong>
           </span>
 
