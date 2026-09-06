@@ -30,9 +30,7 @@ import styles from './dashboard.module.css'
 // Product navigation follows the user's workflow while keeping
 // major RitsuFlow domains independently accessible.
 //
-// Takeoff is intentionally implemented as a standalone module.
-// Its internal drawing geometry engine must remain independent
-// from construction meaning.
+// Takeoff is a standalone application workspace.
 //
 // Takeoff geometry may later map to:
 //
@@ -307,6 +305,7 @@ function NavIcon({
       )
 
   }
+
 }
 
 
@@ -350,7 +349,7 @@ const baseNavigationGroups = [
 
       {
         label: 'Drawing Takeoff',
-        href: '/dashboard/takeoff',
+        href: '/takeoff',
         icon: 'takeoff',
       },
 
@@ -439,9 +438,7 @@ const baseNavigationGroups = [
   {
     label: 'Control',
 
-    items: [
-
-    ],
+    items: [],
   },
 
 
@@ -1141,11 +1138,9 @@ export default function DashboardLayout({
 
     styles.sidebar,
 
-
     isCollapsed
       ? styles.sidebarCollapsed
       : '',
-
 
     isMobileOpen
       ? styles.sidebarMobileOpen
@@ -1425,7 +1420,6 @@ export default function DashboardLayout({
                           const linkClassName = [
 
                             styles.navigationLink,
-
 
                             active
                               ? styles.navigationLinkActive
@@ -2341,4 +2335,5 @@ export default function DashboardLayout({
     </div>
 
   )
+
 }
