@@ -840,6 +840,348 @@ function removeConsecutiveDuplicatePoints(
 }
 
 
+function distancePointToSegment(
+  point,
+  point1,
+  point2
+) {
+  if (
+    !point ||
+    !point1 ||
+    !point2
+  ) {
+    return Infinity
+  }
+
+  const dx =
+    point2.x -
+    point1.x
+
+  const dy =
+    point2.y -
+    point1.y
+
+  const lengthSquared =
+    dx * dx +
+    dy * dy
+
+  if (
+    lengthSquared <=
+    0.0000001
+  ) {
+    return pointDistance(
+      point,
+      point1
+    )
+  }
+
+  const projection =
+    (
+      (
+        point.x -
+        point1.x
+      ) *
+      dx +
+      (
+        point.y -
+        point1.y
+      ) *
+      dy
+    ) /
+    lengthSquared
+
+  const clampedProjection =
+    clamp(
+      projection,
+      0,
+      1
+    )
+
+  const nearestPoint = {
+    x:
+      point1.x +
+      dx *
+      clampedProjection,
+
+    y:
+      point1.y +
+      dy *
+      clampedProjection,
+  }
+
+  return pointDistance(
+    point,
+    nearestPoint
+  )
+}
+
+
+function pointInPolygon(
+  point,
+  polygon
+) {
+  if (
+    !point ||
+    !Array.isArray(
+      polygon
+    ) ||
+    polygon.length <
+      3
+  ) {
+    return false
+  }
+
+  let inside =
+    false
+
+  for (
+    let index = 0,
+      previousIndex =
+        polygon.length -
+        1;
+    index <
+      polygon.length;
+    previousIndex =
+      index,
+    index += 1
+  ) {
+    const current =
+      polygon[index]
+
+    const previous =
+      polygon[
+        previousIndex
+      ]
+
+    const intersects =
+      (
+        current.y >
+          point.y
+      ) !==
+        (
+          previous.y >
+            point.y
+        ) &&
+      point.x <
+        (
+          (
+            previous.x -
+            current.x
+          ) *
+            (
+              point.y -
+              current.y
+            )
+        ) /
+          (
+            previous.y -
+              current.y ||
+            Number.EPSILON
+          ) +
+        current.x
+
+    if (
+      intersects
+    ) {
+      inside =
+        !inside
+    }
+  }
+
+  return inside
+}
+
+
+function hitTestEntity(
+  entity,
+  point,
+  tolerance
+) {
+  if (
+    !entity ||
+    !point ||
+    !Array.isArray(
+      entity.points
+    )
+  ) {
+    return false
+  }
+
+  if (
+    entity.type ===
+      'distance' ||
+    entity.type ===
+      'linear'
+  ) {
+    if (
+      entity.points.length <
+      2
+    ) {
+      return false
+    }
+
+    return (
+      distancePointToSegment(
+        point,
+        entity.points[0],
+        entity.points[1]
+      ) <=
+      tolerance
+    )
+  }
+
+  if (
+    entity.type ===
+    'polyline'
+  ) {
+    for (
+      let index = 1;
+      index <
+        entity.points.length;
+      index += 1
+    ) {
+      if (
+        distancePointToSegment(
+          point,
+          entity.points[
+            index - 1
+          ],
+          entity.points[
+            index
+          ]
+        ) <=
+        tolerance
+      ) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  if (
+    entity.type ===
+    'rectangle'
+  ) {
+    if (
+      entity.points.length <
+      2
+    ) {
+      return false
+    }
+
+    const point1 =
+      entity.points[0]
+
+    const point2 =
+      entity.points[1]
+
+    const minimumX =
+      Math.min(
+        point1.x,
+        point2.x
+      ) -
+      tolerance
+
+    const maximumX =
+      Math.max(
+        point1.x,
+        point2.x
+      ) +
+      tolerance
+
+    const minimumY =
+      Math.min(
+        point1.y,
+        point2.y
+      ) -
+      tolerance
+
+    const maximumY =
+      Math.max(
+        point1.y,
+        point2.y
+      ) +
+      tolerance
+
+    return (
+      point.x >=
+        minimumX &&
+      point.x <=
+        maximumX &&
+      point.y >=
+        minimumY &&
+      point.y <=
+        maximumY
+    )
+  }
+
+  if (
+    entity.type ===
+    'area'
+  ) {
+    if (
+      pointInPolygon(
+        point,
+        entity.points
+      )
+    ) {
+      return true
+    }
+
+    for (
+      let index = 0;
+      index <
+        entity.points.length;
+      index += 1
+    ) {
+      const current =
+        entity.points[
+          index
+        ]
+
+      const next =
+        entity.points[
+          (
+            index + 1
+          ) %
+          entity.points.length
+        ]
+
+      if (
+        distancePointToSegment(
+          point,
+          current,
+          next
+        ) <=
+        tolerance
+      ) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  if (
+    entity.type ===
+    'count'
+  ) {
+    return entity.points.some(
+      (countPoint) =>
+        pointDistance(
+          point,
+          countPoint
+        ) <=
+        tolerance *
+          1.35
+    )
+  }
+
+  return false
+}
+
+
 function createEntityId() {
   if (
     typeof crypto !==
@@ -883,6 +1225,12 @@ export default function TakeoffPage() {
 
   const panSessionRef =
     useRef(null)
+
+  const undoStackRef =
+    useRef([])
+
+  const redoStackRef =
+    useRef([])
 
 
   // ==========================================================
@@ -1080,6 +1428,24 @@ export default function TakeoffPage() {
     setTakeoffEntities,
   ] =
     useState([])
+
+  const [
+    selectedEntityId,
+    setSelectedEntityId,
+  ] =
+    useState(null)
+
+  const [
+    undoCount,
+    setUndoCount,
+  ] =
+    useState(0)
+
+  const [
+    redoCount,
+    setRedoCount,
+  ] =
+    useState(0)
 
 
   // ==========================================================
@@ -1382,6 +1748,138 @@ export default function TakeoffPage() {
     null
 
 
+  const selectedEntity =
+    useMemo(
+      () =>
+        takeoffEntities.find(
+          (entity) =>
+            entity.id ===
+            selectedEntityId
+        ) || null,
+      [
+        takeoffEntities,
+        selectedEntityId,
+      ]
+    )
+
+
+  const selectedEntityQuantity =
+    useMemo(
+      () => {
+        if (
+          !selectedEntity
+        ) {
+          return null
+        }
+
+        if (
+          selectedEntity.type ===
+            'distance' ||
+          selectedEntity.type ===
+            'linear'
+        ) {
+          return realDistanceFromPoints(
+            selectedEntity.points[0],
+            selectedEntity.points[1],
+            currentCalibration
+          )
+        }
+
+        if (
+          selectedEntity.type ===
+          'polyline'
+        ) {
+          return realPolylineLength(
+            selectedEntity.points,
+            currentCalibration
+          )
+        }
+
+        if (
+          selectedEntity.type ===
+          'area'
+        ) {
+          return realPolygonArea(
+            selectedEntity.points,
+            currentCalibration
+          )
+        }
+
+        if (
+          selectedEntity.type ===
+          'rectangle'
+        ) {
+          return realRectangleArea(
+            selectedEntity.points[0],
+            selectedEntity.points[1],
+            currentCalibration
+          )
+        }
+
+        if (
+          selectedEntity.type ===
+          'count'
+        ) {
+          return selectedEntity.points.length
+        }
+
+        return null
+      },
+      [
+        selectedEntity,
+        currentCalibration,
+      ]
+    )
+
+
+  const selectedEntityLabel =
+    selectedEntity
+      ? (
+          selectedEntity.type ===
+            'distance'
+            ? 'Distance'
+            : selectedEntity.type ===
+                'linear'
+              ? 'Linear'
+              : selectedEntity.type ===
+                  'polyline'
+                ? 'Polyline'
+                : selectedEntity.type ===
+                    'area'
+                  ? 'Area'
+                  : selectedEntity.type ===
+                      'rectangle'
+                    ? 'Rectangle'
+                    : selectedEntity.type ===
+                        'count'
+                      ? 'Count'
+                      : 'Takeoff'
+        )
+      : null
+
+
+  const selectedEntityUnit =
+    selectedEntity
+      ? (
+          selectedEntity.type ===
+              'area' ||
+          selectedEntity.type ===
+              'rectangle'
+            ? (
+                currentCalibration
+                  ? `${currentCalibration.displayUnit}²`
+                  : '—'
+              )
+            : selectedEntity.type ===
+                'count'
+              ? 'ea'
+              : currentCalibration
+                ?.displayUnit ||
+                '—'
+        )
+      : '—'
+
+
   const previewDistance =
     activeTool ===
       'distance' &&
@@ -1546,6 +2044,208 @@ export default function TakeoffPage() {
 
 
   // ==========================================================
+  // ENTITY HISTORY
+  // ==========================================================
+
+  const commitTakeoffEntities =
+    useCallback(
+      (
+        updater
+      ) => {
+        setTakeoffEntities(
+          (current) => {
+            const next =
+              typeof updater ===
+                'function'
+                ? updater(
+                    current
+                  )
+                : updater
+
+            if (
+              next ===
+              current
+            ) {
+              return current
+            }
+
+            undoStackRef.current = [
+              ...undoStackRef.current,
+              current,
+            ]
+
+            redoStackRef.current =
+              []
+
+            setUndoCount(
+              undoStackRef.current.length
+            )
+
+            setRedoCount(
+              0
+            )
+
+            return next
+          }
+        )
+      },
+      []
+    )
+
+
+  const resetTakeoffHistory =
+    useCallback(
+      (
+        entities = []
+      ) => {
+        undoStackRef.current =
+          []
+
+        redoStackRef.current =
+          []
+
+        setUndoCount(
+          0
+        )
+
+        setRedoCount(
+          0
+        )
+
+        setTakeoffEntities(
+          entities
+        )
+
+        setSelectedEntityId(
+          null
+        )
+      },
+      []
+    )
+
+
+  const undoTakeoff =
+    useCallback(
+      () => {
+        if (
+          !undoStackRef.current.length
+        ) {
+          return
+        }
+
+        setTakeoffEntities(
+          (current) => {
+            const previous =
+              undoStackRef.current[
+                undoStackRef.current.length -
+                1
+              ]
+
+            undoStackRef.current =
+              undoStackRef.current.slice(
+                0,
+                -1
+              )
+
+            redoStackRef.current = [
+              current,
+              ...redoStackRef.current,
+            ]
+
+            setUndoCount(
+              undoStackRef.current.length
+            )
+
+            setRedoCount(
+              redoStackRef.current.length
+            )
+
+            return previous
+          }
+        )
+
+        setSelectedEntityId(
+          null
+        )
+      },
+      []
+    )
+
+
+  const redoTakeoff =
+    useCallback(
+      () => {
+        if (
+          !redoStackRef.current.length
+        ) {
+          return
+        }
+
+        setTakeoffEntities(
+          (current) => {
+            const next =
+              redoStackRef.current[0]
+
+            redoStackRef.current =
+              redoStackRef.current.slice(
+                1
+              )
+
+            undoStackRef.current = [
+              ...undoStackRef.current,
+              current,
+            ]
+
+            setUndoCount(
+              undoStackRef.current.length
+            )
+
+            setRedoCount(
+              redoStackRef.current.length
+            )
+
+            return next
+          }
+        )
+
+        setSelectedEntityId(
+          null
+        )
+      },
+      []
+    )
+
+
+  const deleteSelectedEntity =
+    useCallback(
+      () => {
+        if (
+          !selectedEntityId
+        ) {
+          return
+        }
+
+        commitTakeoffEntities(
+          (current) =>
+            current.filter(
+              (entity) =>
+                entity.id !==
+                selectedEntityId
+            )
+        )
+
+        setSelectedEntityId(
+          null
+        )
+      },
+      [
+        selectedEntityId,
+        commitTakeoffEntities,
+      ]
+    )
+
+
+  // ==========================================================
   // DRAFT RESET
   // ==========================================================
 
@@ -1666,29 +2366,46 @@ export default function TakeoffPage() {
   // TOOL ACTIVATION
   // ==========================================================
 
-  function activateTool(
-    toolId
-  ) {
-    if (
-      activeTool ===
-      'calibrate' &&
-      toolId !==
-      'calibrate'
-    ) {
-      resetCalibrationDraft()
-    }
+  const activateTool =
+    useCallback(
+      (
+        toolId
+      ) => {
+        if (
+          activeTool ===
+          'calibrate' &&
+          toolId !==
+          'calibrate'
+        ) {
+          resetCalibrationDraft()
+        }
 
-    if (
-      activeTool !==
-      toolId
-    ) {
-      resetAllGeometryDrafts()
-    }
+        if (
+          activeTool !==
+          toolId
+        ) {
+          resetAllGeometryDrafts()
+        }
 
-    setActiveTool(
-      toolId
+        if (
+          toolId !==
+          'select'
+        ) {
+          setSelectedEntityId(
+            null
+          )
+        }
+
+        setActiveTool(
+          toolId
+        )
+      },
+      [
+        activeTool,
+        resetCalibrationDraft,
+        resetAllGeometryDrafts,
+      ]
     )
-  }
 
 
   // ==========================================================
@@ -1906,7 +2623,7 @@ export default function TakeoffPage() {
               .toISOString(),
         }
 
-        setTakeoffEntities(
+        commitTakeoffEntities(
           (current) => [
             ...current,
             entity,
@@ -1924,6 +2641,7 @@ export default function TakeoffPage() {
         pageNumber,
         polylineDraft.points,
         resetPolylineDraft,
+        commitTakeoffEntities,
       ]
     )
 
@@ -1987,7 +2705,7 @@ export default function TakeoffPage() {
               .toISOString(),
         }
 
-        setTakeoffEntities(
+        commitTakeoffEntities(
           (current) => [
             ...current,
             entity,
@@ -2005,6 +2723,7 @@ export default function TakeoffPage() {
         areaDraft.points,
         pageNumber,
         resetAreaDraft,
+        commitTakeoffEntities,
       ]
     )
 
@@ -2048,7 +2767,7 @@ export default function TakeoffPage() {
               .toISOString(),
         }
 
-        setTakeoffEntities(
+        commitTakeoffEntities(
           (current) => [
             ...current,
             entity,
@@ -2066,6 +2785,7 @@ export default function TakeoffPage() {
         countDraft.points,
         pageNumber,
         resetCountDraft,
+        commitTakeoffEntities,
       ]
     )
 
@@ -2196,7 +2916,7 @@ export default function TakeoffPage() {
         {}
       )
 
-      setTakeoffEntities(
+      resetTakeoffHistory(
         []
       )
 
@@ -2237,7 +2957,7 @@ export default function TakeoffPage() {
         {}
       )
 
-      setTakeoffEntities(
+      resetTakeoffHistory(
         []
       )
 
@@ -2360,6 +3080,10 @@ export default function TakeoffPage() {
 
           resetCalibrationDraft()
           resetAllGeometryDrafts()
+
+          setSelectedEntityId(
+            null
+          )
 
           setActiveTool(
             'select'
@@ -2968,6 +3692,86 @@ export default function TakeoffPage() {
       )
 
     if (!point) {
+      if (
+        activeTool ===
+        'select'
+      ) {
+        setSelectedEntityId(
+          null
+        )
+      }
+
+      return
+    }
+
+
+    // ========================================================
+    // SELECTION
+    // ========================================================
+
+    if (
+      activeTool ===
+      'select'
+    ) {
+      event.preventDefault()
+
+      const tolerance =
+        10 /
+        Math.max(
+          effectiveScale,
+          0.01
+        )
+
+      const pageEntities =
+        takeoffEntities.filter(
+          (entity) =>
+            entity.pageNumber ===
+            pageNumber
+        )
+
+      let hitEntity =
+        null
+
+      for (
+        let index =
+          pageEntities.length -
+          1;
+        index >=
+          0;
+        index -= 1
+      ) {
+        if (
+          hitTestEntity(
+            pageEntities[index],
+            point,
+            tolerance
+          )
+        ) {
+          hitEntity =
+            pageEntities[index]
+
+          break
+        }
+      }
+
+      setSelectedEntityId(
+        hitEntity
+          ?.id ||
+        null
+      )
+
+      if (
+        hitEntity
+      ) {
+        setInspectorTab(
+          'properties'
+        )
+
+        setInspectorOpen(
+          true
+        )
+      }
+
       return
     }
 
@@ -3150,7 +3954,7 @@ export default function TakeoffPage() {
         return
       }
 
-      setTakeoffEntities(
+      commitTakeoffEntities(
         (current) => [
           ...current,
           {
@@ -3218,7 +4022,7 @@ export default function TakeoffPage() {
         return
       }
 
-      setTakeoffEntities(
+      commitTakeoffEntities(
         (current) => [
           ...current,
           {
@@ -3405,7 +4209,7 @@ export default function TakeoffPage() {
         return
       }
 
-      setTakeoffEntities(
+      commitTakeoffEntities(
         (current) => [
           ...current,
           {
@@ -3642,6 +4446,61 @@ export default function TakeoffPage() {
         }
 
 
+        const usingModifier =
+          event.ctrlKey ||
+          event.metaKey
+
+        const lowerKey =
+          event.key
+            .toLowerCase()
+
+        if (
+          usingModifier &&
+          lowerKey ===
+            'z'
+        ) {
+          event.preventDefault()
+
+          if (
+            event.shiftKey
+          ) {
+            redoTakeoff()
+          } else {
+            undoTakeoff()
+          }
+
+          return
+        }
+
+        if (
+          usingModifier &&
+          lowerKey ===
+            'y'
+        ) {
+          event.preventDefault()
+
+          redoTakeoff()
+
+          return
+        }
+
+        if (
+          (
+            event.key ===
+              'Delete' ||
+            event.key ===
+              'Backspace'
+          ) &&
+          selectedEntityId
+        ) {
+          event.preventDefault()
+
+          deleteSelectedEntity()
+
+          return
+        }
+
+
         if (
           event.key ===
           'Enter'
@@ -3750,6 +4609,16 @@ export default function TakeoffPage() {
             countDraft.points.length
           ) {
             resetCountDraft()
+            return
+          }
+
+          if (
+            selectedEntityId
+          ) {
+            setSelectedEntityId(
+              null
+            )
+
             return
           }
 
@@ -3869,6 +4738,7 @@ export default function TakeoffPage() {
     },
     [
       activeTool,
+      activateTool,
       areaDraft,
       cancelCalibration,
       countDraft,
@@ -3887,6 +4757,10 @@ export default function TakeoffPage() {
       resetLineDraft,
       resetPolylineDraft,
       resetRectangleDraft,
+      selectedEntityId,
+      deleteSelectedEntity,
+      undoTakeoff,
+      redoTakeoff,
     ]
   )
 
@@ -4748,8 +5622,14 @@ export default function TakeoffPage() {
             className={
               styles.toolbarIconButton
             }
-            disabled
-            title="Undo"
+            onClick={
+              undoTakeoff
+            }
+            disabled={
+              undoCount ===
+              0
+            }
+            title="Undo (Ctrl+Z)"
           >
             <Icon
               type="undo"
@@ -4762,8 +5642,14 @@ export default function TakeoffPage() {
             className={
               styles.toolbarIconButton
             }
-            disabled
-            title="Redo"
+            onClick={
+              redoTakeoff
+            }
+            disabled={
+              redoCount ===
+              0
+            }
+            title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
           >
             <Icon
               type="redo"
@@ -5631,6 +6517,158 @@ export default function TakeoffPage() {
                     </g>
                   )
                 )}
+
+
+                {/* ============================================
+                    SELECTION OVERLAY
+                ============================================ */}
+
+                {selectedEntity &&
+                  selectedEntity.pageNumber ===
+                    pageNumber && (
+                    <g
+                      pointerEvents="none"
+                    >
+                      {(
+                        selectedEntity.type ===
+                          'distance' ||
+                        selectedEntity.type ===
+                          'linear'
+                      ) &&
+                        selectedEntity.points.length >=
+                          2 && (
+                        <line
+                          x1={
+                            selectedEntity.points[0].x
+                          }
+                          y1={
+                            selectedEntity.points[0].y
+                          }
+                          x2={
+                            selectedEntity.points[1].x
+                          }
+                          y2={
+                            selectedEntity.points[1].y
+                          }
+                          stroke="#f59e0b"
+                          strokeWidth="6"
+                          strokeDasharray="8 5"
+                          opacity="0.95"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+
+                      {selectedEntity.type ===
+                        'polyline' && (
+                        <polyline
+                          points={
+                            selectedEntity.points
+                              .map(
+                                (point) =>
+                                  `${point.x},${point.y}`
+                              )
+                              .join(' ')
+                          }
+                          fill="none"
+                          stroke="#f59e0b"
+                          strokeWidth="6"
+                          strokeDasharray="8 5"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                          opacity="0.95"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+
+                      {selectedEntity.type ===
+                        'area' && (
+                        <polygon
+                          points={
+                            selectedEntity.points
+                              .map(
+                                (point) =>
+                                  `${point.x},${point.y}`
+                              )
+                              .join(' ')
+                          }
+                          fill="rgba(245, 158, 11, 0.08)"
+                          stroke="#f59e0b"
+                          strokeWidth="5"
+                          strokeDasharray="8 5"
+                          strokeLinejoin="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+
+                      {selectedEntity.type ===
+                        'rectangle' &&
+                        selectedEntity.points.length >=
+                          2 && (
+                        <rect
+                          x={
+                            Math.min(
+                              selectedEntity.points[0].x,
+                              selectedEntity.points[1].x
+                            )
+                          }
+                          y={
+                            Math.min(
+                              selectedEntity.points[0].y,
+                              selectedEntity.points[1].y
+                            )
+                          }
+                          width={
+                            Math.abs(
+                              selectedEntity.points[1].x -
+                              selectedEntity.points[0].x
+                            )
+                          }
+                          height={
+                            Math.abs(
+                              selectedEntity.points[1].y -
+                              selectedEntity.points[0].y
+                            )
+                          }
+                          fill="rgba(245, 158, 11, 0.06)"
+                          stroke="#f59e0b"
+                          strokeWidth="5"
+                          strokeDasharray="8 5"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+
+                      {selectedEntity.type ===
+                        'count' &&
+                        selectedEntity.points.map(
+                          (
+                            point,
+                            index
+                          ) => (
+                            <circle
+                              key={`selected-count-${index}`}
+                              cx={
+                                point.x
+                              }
+                              cy={
+                                point.y
+                              }
+                              r={
+                                14 /
+                                geometryScale
+                              }
+                              fill="none"
+                              stroke="#f59e0b"
+                              strokeWidth="4"
+                              vectorEffect="non-scaling-stroke"
+                            />
+                          )
+                        )}
+                    </g>
+                  )}
 
 
                 {/* ============================================
@@ -7423,14 +8461,107 @@ export default function TakeoffPage() {
                       Selection
                     </h3>
 
-                    <div
-                      className={
-                        styles.selectionEmpty
-                      }
-                    >
-                      Select takeoff geometry to inspect
-                      and edit its properties.
-                    </div>
+                    {!selectedEntity && (
+                      <div
+                        className={
+                          styles.selectionEmpty
+                        }
+                      >
+                        Select takeoff geometry to inspect
+                        and edit its properties.
+                      </div>
+                    )}
+
+
+                    {selectedEntity && (
+                      <>
+                        <div
+                          className={
+                            styles.propertyRow
+                          }
+                        >
+                          <span>
+                            Type
+                          </span>
+
+                          <strong>
+                            {
+                              selectedEntityLabel
+                            }
+                          </strong>
+                        </div>
+
+
+                        <div
+                          className={
+                            styles.propertyRow
+                          }
+                        >
+                          <span>
+                            Page
+                          </span>
+
+                          <strong>
+                            {
+                              selectedEntity.pageNumber
+                            }
+                          </strong>
+                        </div>
+
+
+                        <div
+                          className={
+                            styles.propertyRow
+                          }
+                        >
+                          <span>
+                            Points
+                          </span>
+
+                          <strong>
+                            {
+                              selectedEntity.points.length
+                            }
+                          </strong>
+                        </div>
+
+
+                        <div
+                          className={
+                            styles.propertyRow
+                          }
+                        >
+                          <span>
+                            Quantity
+                          </span>
+
+                          <strong>
+                            {
+                              selectedEntityQuantity !==
+                                null
+                                ? `${formatNumber(
+                                    selectedEntityQuantity,
+                                    selectedEntity.type ===
+                                      'count'
+                                      ? 0
+                                      : 2
+                                  )} ${selectedEntityUnit}`
+                                : 'Unscaled'
+                            }
+                          </strong>
+                        </div>
+
+
+                        <button
+                          type="button"
+                          onClick={
+                            deleteSelectedEntity
+                          }
+                        >
+                          Delete Selected
+                        </button>
+                      </>
+                    )}
                   </section>
 
                 </>
@@ -7765,10 +8896,17 @@ export default function TakeoffPage() {
           <button
             type="button"
             className={
-              styles.railButton
+              selectedEntityId
+                ? styles.railButtonActive
+                : styles.railButton
             }
-            disabled
-            title="Delete selected geometry"
+            onClick={
+              deleteSelectedEntity
+            }
+            disabled={
+              !selectedEntityId
+            }
+            title="Delete selected geometry (Delete)"
           >
             <Icon
               type="delete"
@@ -7818,6 +8956,27 @@ export default function TakeoffPage() {
               styles.statusDivider
             }
           />
+
+
+          {selectedEntity && (
+            <>
+              <span>
+                Selected
+
+                <strong>
+                  {
+                    selectedEntityLabel
+                  }
+                </strong>
+              </span>
+
+              <span
+                className={
+                  styles.statusDivider
+                }
+              />
+            </>
+          )}
 
 
           <span>
