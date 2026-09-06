@@ -750,15 +750,6 @@ export default function TakeoffPage() {
       pageNumber
     ] || null
 
-  const calibrationPdfDistance =
-    calibrationDraft.point1 &&
-    calibrationDraft.point2
-      ? pointDistance(
-          calibrationDraft.point1,
-          calibrationDraft.point2
-        )
-      : 0
-
   const calibrationPreviewEnd =
     calibrationDraft.point2 ||
     calibrationDraft.previewPoint
@@ -2487,6 +2478,75 @@ export default function TakeoffPage() {
             </strong>
           </span>
 
+
+          {/* ==================================================
+              RITSUFLOW BRAND
+          ================================================== */}
+
+          <Link
+            href="/dashboard"
+            title="Return to RitsuFlow"
+            aria-label="RitsuFlow"
+            style={{
+              display:
+                'inline-flex',
+
+              alignItems:
+                'center',
+
+              justifyContent:
+                'center',
+
+              flex:
+                '0 0 auto',
+
+              height:
+                34,
+
+              padding:
+                '3px 8px',
+
+              marginLeft:
+                4,
+
+              border:
+                '1px solid #a7e5dc',
+
+              borderRadius:
+                8,
+
+              background:
+                '#ffffff',
+
+              textDecoration:
+                'none',
+
+              overflow:
+                'hidden',
+            }}
+          >
+            <img
+              src="/logo.png"
+              alt="RitsuFlow"
+              style={{
+                display:
+                  'block',
+
+                width:
+                  'auto',
+
+                height:
+                  24,
+
+                maxWidth:
+                  140,
+
+                objectFit:
+                  'contain',
+              }}
+            />
+          </Link>
+
         </div>
 
       </header>
@@ -3035,10 +3095,6 @@ export default function TakeoffPage() {
                 preserveAspectRatio="none"
               >
 
-                {/* ============================================
-                    SAVED CALIBRATION
-                ============================================ */}
-
                 {currentCalibration && (
                   <g>
                     <line
@@ -3117,10 +3173,6 @@ export default function TakeoffPage() {
                   </g>
                 )}
 
-
-                {/* ============================================
-                    CALIBRATION DRAFT
-                ============================================ */}
 
                 {activeTool ===
                   'calibrate' &&
@@ -3213,10 +3265,6 @@ export default function TakeoffPage() {
           )}
 
 
-          {/* ==================================================
-              CALIBRATION COMMAND PROMPT
-          ================================================== */}
-
           {activeTool ===
             'calibrate' &&
             calibrationInstruction && (
@@ -3297,10 +3345,6 @@ export default function TakeoffPage() {
               </div>
             )}
 
-
-          {/* ==================================================
-              DRAWING DRAWER
-          ================================================== */}
 
           {drawingDrawerOpen && (
             <aside
@@ -3460,10 +3504,6 @@ export default function TakeoffPage() {
         </main>
 
 
-        {/* ====================================================
-            INSPECTOR
-        ==================================================== */}
-
         {inspectorOpen && (
           <aside
             className={
@@ -3553,10 +3593,6 @@ export default function TakeoffPage() {
               {inspectorTab ===
                 'properties' && (
                 <>
-
-                  {/* ==========================================
-                      CALIBRATION WORKFLOW
-                  ========================================== */}
 
                   {activeTool ===
                     'calibrate' && (
@@ -4319,10 +4355,6 @@ export default function TakeoffPage() {
         )}
 
 
-        {/* ====================================================
-            RIGHT TOOL RAIL
-        ==================================================== */}
-
         <aside
           className={
             styles.toolRail
@@ -4516,10 +4548,6 @@ export default function TakeoffPage() {
 
       </div>
 
-
-      {/* ======================================================
-          STATUS BAR
-      ====================================================== */}
 
       <footer
         className={
