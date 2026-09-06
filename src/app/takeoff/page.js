@@ -1182,6 +1182,327 @@ function hitTestEntity(
 }
 
 
+function entityGripPoints(
+  entity
+) {
+  if (
+    !entity ||
+    !Array.isArray(
+      entity.points
+    )
+  ) {
+    return []
+  }
+
+  if (
+    entity.type ===
+      'rectangle' &&
+    entity.points.length >=
+      2
+  ) {
+    const point1 =
+      entity.points[0]
+
+    const point2 =
+      entity.points[1]
+
+    const minimumX =
+      Math.min(
+        point1.x,
+        point2.x
+      )
+
+    const maximumX =
+      Math.max(
+        point1.x,
+        point2.x
+      )
+
+    const minimumY =
+      Math.min(
+        point1.y,
+        point2.y
+      )
+
+    const maximumY =
+      Math.max(
+        point1.y,
+        point2.y
+      )
+
+    return [
+      {
+        id: 'top-left',
+        point: {
+          x: minimumX,
+          y: minimumY,
+        },
+      },
+      {
+        id: 'top-right',
+        point: {
+          x: maximumX,
+          y: minimumY,
+        },
+      },
+      {
+        id: 'bottom-right',
+        point: {
+          x: maximumX,
+          y: maximumY,
+        },
+      },
+      {
+        id: 'bottom-left',
+        point: {
+          x: minimumX,
+          y: maximumY,
+        },
+      },
+    ]
+  }
+
+  return entity.points.map(
+    (
+      point,
+      index
+    ) => ({
+      id: index,
+      point,
+    })
+  )
+}
+
+
+function updateEntityGrip(
+  entity,
+  gripId,
+  nextPoint
+) {
+  if (
+    !entity ||
+    !nextPoint
+  ) {
+    return entity
+  }
+
+  if (
+    entity.type ===
+      'rectangle' &&
+    entity.points.length >=
+      2
+  ) {
+    const point1 =
+      entity.points[0]
+
+    const point2 =
+      entity.points[1]
+
+    let minimumX =
+      Math.min(
+        point1.x,
+        point2.x
+      )
+
+    let maximumX =
+      Math.max(
+        point1.x,
+        point2.x
+      )
+
+    let minimumY =
+      Math.min(
+        point1.y,
+        point2.y
+      )
+
+    let maximumY =
+      Math.max(
+        point1.y,
+        point2.y
+      )
+
+    if (
+      gripId ===
+      'top-left'
+    ) {
+      minimumX =
+        nextPoint.x
+      minimumY =
+        nextPoint.y
+
+    } else if (
+      gripId ===
+      'top-right'
+    ) {
+      maximumX =
+        nextPoint.x
+      minimumY =
+        nextPoint.y
+
+    } else if (
+      gripId ===
+      'bottom-right'
+    ) {
+      maximumX =
+        nextPoint.x
+      maximumY =
+        nextPoint.y
+
+    } else if (
+      gripId ===
+      'bottom-left'
+    ) {
+      minimumX =
+        nextPoint.x
+      maximumY =
+        nextPoint.y
+    }
+
+    const normalizedMinimumX =
+      Math.min(
+        minimumX,
+        maximumX
+      )
+
+    const normalizedMaximumX =
+      Math.max(
+        minimumX,
+        maximumX
+      )
+
+    const normalizedMinimumY =
+      Math.min(
+        minimumY,
+        maximumY
+      )
+
+    const normalizedMaximumY =
+      Math.max(
+        minimumY,
+        maximumY
+      )
+
+    return {
+      ...entity,
+
+      points: [
+        {
+          x:
+            normalizedMinimumX,
+          y:
+            normalizedMinimumY,
+        },
+        {
+          x:
+            normalizedMaximumX,
+          y:
+            normalizedMaximumY,
+        },
+      ],
+    }
+  }
+
+  const gripIndex =
+    Number(
+      gripId
+    )
+
+  if (
+    !Number.isInteger(
+      gripIndex
+    ) ||
+    gripIndex < 0 ||
+    gripIndex >=
+      entity.points.length
+  ) {
+    return entity
+  }
+
+  return {
+    ...entity,
+
+    points:
+      entity.points.map(
+        (
+          point,
+          index
+        ) =>
+          index ===
+            gripIndex
+            ? {
+                ...nextPoint,
+              }
+            : point
+      ),
+  }
+}
+
+
+function translateEntity(
+  entity,
+  deltaX,
+  deltaY
+) {
+  if (
+    !entity ||
+    !Array.isArray(
+      entity.points
+    )
+  ) {
+    return entity
+  }
+
+  return {
+    ...entity,
+
+    points:
+      entity.points.map(
+        (point) => ({
+          x:
+            point.x +
+            deltaX,
+
+          y:
+            point.y +
+            deltaY,
+        })
+      ),
+  }
+}
+
+
+function entityGeometryChanged(
+  entity1,
+  entity2
+) {
+  if (
+    !entity1 ||
+    !entity2 ||
+    entity1.id !==
+      entity2.id ||
+    entity1.points.length !==
+      entity2.points.length
+  ) {
+    return false
+  }
+
+  return entity1.points.some(
+    (
+      point,
+      index
+    ) =>
+      pointDistance(
+        point,
+        entity2.points[
+          index
+        ]
+      ) >
+      0.0001
+  )
+}
+
+
 function createEntityId() {
   if (
     typeof crypto !==
@@ -1231,6 +1552,9 @@ export default function TakeoffPage() {
 
   const redoStackRef =
     useRef([])
+
+  const editSessionRef =
+    useRef(null)
 
 
   // ==========================================================
@@ -1432,6 +1756,12 @@ export default function TakeoffPage() {
   const [
     selectedEntityId,
     setSelectedEntityId,
+  ] =
+    useState(null)
+
+  const [
+    editPreviewEntity,
+    setEditPreviewEntity,
   ] =
     useState(null)
 
@@ -1762,6 +2092,14 @@ export default function TakeoffPage() {
       ]
     )
 
+
+
+  const selectedRenderEntity =
+    editPreviewEntity &&
+    editPreviewEntity.id ===
+      selectedEntityId
+      ? editPreviewEntity
+      : selectedEntity
 
   const selectedEntityQuantity =
     useMemo(
@@ -2119,6 +2457,13 @@ export default function TakeoffPage() {
         setSelectedEntityId(
           null
         )
+
+        editSessionRef.current =
+          null
+
+        setEditPreviewEntity(
+          null
+        )
       },
       []
     )
@@ -2395,6 +2740,13 @@ export default function TakeoffPage() {
             null
           )
         }
+
+        editSessionRef.current =
+          null
+
+        setEditPreviewEntity(
+          null
+        )
 
         setActiveTool(
           toolId
@@ -3519,6 +3871,43 @@ export default function TakeoffPage() {
       }
     )
 
+    const editSession =
+      editSessionRef.current
+
+    if (
+      editSession &&
+      point
+    ) {
+      if (
+        editSession.mode ===
+        'grip'
+      ) {
+        setEditPreviewEntity(
+          updateEntityGrip(
+            editSession.originalEntity,
+            editSession.gripId,
+            point
+          )
+        )
+
+      } else if (
+        editSession.mode ===
+        'move'
+      ) {
+        setEditPreviewEntity(
+          translateEntity(
+            editSession.originalEntity,
+            point.x -
+              editSession.startPoint.x,
+            point.y -
+              editSession.startPoint.y
+          )
+        )
+      }
+
+      return
+    }
+
     if (
       activeTool ===
         'calibrate' &&
@@ -3699,6 +4088,10 @@ export default function TakeoffPage() {
         setSelectedEntityId(
           null
         )
+
+        setEditPreviewEntity(
+          null
+        )
       }
 
       return
@@ -3706,7 +4099,7 @@ export default function TakeoffPage() {
 
 
     // ========================================================
-    // SELECTION
+    // SELECTION + EDITING
     // ========================================================
 
     if (
@@ -3721,6 +4114,144 @@ export default function TakeoffPage() {
           effectiveScale,
           0.01
         )
+
+      if (
+        selectedEntity &&
+        selectedEntity.pageNumber ===
+          pageNumber
+      ) {
+        const grips =
+          entityGripPoints(
+            selectedEntity
+          )
+
+        let hitGrip =
+          null
+
+        let hitGripDistance =
+          Infinity
+
+        grips.forEach(
+          (grip) => {
+            const distance =
+              pointDistance(
+                point,
+                grip.point
+              )
+
+            if (
+              distance <=
+                tolerance *
+                  1.25 &&
+              distance <
+                hitGripDistance
+            ) {
+              hitGrip =
+                grip
+
+              hitGripDistance =
+                distance
+            }
+          }
+        )
+
+        if (
+          hitGrip
+        ) {
+          editSessionRef.current = {
+            mode:
+              'grip',
+
+            entityId:
+              selectedEntity.id,
+
+            gripId:
+              hitGrip.id,
+
+            startPoint: {
+              ...point,
+            },
+
+            originalEntity: {
+              ...selectedEntity,
+
+              points:
+                selectedEntity.points.map(
+                  (entityPoint) => ({
+                    ...entityPoint,
+                  })
+                ),
+            },
+          }
+
+          setEditPreviewEntity({
+            ...selectedEntity,
+
+            points:
+              selectedEntity.points.map(
+                (entityPoint) => ({
+                  ...entityPoint,
+                })
+              ),
+          })
+
+          event.currentTarget
+            .setPointerCapture(
+              event.pointerId
+            )
+
+          return
+        }
+
+        if (
+          hitTestEntity(
+            selectedEntity,
+            point,
+            tolerance
+          )
+        ) {
+          editSessionRef.current = {
+            mode:
+              'move',
+
+            entityId:
+              selectedEntity.id,
+
+            startPoint: {
+              ...point,
+            },
+
+            originalEntity: {
+              ...selectedEntity,
+
+              points:
+                selectedEntity.points.map(
+                  (entityPoint) => ({
+                    ...entityPoint,
+                  })
+                ),
+            },
+          }
+
+          setEditPreviewEntity({
+            ...selectedEntity,
+
+            points:
+              selectedEntity.points.map(
+                (entityPoint) => ({
+                  ...entityPoint,
+                })
+              ),
+          })
+
+          event.currentTarget
+            .setPointerCapture(
+              event.pointerId
+            )
+
+          return
+        }
+      }
 
       const pageEntities =
         takeoffEntities.filter(
@@ -3760,6 +4291,10 @@ export default function TakeoffPage() {
         null
       )
 
+      setEditPreviewEntity(
+        null
+      )
+
       if (
         hitEntity
       ) {
@@ -3774,7 +4309,6 @@ export default function TakeoffPage() {
 
       return
     }
-
 
     // ========================================================
     // CALIBRATION
@@ -4277,6 +4811,53 @@ export default function TakeoffPage() {
   function handlePointerUp(
     event
   ) {
+    const editSession =
+      editSessionRef.current
+
+    if (
+      editSession
+    ) {
+      if (
+        editPreviewEntity &&
+        entityGeometryChanged(
+          editSession.originalEntity,
+          editPreviewEntity
+        )
+      ) {
+        const updatedEntity =
+          editPreviewEntity
+
+        commitTakeoffEntities(
+          (current) =>
+            current.map(
+              (entity) =>
+                entity.id ===
+                  editSession.entityId
+                  ? updatedEntity
+                  : entity
+            )
+        )
+      }
+
+      editSessionRef.current =
+        null
+
+      setEditPreviewEntity(
+        null
+      )
+
+      try {
+        event.currentTarget
+          .releasePointerCapture(
+            event.pointerId
+          )
+      } catch {
+        // Pointer may already be released.
+      }
+
+      return
+    }
+
     if (
       !panSessionRef.current
     ) {
@@ -4299,7 +4880,6 @@ export default function TakeoffPage() {
       // Pointer may already be released.
     }
   }
-
 
   // ==========================================================
   // WHEEL ZOOM
@@ -4442,6 +5022,24 @@ export default function TakeoffPage() {
           target
             ?.isContentEditable
         ) {
+          return
+        }
+
+
+        if (
+          event.key ===
+            'Escape' &&
+          editSessionRef.current
+        ) {
+          event.preventDefault()
+
+          editSessionRef.current =
+            null
+
+          setEditPreviewEntity(
+            null
+          )
+
           return
         }
 
@@ -6520,35 +7118,35 @@ export default function TakeoffPage() {
 
 
                 {/* ============================================
-                    SELECTION OVERLAY
+                    SELECTION OVERLAY + GRIPS
                 ============================================ */}
 
-                {selectedEntity &&
-                  selectedEntity.pageNumber ===
+                {selectedRenderEntity &&
+                  selectedRenderEntity.pageNumber ===
                     pageNumber && (
                     <g
                       pointerEvents="none"
                     >
                       {(
-                        selectedEntity.type ===
+                        selectedRenderEntity.type ===
                           'distance' ||
-                        selectedEntity.type ===
+                        selectedRenderEntity.type ===
                           'linear'
                       ) &&
-                        selectedEntity.points.length >=
+                        selectedRenderEntity.points.length >=
                           2 && (
                         <line
                           x1={
-                            selectedEntity.points[0].x
+                            selectedRenderEntity.points[0].x
                           }
                           y1={
-                            selectedEntity.points[0].y
+                            selectedRenderEntity.points[0].y
                           }
                           x2={
-                            selectedEntity.points[1].x
+                            selectedRenderEntity.points[1].x
                           }
                           y2={
-                            selectedEntity.points[1].y
+                            selectedRenderEntity.points[1].y
                           }
                           stroke="#f59e0b"
                           strokeWidth="6"
@@ -6559,11 +7157,11 @@ export default function TakeoffPage() {
                       )}
 
 
-                      {selectedEntity.type ===
+                      {selectedRenderEntity.type ===
                         'polyline' && (
                         <polyline
                           points={
-                            selectedEntity.points
+                            selectedRenderEntity.points
                               .map(
                                 (point) =>
                                   `${point.x},${point.y}`
@@ -6582,11 +7180,11 @@ export default function TakeoffPage() {
                       )}
 
 
-                      {selectedEntity.type ===
+                      {selectedRenderEntity.type ===
                         'area' && (
                         <polygon
                           points={
-                            selectedEntity.points
+                            selectedRenderEntity.points
                               .map(
                                 (point) =>
                                   `${point.x},${point.y}`
@@ -6603,33 +7201,33 @@ export default function TakeoffPage() {
                       )}
 
 
-                      {selectedEntity.type ===
+                      {selectedRenderEntity.type ===
                         'rectangle' &&
-                        selectedEntity.points.length >=
+                        selectedRenderEntity.points.length >=
                           2 && (
                         <rect
                           x={
                             Math.min(
-                              selectedEntity.points[0].x,
-                              selectedEntity.points[1].x
+                              selectedRenderEntity.points[0].x,
+                              selectedRenderEntity.points[1].x
                             )
                           }
                           y={
                             Math.min(
-                              selectedEntity.points[0].y,
-                              selectedEntity.points[1].y
+                              selectedRenderEntity.points[0].y,
+                              selectedRenderEntity.points[1].y
                             )
                           }
                           width={
                             Math.abs(
-                              selectedEntity.points[1].x -
-                              selectedEntity.points[0].x
+                              selectedRenderEntity.points[1].x -
+                              selectedRenderEntity.points[0].x
                             )
                           }
                           height={
                             Math.abs(
-                              selectedEntity.points[1].y -
-                              selectedEntity.points[0].y
+                              selectedRenderEntity.points[1].y -
+                              selectedRenderEntity.points[0].y
                             )
                           }
                           fill="rgba(245, 158, 11, 0.06)"
@@ -6641,9 +7239,9 @@ export default function TakeoffPage() {
                       )}
 
 
-                      {selectedEntity.type ===
+                      {selectedRenderEntity.type ===
                         'count' &&
-                        selectedEntity.points.map(
+                        selectedRenderEntity.points.map(
                           (
                             point,
                             index
@@ -6667,6 +7265,31 @@ export default function TakeoffPage() {
                             />
                           )
                         )}
+
+
+                      {entityGripPoints(
+                        selectedRenderEntity
+                      ).map(
+                        (grip) => (
+                          <circle
+                            key={`grip-${selectedRenderEntity.id}-${grip.id}`}
+                            cx={
+                              grip.point.x
+                            }
+                            cy={
+                              grip.point.y
+                            }
+                            r={
+                              5.5 /
+                              geometryScale
+                            }
+                            fill="#ffffff"
+                            stroke="#f59e0b"
+                            strokeWidth="2.5"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        )
+                      )}
                     </g>
                   )}
 
