@@ -27,21 +27,8 @@ import styles from './dashboard.module.css'
 // RitsuFlow™
 // DASHBOARD NAVIGATION
 //
-// Product navigation follows the user's workflow while keeping
-// major RitsuFlow domains independently accessible.
-//
-// Takeoff is a standalone application workspace.
-//
-// Takeoff geometry may later map to:
-//
-// Project
-// → Location
-// → Work Package
-// → Scope Item
-// → Quantity
-// → Productivity
-// → Planning
-// → Production Control
+// Product navigation follows the user's workflow rather than
+// exposing every underlying database/domain structure.
 //
 // Project Setup will progressively become the unified project
 // definition workspace:
@@ -110,16 +97,16 @@ function NavIcon({
       )
 
 
-    case 'takeoff':
+    case 'cad':
       return (
         <svg {...commonProps}>
-          <path d="M5 3h10l4 4v14H5z" />
-          <path d="M15 3v5h4" />
-          <path d="M8 16l3-3 2 2 4-5" />
-          <circle cx="8" cy="16" r="1" />
-          <circle cx="11" cy="13" r="1" />
-          <circle cx="13" cy="15" r="1" />
-          <circle cx="17" cy="10" r="1" />
+          <path d="M4 4h12l4 4v12H4z" />
+          <path d="M16 4v4h4" />
+          <path d="M7 16l4-5 2 2 4-5" />
+          <circle cx="7" cy="16" r="1" />
+          <circle cx="11" cy="11" r="1" />
+          <circle cx="13" cy="13" r="1" />
+          <circle cx="17" cy="8" r="1" />
         </svg>
       )
 
@@ -305,7 +292,6 @@ function NavIcon({
       )
 
   }
-
 }
 
 
@@ -338,19 +324,10 @@ const baseNavigationGroups = [
         icon: 'setup',
       },
 
-    ],
-  },
-
-
-  {
-    label: 'Takeoff',
-
-    items: [
-
       {
-        label: 'Drawing Takeoff',
-        href: '/takeoff',
-        icon: 'takeoff',
+        label: 'RitsuCAD',
+        href: '/ritsucad',
+        icon: 'cad',
       },
 
     ],
@@ -438,7 +415,10 @@ const baseNavigationGroups = [
   {
     label: 'Control',
 
-    items: [],
+    items: [
+
+
+    ],
   },
 
 
@@ -478,6 +458,9 @@ const platformNavigationGroup = {
 
 // ============================================================
 // LEGACY PROJECT SETUP ROUTES
+//
+// These routes remain available while their functionality is
+// progressively absorbed into the unified Project Setup page.
 // ============================================================
 
 const projectSetupLegacyRoutes = [
@@ -689,9 +672,6 @@ export default function DashboardLayout({
     useState({
 
       Workspace:
-        true,
-
-      Takeoff:
         true,
 
       'Field Management':
@@ -1138,9 +1118,11 @@ export default function DashboardLayout({
 
     styles.sidebar,
 
+
     isCollapsed
       ? styles.sidebarCollapsed
       : '',
+
 
     isMobileOpen
       ? styles.sidebarMobileOpen
@@ -1421,6 +1403,7 @@ export default function DashboardLayout({
 
                             styles.navigationLink,
 
+
                             active
                               ? styles.navigationLinkActive
                               : '',
@@ -1653,7 +1636,7 @@ export default function DashboardLayout({
                                       position:
                                         'absolute',
 
-                                      left:
+                                    left:
                                         '-5px',
 
                                       top:
@@ -2335,5 +2318,4 @@ export default function DashboardLayout({
     </div>
 
   )
-
 }
