@@ -4,7 +4,7 @@ import {
 
 import {
   createClient,
-} from '../../../../../lib/supabase/server'
+} from '../../../../lib/supabase/server'
 
 
 export async function POST(request) {
@@ -100,8 +100,9 @@ export async function POST(request) {
     }
 
     /*
-     * Validate that every submitted Scope Item belongs
-     * to the selected project before attempting the write.
+     * Validate that every submitted Scope Item
+     * belongs to the selected project before
+     * attempting the write.
      */
     const serviceIds =
       normalizedItems.map(
