@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -19,46 +20,97 @@ const BORDER = '#dce5ed'
 const DANGER = '#b42318'
 
 
-function moveItem(
-  items,
-  sourceId,
-  targetId
-) {
-  const sourceIndex =
-    items.findIndex(
-      (item) =>
-        item.id === sourceId
+function normalizeLayers(items) {
+  const sorted =
+    [...items].sort(
+      (first, second) => {
+        const sequenceDifference =
+          Number(first.sequence || 1) -
+          Number(second.sequence || 1)
+
+        if (sequenceDifference !== 0) {
+          return sequenceDifference
+        }
+
+        return String(first.code)
+          .localeCompare(
+            String(second.code)
+          )
+      }
     )
 
-  const targetIndex =
-    items.findIndex(
-      (item) =>
-        item.id === targetId
+  const originalLayers =
+    [...new Set(
+      sorted.map(
+        (item) =>
+          Number(item.sequence || 1)
+      )
+    )].sort(
+      (first, second) =>
+        first - second
     )
 
-  if (
-    sourceIndex < 0 ||
-    targetIndex < 0 ||
-    sourceIndex === targetIndex
-  ) {
-    return items
+  const layerMap =
+    new Map(
+      originalLayers.map(
+        (layer, index) => [
+          layer,
+          index + 1,
+        ]
+      )
+    )
+
+  return sorted.map(
+    (item) => ({
+      ...item,
+      sequence:
+        layerMap.get(
+          Number(item.sequence || 1)
+        ) || 1,
+    })
+  )
+}
+
+
+function layersFromItems(items) {
+  const groups =
+    new Map()
+
+  for (const item of items) {
+    const layer =
+      Number(item.sequence || 1)
+
+    const current =
+      groups.get(layer) || []
+
+    current.push(item)
+    groups.set(layer, current)
   }
 
-  const next = [...items]
-  const [moved] =
-    next.splice(sourceIndex, 1)
+  return [...groups.entries()]
+    .sort(
+      ([first], [second]) =>
+        first - second
+    )
+    .map(
+      ([sequence, layerItems]) => ({
+        sequence,
+        items: layerItems,
+      })
+    )
+}
 
-  next.splice(
-    targetIndex,
-    0,
-    moved
-  )
 
-  return next.map(
-    (item, index) => ({
-      ...item,
-      sequence: index + 1,
-    })
+function rebuildFromLayers(layers) {
+  return layers.flatMap(
+    (layer, layerIndex) =>
+      layer.items.map(
+        (item) => ({
+          ...item,
+          sequence:
+            layerIndex + 1,
+        })
+      )
   )
 }
 
@@ -68,12 +120,16 @@ export default function ActivityPreSequence({
   initialItems,
 }) {
   const [items, setItems] =
-    useState(initialItems || [])
+    useState(
+      normalizeLayers(
+        initialItems || []
+      )
+    )
 
   const [draggedId, setDraggedId] =
     useState(null)
 
-  const [overId, setOverId] =
+  const [dropTarget, setDropTarget] =
     useState(null)
 
   const [saveState, setSaveState] =
@@ -90,12 +146,25 @@ export default function ActivityPreSequence({
 
   useEffect(
     () => {
-      setItems(initialItems || [])
+      const normalized =
+        normalizeLayers(
+          initialItems || []
+        )
+
+      setItems(normalized)
       latestItemsRef.current =
-        initialItems || []
+        normalized
     },
     [initialItems]
   )
+
+  const layers =
+    useMemo(
+      () =>
+        layersFromItems(items),
+      [items]
+    )
+
 
   async function persistOrder(
     orderedItems
@@ -109,62 +178,39 @@ export default function ActivityPreSequence({
     setSaveState('saving')
     setErrorMessage('')
 
-    const supabase =
-      createClient()
-
-    const {
-      data: {
-        user,
-      },
-      error: userError,
-    } =
-      await supabase.auth.getUser()
-
-    if (
-      userError ||
-      !user
-    ) {
-      if (
-        version ===
-        saveVersionRef.current
-      ) {
-        setSaveState('error')
-        setErrorMessage(
-          'Authentication is required to save the sequence.'
-        )
-      }
-
-      return
-    }
-
-    const payload =
-      orderedItems.map(
-        (item, index) => ({
-          project_id: projectId,
-          project_work_package_id:
-            item.id,
-          pre_sequence_number:
-            index + 1,
-          created_by: user.id,
-          updated_at:
-            new Date().toISOString(),
-        })
+    const response =
+      await fetch(
+        '/api/pre-planning/activity-sequence',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            projectId,
+            items:
+              orderedItems.map(
+                (item) => ({
+                  serviceId: item.id,
+                  sequence:
+                    Number(
+                      item.sequence
+                    ),
+                })
+              ),
+          }),
+        }
       )
 
-    const {
-      error,
-    } =
-      await supabase
-        .from(
-          'project_activity_pre_sequence'
-        )
-        .upsert(
-          payload,
-          {
-            onConflict:
-              'project_id,project_work_package_id',
-          }
-        )
+    let result = null
+
+    try {
+      result =
+        await response.json()
+    } catch {
+      result = null
+    }
 
     if (
       version !==
@@ -173,10 +219,10 @@ export default function ActivityPreSequence({
       return
     }
 
-    if (error) {
+    if (!response.ok) {
       setSaveState('error')
       setErrorMessage(
-        error.message ||
+        result?.error ||
         'The activity sequence could not be saved.'
       )
       return
@@ -198,12 +244,11 @@ export default function ActivityPreSequence({
   }
 
 
-  function handleDragStart(
+  function beginDrag(
     event,
     itemId
   ) {
     setDraggedId(itemId)
-    setOverId(itemId)
 
     event.dataTransfer.effectAllowed =
       'move'
@@ -215,58 +260,139 @@ export default function ActivityPreSequence({
   }
 
 
-  function handleDragOver(
+  function endDrag() {
+    setDraggedId(null)
+    setDropTarget(null)
+  }
+
+
+  function allowDrop(
     event,
-    targetId
+    target
   ) {
     event.preventDefault()
 
     event.dataTransfer.dropEffect =
       'move'
 
-    setOverId(targetId)
+    setDropTarget(target)
   }
 
 
-  function handleDrop(
-    event,
-    targetId
-  ) {
-    event.preventDefault()
-
+  function applyDrop(target) {
     const sourceId =
-      draggedId ||
-      event.dataTransfer.getData(
-        'text/plain'
-      )
+      draggedId
 
     if (!sourceId) {
       return
     }
 
+    const currentLayers =
+      layersFromItems(
+        latestItemsRef.current
+      ).map(
+        (layer) => ({
+          ...layer,
+          items: [...layer.items],
+        })
+      )
+
+    let draggedItem = null
+
+    for (const layer of currentLayers) {
+      const index =
+        layer.items.findIndex(
+          (item) =>
+            item.id === sourceId
+        )
+
+      if (index >= 0) {
+        ;[draggedItem] =
+          layer.items.splice(
+            index,
+            1
+          )
+        break
+      }
+    }
+
+    if (!draggedItem) {
+      endDrag()
+      return
+    }
+
+    const compactLayers =
+      currentLayers.filter(
+        (layer) =>
+          layer.items.length > 0
+      )
+
+    if (
+      target.type ===
+      'layer'
+    ) {
+      const targetIndex =
+        compactLayers.findIndex(
+          (layer) =>
+            layer.sequence ===
+            target.sequence
+        )
+
+      if (targetIndex >= 0) {
+        compactLayers[
+          targetIndex
+        ].items.push(
+          draggedItem
+        )
+      } else {
+        compactLayers.push({
+          sequence:
+            target.sequence,
+          items: [draggedItem],
+        })
+      }
+    } else {
+      let insertIndex =
+        target.position
+
+      if (
+        insertIndex < 0
+      ) {
+        insertIndex = 0
+      }
+
+      if (
+        insertIndex >
+        compactLayers.length
+      ) {
+        insertIndex =
+          compactLayers.length
+      }
+
+      compactLayers.splice(
+        insertIndex,
+        0,
+        {
+          sequence: 0,
+          items: [draggedItem],
+        }
+      )
+    }
+
     const nextItems =
-      moveItem(
-        latestItemsRef.current,
-        sourceId,
-        targetId
+      rebuildFromLayers(
+        compactLayers
       )
 
     latestItemsRef.current =
       nextItems
 
     setItems(nextItems)
-    setDraggedId(null)
-    setOverId(null)
+    endDrag()
 
     void persistOrder(
       nextItems
     )
-  }
-
-
-  function handleDragEnd() {
-    setDraggedId(null)
-    setOverId(null)
   }
 
 
@@ -279,7 +405,7 @@ export default function ActivityPreSequence({
           fontSize: '13px',
         }}
       >
-        No active Work Packages are available for sequencing.
+        No active Scope Items are available for sequencing.
       </div>
     )
   }
@@ -309,9 +435,9 @@ export default function ActivityPreSequence({
           }}
         >
           <strong>
-            Drag to define flow:
+            Production rule:
           </strong>{' '}
-          hold the handle, move the activity to its new position, and release.
+          one layer follows the previous layer. Activities inside the same layer may be performed in parallel.
         </div>
 
         <div
@@ -340,140 +466,336 @@ export default function ActivityPreSequence({
 
       <div
         style={{
-          display: 'grid',
-          gap: '7px',
-          padding: '14px',
-          background: '#fbfcfd',
+          padding: '12px 14px 4px',
+          color: MUTED,
+          fontSize: '11px',
+          lineHeight: 1.5,
         }}
       >
-        {items.map(
-          (item, index) => {
-            const isDragging =
-              draggedId === item.id
+        Drop an activity <strong>inside a layer</strong> to make it parallel with that layer. Drop it on the <strong>gap between layers</strong> to create a separate production layer.
+      </div>
 
-            const isOver =
-              overId === item.id &&
-              draggedId !== item.id
+      <div
+        onDragOver={
+          (event) =>
+            allowDrop(
+              event,
+              {
+                type: 'gap',
+                position: 0,
+              }
+            )
+        }
+        onDrop={
+          (event) => {
+            event.preventDefault()
+            applyDrop({
+              type: 'gap',
+              position: 0,
+            })
+          }
+        }
+        style={{
+          height: '12px',
+          margin: '4px 14px 0',
+          borderRadius: '6px',
+          background:
+            dropTarget?.type ===
+              'gap' &&
+            dropTarget?.position ===
+              0
+              ? '#ccfbf1'
+              : 'transparent',
+        }}
+      />
 
-            return (
+      <div
+        style={{
+          display: 'grid',
+          gap: '0',
+          padding: '0 14px 14px',
+        }}
+      >
+        {layers.map(
+          (layer, layerIndex) => (
+            <div
+              key={
+                `layer-${layer.sequence}`
+              }
+            >
               <div
-                key={item.id}
                 onDragOver={
                   (event) =>
-                    handleDragOver(
+                    allowDrop(
                       event,
-                      item.id
+                      {
+                        type: 'layer',
+                        sequence:
+                          layer.sequence,
+                      }
                     )
                 }
                 onDrop={
-                  (event) =>
-                    handleDrop(
-                      event,
-                      item.id
-                    )
+                  (event) => {
+                    event.preventDefault()
+                    applyDrop({
+                      type: 'layer',
+                      sequence:
+                        layer.sequence,
+                    })
+                  }
                 }
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns:
-                    '44px 52px 76px minmax(0, 1fr)',
-                  alignItems: 'center',
-                  minHeight: '54px',
+                  overflow: 'hidden',
                   border:
-                    isOver
+                    dropTarget?.type ===
+                      'layer' &&
+                    dropTarget?.sequence ===
+                      layer.sequence
                       ? `2px solid ${TEAL}`
                       : `1px solid ${BORDER}`,
-                  borderRadius: '9px',
-                  background:
-                    isDragging
-                      ? '#eef3f6'
-                      : '#ffffff',
-                  opacity:
-                    isDragging
-                      ? 0.55
-                      : 1,
+                  borderRadius: '10px',
+                  background: '#ffffff',
                   boxShadow:
-                    isOver
+                    dropTarget?.type ===
+                      'layer' &&
+                    dropTarget?.sequence ===
+                      layer.sequence
                       ? '0 0 0 2px rgba(0, 153, 139, 0.08)'
                       : 'none',
-                  transition:
-                    'border-color 120ms ease, opacity 120ms ease, box-shadow 120ms ease',
                 }}
               >
                 <div
-                  draggable
-                  onDragStart={
-                    (event) =>
-                      handleDragStart(
-                        event,
-                        item.id
-                      )
-                  }
-                  onDragEnd={
-                    handleDragEnd
-                  }
-                  title="Hold and drag"
-                  aria-label={`Drag ${item.code} ${item.description}`}
                   style={{
-                    display: 'grid',
-                    placeItems: 'center',
-                    alignSelf: 'stretch',
-                    borderRight:
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent:
+                      'space-between',
+                    gap: '12px',
+                    minHeight: '34px',
+                    padding: '0 12px',
+                    borderBottom:
                       `1px solid ${BORDER}`,
-                    color: MUTED,
-                    fontSize: '20px',
-                    fontWeight: 900,
-                    cursor: isDragging
-                      ? 'grabbing'
-                      : 'grab',
-                    userSelect: 'none',
+                    background: '#f7fafc',
                   }}
                 >
-                  ☰
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: TEAL,
+                        fontSize: '10px',
+                        fontWeight: 900,
+                        letterSpacing:
+                          '0.06em',
+                        textTransform:
+                          'uppercase',
+                      }}
+                    >
+                      Production Layer
+                    </span>
+
+                    <strong
+                      style={{
+                        color: NAVY,
+                        fontSize: '12px',
+                        fontWeight: 900,
+                        fontVariantNumeric:
+                          'tabular-nums',
+                      }}
+                    >
+                      {String(
+                        layerIndex + 1
+                      ).padStart(2, '0')}
+                    </strong>
+                  </div>
+
+                  <span
+                    style={{
+                      color:
+                        layer.items.length >
+                        1
+                          ? TEAL
+                          : MUTED,
+                      fontSize: '10px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {layer.items.length > 1
+                      ? `${layer.items.length} activities · parallel allowed`
+                      : '1 activity'}
+                  </span>
                 </div>
 
-                <div
-                  style={{
-                    color: '#94a3b8',
-                    fontSize: '12px',
-                    fontWeight: 900,
-                    textAlign: 'center',
-                    fontVariantNumeric:
-                      'tabular-nums',
-                  }}
-                >
-                  {String(
-                    index + 1
-                  ).padStart(2, '0')}
-                </div>
+                <div>
+                  {layer.items.map(
+                    (item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns:
+                            '44px 72px minmax(180px, 1fr) minmax(220px, 2fr)',
+                          alignItems:
+                            'center',
+                          minHeight:
+                            '50px',
+                          borderBottom:
+                            layer.items[
+                              layer.items.length -
+                                1
+                            ]?.id !==
+                            item.id
+                              ? '1px solid #edf1f4'
+                              : 0,
+                          opacity:
+                            draggedId ===
+                            item.id
+                              ? 0.45
+                              : 1,
+                        }}
+                      >
+                        <div
+                          draggable
+                          onDragStart={
+                            (event) =>
+                              beginDrag(
+                                event,
+                                item.id
+                              )
+                          }
+                          onDragEnd={
+                            endDrag
+                          }
+                          title="Hold and drag"
+                          aria-label={`Drag ${item.code} ${item.description}`}
+                          style={{
+                            display:
+                              'grid',
+                            placeItems:
+                              'center',
+                            alignSelf:
+                              'stretch',
+                            borderRight:
+                              `1px solid ${BORDER}`,
+                            color: MUTED,
+                            fontSize:
+                              '20px',
+                            fontWeight:
+                              900,
+                            cursor:
+                              draggedId ===
+                              item.id
+                                ? 'grabbing'
+                                : 'grab',
+                            userSelect:
+                              'none',
+                          }}
+                        >
+                          ☰
+                        </div>
 
-                <div
-                  style={{
-                    color: TEAL,
-                    fontSize: '12px',
-                    fontWeight: 900,
-                  }}
-                >
-                  {item.code}
-                </div>
+                        <div
+                          style={{
+                            color: TEAL,
+                            fontSize:
+                              '11px',
+                            fontWeight:
+                              900,
+                            textAlign:
+                              'center',
+                          }}
+                        >
+                          {item.code}
+                        </div>
 
-                <div
-                  style={{
-                    minWidth: 0,
-                    padding: '0 14px 0 0',
-                    color: TEXT,
-                    fontSize: '12px',
-                    fontWeight: 800,
-                    overflow: 'hidden',
-                    textOverflow:
-                      'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {item.description}
+                        <div
+                          style={{
+                            minWidth: 0,
+                            padding:
+                              '0 12px',
+                            color: TEXT,
+                            fontSize:
+                              '12px',
+                            fontWeight:
+                              900,
+                            overflow:
+                              'hidden',
+                            textOverflow:
+                              'ellipsis',
+                            whiteSpace:
+                              'nowrap',
+                          }}
+                        >
+                          {item.description}
+                        </div>
+
+                        <div
+                          style={{
+                            minWidth: 0,
+                            padding:
+                              '0 14px',
+                            color: MUTED,
+                            fontSize:
+                              '11px',
+                            overflow:
+                              'hidden',
+                            textOverflow:
+                              'ellipsis',
+                            whiteSpace:
+                              'nowrap',
+                          }}
+                        >
+                          {item.workPackage}
+                        </div>
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
-            )
-          }
+
+              <div
+                onDragOver={
+                  (event) =>
+                    allowDrop(
+                      event,
+                      {
+                        type: 'gap',
+                        position:
+                          layerIndex + 1,
+                      }
+                    )
+                }
+                onDrop={
+                  (event) => {
+                    event.preventDefault()
+                    applyDrop({
+                      type: 'gap',
+                      position:
+                        layerIndex + 1,
+                    })
+                  }
+                }
+                style={{
+                  height: '14px',
+                  borderRadius:
+                    '7px',
+                  background:
+                    dropTarget?.type ===
+                      'gap' &&
+                    dropTarget?.position ===
+                      layerIndex + 1
+                      ? '#ccfbf1'
+                      : 'transparent',
+                }}
+              />
+            </div>
+          )
         )}
       </div>
 
