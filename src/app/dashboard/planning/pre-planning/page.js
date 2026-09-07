@@ -136,9 +136,6 @@ function resolveProductionLocation(
    *
    * Location = production level
    * Division = child production area
-   *
-   * Find the deepest Level/Floor node
-   * in the allocation path.
    */
   let productionLocationIndex =
     -1
@@ -166,12 +163,6 @@ function resolveProductionLocation(
   }
 
 
-  /*
-   * If the hierarchy does not contain
-   * a Level/Floor node, use the parent
-   * of the allocation as Location when
-   * possible.
-   */
   if (
     productionLocationIndex <
     0
@@ -319,8 +310,6 @@ function calculateActivity({
 
   return {
     /*
-     * IMPORTANT:
-     *
      * allocation.id is the Pre-Planning
      * production activity identity.
      */
@@ -331,9 +320,7 @@ function calculateActivity({
       allocation.id,
 
     /*
-     * serviceId is the stable Scope Item
-     * identity used when copying production
-     * sequences between locations/divisions.
+     * Stable Scope Item identity.
      */
     serviceId:
       scopeItem.id,
@@ -365,10 +352,8 @@ function calculateActivity({
       'unit',
 
     /*
-     * Quantity and Production Capacity
-     * remain part of the calculation layer
-     * even though they are not displayed
-     * in the main Pre-Planning grid.
+     * Quantity remains internal to
+     * Pre-Planning calculations.
      */
     quantity,
 
@@ -565,11 +550,6 @@ function applySavedSequence(
   )
 
 
-  /*
-   * Newly allocated activities that
-   * were not present when the version
-   * was saved are appended.
-   */
   return [
     ...sequenced.map(
       (item) =>
@@ -693,6 +673,74 @@ function buildVersionSequenceMap(
               first.sequenceNumber -
               second.sequenceNumber
           )
+    }
+  )
+
+
+  return result
+}
+
+
+/* =========================================================
+   DURATION STRATEGY HELPERS
+   ========================================================= */
+
+function buildVersionDurationStrategyMap(
+  rows
+) {
+  const result = {}
+
+
+  ;(
+    rows ||
+    []
+  ).forEach(
+    (row) => {
+      const versionId =
+        row.version_id
+
+
+      const allocationId =
+        row.allocation_id
+
+
+      if (
+        !versionId ||
+        !allocationId
+      ) {
+        return
+      }
+
+
+      if (
+        !result[
+          versionId
+        ]
+      ) {
+        result[
+          versionId
+        ] = {}
+      }
+
+
+      const desiredDuration =
+        Number(
+          row.desired_duration
+        )
+
+
+      result[
+        versionId
+      ][
+        allocationId
+      ] =
+        Number.isFinite(
+          desiredDuration
+        ) &&
+        desiredDuration >
+          0
+          ? desiredDuration
+          : null
     }
   )
 
@@ -1211,62 +1259,98 @@ export default async function PrePlanningPage({
 
 
   /* =======================================================
-     LOAD ALL SAVED VERSION SEQUENCES
+     LOAD VERSION-OWNED DATA
      ======================================================= */
 
   let allSequenceRows = []
+
+  let allDurationStrategyRows =
+    []
 
 
   if (
     rawVersions.length >
     0
   ) {
-    const {
-      data,
-      error,
-    } =
-      await supabase
-        .from(
-          'project_pre_planning_activity_sequence'
-        )
-        .select(
-          `
-            version_id,
-            allocation_id,
-            sequence_number
-          `
-        )
-        .eq(
-          'project_id',
-          selectedProject.id
-        )
-        .order(
-          'sequence_number',
-          {
-            ascending: true,
-          }
-        )
+    const [
+      sequenceResult,
+      durationStrategyResult,
+    ] =
+      await Promise.all([
+        supabase
+          .from(
+            'project_pre_planning_activity_sequence'
+          )
+          .select(
+            `
+              version_id,
+              allocation_id,
+              sequence_number
+            `
+          )
+          .eq(
+            'project_id',
+            selectedProject.id
+          )
+          .order(
+            'sequence_number',
+            {
+              ascending: true,
+            }
+          ),
 
 
-    if (error) {
+        supabase
+          .from(
+            'project_pre_planning_activity_strategy'
+          )
+          .select(
+            `
+              version_id,
+              allocation_id,
+              desired_duration
+            `
+          )
+          .eq(
+            'project_id',
+            selectedProject.id
+          ),
+      ])
+
+
+    if (
+      sequenceResult.error
+    ) {
       console.error(
         'Pre-Planning version sequences could not be loaded.',
-        error
+        sequenceResult.error
       )
     } else {
       allSequenceRows =
-        data ||
+        sequenceResult.data ||
+        []
+    }
+
+
+    if (
+      durationStrategyResult.error
+    ) {
+      console.error(
+        'Pre-Planning duration strategies could not be loaded.',
+        durationStrategyResult.error
+      )
+    } else {
+      allDurationStrategyRows =
+        durationStrategyResult.data ||
         []
     }
   }
 
 
-  /*
-   * Keep database-style rows for the
-   * current version because the existing
-   * activity ordering helper consumes
-   * allocation_id / sequence_number.
-   */
+  /* =======================================================
+     CURRENT VERSION SEQUENCE
+     ======================================================= */
+
   const currentSequenceRows =
     currentVersion
       ? allSequenceRows.filter(
@@ -1277,27 +1361,33 @@ export default async function PrePlanningPage({
       : []
 
 
-  /*
-   * Client-friendly sequence map.
-   *
-   * Example:
-   *
-   * {
-   *   "<version-id>": [
-   *     {
-   *       allocationId: "...",
-   *       sequenceNumber: 1
-   *     }
-   *   ]
-   * }
-   *
-   * The next PrePlanningWorkspace update
-   * will use this to switch version
-   * snapshots instantly.
-   */
+  /* =======================================================
+     CLIENT-FRIENDLY VERSION DATA
+     ======================================================= */
+
   const versionSequences =
     buildVersionSequenceMap(
       allSequenceRows
+    )
+
+
+  /*
+   * Shape:
+   *
+   * {
+   *   "<version-id>": {
+   *     "<allocation-id>": 5,
+   *     "<allocation-id>": 7.5
+   *   }
+   * }
+   *
+   * This allows PrePlanningWorkspace
+   * to instantly load Desired Duration
+   * when switching versions.
+   */
+  const versionDurationStrategies =
+    buildVersionDurationStrategyMap(
+      allDurationStrategyRows
     )
 
 
@@ -1421,12 +1511,8 @@ export default async function PrePlanningPage({
 
 
   /*
-   * Backward compatibility:
-   *
-   * The workspace still opens on the
-   * current working version exactly as
-   * it did before version management
-   * was introduced.
+   * The initial visible order still uses
+   * the CURRENT working version.
    */
   const orderedActivities =
     applySavedSequence(
@@ -1456,38 +1542,37 @@ export default async function PrePlanningPage({
       }
 
       /*
-       * Complete version catalog.
-       *
-       * Used by the upcoming version
-       * selector / manager.
+       * Complete saved version catalog.
        */
       versions={
         versions
       }
 
       /*
-       * Saved sequence snapshot for every
-       * version.
+       * Activity sequence snapshot
+       * for each version.
        */
       versionSequences={
         versionSequences
       }
 
       /*
-       * Explicit current version.
-       *
-       * New version-management UI will
-       * distinguish Current Version from
-       * Selected Version.
+       * Desired Duration strategy
+       * for each version and activity.
+       */
+      versionDurationStrategies={
+        versionDurationStrategies
+      }
+
+      /*
+       * Explicit current working version.
        */
       currentVersion={
         normalizedCurrentVersion
       }
 
       /*
-       * Backward-compatible prop used by
-       * the current workspace until the
-       * next component replacement.
+       * Backward compatibility.
        */
       activeVersion={
         normalizedCurrentVersion
