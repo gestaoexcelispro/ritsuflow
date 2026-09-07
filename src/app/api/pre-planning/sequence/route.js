@@ -7,6 +7,10 @@ import {
 } from '../../../../lib/supabase/server'
 
 
+/* =========================================================
+   NORMALIZATION
+   ========================================================= */
+
 function normalizeAllocationIds(
   value
 ) {
@@ -34,6 +38,7 @@ function normalizeAllocationIds(
           ''
         ).trim()
 
+
       if (
         !id ||
         seen.has(
@@ -43,9 +48,11 @@ function normalizeAllocationIds(
         return
       }
 
+
       seen.add(
         id
       )
+
 
       result.push(
         id
@@ -58,12 +65,122 @@ function normalizeAllocationIds(
 }
 
 
+function normalizeVersionName(
+  value
+) {
+  return String(
+    value ||
+    ''
+  )
+    .trim()
+    .replace(
+      /\s+/g,
+      ' '
+    )
+    .slice(
+      0,
+      120
+    )
+}
+
+
+/* =========================================================
+   RESPONSE HELPERS
+   ========================================================= */
+
+function versionResponse(
+  version
+) {
+  if (!version) {
+    return null
+  }
+
+
+  return {
+    id:
+      version.id,
+
+    projectId:
+      version.project_id,
+
+    versionNumber:
+      version.version_number,
+
+    versionName:
+      version.version_name ||
+      `Version ${version.version_number}`,
+
+    status:
+      version.status,
+
+    isCurrent:
+      Boolean(
+        version.is_current
+      ),
+  }
+}
+
+
+function badRequest(
+  message
+) {
+  return NextResponse.json(
+    {
+      error:
+        message,
+    },
+    {
+      status: 400,
+    }
+  )
+}
+
+
+function conflict(
+  message
+) {
+  return NextResponse.json(
+    {
+      error:
+        message,
+    },
+    {
+      status: 409,
+    }
+  )
+}
+
+
+function notFound(
+  message
+) {
+  return NextResponse.json(
+    {
+      error:
+        message,
+    },
+    {
+      status: 404,
+    }
+  )
+}
+
+
+/* =========================================================
+   SEQUENCE HELPERS
+   ========================================================= */
+
 function sequencePayload({
   projectId,
   versionId,
   allocationIds,
   userId,
 }) {
+  const timestamp =
+    new Date()
+      .toISOString()
+
+
   return allocationIds.map(
     (
       allocationId,
@@ -79,10 +196,10 @@ function sequencePayload({
         allocationId,
 
       /*
-       * Database order remains simple:
+       * Database order:
        * 1, 2, 3...
        *
-       * The UI displays these as:
+       * UI display:
        * 0010, 0020, 0030...
        */
       sequence_number:
@@ -92,7 +209,7 @@ function sequencePayload({
         userId,
 
       updated_at:
-        new Date().toISOString(),
+        timestamp,
     })
   )
 }
@@ -109,10 +226,16 @@ async function restoreSequence({
     !Array.isArray(
       backup
     ) ||
-    backup.length === 0
+    backup.length ===
+      0
   ) {
     return
   }
+
+
+  const timestamp =
+    new Date()
+      .toISOString()
 
 
   const rows =
@@ -135,7 +258,7 @@ async function restoreSequence({
           userId,
 
         updated_at:
-          new Date().toISOString(),
+          timestamp,
       })
     )
 
@@ -269,11 +392,8 @@ async function replaceSequence({
     /*
      * Best-effort recovery.
      *
-     * A future migration may move this
-     * replacement into a transactional
-     * Postgres RPC. For V1 we protect
-     * the previous sequence by restoring
-     * it when insertion fails.
+     * A future Postgres RPC can make this
+     * replacement fully transactional.
      */
     await restoreSequence({
       supabase,
@@ -285,8 +405,118 @@ async function replaceSequence({
       userId,
     })
 
+
     throw insertError
   }
+}
+
+
+async function getStoredSequence({
+  supabase,
+  projectId,
+  versionId,
+}) {
+  const {
+    data,
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_activity_sequence'
+      )
+      .select(
+        `
+          allocation_id,
+          sequence_number
+        `
+      )
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'version_id',
+        versionId
+      )
+      .order(
+        'sequence_number',
+        {
+          ascending: true,
+        }
+      )
+
+
+  if (error) {
+    throw error
+  }
+
+
+  return (
+    data ||
+    []
+  ).map(
+    (row) =>
+      row.allocation_id
+  )
+}
+
+
+/* =========================================================
+   VERSION QUERIES
+   ========================================================= */
+
+async function getVersion({
+  supabase,
+  projectId,
+  versionId,
+}) {
+  if (
+    !versionId
+  ) {
+    return null
+  }
+
+
+  const {
+    data,
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_versions'
+      )
+      .select(
+        `
+          id,
+          project_id,
+          version_number,
+          version_name,
+          status,
+          is_current,
+          created_at,
+          updated_at
+        `
+      )
+      .eq(
+        'id',
+        versionId
+      )
+      .eq(
+        'project_id',
+        projectId
+      )
+      .maybeSingle()
+
+
+  if (error) {
+    throw error
+  }
+
+
+  return (
+    data ||
+    null
+  )
 }
 
 
@@ -309,7 +539,9 @@ async function getCurrentVersion({
           version_number,
           version_name,
           status,
-          is_current
+          is_current,
+          created_at,
+          updated_at
         `
       )
       .eq(
@@ -328,8 +560,10 @@ async function getCurrentVersion({
   }
 
 
-  return data ||
+  return (
+    data ||
     null
+  )
 }
 
 
@@ -383,6 +617,154 @@ async function getNextVersionNumber({
 }
 
 
+async function createVersionRecord({
+  supabase,
+  projectId,
+  versionNumber,
+  versionName,
+  userId,
+  isCurrent,
+}) {
+  const {
+    data,
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_versions'
+      )
+      .insert({
+        project_id:
+          projectId,
+
+        version_number:
+          versionNumber,
+
+        version_name:
+          versionName ||
+          `Version ${versionNumber}`,
+
+        status:
+          isCurrent
+            ? 'working'
+            : 'archived',
+
+        is_current:
+          isCurrent,
+
+        created_by:
+          userId,
+
+        updated_at:
+          new Date()
+            .toISOString(),
+      })
+      .select(
+        `
+          id,
+          project_id,
+          version_number,
+          version_name,
+          status,
+          is_current,
+          created_at,
+          updated_at
+        `
+      )
+      .single()
+
+
+  if (error) {
+    throw error
+  }
+
+
+  return data
+}
+
+
+async function archiveVersion({
+  supabase,
+  projectId,
+  versionId,
+}) {
+  const {
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_versions'
+      )
+      .update({
+        status:
+          'archived',
+
+        is_current:
+          false,
+
+        updated_at:
+          new Date()
+            .toISOString(),
+      })
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'id',
+        versionId
+      )
+
+
+  if (error) {
+    throw error
+  }
+}
+
+
+async function activateVersion({
+  supabase,
+  projectId,
+  versionId,
+}) {
+  const {
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_versions'
+      )
+      .update({
+        status:
+          'working',
+
+        is_current:
+          true,
+
+        updated_at:
+          new Date()
+            .toISOString(),
+      })
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'id',
+        versionId
+      )
+
+
+  if (error) {
+    throw error
+  }
+}
+
+
+/* =========================================================
+   INITIAL VERSION
+   ========================================================= */
+
 async function createInitialVersion({
   supabase,
   projectId,
@@ -415,63 +797,31 @@ async function createInitialVersion({
     })
 
 
-  const {
-    data,
-    error,
-  } =
-    await supabase
-      .from(
-        'project_pre_planning_versions'
-      )
-      .insert({
-        project_id:
-          projectId,
-
-        version_number:
-          versionNumber,
-
-        version_name:
-          `Version ${versionNumber}`,
-
-        status:
-          'working',
-
-        is_current:
-          true,
-
-        created_by:
-          userId,
-
-        updated_at:
-          new Date().toISOString(),
-      })
-      .select(
-        `
-          id,
-          project_id,
-          version_number,
-          version_name,
-          status,
-          is_current
-        `
-      )
-      .single()
-
-
-  if (error) {
-    throw error
-  }
+  const version =
+    await createVersionRecord({
+      supabase,
+      projectId,
+      versionNumber,
+      versionName:
+        `Version ${versionNumber}`,
+      userId,
+      isCurrent:
+        true,
+    })
 
 
   return {
-    version:
-      data,
+    version,
 
     created:
       true,
   }
 }
 
+
+/* =========================================================
+   SAVE CURRENT VERSION
+   ========================================================= */
 
 async function handleSaveSequence({
   supabase,
@@ -483,6 +833,7 @@ async function handleSaveSequence({
   let version =
     null
 
+
   let createdVersion =
     false
 
@@ -490,43 +841,13 @@ async function handleSaveSequence({
   if (
     requestedVersionId
   ) {
-    const {
-      data,
-      error,
-    } =
-      await supabase
-        .from(
-          'project_pre_planning_versions'
-        )
-        .select(
-          `
-            id,
-            project_id,
-            version_number,
-            version_name,
-            status,
-            is_current
-          `
-        )
-        .eq(
-          'id',
-          requestedVersionId
-        )
-        .eq(
-          'project_id',
-          projectId
-        )
-        .maybeSingle()
-
-
-    if (error) {
-      throw error
-    }
-
-
     version =
-      data ||
-      null
+      await getVersion({
+        supabase,
+        projectId,
+        versionId:
+          requestedVersionId,
+      })
   }
 
 
@@ -540,8 +861,10 @@ async function handleSaveSequence({
         userId,
       })
 
+
     version =
       initial.version
+
 
     createdVersion =
       initial.created
@@ -553,14 +876,8 @@ async function handleSaveSequence({
       'working' ||
     !version.is_current
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'Only the current working version can be edited.',
-      },
-      {
-        status: 409,
-      }
+    return conflict(
+      'Only the current working version can be edited.'
     )
   }
 
@@ -586,7 +903,8 @@ async function handleSaveSequence({
         )
         .update({
           updated_at:
-            new Date().toISOString(),
+            new Date()
+              .toISOString(),
         })
         .eq(
           'id',
@@ -611,24 +929,17 @@ async function handleSaveSequence({
       action:
         'save',
 
-      version: {
-        id:
-          version.id,
-
-        versionNumber:
-          version.version_number,
-
-        versionName:
-          version.version_name ||
-          `Version ${version.version_number}`,
-      },
+      version:
+        versionResponse(
+          version
+        ),
     })
   } catch (
     error
   ) {
     /*
-     * If Version 1 was created by this
-     * request but the first sequence save
+     * If the first version was created
+     * by this request but the sequence
      * failed, remove the empty version.
      */
     if (
@@ -649,10 +960,15 @@ async function handleSaveSequence({
         )
     }
 
+
     throw error
   }
 }
 
+
+/* =========================================================
+   CREATE VERSION FROM CURRENT BROWSER SEQUENCE
+   ========================================================= */
 
 async function handleCreateVersion({
   supabase,
@@ -674,45 +990,15 @@ async function handleCreateVersion({
     })
 
 
-  /*
-   * Older version becomes historical.
-   */
   if (
     currentVersion
   ) {
-    const {
-      error:
-        archiveError,
-    } =
-      await supabase
-        .from(
-          'project_pre_planning_versions'
-        )
-        .update({
-          status:
-            'archived',
-
-          is_current:
-            false,
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          'id',
-          currentVersion.id
-        )
-        .eq(
-          'project_id',
-          projectId
-        )
-
-
-    if (
-      archiveError
-    ) {
-      throw archiveError
-    }
+    await archiveVersion({
+      supabase,
+      projectId,
+      versionId:
+        currentVersion.id,
+    })
   }
 
 
@@ -721,58 +1007,17 @@ async function handleCreateVersion({
 
 
   try {
-    const {
-      data,
-      error:
-        createError,
-    } =
-      await supabase
-        .from(
-          'project_pre_planning_versions'
-        )
-        .insert({
-          project_id:
-            projectId,
-
-          version_number:
-            versionNumber,
-
-          version_name:
-            `Version ${versionNumber}`,
-
-          status:
-            'working',
-
-          is_current:
-            true,
-
-          created_by:
-            userId,
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .select(
-          `
-            id,
-            version_number,
-            version_name,
-            status,
-            is_current
-          `
-        )
-        .single()
-
-
-    if (
-      createError
-    ) {
-      throw createError
-    }
-
-
     newVersion =
-      data
+      await createVersionRecord({
+        supabase,
+        projectId,
+        versionNumber,
+        versionName:
+          `Version ${versionNumber}`,
+        userId,
+        isCurrent:
+          true,
+      })
 
 
     await replaceSequence({
@@ -791,26 +1036,14 @@ async function handleCreateVersion({
       action:
         'create_version',
 
-      version: {
-        id:
-          newVersion.id,
-
-        versionNumber:
-          newVersion.version_number,
-
-        versionName:
-          newVersion.version_name ||
-          `Version ${newVersion.version_number}`,
-      },
+      version:
+        versionResponse(
+          newVersion
+        ),
     })
   } catch (
     error
   ) {
-    /*
-     * Roll back the version switch as
-     * far as possible if the new version
-     * cannot be completed.
-     */
     if (
       newVersion?.id
     ) {
@@ -833,23 +1066,161 @@ async function handleCreateVersion({
     if (
       currentVersion?.id
     ) {
+      await activateVersion({
+        supabase,
+        projectId,
+        versionId:
+          currentVersion.id,
+      })
+    }
+
+
+    throw error
+  }
+}
+
+
+/* =========================================================
+   DUPLICATE SELECTED VERSION
+   ========================================================= */
+
+async function handleDuplicateVersion({
+  supabase,
+  projectId,
+  sourceVersionId,
+  userId,
+}) {
+  if (
+    !sourceVersionId
+  ) {
+    return badRequest(
+      'A source version is required.'
+    )
+  }
+
+
+  const sourceVersion =
+    await getVersion({
+      supabase,
+      projectId,
+      versionId:
+        sourceVersionId,
+    })
+
+
+  if (
+    !sourceVersion
+  ) {
+    return notFound(
+      'The selected source version was not found.'
+    )
+  }
+
+
+  const sourceAllocationIds =
+    await getStoredSequence({
+      supabase,
+      projectId,
+      versionId:
+        sourceVersion.id,
+    })
+
+
+  if (
+    sourceAllocationIds.length ===
+    0
+  ) {
+    return conflict(
+      'The selected version has no saved sequence to duplicate.'
+    )
+  }
+
+
+  const currentVersion =
+    await getCurrentVersion({
+      supabase,
+      projectId,
+    })
+
+
+  const versionNumber =
+    await getNextVersionNumber({
+      supabase,
+      projectId,
+    })
+
+
+  if (
+    currentVersion
+  ) {
+    await archiveVersion({
+      supabase,
+      projectId,
+      versionId:
+        currentVersion.id,
+    })
+  }
+
+
+  let newVersion =
+    null
+
+
+  try {
+    newVersion =
+      await createVersionRecord({
+        supabase,
+        projectId,
+        versionNumber,
+        versionName:
+          `Version ${versionNumber}`,
+        userId,
+        isCurrent:
+          true,
+      })
+
+
+    await replaceSequence({
+      supabase,
+      projectId,
+      versionId:
+        newVersion.id,
+      allocationIds:
+        sourceAllocationIds,
+      userId,
+    })
+
+
+    return NextResponse.json({
+      ok: true,
+
+      action:
+        'duplicate_version',
+
+      sourceVersion:
+        versionResponse(
+          sourceVersion
+        ),
+
+      version:
+        versionResponse(
+          newVersion
+        ),
+    })
+  } catch (
+    error
+  ) {
+    if (
+      newVersion?.id
+    ) {
       await supabase
         .from(
           'project_pre_planning_versions'
         )
-        .update({
-          status:
-            'working',
-
-          is_current:
-            true,
-
-          updated_at:
-            new Date().toISOString(),
-        })
+        .delete()
         .eq(
           'id',
-          currentVersion.id
+          newVersion.id
         )
         .eq(
           'project_id',
@@ -858,10 +1229,380 @@ async function handleCreateVersion({
     }
 
 
+    if (
+      currentVersion?.id
+    ) {
+      await activateVersion({
+        supabase,
+        projectId,
+        versionId:
+          currentVersion.id,
+      })
+    }
+
+
     throw error
   }
 }
 
+
+/* =========================================================
+   RENAME VERSION
+   ========================================================= */
+
+async function handleRenameVersion({
+  supabase,
+  projectId,
+  versionId,
+  versionName,
+}) {
+  if (
+    !versionId
+  ) {
+    return badRequest(
+      'Version ID is required.'
+    )
+  }
+
+
+  const normalizedName =
+    normalizeVersionName(
+      versionName
+    )
+
+
+  if (
+    !normalizedName
+  ) {
+    return badRequest(
+      'Version name is required.'
+    )
+  }
+
+
+  const version =
+    await getVersion({
+      supabase,
+      projectId,
+      versionId,
+    })
+
+
+  if (
+    !version
+  ) {
+    return notFound(
+      'The selected version was not found.'
+    )
+  }
+
+
+  const {
+    data,
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_versions'
+      )
+      .update({
+        version_name:
+          normalizedName,
+
+        updated_at:
+          new Date()
+            .toISOString(),
+      })
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'id',
+        versionId
+      )
+      .select(
+        `
+          id,
+          project_id,
+          version_number,
+          version_name,
+          status,
+          is_current,
+          created_at,
+          updated_at
+        `
+      )
+      .single()
+
+
+  if (error) {
+    throw error
+  }
+
+
+  return NextResponse.json({
+    ok: true,
+
+    action:
+      'rename_version',
+
+    version:
+      versionResponse(
+        data
+      ),
+  })
+}
+
+
+/* =========================================================
+   SET SELECTED VERSION AS CURRENT
+   ========================================================= */
+
+async function handleSetCurrentVersion({
+  supabase,
+  projectId,
+  versionId,
+}) {
+  if (
+    !versionId
+  ) {
+    return badRequest(
+      'Version ID is required.'
+    )
+  }
+
+
+  const selectedVersion =
+    await getVersion({
+      supabase,
+      projectId,
+      versionId,
+    })
+
+
+  if (
+    !selectedVersion
+  ) {
+    return notFound(
+      'The selected version was not found.'
+    )
+  }
+
+
+  if (
+    selectedVersion.is_current
+  ) {
+    return NextResponse.json({
+      ok: true,
+
+      action:
+        'set_current',
+
+      version:
+        versionResponse(
+          selectedVersion
+        ),
+    })
+  }
+
+
+  const currentVersion =
+    await getCurrentVersion({
+      supabase,
+      projectId,
+    })
+
+
+  /*
+   * Because the database has a partial
+   * unique index allowing only one current
+   * version per project, archive the old
+   * current version before activating the
+   * selected one.
+   */
+  if (
+    currentVersion?.id
+  ) {
+    await archiveVersion({
+      supabase,
+      projectId,
+      versionId:
+        currentVersion.id,
+    })
+  }
+
+
+  try {
+    await activateVersion({
+      supabase,
+      projectId,
+      versionId:
+        selectedVersion.id,
+    })
+
+
+    const activatedVersion =
+      await getVersion({
+        supabase,
+        projectId,
+        versionId:
+          selectedVersion.id,
+      })
+
+
+    return NextResponse.json({
+      ok: true,
+
+      action:
+        'set_current',
+
+      version:
+        versionResponse(
+          activatedVersion
+        ),
+    })
+  } catch (
+    error
+  ) {
+    /*
+     * Best-effort restoration of the
+     * previous current version.
+     */
+    if (
+      currentVersion?.id
+    ) {
+      await activateVersion({
+        supabase,
+        projectId,
+        versionId:
+          currentVersion.id,
+      })
+    }
+
+
+    throw error
+  }
+}
+
+
+/* =========================================================
+   DELETE HISTORICAL VERSION
+   ========================================================= */
+
+async function handleDeleteVersion({
+  supabase,
+  projectId,
+  versionId,
+}) {
+  if (
+    !versionId
+  ) {
+    return badRequest(
+      'Version ID is required.'
+    )
+  }
+
+
+  const version =
+    await getVersion({
+      supabase,
+      projectId,
+      versionId,
+    })
+
+
+  if (
+    !version
+  ) {
+    return notFound(
+      'The selected version was not found.'
+    )
+  }
+
+
+  if (
+    version.is_current
+  ) {
+    return conflict(
+      'The current working version cannot be deleted. Make another version current first.'
+    )
+  }
+
+
+  /*
+   * Explicitly delete sequence rows first.
+   *
+   * This keeps the behavior clear even if
+   * the FK is not configured with CASCADE.
+   */
+  const {
+    error:
+      sequenceDeleteError,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_activity_sequence'
+      )
+      .delete()
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'version_id',
+        versionId
+      )
+
+
+  if (
+    sequenceDeleteError
+  ) {
+    throw sequenceDeleteError
+  }
+
+
+  const {
+    error:
+      versionDeleteError,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_versions'
+      )
+      .delete()
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'id',
+        versionId
+      )
+
+
+  if (
+    versionDeleteError
+  ) {
+    throw versionDeleteError
+  }
+
+
+  return NextResponse.json({
+    ok: true,
+
+    action:
+      'delete_version',
+
+    deletedVersionId:
+      versionId,
+  })
+}
+
+
+/* =========================================================
+   POST
+   ========================================================= */
 
 export async function POST(
   request
@@ -901,6 +1642,8 @@ export async function POST(
         body?.action ||
         ''
       )
+        .trim()
+        .toLowerCase()
 
 
     const projectId =
@@ -918,6 +1661,14 @@ export async function POST(
         : ''
 
 
+    const sourceVersionId =
+      body?.sourceVersionId
+        ? String(
+            body.sourceVersionId
+          ).trim()
+        : ''
+
+
     const allocationIds =
       normalizeAllocationIds(
         body?.allocationIds
@@ -927,30 +1678,31 @@ export async function POST(
     if (
       !projectId
     ) {
-      return NextResponse.json(
-        {
-          error:
-            'Project ID is required.',
-        },
-        {
-          status: 400,
-        }
+      return badRequest(
+        'Project ID is required.'
       )
     }
 
 
+    /*
+     * Only these two actions require
+     * activity IDs from the browser.
+     *
+     * Duplicate uses the stored source
+     * version sequence instead.
+     */
     if (
+      (
+        action ===
+          'save' ||
+        action ===
+          'create_version'
+      ) &&
       allocationIds.length ===
-      0
+        0
     ) {
-      return NextResponse.json(
-        {
-          error:
-            'At least one activity is required.',
-        },
-        {
-          status: 400,
-        }
+      return badRequest(
+        'At least one activity is required.'
       )
     }
 
@@ -961,13 +1713,9 @@ export async function POST(
     ) {
       return await handleSaveSequence({
         supabase,
-
         projectId,
-
         requestedVersionId,
-
         allocationIds,
-
         userId:
           user.id,
       })
@@ -980,25 +1728,73 @@ export async function POST(
     ) {
       return await handleCreateVersion({
         supabase,
-
         projectId,
-
         allocationIds,
-
         userId:
           user.id,
       })
     }
 
 
-    return NextResponse.json(
-      {
-        error:
-          'Unsupported Pre-Planning action.',
-      },
-      {
-        status: 400,
-      }
+    if (
+      action ===
+      'duplicate_version'
+    ) {
+      return await handleDuplicateVersion({
+        supabase,
+        projectId,
+        sourceVersionId:
+          sourceVersionId ||
+          requestedVersionId,
+        userId:
+          user.id,
+      })
+    }
+
+
+    if (
+      action ===
+      'rename_version'
+    ) {
+      return await handleRenameVersion({
+        supabase,
+        projectId,
+        versionId:
+          requestedVersionId,
+        versionName:
+          body?.versionName,
+      })
+    }
+
+
+    if (
+      action ===
+      'set_current'
+    ) {
+      return await handleSetCurrentVersion({
+        supabase,
+        projectId,
+        versionId:
+          requestedVersionId,
+      })
+    }
+
+
+    if (
+      action ===
+      'delete_version'
+    ) {
+      return await handleDeleteVersion({
+        supabase,
+        projectId,
+        versionId:
+          requestedVersionId,
+      })
+    }
+
+
+    return badRequest(
+      'Unsupported Pre-Planning action.'
     )
   } catch (
     error
@@ -1013,7 +1809,7 @@ export async function POST(
       {
         error:
           error?.message ||
-          'Pre-Planning sequence could not be saved.',
+          'Pre-Planning version operation failed.',
       },
       {
         status: 500,
