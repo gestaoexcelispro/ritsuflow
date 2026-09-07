@@ -29,12 +29,17 @@ const AUTO_SCROLL_EDGE = 70
 const AUTO_SCROLL_SPEED = 16
 
 
+/* =========================================================
+   DISPLAY HELPERS
+   ========================================================= */
+
 function safeNumber(
   value,
   digits = 2
 ) {
   const numeric =
     Number(value)
+
 
   if (
     !Number.isFinite(
@@ -43,6 +48,7 @@ function safeNumber(
   ) {
     return '—'
   }
+
 
   return new Intl.NumberFormat(
     'en-US',
@@ -66,6 +72,7 @@ function getBasisLabel(
   ) {
     return 'Per crew / day'
   }
+
 
   return 'Per worker / day'
 }
@@ -119,6 +126,22 @@ function getActivityCode(
     4,
     '0'
   )
+}
+
+
+/* =========================================================
+   ORDER HELPERS
+   ========================================================= */
+
+function orderSignature(
+  activities
+) {
+  return activities
+    .map(
+      (activity) =>
+        activity.id
+    )
+    .join('|')
 }
 
 
@@ -273,20 +296,138 @@ function reorderVisibleActivities({
 
 
 /* =========================================================
-   APPLY SEQUENCE HELPERS
+   VERSION SEQUENCE HELPERS
+   ========================================================= */
+
+function applyVersionSequence(
+  activities,
+  sequenceRows
+) {
+  if (
+    !Array.isArray(
+      activities
+    ) ||
+    activities.length ===
+      0
+  ) {
+    return []
+  }
+
+
+  if (
+    !Array.isArray(
+      sequenceRows
+    ) ||
+    sequenceRows.length ===
+      0
+  ) {
+    return [
+      ...activities,
+    ]
+  }
+
+
+  const activityMap =
+    new Map(
+      activities.map(
+        (activity) => [
+          activity.id,
+          activity,
+        ]
+      )
+    )
+
+
+  const ordered =
+    []
+
+
+  const used =
+    new Set()
+
+
+  ;[
+    ...sequenceRows,
+  ]
+    .sort(
+      (
+        first,
+        second
+      ) =>
+        Number(
+          first.sequenceNumber ||
+          0
+        ) -
+        Number(
+          second.sequenceNumber ||
+          0
+        )
+    )
+    .forEach(
+      (row) => {
+        const activity =
+          activityMap.get(
+            row.allocationId
+          )
+
+
+        if (
+          !activity ||
+          used.has(
+            activity.id
+          )
+        ) {
+          return
+        }
+
+
+        ordered.push(
+          activity
+        )
+
+
+        used.add(
+          activity.id
+        )
+      }
+    )
+
+
+  /*
+   * Activities created after a historical
+   * version was saved remain visible.
+   *
+   * They are appended rather than removed.
+   */
+  activities.forEach(
+    (activity) => {
+      if (
+        used.has(
+          activity.id
+        )
+      ) {
+        return
+      }
+
+
+      ordered.push(
+        activity
+      )
+    }
+  )
+
+
+  return ordered
+}
+
+
+/* =========================================================
+   APPLY SEQUENCE TO ALL HELPERS
    ========================================================= */
 
 function getScopeSequenceKey(
   activity
 ) {
-  /*
-   * Prefer a stable database identifier
-   * whenever page.js provides one.
-   *
-   * The textual fallback keeps the feature
-   * compatible with the current activity
-   * payload without changing the API.
-   */
   const stableId =
     activity?.scopeItemId ||
     activity?.serviceId ||
@@ -294,7 +435,9 @@ function getScopeSequenceKey(
     null
 
 
-  if (stableId) {
+  if (
+    stableId
+  ) {
     return `id:${stableId}`
   }
 
@@ -377,15 +520,6 @@ function applySequenceTemplate({
   }
 
 
-  /*
-   * Build the source template.
-   *
-   * Example:
-   *
-   * FRM - Interior Wall Framing -> 0
-   * FRM - Door Framing          -> 1
-   * ELE - Electrical Rough-In   -> 2
-   */
   const sourceRank =
     new Map()
 
@@ -460,8 +594,10 @@ function applySequenceTemplate({
 
   let targetGroups =
     0
+
   let changedGroups =
     0
+
   let matchedActivities =
     0
 
@@ -471,9 +607,6 @@ function applySequenceTemplate({
       entries,
       groupKey
     ) => {
-      /*
-       * Never rewrite the source group.
-       */
       if (
         groupKey ===
         sourceGroupKey
@@ -482,12 +615,6 @@ function applySequenceTemplate({
       }
 
 
-      /*
-       * Only matching scope items participate.
-       *
-       * Target-only activities remain exactly
-       * where they currently are.
-       */
       const matchingEntries =
         entries.filter(
           ({
@@ -511,6 +638,7 @@ function applySequenceTemplate({
 
       targetGroups +=
         1
+
 
       matchedActivities +=
         matchingEntries.length
@@ -596,13 +724,6 @@ function applySequenceTemplate({
       }
 
 
-      /*
-       * Replace only the slots occupied by
-       * matching scope items.
-       *
-       * Any activity that exists only in the
-       * target area remains untouched.
-       */
       matchingEntries.forEach(
         (
           entry,
@@ -646,29 +767,38 @@ function applySequenceTemplate({
 }
 
 
-function orderSignature(
-  activities
-) {
-  return activities
-    .map(
-      (activity) =>
-        activity.id
-    )
-    .join('|')
-}
-
+/* =========================================================
+   WORKSPACE
+   ========================================================= */
 
 export default function PrePlanningWorkspace({
   project,
   activities = [],
-  targetTakt = null,
-  strategyStatus = 'draft',
+
+  versions = [],
+  versionSequences = {},
+  currentVersion = null,
+
+  /*
+   * Kept temporarily for compatibility
+   * with the previous page.js contract.
+   */
   activeVersion = null,
   versionCount = 0,
+
+  targetTakt = null,
+  strategyStatus = 'draft',
+
   changeProjectHref = '/dashboard/planning/pre-planning',
 }) {
   const router =
     useRouter()
+
+
+  const workingVersion =
+    currentVersion ||
+    activeVersion ||
+    null
 
 
   const normalizedActivities =
@@ -682,6 +812,30 @@ export default function PrePlanningWorkspace({
       [
         activities,
       ]
+    )
+
+
+  const normalizedVersions =
+    useMemo(
+      () =>
+        Array.isArray(
+          versions
+        )
+          ? versions
+          : [],
+      [
+        versions,
+      ]
+    )
+
+
+  const [
+    selectedVersionId,
+    setSelectedVersionId,
+  ] =
+    useState(
+      workingVersion?.id ||
+      ''
     )
 
 
@@ -797,8 +951,63 @@ export default function PrePlanningWorkspace({
     )
 
 
+  /* =========================================================
+     VERSION STATE
+     ========================================================= */
+
+  const selectedVersion =
+    useMemo(
+      () =>
+        normalizedVersions.find(
+          (version) =>
+            version.id ===
+            selectedVersionId
+        ) ||
+        workingVersion ||
+        null,
+      [
+        normalizedVersions,
+        selectedVersionId,
+        workingVersion,
+      ]
+    )
+
+
+  const isViewingCurrentVersion =
+    !workingVersion
+      ? !selectedVersion
+      : selectedVersion?.id ===
+        workingVersion.id
+
+
+  const isHistoricalView =
+    Boolean(
+      selectedVersion &&
+      workingVersion &&
+      selectedVersion.id !==
+        workingVersion.id
+    )
+
+
+  const effectiveVersionCount =
+    normalizedVersions.length >
+    0
+      ? normalizedVersions.length
+      : versionCount
+
+
   useEffect(
     () => {
+      const nextVersionId =
+        workingVersion?.id ||
+        ''
+
+
+      setSelectedVersionId(
+        nextVersionId
+      )
+
+
       setOrderedActivities(
         normalizedActivities
       )
@@ -839,7 +1048,7 @@ export default function PrePlanningWorkspace({
     },
     [
       normalizedActivities,
-      activeVersion?.id,
+      workingVersion?.id,
     ]
   )
 
@@ -857,8 +1066,166 @@ export default function PrePlanningWorkspace({
 
 
   const hasUnsavedChanges =
+    isViewingCurrentVersion &&
     currentSignature !==
-    savedSignature
+      savedSignature
+
+
+  /* =========================================================
+     VERSION SELECTION
+     ========================================================= */
+
+  function getVersionActivities(
+    versionId
+  ) {
+    if (
+      !versionId
+    ) {
+      return [
+        ...normalizedActivities,
+      ]
+    }
+
+
+    if (
+      versionId ===
+      workingVersion?.id
+    ) {
+      return [
+        ...normalizedActivities,
+      ]
+    }
+
+
+    const sequence =
+      versionSequences?.[
+        versionId
+      ] ||
+      []
+
+
+    return applyVersionSequence(
+      normalizedActivities,
+      sequence
+    )
+  }
+
+
+  function handleVersionSelection(
+    event
+  ) {
+    const nextVersionId =
+      event.target.value
+
+
+    if (
+      nextVersionId ===
+      selectedVersionId
+    ) {
+      return
+    }
+
+
+    if (
+      hasUnsavedChanges
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Save the current version before switching to another version.',
+      })
+
+
+      return
+    }
+
+
+    const nextActivities =
+      getVersionActivities(
+        nextVersionId
+      )
+
+
+    setSelectedVersionId(
+      nextVersionId
+    )
+
+
+    setOrderedActivities(
+      nextActivities
+    )
+
+
+    setSavedSignature(
+      orderSignature(
+        nextActivities
+      )
+    )
+
+
+    setSelectedActivityId(
+      nextActivities
+        ?.[0]
+        ?.id ||
+      null
+    )
+
+
+    setSelectedLocation(
+      'all'
+    )
+
+
+    setSelectedDivision(
+      'all'
+    )
+
+
+    setRowDrag(
+      null
+    )
+
+
+    rowDragRef.current =
+      null
+
+
+    const version =
+      normalizedVersions.find(
+        (item) =>
+          item.id ===
+          nextVersionId
+      )
+
+
+    if (
+      version?.isCurrent
+    ) {
+      setNotice({
+        type:
+          'success',
+
+        text:
+          `${version.versionName} is the current working version.`,
+      })
+    } else if (
+      version
+    ) {
+      setNotice({
+        type:
+          'success',
+
+        text:
+          `${version.versionName} opened in historical read-only mode.`,
+      })
+    } else {
+      setNotice(
+        null
+      )
+    }
+  }
 
 
   /* =========================================================
@@ -1249,13 +1616,14 @@ export default function PrePlanningWorkspace({
 
 
   /* =========================================================
-     APPLY SEQUENCE TO ALL LOCATIONS / DIVISIONS
+     APPLY SEQUENCE TO ALL
      ========================================================= */
 
   function handleApplySequenceToAll() {
     if (
       actionState !==
-      'idle'
+        'idle' ||
+      !isViewingCurrentVersion
     ) {
       return
     }
@@ -1275,6 +1643,7 @@ export default function PrePlanningWorkspace({
           'Select one Location and one Division to use as the source sequence.',
       })
 
+
       return
     }
 
@@ -1290,6 +1659,7 @@ export default function PrePlanningWorkspace({
         text:
           'The selected source area has no activities.',
       })
+
 
       return
     }
@@ -1320,6 +1690,7 @@ export default function PrePlanningWorkspace({
           'No other Location / Division groups contain matching scope items.',
       })
 
+
       return
     }
 
@@ -1347,6 +1718,7 @@ export default function PrePlanningWorkspace({
           } this sequence.`,
       })
 
+
       return
     }
 
@@ -1372,7 +1744,7 @@ export default function PrePlanningWorkspace({
 
 
   /* =========================================================
-     SAVE / VERSIONING
+     SEQUENCE SAVE / CREATE VERSION
      ========================================================= */
 
   async function runSequenceAction(
@@ -1395,9 +1767,26 @@ export default function PrePlanningWorkspace({
 
 
     if (
+      !isViewingCurrentVersion &&
+      workingVersion
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Historical versions are read-only. Make this version current or duplicate it first.',
+      })
+
+
+      return
+    }
+
+
+    if (
       action ===
         'create_version' &&
-      !activeVersion
+      !workingVersion
     ) {
       setNotice({
         type:
@@ -1406,6 +1795,7 @@ export default function PrePlanningWorkspace({
         text:
           'Save Sequence first to create Version 1.',
       })
+
 
       return
     }
@@ -1445,15 +1835,9 @@ export default function PrePlanningWorkspace({
                   project.id,
 
                 versionId:
-                  activeVersion?.id ||
+                  workingVersion?.id ||
                   null,
 
-                /*
-                 * Always save the FULL
-                 * project sequence,
-                 * regardless of active
-                 * filters.
-                 */
                 allocationIds:
                   orderedActivities.map(
                     (activity) =>
@@ -1525,11 +1909,360 @@ export default function PrePlanningWorkspace({
   }
 
 
+  /* =========================================================
+     VERSION MANAGEMENT
+     ========================================================= */
+
+  async function runVersionAction({
+    action,
+    versionId,
+    versionName = '',
+  }) {
+    if (
+      actionState !==
+      'idle'
+    ) {
+      return
+    }
+
+
+    setActionState(
+      action
+    )
+
+
+    setNotice(
+      null
+    )
+
+
+    try {
+      const payload = {
+        action,
+
+        projectId:
+          project.id,
+
+        versionId,
+      }
+
+
+      if (
+        action ===
+        'duplicate_version'
+      ) {
+        payload.sourceVersionId =
+          versionId
+      }
+
+
+      if (
+        action ===
+        'rename_version'
+      ) {
+        payload.versionName =
+          versionName
+      }
+
+
+      const response =
+        await fetch(
+          '/api/pre-planning/sequence',
+          {
+            method:
+              'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              JSON.stringify(
+                payload
+              ),
+          }
+        )
+
+
+      const result =
+        await response.json()
+
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          result?.error ||
+          'Version operation failed.'
+        )
+      }
+
+
+      if (
+        action ===
+        'duplicate_version'
+      ) {
+        setNotice({
+          type:
+            'success',
+
+          text:
+            `${result.version.versionName} created from ${selectedVersion?.versionName || 'the selected version'}.`,
+        })
+      }
+
+
+      if (
+        action ===
+        'rename_version'
+      ) {
+        setNotice({
+          type:
+            'success',
+
+          text:
+            `Version renamed to ${result.version.versionName}.`,
+        })
+      }
+
+
+      if (
+        action ===
+        'set_current'
+      ) {
+        setNotice({
+          type:
+            'success',
+
+          text:
+            `${result.version.versionName} is now the current working version.`,
+        })
+      }
+
+
+      if (
+        action ===
+        'delete_version'
+      ) {
+        setSelectedVersionId(
+          workingVersion?.id ||
+          ''
+        )
+
+
+        setOrderedActivities(
+          normalizedActivities
+        )
+
+
+        setSavedSignature(
+          orderSignature(
+            normalizedActivities
+          )
+        )
+
+
+        setNotice({
+          type:
+            'success',
+
+          text:
+            'Historical version deleted.',
+        })
+      }
+
+
+      router.refresh()
+    } catch (
+      error
+    ) {
+      setNotice({
+        type:
+          'error',
+
+        text:
+          error?.message ||
+          'Version operation failed.',
+      })
+    } finally {
+      setActionState(
+        'idle'
+      )
+    }
+  }
+
+
+  function handleWorkOnSelectedVersion() {
+    if (
+      !selectedVersion ||
+      selectedVersion.isCurrent
+    ) {
+      return
+    }
+
+
+    runVersionAction({
+      action:
+        'set_current',
+
+      versionId:
+        selectedVersion.id,
+    })
+  }
+
+
+  function handleDuplicateVersion() {
+    if (
+      !selectedVersion
+    ) {
+      return
+    }
+
+
+    if (
+      hasUnsavedChanges
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Save the current version before duplicating another saved version.',
+      })
+
+
+      return
+    }
+
+
+    runVersionAction({
+      action:
+        'duplicate_version',
+
+      versionId:
+        selectedVersion.id,
+    })
+  }
+
+
+  function handleRenameVersion() {
+    if (
+      !selectedVersion
+    ) {
+      return
+    }
+
+
+    const proposedName =
+      window.prompt(
+        'Enter a name for this version:',
+        selectedVersion.versionName
+      )
+
+
+    if (
+      proposedName ===
+      null
+    ) {
+      return
+    }
+
+
+    const versionName =
+      proposedName
+        .trim()
+
+
+    if (
+      !versionName
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Version name cannot be empty.',
+      })
+
+
+      return
+    }
+
+
+    if (
+      versionName ===
+      selectedVersion.versionName
+    ) {
+      return
+    }
+
+
+    runVersionAction({
+      action:
+        'rename_version',
+
+      versionId:
+        selectedVersion.id,
+
+      versionName,
+    })
+  }
+
+
+  function handleDeleteVersion() {
+    if (
+      !selectedVersion
+    ) {
+      return
+    }
+
+
+    if (
+      selectedVersion.isCurrent
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'The current working version cannot be deleted. Make another version current first.',
+      })
+
+
+      return
+    }
+
+
+    const confirmed =
+      window.confirm(
+        `Delete ${selectedVersion.versionName}? This action cannot be undone.`
+      )
+
+
+    if (
+      !confirmed
+    ) {
+      return
+    }
+
+
+    runVersionAction({
+      action:
+        'delete_version',
+
+      versionId:
+        selectedVersion.id,
+    })
+  }
+
+
   const saveDisabled =
     actionState !==
       'idle' ||
+    !isViewingCurrentVersion ||
     (
-      activeVersion &&
+      workingVersion &&
       !hasUnsavedChanges
     )
 
@@ -1537,15 +2270,22 @@ export default function PrePlanningWorkspace({
   const createVersionDisabled =
     actionState !==
       'idle' ||
-    !activeVersion
+    !workingVersion ||
+    !isViewingCurrentVersion
 
 
   const applySequenceDisabled =
     actionState !==
       'idle' ||
+    !isViewingCurrentVersion ||
     !hasExactSourceFilter ||
     filteredActivities.length ===
       0
+
+
+  const versionManagementDisabled =
+    actionState !==
+    'idle'
 
 
   /* =========================================================
@@ -1572,7 +2312,9 @@ export default function PrePlanningWorkspace({
           leftBodyRef.current
 
 
-        if (!body) {
+        if (
+          !body
+        ) {
           return
         }
 
@@ -1690,6 +2432,22 @@ export default function PrePlanningWorkspace({
         }
 
 
+        if (
+          !isViewingCurrentVersion
+        ) {
+          rowDragRef.current =
+            null
+
+
+          setRowDrag(
+            null
+          )
+
+
+          return
+        }
+
+
         setOrderedActivities(
           (currentOrder) =>
             reorderVisibleActivities({
@@ -1757,6 +2515,7 @@ export default function PrePlanningWorkspace({
     },
     [
       filteredActivities.length,
+      isViewingCurrentVersion,
     ]
   )
 
@@ -1766,6 +2525,13 @@ export default function PrePlanningWorkspace({
     activity,
     visibleIndex
   ) {
+    if (
+      !isViewingCurrentVersion
+    ) {
+      return
+    }
+
+
     event.preventDefault()
     event.stopPropagation()
 
@@ -1920,6 +2686,10 @@ export default function PrePlanningWorkspace({
   }
 
 
+  /* =========================================================
+     DERIVED VALUES
+     ========================================================= */
+
   const targetTaktNumber =
     Number(
       targetTakt
@@ -1958,6 +2728,10 @@ export default function PrePlanningWorkspace({
         ROW_HEIGHT
       : null
 
+
+  /* =========================================================
+     RENDER
+     ========================================================= */
 
   return (
     <div
@@ -2143,7 +2917,9 @@ export default function PrePlanningWorkspace({
                 styles.sequenceHint
               }
             >
-              ⠿ DRAG TO REORDER
+              {isViewingCurrentVersion
+                ? '⠿ DRAG TO REORDER'
+                : 'HISTORICAL VIEW · READ ONLY'}
             </span>
           </div>
 
@@ -2354,18 +3130,55 @@ export default function PrePlanningWorkspace({
           </span>
 
 
-          <strong
-            className={
-              styles.versionName
-            }
-          >
-            {activeVersion
-              ? activeVersion.versionName
-              : 'Not saved yet'}
-          </strong>
+          {normalizedVersions.length >
+          0 ? (
+            <select
+              value={
+                selectedVersion?.id ||
+                ''
+              }
+              onChange={
+                handleVersionSelection
+              }
+              disabled={
+                actionState !==
+                'idle'
+              }
+              className={
+                styles.filterSelectActive
+              }
+              title="Choose a saved sequence version"
+            >
+              {normalizedVersions.map(
+                (version) => (
+                  <option
+                    key={
+                      version.id
+                    }
+                    value={
+                      version.id
+                    }
+                  >
+                    {version.versionName}
+                    {version.isCurrent
+                      ? ' · Current'
+                      : ''}
+                  </option>
+                )
+              )}
+            </select>
+          ) : (
+            <strong
+              className={
+                styles.versionName
+              }
+            >
+              Not saved yet
+            </strong>
+          )}
 
 
-          {activeVersion ? (
+          {selectedVersion?.isCurrent ? (
             <span
               className={
                 styles.currentVersionBadge
@@ -2373,18 +3186,28 @@ export default function PrePlanningWorkspace({
             >
               CURRENT
             </span>
+          ) : selectedVersion ? (
+            <span
+              className={
+                styles.savedBadge
+              }
+            >
+              HISTORICAL
+            </span>
           ) : null}
 
 
-          {versionCount >
+          {effectiveVersionCount >
           0 ? (
             <span
               className={
                 styles.versionCount
               }
             >
-              {versionCount}{' '}
-              {versionCount ===
+              {
+                effectiveVersionCount
+              }{' '}
+              {effectiveVersionCount ===
               1
                 ? 'version'
                 : 'versions'}
@@ -2400,13 +3223,21 @@ export default function PrePlanningWorkspace({
             >
               UNSAVED CHANGES
             </span>
-          ) : activeVersion ? (
+          ) : selectedVersion?.isCurrent ? (
             <span
               className={
                 styles.savedBadge
               }
             >
               SAVED
+            </span>
+          ) : isHistoricalView ? (
+            <span
+              className={
+                styles.savedBadge
+              }
+            >
+              READ ONLY
             </span>
           ) : null}
         </div>
@@ -2436,6 +3267,94 @@ export default function PrePlanningWorkspace({
           ) : null}
 
 
+          {isHistoricalView ? (
+            <button
+              type="button"
+              className={
+                styles.saveSequenceButton
+              }
+              disabled={
+                versionManagementDisabled
+              }
+              onClick={
+                handleWorkOnSelectedVersion
+              }
+            >
+              {actionState ===
+              'set_current'
+                ? 'Switching...'
+                : 'Work on This Version'}
+            </button>
+          ) : null}
+
+
+          {selectedVersion ? (
+            <>
+              <button
+                type="button"
+                className={
+                  styles.createVersionButton
+                }
+                disabled={
+                  versionManagementDisabled
+                }
+                onClick={
+                  handleDuplicateVersion
+                }
+              >
+                {actionState ===
+                'duplicate_version'
+                  ? 'Duplicating...'
+                  : 'Duplicate'}
+              </button>
+
+
+              <button
+                type="button"
+                className={
+                  styles.createVersionButton
+                }
+                disabled={
+                  versionManagementDisabled
+                }
+                onClick={
+                  handleRenameVersion
+                }
+              >
+                {actionState ===
+                'rename_version'
+                  ? 'Renaming...'
+                  : 'Rename'}
+              </button>
+
+
+              <button
+                type="button"
+                className={
+                  styles.createVersionButton
+                }
+                disabled={
+                  versionManagementDisabled ||
+                  selectedVersion.isCurrent
+                }
+                onClick={
+                  handleDeleteVersion
+                }
+                title={
+                  selectedVersion.isCurrent
+                    ? 'The current working version cannot be deleted'
+                    : 'Delete this historical version'
+                }
+              >
+                {actionState ===
+                'delete_version'
+                  ? 'Deleting...'
+                  : 'Delete'}
+              </button>
+            </>
+          ) : null}
+
+
           <button
             type="button"
             className={
@@ -2448,9 +3367,11 @@ export default function PrePlanningWorkspace({
               handleApplySequenceToAll
             }
             title={
-              hasExactSourceFilter
-                ? 'Use this Location / Division sequence as the template for every other production area'
-                : 'Select one Location and one Division first'
+              isHistoricalView
+                ? 'Historical versions are read-only'
+                : hasExactSourceFilter
+                  ? 'Use this Location / Division sequence as the template for every other production area'
+                  : 'Select one Location and one Division first'
             }
           >
             Apply Sequence to All
@@ -2495,7 +3416,7 @@ export default function PrePlanningWorkspace({
             {actionState ===
             'saving'
               ? 'Saving...'
-              : activeVersion
+              : workingVersion
                 ? 'Save Sequence'
                 : 'Save Sequence · Create V1'}
           </button>
@@ -2688,6 +3609,9 @@ export default function PrePlanningWorkspace({
                             className={
                               styles.sequenceHandle
                             }
+                            disabled={
+                              !isViewingCurrentVersion
+                            }
                             onPointerDown={(
                               event
                             ) =>
@@ -2697,7 +3621,11 @@ export default function PrePlanningWorkspace({
                                 visibleIndex
                               )
                             }
-                            title="Drag to change activity sequence"
+                            title={
+                              isViewingCurrentVersion
+                                ? 'Drag to change activity sequence'
+                                : 'Historical versions are read-only'
+                            }
                           >
                             <span
                               className={
@@ -3139,7 +4067,11 @@ export default function PrePlanningWorkspace({
                 value={
                   selectedSequence
                 }
-                detail="Drag handle to reorder"
+                detail={
+                  isViewingCurrentVersion
+                    ? 'Drag handle to reorder'
+                    : 'Historical sequence'
+                }
                 emphasized
               />
 
@@ -3230,6 +4162,10 @@ export default function PrePlanningWorkspace({
   )
 }
 
+
+/* =========================================================
+   INSPECTOR METRIC
+   ========================================================= */
 
 function InspectorMetric({
   label,
