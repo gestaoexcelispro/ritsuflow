@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+
 import {
   useMemo,
   useRef,
@@ -10,8 +11,8 @@ import {
 import styles from './pre-planning.module.css'
 
 
-const DEFAULT_DAY_WIDTH = 46
-const MIN_DAY_WIDTH = 28
+const DEFAULT_DAY_WIDTH = 34
+const MIN_DAY_WIDTH = 24
 const MAX_DAY_WIDTH = 84
 const MIN_TIMELINE_DAYS = 20
 const TIMELINE_PADDING_DAYS = 5
@@ -25,7 +26,9 @@ function safeNumber(
     Number(value)
 
   if (
-    !Number.isFinite(numeric)
+    !Number.isFinite(
+      numeric
+    )
   ) {
     return '—'
   }
@@ -34,7 +37,8 @@ function safeNumber(
     'en-US',
     {
       minimumFractionDigits: 0,
-      maximumFractionDigits: digits,
+      maximumFractionDigits:
+        digits,
     }
   ).format(numeric)
 }
@@ -45,15 +49,21 @@ function getActivityStatus(
   targetTakt
 ) {
   const rawDuration =
-    Number(activity?.rawDuration)
+    Number(
+      activity?.rawDuration
+    )
 
   const takt =
     Number(targetTakt)
 
   if (
-    !Number.isFinite(rawDuration) ||
+    !Number.isFinite(
+      rawDuration
+    ) ||
     rawDuration <= 0 ||
-    !Number.isFinite(takt) ||
+    !Number.isFinite(
+      takt
+    ) ||
     takt <= 0
   ) {
     return {
@@ -63,16 +73,21 @@ function getActivityStatus(
   }
 
   const utilization =
-    rawDuration / takt
+    rawDuration /
+    takt
 
-  if (utilization > 1) {
+  if (
+    utilization > 1
+  ) {
     return {
       key: 'gap',
       label: 'Capacity Gap',
     }
   }
 
-  if (utilization >= 0.75) {
+  if (
+    utilization >= 0.75
+  ) {
     return {
       key: 'balanced',
       label: 'Balanced',
@@ -90,7 +105,8 @@ function getBasisLabel(
   basis
 ) {
   if (
-    basis === 'crew_day'
+    basis ===
+    'crew_day'
   ) {
     return 'Per crew / day'
   }
@@ -104,18 +120,22 @@ function getResourceLabel(
 ) {
   const value =
     Number(
-      activity?.effectiveWorkforce
+      activity
+        ?.effectiveWorkforce
     )
 
   if (
-    !Number.isFinite(value) ||
+    !Number.isFinite(
+      value
+    ) ||
     value <= 0
   ) {
     return '—'
   }
 
   const unit =
-    activity?.productivityBasis ===
+    activity
+      ?.productivityBasis ===
     'crew_day'
       ? value === 1
         ? 'crew'
@@ -159,6 +179,18 @@ export default function PrePlanningWorkspace({
     )
 
   const [
+    selectedLocation,
+    setSelectedLocation,
+  ] =
+    useState('all')
+
+  const [
+    selectedDivision,
+    setSelectedDivision,
+  ] =
+    useState('all')
+
+  const [
     dayWidth,
     setDayWidth,
   ] =
@@ -166,10 +198,14 @@ export default function PrePlanningWorkspace({
       DEFAULT_DAY_WIDTH
     )
 
+
   const leftBodyRef =
     useRef(null)
 
   const rightBodyRef =
+    useRef(null)
+
+  const ganttHeaderRef =
     useRef(null)
 
   const scrollOwnerRef =
@@ -188,28 +224,184 @@ export default function PrePlanningWorkspace({
     )
 
 
+  /* =========================================================
+     FILTER OPTIONS
+     ========================================================= */
+
+  const locationOptions =
+    useMemo(
+      () => {
+        const map =
+          new Map()
+
+        normalizedActivities.forEach(
+          (activity) => {
+            if (
+              activity.locationId &&
+              activity.locationName
+            ) {
+              map.set(
+                activity.locationId,
+                activity.locationName
+              )
+            }
+          }
+        )
+
+        return Array.from(
+          map.entries()
+        )
+          .map(
+            ([
+              id,
+              name,
+            ]) => ({
+              id,
+              name,
+            })
+          )
+          .sort(
+            (
+              first,
+              second
+            ) =>
+              first.name.localeCompare(
+                second.name,
+                undefined,
+                {
+                  numeric:
+                    true,
+                }
+              )
+          )
+      },
+      [
+        normalizedActivities,
+      ]
+    )
+
+
+  const divisionOptions =
+    useMemo(
+      () => {
+        const map =
+          new Map()
+
+        normalizedActivities
+          .filter(
+            (activity) =>
+              selectedLocation ===
+                'all' ||
+              activity.locationId ===
+                selectedLocation
+          )
+          .forEach(
+            (activity) => {
+              if (
+                activity.divisionId &&
+                activity.divisionName &&
+                activity.divisionName !==
+                  '—'
+              ) {
+                map.set(
+                  activity.divisionId,
+                  activity.divisionName
+                )
+              }
+            }
+          )
+
+        return Array.from(
+          map.entries()
+        )
+          .map(
+            ([
+              id,
+              name,
+            ]) => ({
+              id,
+              name,
+            })
+          )
+          .sort(
+            (
+              first,
+              second
+            ) =>
+              first.name.localeCompare(
+                second.name,
+                undefined,
+                {
+                  numeric:
+                    true,
+                }
+              )
+          )
+      },
+      [
+        normalizedActivities,
+        selectedLocation,
+      ]
+    )
+
+
+  const filteredActivities =
+    useMemo(
+      () =>
+        normalizedActivities.filter(
+          (activity) => {
+            const matchesLocation =
+              selectedLocation ===
+                'all' ||
+              activity.locationId ===
+                selectedLocation
+
+            const matchesDivision =
+              selectedDivision ===
+                'all' ||
+              activity.divisionId ===
+                selectedDivision
+
+            return (
+              matchesLocation &&
+              matchesDivision
+            )
+          }
+        ),
+      [
+        normalizedActivities,
+        selectedLocation,
+        selectedDivision,
+      ]
+    )
+
+
   const selectedActivity =
     useMemo(
       () =>
-        normalizedActivities.find(
+        filteredActivities.find(
           (activity) =>
             activity.id ===
             selectedActivityId
         ) ||
-        normalizedActivities[0] ||
+        filteredActivities[0] ||
         null,
       [
-        normalizedActivities,
+        filteredActivities,
         selectedActivityId,
       ]
     )
 
 
+  /* =========================================================
+     TIMELINE
+     ========================================================= */
+
   const maxRawDuration =
     useMemo(
       () => {
         const durations =
-          normalizedActivities
+          filteredActivities
             .map(
               (activity) =>
                 Number(
@@ -225,7 +417,8 @@ export default function PrePlanningWorkspace({
             )
 
         if (
-          durations.length === 0
+          durations.length ===
+          0
         ) {
           return 0
         }
@@ -234,14 +427,16 @@ export default function PrePlanningWorkspace({
           ...durations
         )
       },
-      [normalizedActivities]
+      [
+        filteredActivities,
+      ]
     )
 
 
   const timelineDays =
     useMemo(
       () => {
-        const calculatedDays =
+        const calculated =
           Math.ceil(
             maxRawDuration
           ) +
@@ -249,10 +444,12 @@ export default function PrePlanningWorkspace({
 
         return Math.max(
           MIN_TIMELINE_DAYS,
-          calculatedDays
+          calculated
         )
       },
-      [maxRawDuration]
+      [
+        maxRawDuration,
+      ]
     )
 
 
@@ -262,14 +459,15 @@ export default function PrePlanningWorkspace({
         Array.from(
           {
             length:
-              timelineDays + 1,
+              timelineDays +
+              1,
           },
-          (
-            _,
+          (_, index) =>
             index
-          ) => index
         ),
-      [timelineDays]
+      [
+        timelineDays,
+      ]
     )
 
 
@@ -278,12 +476,17 @@ export default function PrePlanningWorkspace({
     dayWidth
 
 
+  /* =========================================================
+     SCROLL
+     ========================================================= */
+
   function syncVerticalScroll(
     source
   ) {
     if (
       scrollOwnerRef.current &&
-      scrollOwnerRef.current !== source
+      scrollOwnerRef.current !==
+        source
     ) {
       return
     }
@@ -320,6 +523,74 @@ export default function PrePlanningWorkspace({
   }
 
 
+  function handleGanttScroll() {
+    syncVerticalScroll(
+      'right'
+    )
+
+    if (
+      rightBodyRef.current &&
+      ganttHeaderRef.current
+    ) {
+      ganttHeaderRef.current.scrollLeft =
+        rightBodyRef.current.scrollLeft
+    }
+  }
+
+
+  /* =========================================================
+     FILTERS
+     ========================================================= */
+
+  function handleLocationChange(
+    event
+  ) {
+    setSelectedLocation(
+      event.target.value
+    )
+
+    /*
+     * Division depends on Location,
+     * therefore reset Division whenever
+     * Location changes.
+     */
+    setSelectedDivision(
+      'all'
+    )
+  }
+
+
+  function handleDivisionChange(
+    event
+  ) {
+    setSelectedDivision(
+      event.target.value
+    )
+  }
+
+
+  function clearFilters() {
+    setSelectedLocation(
+      'all'
+    )
+
+    setSelectedDivision(
+      'all'
+    )
+  }
+
+
+  const hasFilters =
+    selectedLocation !==
+      'all' ||
+    selectedDivision !==
+      'all'
+
+
+  /* =========================================================
+     ZOOM
+     ========================================================= */
+
   function zoomIn() {
     setDayWidth(
       (current) =>
@@ -353,6 +624,13 @@ export default function PrePlanningWorkspace({
       rightBodyRef.current.scrollLeft =
         0
     }
+
+    if (
+      ganttHeaderRef.current
+    ) {
+      ganttHeaderRef.current.scrollLeft =
+        0
+    }
   }
 
 
@@ -365,11 +643,14 @@ export default function PrePlanningWorkspace({
     ) &&
     targetTaktNumber > 0
 
-
   const isApproved =
     strategyStatus ===
     'approved'
 
+
+  /* =========================================================
+     RENDER
+     ========================================================= */
 
   return (
     <div
@@ -408,6 +689,7 @@ export default function PrePlanningWorkspace({
               {project?.code
                 ? `${project.code} · `
                 : ''}
+
               {project?.name ||
                 'Project'}
             </h1>
@@ -436,6 +718,7 @@ export default function PrePlanningWorkspace({
           </p>
         </div>
 
+
         <div
           className={
             styles.headerActions
@@ -456,7 +739,7 @@ export default function PrePlanningWorkspace({
 
             <strong>
               {
-                normalizedActivities.length
+                filteredActivities.length
               }
             </strong>
           </div>
@@ -504,25 +787,135 @@ export default function PrePlanningWorkspace({
       >
         <div
           className={
-            styles.toolbarGroup
+            styles.toolbarLeft
           }
         >
           <div
             className={
-              styles.toolbarTitle
+              styles.toolbarGroup
             }
           >
-            Production Gantt
+            <div
+              className={
+                styles.toolbarTitle
+              }
+            >
+              Production Gantt
+            </div>
+
+            <span
+              className={
+                styles.lockedBadge
+              }
+            >
+              DURATIONS LOCKED
+            </span>
           </div>
 
-          <span
+
+          <div
             className={
-              styles.lockedBadge
+              styles.filterGroup
             }
           >
-            DURATIONS LOCKED
-          </span>
+            <label
+              className={
+                styles.filterControl
+              }
+            >
+              <span>
+                Location
+              </span>
+
+              <select
+                value={
+                  selectedLocation
+                }
+                onChange={
+                  handleLocationChange
+                }
+              >
+                <option value="all">
+                  All Locations
+                </option>
+
+                {locationOptions.map(
+                  (location) => (
+                    <option
+                      key={
+                        location.id
+                      }
+                      value={
+                        location.id
+                      }
+                    >
+                      {
+                        location.name
+                      }
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+
+
+            <label
+              className={
+                styles.filterControl
+              }
+            >
+              <span>
+                Division
+              </span>
+
+              <select
+                value={
+                  selectedDivision
+                }
+                onChange={
+                  handleDivisionChange
+                }
+              >
+                <option value="all">
+                  All Divisions
+                </option>
+
+                {divisionOptions.map(
+                  (division) => (
+                    <option
+                      key={
+                        division.id
+                      }
+                      value={
+                        division.id
+                      }
+                    >
+                      {
+                        division.name
+                      }
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+
+
+            {hasFilters ? (
+              <button
+                type="button"
+                className={
+                  styles.clearFiltersButton
+                }
+                onClick={
+                  clearFilters
+                }
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         </div>
+
 
         <div
           className={
@@ -635,6 +1028,14 @@ export default function PrePlanningWorkspace({
 
             <div
               className={
+                styles.activityHeaderCell
+              }
+            >
+              Division
+            </div>
+
+            <div
+              className={
                 styles.activityHeaderCellRight
               }
             >
@@ -658,6 +1059,7 @@ export default function PrePlanningWorkspace({
             </div>
           </div>
 
+
           <div
             ref={
               leftBodyRef
@@ -671,9 +1073,9 @@ export default function PrePlanningWorkspace({
               )
             }
           >
-            {normalizedActivities.length >
+            {filteredActivities.length >
             0 ? (
-              normalizedActivities.map(
+              filteredActivities.map(
                 (
                   activity,
                   index
@@ -756,11 +1158,24 @@ export default function PrePlanningWorkspace({
                           styles.locationName
                         }
                         title={
-                          activity.locationPath ||
+                          activity.locationName ||
                           ''
                         }
                       >
-                        {activity.locationPath ||
+                        {activity.locationName ||
+                          '—'}
+                      </div>
+
+                      <div
+                        className={
+                          styles.divisionName
+                        }
+                        title={
+                          activity.divisionName ||
+                          ''
+                        }
+                      >
+                        {activity.divisionName ||
                           '—'}
                       </div>
 
@@ -772,6 +1187,7 @@ export default function PrePlanningWorkspace({
                         {safeNumber(
                           activity.quantity
                         )}{' '}
+
                         <span
                           className={
                             styles.unitText
@@ -822,12 +1238,11 @@ export default function PrePlanningWorkspace({
                 }
               >
                 <strong>
-                  No production activities
+                  No activities match the selected filters
                 </strong>
 
                 <span>
-                  Positive location quantities are required before
-                  activities can be visualized.
+                  Change the Location or Division filter to display production activities.
                 </span>
               </div>
             )}
@@ -841,6 +1256,9 @@ export default function PrePlanningWorkspace({
           }
         >
           <div
+            ref={
+              ganttHeaderRef
+            }
             className={
               styles.ganttHeaderScroll
             }
@@ -857,13 +1275,9 @@ export default function PrePlanningWorkspace({
               {dayMarkers.map(
                 (day) => (
                   <div
-                    key={
-                      day
-                    }
+                    key={day}
                     className={
-                      day %
-                        5 ===
-                      0
+                      day % 5 === 0
                         ? styles.dayHeaderMajor
                         : styles.dayHeader
                     }
@@ -882,6 +1296,7 @@ export default function PrePlanningWorkspace({
             </div>
           </div>
 
+
           <div
             ref={
               rightBodyRef
@@ -889,10 +1304,8 @@ export default function PrePlanningWorkspace({
             className={
               styles.ganttBody
             }
-            onScroll={() =>
-              syncVerticalScroll(
-                'right'
-              )
+            onScroll={
+              handleGanttScroll
             }
           >
             <div
@@ -902,6 +1315,13 @@ export default function PrePlanningWorkspace({
               style={{
                 width:
                   timelineWidth,
+
+                height:
+                  Math.max(
+                    filteredActivities.length *
+                      44,
+                    44
+                  ),
               }}
             >
               <div
@@ -915,8 +1335,7 @@ export default function PrePlanningWorkspace({
 
               {dayMarkers.map(
                 (day) =>
-                  day %
-                    5 ===
+                  day % 5 ===
                   0 ? (
                     <div
                       key={`major-${day}`}
@@ -933,7 +1352,7 @@ export default function PrePlanningWorkspace({
               )}
 
 
-              {normalizedActivities.map(
+              {filteredActivities.map(
                 (
                   activity,
                   index
@@ -1084,8 +1503,14 @@ export default function PrePlanningWorkspace({
                   styles.inspectorLocation
                 }
               >
-                {selectedActivity.locationPath ||
+                {selectedActivity.locationName ||
                   '—'}
+
+                {selectedActivity.divisionName &&
+                selectedActivity.divisionName !==
+                  '—'
+                  ? ` / ${selectedActivity.divisionName}`
+                  : ''}
               </div>
             </div>
 
@@ -1095,6 +1520,26 @@ export default function PrePlanningWorkspace({
                 styles.inspectorMetrics
               }
             >
+              <InspectorMetric
+                label="Location"
+                value={
+                  selectedActivity.locationName ||
+                  '—'
+                }
+              />
+
+              <InspectorMetric
+                label="Division"
+                value={
+                  selectedActivity.divisionName ||
+                  '—'
+                }
+                detail={
+                  selectedActivity.divisionType ||
+                  ''
+                }
+              />
+
               <InspectorMetric
                 label="Quantity"
                 value={`${safeNumber(
@@ -1172,27 +1617,6 @@ export default function PrePlanningWorkspace({
               />
 
               <InspectorMetric
-                label="Start Offset"
-                value="Day 0"
-                detail="Initial state"
-              />
-
-              <InspectorMetric
-                label="Finish Offset"
-                value={
-                  Number.isFinite(
-                    Number(
-                      selectedActivity.rawDuration
-                    )
-                  )
-                    ? `Day ${safeNumber(
-                        selectedActivity.rawDuration
-                      )}`
-                    : '—'
-                }
-              />
-
-              <InspectorMetric
                 label="Takt Status"
                 value={
                   getActivityStatus(
@@ -1228,7 +1652,7 @@ export default function PrePlanningWorkspace({
               styles.noSelection
             }
           >
-            Select an activity to inspect its production data.
+            No activity is available with the current filters.
           </div>
         )}
       </footer>
