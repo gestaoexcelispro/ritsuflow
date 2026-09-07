@@ -5,6 +5,8 @@ import {
   createClient,
 } from '../../../../lib/supabase/server'
 
+import ActivityPreSequence from './ActivityPreSequence'
+
 
 const NAVY = '#052c49'
 const TEAL = '#00998b'
@@ -875,6 +877,7 @@ export default async function PrePlanningPage({
     settingsResult,
     workPackageRulesResult,
     scopeSequenceResult,
+    activitySequenceResult,
   ] =
     await Promise.all(
       [
@@ -1040,6 +1043,28 @@ export default async function PrePlanningPage({
             'project_id',
             selectedProject.id
           ),
+
+        supabase
+          .from(
+            'project_activity_pre_sequence'
+          )
+          .select(
+            `
+              id,
+              project_work_package_id,
+              pre_sequence_number
+            `
+          )
+          .eq(
+            'project_id',
+            selectedProject.id
+          )
+          .order(
+            'pre_sequence_number',
+            {
+              ascending: true,
+            }
+          ),
       ]
     )
 
@@ -1053,6 +1078,7 @@ export default async function PrePlanningPage({
       settingsResult.error,
       workPackageRulesResult.error,
       scopeSequenceResult.error,
+      activitySequenceResult.error,
     ].filter(Boolean)
 
   if (loadErrors.length > 0) {
@@ -1167,6 +1193,67 @@ export default async function PrePlanningPage({
         ]
       )
     )
+
+  const activitySequenceMap =
+    new Map(
+      (
+        activitySequenceResult.data ||
+        []
+      ).map(
+        (item) => [
+          item.project_work_package_id,
+          Number(item.pre_sequence_number) || 1,
+        ]
+      )
+    )
+
+  const orderedActivityWorkPackages =
+    [...workPackages]
+      .sort(
+        (first, second) => {
+          const firstSaved =
+            activitySequenceMap.has(first.id)
+
+          const secondSaved =
+            activitySequenceMap.has(second.id)
+
+          if (
+            firstSaved &&
+            secondSaved
+          ) {
+            const difference =
+              activitySequenceMap.get(first.id) -
+              activitySequenceMap.get(second.id)
+
+            if (difference !== 0) {
+              return difference
+            }
+          }
+
+          if (firstSaved !== secondSaved) {
+            return firstSaved ? -1 : 1
+          }
+
+          return first.code.localeCompare(
+            second.code
+          )
+        }
+      )
+
+  const activitySequenceItems =
+    orderedActivityWorkPackages.map(
+      (workPackage, index) => ({
+        id: workPackage.id,
+        code: workPackage.code,
+        description:
+          workPackage.description ||
+          'Work Package',
+        color:
+          workPackage.color || null,
+        sequence: index + 1,
+      })
+    )
+
 
   const calculations =
     allocations
@@ -2056,6 +2143,27 @@ export default async function PrePlanningPage({
       <section
         style={{
           overflow: 'hidden',
+          border: `1px solid ${BORDER}`,
+          borderRadius: '12px',
+          background: '#ffffff',
+        }}
+      >
+        <SectionHeader
+          step="3"
+          title="Activity Pre-Sequence"
+          description="Drag Work Packages up or down to define the preliminary production flow. RitsuFlow renumbers and saves the sequence automatically after every drop."
+        />
+
+        <ActivityPreSequence
+          projectId={selectedProject.id}
+          initialItems={activitySequenceItems}
+        />
+      </section>
+
+
+      <section
+        style={{
+          overflow: 'hidden',
           border:
             `1px solid ${BORDER}`,
           borderRadius: '12px',
@@ -2063,7 +2171,7 @@ export default async function PrePlanningPage({
         }}
       >
         <SectionHeader
-          step="3"
+          step="4"
           title="Takt & Balancing"
           description="Set the common production rhythm. RitsuFlow compares calculated production capability with the Target Takt and identifies balancing requirements."
         />
@@ -2202,7 +2310,7 @@ export default async function PrePlanningPage({
         }}
       >
         <SectionHeader
-          step="4"
+          step="5"
           title="Flow Review"
           description="Review Work Package duration by production location against the common Target Takt. This matrix exposes bottlenecks and underloaded production packages before scheduling."
         />
@@ -2478,7 +2586,7 @@ export default async function PrePlanningPage({
         }}
       >
         <SectionHeader
-          step="5"
+          step="6"
           title="Production Strategy"
           description="Approve the production strategy only after Production Parameters, Work Package logic, Target Takt and flow balance have been reviewed."
         />
