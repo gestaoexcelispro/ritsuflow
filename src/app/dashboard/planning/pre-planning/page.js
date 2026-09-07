@@ -13,6 +13,10 @@ const MUTED = '#6b7d8d'
 const BORDER = '#dce5ed'
 
 
+/* =========================================================
+   LOCATION HELPERS
+   ========================================================= */
+
 function buildLocationMap(
   locations
 ) {
@@ -42,6 +46,7 @@ function locationTypeLabel(
     custom: 'Custom',
   }
 
+
   return (
     labels[value] ||
     value ||
@@ -58,7 +63,9 @@ function getLocationChain(
   const visited = new Set()
 
   let cursor =
-    location || null
+    location ||
+    null
+
 
   while (
     cursor &&
@@ -70,9 +77,11 @@ function getLocationChain(
       cursor.id
     )
 
+
     chain.unshift(
       cursor
     )
+
 
     cursor =
       cursor.parent_id
@@ -81,6 +90,7 @@ function getLocationChain(
           )
         : null
   }
+
 
   return chain
 }
@@ -143,6 +153,7 @@ function resolveProductionLocation(
       chain[
         index
       ]?.location_type
+
 
     if (
       type === 'floor' ||
@@ -233,6 +244,10 @@ function resolveProductionLocation(
 }
 
 
+/* =========================================================
+   ACTIVITY CALCULATION
+   ========================================================= */
+
 function calculateActivity({
   allocation,
   scopeItem,
@@ -305,8 +320,9 @@ function calculateActivity({
   return {
     /*
      * IMPORTANT:
-     * allocation.id is the
-     * Pre-Planning activity identity.
+     *
+     * allocation.id is the Pre-Planning
+     * production activity identity.
      */
     id:
       allocation.id,
@@ -314,6 +330,11 @@ function calculateActivity({
     allocationId:
       allocation.id,
 
+    /*
+     * serviceId is the stable Scope Item
+     * identity used when copying production
+     * sequences between locations/divisions.
+     */
     serviceId:
       scopeItem.id,
 
@@ -344,10 +365,10 @@ function calculateActivity({
       'unit',
 
     /*
-     * These remain available to the
-     * calculation layer and inspector
-     * logic, but Quantity and Capacity
-     * are no longer shown on the page.
+     * Quantity and Production Capacity
+     * remain part of the calculation layer
+     * even though they are not displayed
+     * in the main Pre-Planning grid.
      */
     quantity,
 
@@ -376,6 +397,10 @@ function calculateActivity({
 }
 
 
+/* =========================================================
+   DEFAULT ACTIVITY ORDER
+   ========================================================= */
+
 function sortDefaultActivities(
   activities
 ) {
@@ -398,6 +423,7 @@ function sortDefaultActivities(
             numeric: true,
           }
         )
+
 
       if (
         locationDifference !==
@@ -422,6 +448,7 @@ function sortDefaultActivities(
           }
         )
 
+
       if (
         divisionDifference !==
         0
@@ -439,6 +466,7 @@ function sortDefaultActivities(
           second.serviceSequence ||
           0
         )
+
 
       if (
         serviceDifference !==
@@ -462,6 +490,10 @@ function sortDefaultActivities(
 }
 
 
+/* =========================================================
+   SAVED SEQUENCE
+   ========================================================= */
+
 function applySavedSequence(
   activities,
   sequenceRows
@@ -470,7 +502,8 @@ function applySavedSequence(
     !Array.isArray(
       sequenceRows
     ) ||
-    sequenceRows.length === 0
+    sequenceRows.length ===
+      0
   ) {
     return activities
   }
@@ -503,6 +536,7 @@ function applySavedSequence(
           activity.id
         )
 
+
       if (
         Number.isFinite(
           savedSequence
@@ -533,9 +567,8 @@ function applySavedSequence(
 
   /*
    * Newly allocated activities that
-   * did not exist when the version was
-   * last saved are appended rather than
-   * silently discarded.
+   * were not present when the version
+   * was saved are appended.
    */
   return [
     ...sequenced.map(
@@ -546,6 +579,131 @@ function applySavedSequence(
   ]
 }
 
+
+/* =========================================================
+   VERSION HELPERS
+   ========================================================= */
+
+function normalizeVersion(
+  version
+) {
+  if (!version) {
+    return null
+  }
+
+
+  return {
+    id:
+      version.id,
+
+    versionNumber:
+      Number(
+        version.version_number
+      ),
+
+    versionName:
+      version.version_name ||
+      `Version ${version.version_number}`,
+
+    status:
+      version.status,
+
+    isCurrent:
+      Boolean(
+        version.is_current
+      ),
+
+    createdAt:
+      version.created_at ||
+      null,
+
+    updatedAt:
+      version.updated_at ||
+      null,
+  }
+}
+
+
+function buildVersionSequenceMap(
+  rows
+) {
+  const grouped =
+    new Map()
+
+
+  ;(
+    rows ||
+    []
+  ).forEach(
+    (row) => {
+      if (
+        !row.version_id ||
+        !row.allocation_id
+      ) {
+        return
+      }
+
+
+      if (
+        !grouped.has(
+          row.version_id
+        )
+      ) {
+        grouped.set(
+          row.version_id,
+          []
+        )
+      }
+
+
+      grouped
+        .get(
+          row.version_id
+        )
+        .push({
+          allocationId:
+            row.allocation_id,
+
+          sequenceNumber:
+            Number(
+              row.sequence_number
+            ),
+        })
+    }
+  )
+
+
+  const result = {}
+
+
+  grouped.forEach(
+    (
+      sequence,
+      versionId
+    ) => {
+      result[
+        versionId
+      ] =
+        [...sequence]
+          .sort(
+            (
+              first,
+              second
+            ) =>
+              first.sequenceNumber -
+              second.sequenceNumber
+          )
+    }
+  )
+
+
+  return result
+}
+
+
+/* =========================================================
+   PROJECT SELECTOR
+   ========================================================= */
 
 function ProjectSelector({
   projects,
@@ -576,6 +734,7 @@ function ProjectSelector({
         >
           Pre-Planning
         </h2>
+
 
         <p
           style={{
@@ -632,6 +791,7 @@ function ProjectSelector({
                   }
                 </div>
 
+
                 <div
                   style={{
                     marginTop: '5px',
@@ -644,6 +804,7 @@ function ProjectSelector({
                     project.name
                   }
                 </div>
+
 
                 <div
                   style={{
@@ -677,6 +838,10 @@ function ProjectSelector({
   )
 }
 
+
+/* =========================================================
+   PAGE
+   ========================================================= */
 
 export default async function PrePlanningPage({
   searchParams,
@@ -717,12 +882,18 @@ export default async function PrePlanningPage({
   }
 
 
+  /* =======================================================
+     PROJECTS
+     ======================================================= */
+
   const {
     data: projectsData,
     error: projectsError,
   } =
     await supabase
-      .from('projects')
+      .from(
+        'projects'
+      )
       .select(
         `
           id,
@@ -775,6 +946,10 @@ export default async function PrePlanningPage({
     )
   }
 
+
+  /* =======================================================
+     PROJECT DATA
+     ======================================================= */
 
   const [
     workPackagesResult,
@@ -976,6 +1151,10 @@ export default async function PrePlanningPage({
   }
 
 
+  /* =======================================================
+     NORMALIZED PROJECT DATA
+     ======================================================= */
+
   const workPackages =
     (
       workPackagesResult.data ||
@@ -1018,24 +1197,29 @@ export default async function PrePlanningPage({
     null
 
 
-  const versions =
+  const rawVersions =
     versionsResult.data ||
     []
 
 
   const currentVersion =
-    versions.find(
+    rawVersions.find(
       (version) =>
         version.is_current
     ) ||
     null
 
 
-  let sequenceRows = []
+  /* =======================================================
+     LOAD ALL SAVED VERSION SEQUENCES
+     ======================================================= */
+
+  let allSequenceRows = []
 
 
   if (
-    currentVersion
+    rawVersions.length >
+    0
   ) {
     const {
       data,
@@ -1047,6 +1231,7 @@ export default async function PrePlanningPage({
         )
         .select(
           `
+            version_id,
             allocation_id,
             sequence_number
           `
@@ -1054,10 +1239,6 @@ export default async function PrePlanningPage({
         .eq(
           'project_id',
           selectedProject.id
-        )
-        .eq(
-          'version_id',
-          currentVersion.id
         )
         .order(
           'sequence_number',
@@ -1069,16 +1250,72 @@ export default async function PrePlanningPage({
 
     if (error) {
       console.error(
-        'Current Pre-Planning sequence could not be loaded.',
+        'Pre-Planning version sequences could not be loaded.',
         error
       )
     } else {
-      sequenceRows =
+      allSequenceRows =
         data ||
         []
     }
   }
 
+
+  /*
+   * Keep database-style rows for the
+   * current version because the existing
+   * activity ordering helper consumes
+   * allocation_id / sequence_number.
+   */
+  const currentSequenceRows =
+    currentVersion
+      ? allSequenceRows.filter(
+          (row) =>
+            row.version_id ===
+            currentVersion.id
+        )
+      : []
+
+
+  /*
+   * Client-friendly sequence map.
+   *
+   * Example:
+   *
+   * {
+   *   "<version-id>": [
+   *     {
+   *       allocationId: "...",
+   *       sequenceNumber: 1
+   *     }
+   *   ]
+   * }
+   *
+   * The next PrePlanningWorkspace update
+   * will use this to switch version
+   * snapshots instantly.
+   */
+  const versionSequences =
+    buildVersionSequenceMap(
+      allSequenceRows
+    )
+
+
+  const versions =
+    rawVersions.map(
+      normalizeVersion
+    )
+
+
+  const normalizedCurrentVersion =
+    normalizeVersion(
+      currentVersion
+    )
+
+
+  /* =======================================================
+     LOOKUP MAPS
+     ======================================================= */
 
   const workPackageMap =
     new Map(
@@ -1118,6 +1355,10 @@ export default async function PrePlanningPage({
       locations
     )
 
+
+  /* =======================================================
+     BUILD ACTIVITIES
+     ======================================================= */
 
   const activities =
     allocations
@@ -1179,10 +1420,18 @@ export default async function PrePlanningPage({
     )
 
 
+  /*
+   * Backward compatibility:
+   *
+   * The workspace still opens on the
+   * current working version exactly as
+   * it did before version management
+   * was introduced.
+   */
   const orderedActivities =
     applySavedSequence(
       defaultActivities,
-      sequenceRows
+      currentSequenceRows
     )
 
 
@@ -1192,6 +1441,10 @@ export default async function PrePlanningPage({
     )
 
 
+  /* =======================================================
+     WORKSPACE
+     ======================================================= */
+
   return (
     <PrePlanningWorkspace
       project={
@@ -1200,6 +1453,44 @@ export default async function PrePlanningPage({
 
       activities={
         orderedActivities
+      }
+
+      /*
+       * Complete version catalog.
+       *
+       * Used by the upcoming version
+       * selector / manager.
+       */
+      versions={
+        versions
+      }
+
+      /*
+       * Saved sequence snapshot for every
+       * version.
+       */
+      versionSequences={
+        versionSequences
+      }
+
+      /*
+       * Explicit current version.
+       *
+       * New version-management UI will
+       * distinguish Current Version from
+       * Selected Version.
+       */
+      currentVersion={
+        normalizedCurrentVersion
+      }
+
+      /*
+       * Backward-compatible prop used by
+       * the current workspace until the
+       * next component replacement.
+       */
+      activeVersion={
+        normalizedCurrentVersion
       }
 
       targetTakt={
@@ -1214,30 +1505,6 @@ export default async function PrePlanningPage({
       strategyStatus={
         settings?.status ||
         'draft'
-      }
-
-      activeVersion={
-        currentVersion
-          ? {
-              id:
-                currentVersion.id,
-
-              versionNumber:
-                Number(
-                  currentVersion.version_number
-                ),
-
-              versionName:
-                currentVersion.version_name ||
-                `Version ${currentVersion.version_number}`,
-
-              status:
-                currentVersion.status,
-
-              updatedAt:
-                currentVersion.updated_at,
-            }
-          : null
       }
 
       versionCount={
