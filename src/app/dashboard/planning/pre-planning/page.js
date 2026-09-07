@@ -18,16 +18,12 @@ const DANGER = '#b42318'
    LOCATION HELPERS
    ========================================================= */
 
-function buildLocationMap(
-  locations
-) {
+function buildLocationMap(locations) {
   return new Map(
-    locations.map(
-      (location) => [
-        location.id,
-        location,
-      ]
-    )
+    locations.map((location) => [
+      location.id,
+      location,
+    ])
   )
 }
 
@@ -41,28 +37,18 @@ function buildLocationPath(
   }
 
   const parts = []
-  const visited =
-    new Set()
+  const visited = new Set()
 
-  let cursor =
-    location
+  let cursor = location
 
   while (
     cursor &&
-    !visited.has(
-      cursor.id
-    )
+    !visited.has(cursor.id)
   ) {
-    visited.add(
-      cursor.id
-    )
+    visited.add(cursor.id)
 
-    if (
-      cursor.name
-    ) {
-      parts.unshift(
-        cursor.name
-      )
+    if (cursor.name) {
+      parts.unshift(cursor.name)
     }
 
     cursor =
@@ -81,108 +67,93 @@ function buildLocationPath(
 }
 
 
-function buildLocationDepth(
+function getPlanningLocationStructure(
   location,
   locationMap
 ) {
-  let depth = 0
-
-  const visited =
-    new Set()
-
-  let cursor =
-    location
-
-  while (
-    cursor?.parent_id &&
-    !visited.has(
-      cursor.parent_id
-    )
-  ) {
-    visited.add(
-      cursor.parent_id
-    )
-
-    depth += 1
-
-    cursor =
-      locationMap.get(
-        cursor.parent_id
-      )
+  if (!location) {
+    return {
+      locationName: '—',
+      locationId: null,
+      divisionName: '—',
+      divisionId: null,
+      divisionType: null,
+      fullPath: '—',
+    }
   }
 
-  return depth
-}
+  const parent =
+    location.parent_id
+      ? locationMap.get(
+          location.parent_id
+        )
+      : null
 
+  /*
+   * RitsuFlow Pre-Planning terminology:
+   *
+   * Location = parent production location
+   * Example: Level 1
+   *
+   * Division = production subdivision
+   * Example: Zone A, Area A, Block A, Wing A
+   *
+   * If the allocated location has no parent,
+   * the location itself becomes the Location
+   * and Division remains empty.
+   */
 
-function compareLocations(
-  first,
-  second,
-  locationMap
-) {
-  if (
-    !first &&
-    !second
-  ) {
-    return 0
+  if (parent) {
+    return {
+      locationName:
+        parent.name ||
+        'Location',
+
+      locationId:
+        parent.id,
+
+      divisionName:
+        location.name ||
+        'Division',
+
+      divisionId:
+        location.id,
+
+      divisionType:
+        location.location_type ||
+        null,
+
+      fullPath:
+        buildLocationPath(
+          location,
+          locationMap
+        ),
+    }
   }
 
-  if (!first) {
-    return 1
+  return {
+    locationName:
+      location.name ||
+      'Location',
+
+    locationId:
+      location.id,
+
+    divisionName:
+      '—',
+
+    divisionId:
+      null,
+
+    divisionType:
+      null,
+
+    fullPath:
+      buildLocationPath(
+        location,
+        locationMap
+      ),
   }
-
-  if (!second) {
-    return -1
-  }
-
-  const firstDepth =
-    buildLocationDepth(
-      first,
-      locationMap
-    )
-
-  const secondDepth =
-    buildLocationDepth(
-      second,
-      locationMap
-    )
-
-  if (
-    firstDepth !==
-    secondDepth
-  ) {
-    return (
-      firstDepth -
-      secondDepth
-    )
-  }
-
-  const sequenceDifference =
-    Number(
-      first.sequence_number ||
-      0
-    ) -
-    Number(
-      second.sequence_number ||
-      0
-    )
-
-  if (
-    sequenceDifference !==
-    0
-  ) {
-    return sequenceDifference
-  }
-
-  return buildLocationPath(
-    first,
-    locationMap
-  ).localeCompare(
-    buildLocationPath(
-      second,
-      locationMap
-    )
-  )
 }
 
 
@@ -233,19 +204,6 @@ function calculateActivity({
     ) &&
     effectiveWorkforce > 0
 
-  /*
-   * Existing RitsuFlow Production Parameters logic:
-   *
-   * worker_day:
-   * productivity × effective workers
-   *
-   * crew_day:
-   * productivity × effective crews
-   *
-   * Raw Duration:
-   * quantity ÷ production capacity
-   */
-
   const productionCapacity =
     hasProductivity &&
     hasEffectiveResource
@@ -263,13 +221,16 @@ function calculateActivity({
         productionCapacity
       : null
 
+  const planningLocation =
+    getPlanningLocationStructure(
+      location,
+      locationMap
+    )
+
   return {
     /*
-     * One activity =
-     * Scope Item × Location allocation.
-     *
-     * allocation.id is therefore
-     * the correct V1 activity identity.
+     * Activity identity:
+     * Scope Item × allocated production location
      */
     id:
       allocation.id,
@@ -277,7 +238,7 @@ function calculateActivity({
     serviceId:
       scopeItem.id,
 
-    locationId:
+    allocatedLocationId:
       location.id,
 
     workPackageId:
@@ -309,18 +270,26 @@ function calculateActivity({
         0
       ),
 
-    locationPath:
-      buildLocationPath(
-        location,
-        locationMap
-      ),
+    /*
+     * Planning location hierarchy
+     */
+    locationId:
+      planningLocation.locationId,
 
-    locationSequence:
-      Number(
-        location
-          ?.sequence_number ||
-        0
-      ),
+    locationName:
+      planningLocation.locationName,
+
+    divisionId:
+      planningLocation.divisionId,
+
+    divisionName:
+      planningLocation.divisionName,
+
+    divisionType:
+      planningLocation.divisionType,
+
+    locationPath:
+      planningLocation.fullPath,
 
     quantity,
 
@@ -371,23 +340,18 @@ function ProjectSelector({
     >
       <div
         style={{
-          padding:
-            '22px',
+          padding: '22px',
           border:
             `1px solid ${BORDER}`,
-          borderRadius:
-            '12px',
-          background:
-            '#ffffff',
+          borderRadius: '12px',
+          background: '#ffffff',
         }}
       >
         <div
           style={{
             color: TEAL,
-            fontSize:
-              '10px',
-            fontWeight:
-              900,
+            fontSize: '10px',
+            fontWeight: 900,
             letterSpacing:
               '0.08em',
             textTransform:
@@ -399,13 +363,10 @@ function ProjectSelector({
 
         <h1
           style={{
-            margin:
-              '7px 0 0',
+            margin: '7px 0 0',
             color: NAVY,
-            fontSize:
-              '22px',
-            fontWeight:
-              900,
+            fontSize: '22px',
+            fontWeight: 900,
           }}
         >
           Pre-Planning
@@ -413,37 +374,28 @@ function ProjectSelector({
 
         <p
           style={{
-            maxWidth:
-              '820px',
-            margin:
-              '8px 0 0',
+            maxWidth: '820px',
+            margin: '8px 0 0',
             color: MUTED,
-            fontSize:
-              '13px',
-            lineHeight:
-              1.55,
+            fontSize: '13px',
+            lineHeight: 1.55,
           }}
         >
           Select a project to visualize its existing production data before detailed planning begins.
         </p>
       </div>
 
-
-      {projects.length >
-      0 ? (
+      {projects.length > 0 ? (
         <div
           style={{
-            display:
-              'grid',
+            display: 'grid',
             gridTemplateColumns:
               'repeat(auto-fit, minmax(270px, 1fr))',
             gap: '12px',
           }}
         >
           {projects.map(
-            (
-              project
-            ) => (
+            (project) => (
               <Link
                 key={
                   project.id
@@ -452,27 +404,23 @@ function ProjectSelector({
                   project.id
                 )}`}
                 style={{
-                  display:
-                    'grid',
+                  display: 'grid',
                   gap: '6px',
-                  padding:
-                    '18px',
+                  padding: '18px',
                   border:
                     `1px solid ${BORDER}`,
                   borderRadius:
                     '10px',
                   background:
                     '#ffffff',
-                  color:
-                    'inherit',
+                  color: 'inherit',
                   textDecoration:
                     'none',
                 }}
               >
                 <div
                   style={{
-                    color:
-                      TEAL,
+                    color: TEAL,
                     fontSize:
                       '10px',
                     fontWeight:
@@ -489,8 +437,7 @@ function ProjectSelector({
 
                 <div
                   style={{
-                    color:
-                      NAVY,
+                    color: NAVY,
                     fontSize:
                       '15px',
                     fontWeight:
@@ -504,8 +451,7 @@ function ProjectSelector({
                   style={{
                     marginTop:
                       '5px',
-                    color:
-                      MUTED,
+                    color: MUTED,
                     fontSize:
                       '10px',
                     fontWeight:
@@ -521,8 +467,7 @@ function ProjectSelector({
       ) : (
         <div
           style={{
-            padding:
-              '20px',
+            padding: '20px',
             border:
               `1px solid ${BORDER}`,
             borderRadius:
@@ -530,8 +475,7 @@ function ProjectSelector({
             background:
               '#ffffff',
             color: MUTED,
-            fontSize:
-              '13px',
+            fontSize: '13px',
           }}
         >
           No accessible projects were found.
@@ -579,16 +523,14 @@ export default async function PrePlanningPage({
     return (
       <div
         style={{
-          padding:
-            '24px',
+          padding: '24px',
           border:
             `1px solid ${BORDER}`,
           borderRadius:
             '10px',
           background:
             '#ffffff',
-          color:
-            MUTED,
+          color: MUTED,
           fontSize:
             '13px',
         }}
@@ -610,9 +552,7 @@ export default async function PrePlanningPage({
       projectsError,
   } =
     await supabase
-      .from(
-        'projects'
-      )
+      .from('projects')
       .select(
         `
           id,
@@ -624,15 +564,12 @@ export default async function PrePlanningPage({
       .order(
         'code',
         {
-          ascending:
-            true,
+          ascending: true,
         }
       )
 
 
-  if (
-    projectsError
-  ) {
+  if (projectsError) {
     console.error(
       'Pre-Planning projects could not be loaded.',
       projectsError
@@ -641,20 +578,17 @@ export default async function PrePlanningPage({
     return (
       <div
         style={{
-          padding:
-            '20px',
+          padding: '20px',
           border:
             '1px solid #fecaca',
           borderRadius:
             '10px',
           background:
             '#fef2f2',
-          color:
-            DANGER,
+          color: DANGER,
           fontSize:
             '13px',
-          fontWeight:
-            700,
+          fontWeight: 700,
         }}
       >
         Projects could not be loaded.
@@ -667,21 +601,16 @@ export default async function PrePlanningPage({
     projectsData ||
     []
 
-
   const selectedProject =
     projects.find(
-      (
-        project
-      ) =>
+      (project) =>
         project.id ===
         selectedProjectId
     ) ||
     null
 
 
-  if (
-    !selectedProject
-  ) {
+  if (!selectedProject) {
     return (
       <ProjectSelector
         projects={
@@ -704,174 +633,141 @@ export default async function PrePlanningPage({
     productionParametersResult,
     settingsResult,
   ] =
-    await Promise.all(
-      [
-        /*
-         * Work Packages
-         */
-        supabase
-          .from(
-            'project_work_packages'
-          )
-          .select(
-            `
-              id,
-              code,
-              description,
-              color,
-              is_active
-            `
-          )
-          .eq(
-            'project_id',
-            selectedProject.id
-          )
-          .order(
-            'code',
-            {
-              ascending:
-                true,
-            }
-          ),
+    await Promise.all([
+      supabase
+        .from(
+          'project_work_packages'
+        )
+        .select(
+          `
+            id,
+            code,
+            description,
+            color,
+            is_active
+          `
+        )
+        .eq(
+          'project_id',
+          selectedProject.id
+        )
+        .order(
+          'code',
+          {
+            ascending:
+              true,
+          }
+        ),
 
+      supabase
+        .from(
+          'project_services'
+        )
+        .select(
+          `
+            id,
+            project_work_package_id,
+            service_name,
+            unit,
+            scope_quantity,
+            sequence_number,
+            is_active
+          `
+        )
+        .eq(
+          'project_id',
+          selectedProject.id
+        )
+        .order(
+          'sequence_number',
+          {
+            ascending:
+              true,
+          }
+        ),
 
-        /*
-         * Scope Items
-         */
-        supabase
-          .from(
-            'project_services'
-          )
-          .select(
-            `
-              id,
-              project_work_package_id,
-              service_name,
-              unit,
-              scope_quantity,
-              sequence_number,
-              is_active
-            `
-          )
-          .eq(
-            'project_id',
-            selectedProject.id
-          )
-          .order(
-            'sequence_number',
-            {
-              ascending:
-                true,
-            }
-          ),
+      supabase
+        .from('locations')
+        .select(
+          `
+            id,
+            parent_id,
+            name,
+            location_type,
+            sequence_number
+          `
+        )
+        .eq(
+          'project_id',
+          selectedProject.id
+        )
+        .order(
+          'sequence_number',
+          {
+            ascending:
+              true,
+          }
+        ),
 
+      supabase
+        .from(
+          'location_service_quantities'
+        )
+        .select(
+          `
+            id,
+            location_id,
+            service_id,
+            quantity
+          `
+        )
+        .eq(
+          'project_id',
+          selectedProject.id
+        )
+        .gt(
+          'quantity',
+          0
+        ),
 
-        /*
-         * Location Structure
-         */
-        supabase
-          .from(
-            'locations'
-          )
-          .select(
-            `
-              id,
-              parent_id,
-              name,
-              location_type,
-              sequence_number
-            `
-          )
-          .eq(
-            'project_id',
-            selectedProject.id
-          )
-          .order(
-            'sequence_number',
-            {
-              ascending:
-                true,
-            }
-          ),
+      supabase
+        .from(
+          'project_service_production_parameters'
+        )
+        .select(
+          `
+            id,
+            service_id,
+            productivity_rate,
+            quantity_unit,
+            productivity_basis,
+            effective_workforce
+          `
+        )
+        .eq(
+          'project_id',
+          selectedProject.id
+        ),
 
-
-        /*
-         * Scope quantities allocated
-         * to production locations.
-         */
-        supabase
-          .from(
-            'location_service_quantities'
-          )
-          .select(
-            `
-              id,
-              location_id,
-              service_id,
-              quantity
-            `
-          )
-          .eq(
-            'project_id',
-            selectedProject.id
-          )
-          .gt(
-            'quantity',
-            0
-          ),
-
-
-        /*
-         * Existing Production Parameters.
-         *
-         * Pre-Planning consumes these.
-         * It does not duplicate them.
-         */
-        supabase
-          .from(
-            'project_service_production_parameters'
-          )
-          .select(
-            `
-              id,
-              service_id,
-              productivity_rate,
-              quantity_unit,
-              productivity_basis,
-              effective_workforce
-            `
-          )
-          .eq(
-            'project_id',
-            selectedProject.id
-          ),
-
-
-        /*
-         * Existing Target Takt / approval status.
-         *
-         * V1 only displays this information.
-         */
-        supabase
-          .from(
-            'project_pre_planning_settings'
-          )
-          .select(
-            `
-              project_id,
-              target_takt_days,
-              status,
-              approved_at,
-              approved_by
-            `
-          )
-          .eq(
-            'project_id',
-            selectedProject.id
-          )
-          .maybeSingle(),
-      ]
-    )
+      supabase
+        .from(
+          'project_pre_planning_settings'
+        )
+        .select(
+          `
+            project_id,
+            target_takt_days,
+            status,
+            approved_at,
+            approved_by
+          `
+        )
+        .eq(
+          'project_id',
+          selectedProject.id
+        )
+        .maybeSingle(),
+    ])
 
 
   const loadErrors =
@@ -882,15 +778,10 @@ export default async function PrePlanningPage({
       allocationsResult.error,
       productionParametersResult.error,
       settingsResult.error,
-    ].filter(
-      Boolean
-    )
+    ].filter(Boolean)
 
 
-  if (
-    loadErrors.length >
-    0
-  ) {
+  if (loadErrors.length > 0) {
     console.error(
       'Pre-Planning data could not be loaded.',
       loadErrors
@@ -899,27 +790,23 @@ export default async function PrePlanningPage({
     return (
       <section
         style={{
-          display:
-            'grid',
+          display: 'grid',
           gap: '12px',
         }}
       >
         <div
           style={{
-            padding:
-              '20px',
+            padding: '20px',
             border:
               '1px solid #fecaca',
             borderRadius:
               '10px',
             background:
               '#fef2f2',
-            color:
-              DANGER,
+            color: DANGER,
             fontSize:
               '13px',
-            fontWeight:
-              700,
+            fontWeight: 700,
           }}
         >
           One or more Pre-Planning data sources could not be loaded.
@@ -930,8 +817,7 @@ export default async function PrePlanningPage({
           style={{
             width:
               'fit-content',
-            color:
-              NAVY,
+            color: NAVY,
             fontSize:
               '12px',
             fontWeight:
@@ -948,7 +834,7 @@ export default async function PrePlanningPage({
 
 
   /* ---------------------------------------------------------
-     NORMALIZE DATA
+     NORMALIZE
      --------------------------------------------------------- */
 
   const workPackages =
@@ -957,13 +843,10 @@ export default async function PrePlanningPage({
         .data ||
       []
     ).filter(
-      (
-        item
-      ) =>
+      (item) =>
         item.is_active !==
         false
     )
-
 
   const scopeItems =
     (
@@ -971,31 +854,25 @@ export default async function PrePlanningPage({
         .data ||
       []
     ).filter(
-      (
-        item
-      ) =>
+      (item) =>
         item.is_active !==
         false
     )
-
 
   const locations =
     locationsResult
       .data ||
     []
 
-
   const allocations =
     allocationsResult
       .data ||
     []
 
-
   const productionParameters =
     productionParametersResult
       .data ||
     []
-
 
   const settings =
     settingsResult
@@ -1004,47 +881,38 @@ export default async function PrePlanningPage({
 
 
   /* ---------------------------------------------------------
-     LOOKUP MAPS
+     LOOKUPS
      --------------------------------------------------------- */
 
   const workPackageMap =
     new Map(
       workPackages.map(
-        (
-          item
-        ) => [
+        (item) => [
           item.id,
           item,
         ]
       )
     )
-
 
   const scopeItemMap =
     new Map(
       scopeItems.map(
-        (
-          item
-        ) => [
+        (item) => [
           item.id,
           item,
         ]
       )
     )
-
 
   const locationMap =
     buildLocationMap(
       locations
     )
 
-
   const parameterMap =
     new Map(
       productionParameters.map(
-        (
-          item
-        ) => [
+        (item) => [
           item.service_id,
           item,
         ]
@@ -1053,18 +921,13 @@ export default async function PrePlanningPage({
 
 
   /* ---------------------------------------------------------
-     BUILD PRODUCTION ACTIVITIES
-
-     One row =
-     Scope Item × Location
+     BUILD ACTIVITIES
      --------------------------------------------------------- */
 
   const activities =
     allocations
       .map(
-        (
-          allocation
-        ) => {
+        (allocation) => {
           const scopeItem =
             scopeItemMap.get(
               allocation.service_id
@@ -1088,13 +951,7 @@ export default async function PrePlanningPage({
                 .project_work_package_id
             )
 
-          /*
-           * Ignore allocation rows whose
-           * Work Package is no longer active.
-           */
-          if (
-            !workPackage
-          ) {
+          if (!workPackage) {
             return null
           }
 
@@ -1113,20 +970,13 @@ export default async function PrePlanningPage({
           })
         }
       )
-      .filter(
-        Boolean
-      )
+      .filter(Boolean)
 
 
   /* ---------------------------------------------------------
-     ORDER ACTIVITIES
+     VISUAL ORGANIZATION ONLY
 
-     V1 does NOT invent production precedence.
-
-     Sorting is only for visual organization:
-     Work Package → Scope Item → Location.
-
-     All bars still begin at Day 0.
+     This is not scheduling precedence.
      --------------------------------------------------------- */
 
   activities.sort(
@@ -1134,6 +984,50 @@ export default async function PrePlanningPage({
       first,
       second
     ) => {
+      const locationDifference =
+        String(
+          first.locationName ||
+          ''
+        ).localeCompare(
+          String(
+            second.locationName ||
+            ''
+          ),
+          undefined,
+          {
+            numeric: true,
+          }
+        )
+
+      if (
+        locationDifference !==
+        0
+      ) {
+        return locationDifference
+      }
+
+      const divisionDifference =
+        String(
+          first.divisionName ||
+          ''
+        ).localeCompare(
+          String(
+            second.divisionName ||
+            ''
+          ),
+          undefined,
+          {
+            numeric: true,
+          }
+        )
+
+      if (
+        divisionDifference !==
+        0
+      ) {
+        return divisionDifference
+      }
+
       const workPackageDifference =
         String(
           first.workPackageCode ||
@@ -1152,8 +1046,7 @@ export default async function PrePlanningPage({
         return workPackageDifference
       }
 
-
-      const scopeSequenceDifference =
+      const sequenceDifference =
         Number(
           first.scopeSequence ||
           0
@@ -1164,46 +1057,20 @@ export default async function PrePlanningPage({
         )
 
       if (
-        scopeSequenceDifference !==
+        sequenceDifference !==
         0
       ) {
-        return scopeSequenceDifference
+        return sequenceDifference
       }
 
-
-      const scopeNameDifference =
+      return String(
+        first.scopeItemName ||
+        ''
+      ).localeCompare(
         String(
-          first.scopeItemName ||
+          second.scopeItemName ||
           ''
-        ).localeCompare(
-          String(
-            second.scopeItemName ||
-            ''
-          )
         )
-
-      if (
-        scopeNameDifference !==
-        0
-      ) {
-        return scopeNameDifference
-      }
-
-
-      const firstLocation =
-        locationMap.get(
-          first.locationId
-        )
-
-      const secondLocation =
-        locationMap.get(
-          second.locationId
-        )
-
-      return compareLocations(
-        firstLocation,
-        secondLocation,
-        locationMap
       )
     }
   )
@@ -1219,13 +1086,11 @@ export default async function PrePlanningPage({
         ?.target_takt_days
     )
 
-
   const targetTakt =
     Number.isFinite(
       parsedTargetTakt
     ) &&
-    parsedTargetTakt >
-    0
+    parsedTargetTakt > 0
       ? parsedTargetTakt
       : null
 
@@ -1234,10 +1099,6 @@ export default async function PrePlanningPage({
     settings?.status ||
     'draft'
 
-
-  /* ---------------------------------------------------------
-     WORKSPACE
-     --------------------------------------------------------- */
 
   return (
     <PrePlanningWorkspace
