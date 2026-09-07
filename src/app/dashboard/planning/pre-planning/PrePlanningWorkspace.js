@@ -272,6 +272,380 @@ function reorderVisibleActivities({
 }
 
 
+/* =========================================================
+   APPLY SEQUENCE HELPERS
+   ========================================================= */
+
+function getScopeSequenceKey(
+  activity
+) {
+  /*
+   * Prefer a stable database identifier
+   * whenever page.js provides one.
+   *
+   * The textual fallback keeps the feature
+   * compatible with the current activity
+   * payload without changing the API.
+   */
+  const stableId =
+    activity?.scopeItemId ||
+    activity?.serviceId ||
+    activity?.projectServiceId ||
+    null
+
+
+  if (stableId) {
+    return `id:${stableId}`
+  }
+
+
+  const workPackage =
+    String(
+      activity?.workPackageCode ||
+      ''
+    )
+      .trim()
+      .toLowerCase()
+
+
+  const scopeItem =
+    String(
+      activity?.scopeItemName ||
+      ''
+    )
+      .trim()
+      .toLowerCase()
+
+
+  return `text:${workPackage}::${scopeItem}`
+}
+
+
+function getProductionGroupKey(
+  activity
+) {
+  const location =
+    activity?.locationId ||
+    '__no_location__'
+
+
+  const division =
+    activity?.divisionId ||
+    '__no_division__'
+
+
+  return `${location}::${division}`
+}
+
+
+function applySequenceTemplate({
+  fullOrder,
+  sourceLocationId,
+  sourceDivisionId,
+}) {
+  const sourceGroupKey =
+    `${sourceLocationId}::${sourceDivisionId}`
+
+
+  const sourceActivities =
+    fullOrder.filter(
+      (activity) =>
+        getProductionGroupKey(
+          activity
+        ) ===
+        sourceGroupKey
+    )
+
+
+  if (
+    sourceActivities.length ===
+    0
+  ) {
+    return {
+      activities:
+        fullOrder,
+
+      targetGroups:
+        0,
+
+      changedGroups:
+        0,
+
+      matchedActivities:
+        0,
+    }
+  }
+
+
+  /*
+   * Build the source template.
+   *
+   * Example:
+   *
+   * FRM - Interior Wall Framing -> 0
+   * FRM - Door Framing          -> 1
+   * ELE - Electrical Rough-In   -> 2
+   */
+  const sourceRank =
+    new Map()
+
+
+  sourceActivities.forEach(
+    (
+      activity,
+      index
+    ) => {
+      const key =
+        getScopeSequenceKey(
+          activity
+        )
+
+
+      if (
+        !sourceRank.has(
+          key
+        )
+      ) {
+        sourceRank.set(
+          key,
+          index
+        )
+      }
+    }
+  )
+
+
+  const groups =
+    new Map()
+
+
+  fullOrder.forEach(
+    (
+      activity,
+      globalIndex
+    ) => {
+      const groupKey =
+        getProductionGroupKey(
+          activity
+        )
+
+
+      if (
+        !groups.has(
+          groupKey
+        )
+      ) {
+        groups.set(
+          groupKey,
+          []
+        )
+      }
+
+
+      groups
+        .get(
+          groupKey
+        )
+        .push({
+          activity,
+          globalIndex,
+        })
+    }
+  )
+
+
+  const replacements =
+    new Map()
+
+
+  let targetGroups =
+    0
+  let changedGroups =
+    0
+  let matchedActivities =
+    0
+
+
+  groups.forEach(
+    (
+      entries,
+      groupKey
+    ) => {
+      /*
+       * Never rewrite the source group.
+       */
+      if (
+        groupKey ===
+        sourceGroupKey
+      ) {
+        return
+      }
+
+
+      /*
+       * Only matching scope items participate.
+       *
+       * Target-only activities remain exactly
+       * where they currently are.
+       */
+      const matchingEntries =
+        entries.filter(
+          ({
+            activity,
+          }) =>
+            sourceRank.has(
+              getScopeSequenceKey(
+                activity
+              )
+            )
+        )
+
+
+      if (
+        matchingEntries.length ===
+        0
+      ) {
+        return
+      }
+
+
+      targetGroups +=
+        1
+
+      matchedActivities +=
+        matchingEntries.length
+
+
+      const sortedMatchingActivities =
+        matchingEntries
+          .map(
+            (
+              entry,
+              originalIndex
+            ) => ({
+              activity:
+                entry.activity,
+
+              originalIndex,
+            })
+          )
+          .sort(
+            (
+              first,
+              second
+            ) => {
+              const firstRank =
+                sourceRank.get(
+                  getScopeSequenceKey(
+                    first.activity
+                  )
+                )
+
+
+              const secondRank =
+                sourceRank.get(
+                  getScopeSequenceKey(
+                    second.activity
+                  )
+                )
+
+
+              if (
+                firstRank !==
+                secondRank
+              ) {
+                return (
+                  firstRank -
+                  secondRank
+                )
+              }
+
+
+              return (
+                first.originalIndex -
+                second.originalIndex
+              )
+            }
+          )
+          .map(
+            ({
+              activity,
+            }) =>
+              activity
+          )
+
+
+      const groupChanged =
+        matchingEntries.some(
+          (
+            entry,
+            index
+          ) =>
+            entry.activity.id !==
+            sortedMatchingActivities[
+              index
+            ]?.id
+        )
+
+
+      if (
+        groupChanged
+      ) {
+        changedGroups +=
+          1
+      }
+
+
+      /*
+       * Replace only the slots occupied by
+       * matching scope items.
+       *
+       * Any activity that exists only in the
+       * target area remains untouched.
+       */
+      matchingEntries.forEach(
+        (
+          entry,
+          index
+        ) => {
+          replacements.set(
+            entry.globalIndex,
+            sortedMatchingActivities[
+              index
+            ]
+          )
+        }
+      )
+    }
+  )
+
+
+  const nextActivities =
+    fullOrder.map(
+      (
+        activity,
+        index
+      ) =>
+        replacements.get(
+          index
+        ) ||
+        activity
+    )
+
+
+  return {
+    activities:
+      nextActivities,
+
+    targetGroups,
+
+    changedGroups,
+
+    matchedActivities,
+  }
+}
+
+
 function orderSignature(
   activities
 ) {
@@ -715,6 +1089,13 @@ export default function PrePlanningWorkspace({
       'all'
 
 
+  const hasExactSourceFilter =
+    selectedLocation !==
+      'all' &&
+    selectedDivision !==
+      'all'
+
+
   /* =========================================================
      TIMELINE
      ========================================================= */
@@ -864,6 +1245,129 @@ export default function PrePlanningWorkspace({
 
     rowDragRef.current =
       null
+  }
+
+
+  /* =========================================================
+     APPLY SEQUENCE TO ALL LOCATIONS / DIVISIONS
+     ========================================================= */
+
+  function handleApplySequenceToAll() {
+    if (
+      actionState !==
+      'idle'
+    ) {
+      return
+    }
+
+
+    if (
+      selectedLocation ===
+        'all' ||
+      selectedDivision ===
+        'all'
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Select one Location and one Division to use as the source sequence.',
+      })
+
+      return
+    }
+
+
+    if (
+      filteredActivities.length ===
+      0
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'The selected source area has no activities.',
+      })
+
+      return
+    }
+
+
+    const result =
+      applySequenceTemplate({
+        fullOrder:
+          orderedActivities,
+
+        sourceLocationId:
+          selectedLocation,
+
+        sourceDivisionId:
+          selectedDivision,
+      })
+
+
+    if (
+      result.targetGroups ===
+      0
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'No other Location / Division groups contain matching scope items.',
+      })
+
+      return
+    }
+
+
+    const nextSignature =
+      orderSignature(
+        result.activities
+      )
+
+
+    if (
+      nextSignature ===
+      currentSignature
+    ) {
+      setNotice({
+        type:
+          'success',
+
+        text:
+          `${result.targetGroups} target ${
+            result.targetGroups ===
+            1
+              ? 'area already follows'
+              : 'areas already follow'
+          } this sequence.`,
+      })
+
+      return
+    }
+
+
+    setOrderedActivities(
+      result.activities
+    )
+
+
+    setNotice({
+      type:
+        'success',
+
+      text:
+        `Sequence applied to ${result.changedGroups} ${
+          result.changedGroups ===
+          1
+            ? 'area'
+            : 'areas'
+        }. Review and save when ready.`,
+    })
   }
 
 
@@ -1034,6 +1538,14 @@ export default function PrePlanningWorkspace({
     actionState !==
       'idle' ||
     !activeVersion
+
+
+  const applySequenceDisabled =
+    actionState !==
+      'idle' ||
+    !hasExactSourceFilter ||
+    filteredActivities.length ===
+      0
 
 
   /* =========================================================
@@ -1922,6 +2434,27 @@ export default function PrePlanningWorkspace({
               }
             </span>
           ) : null}
+
+
+          <button
+            type="button"
+            className={
+              styles.createVersionButton
+            }
+            disabled={
+              applySequenceDisabled
+            }
+            onClick={
+              handleApplySequenceToAll
+            }
+            title={
+              hasExactSourceFilter
+                ? 'Use this Location / Division sequence as the template for every other production area'
+                : 'Select one Location and one Division first'
+            }
+          >
+            Apply Sequence to All
+          </button>
 
 
           <button
