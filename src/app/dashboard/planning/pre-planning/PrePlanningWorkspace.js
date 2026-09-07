@@ -19,11 +19,10 @@ const MAX_DAY_WIDTH = 84
 const MIN_TIMELINE_DAYS = 30
 const TIMELINE_PADDING_DAYS = 15
 
-const SNAP_INCREMENT = 0.25
 const ROW_HEIGHT = 44
 
 const AUTO_SCROLL_EDGE = 70
-const AUTO_SCROLL_SPEED = 18
+const AUTO_SCROLL_SPEED = 16
 
 
 function safeNumber(
@@ -51,25 +50,6 @@ function safeNumber(
 }
 
 
-function snapDay(
-  value
-) {
-  const snapped =
-    Math.round(
-      value /
-      SNAP_INCREMENT
-    ) *
-    SNAP_INCREMENT
-
-  return Math.max(
-    0,
-    Number(
-      snapped.toFixed(2)
-    )
-  )
-}
-
-
 function getActivityStatus(
   activity,
   targetTakt
@@ -83,13 +63,9 @@ function getActivityStatus(
     Number(targetTakt)
 
   if (
-    !Number.isFinite(
-      rawDuration
-    ) ||
+    !Number.isFinite(rawDuration) ||
     rawDuration <= 0 ||
-    !Number.isFinite(
-      takt
-    ) ||
+    !Number.isFinite(takt) ||
     takt <= 0
   ) {
     return {
@@ -99,8 +75,7 @@ function getActivityStatus(
   }
 
   const utilization =
-    rawDuration /
-    takt
+    rawDuration / takt
 
   if (
     utilization > 1
@@ -183,6 +158,59 @@ function getActivityCode(
 }
 
 
+function moveItem(
+  items,
+  fromIndex,
+  toIndex
+) {
+  if (
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    fromIndex >= items.length
+  ) {
+    return items
+  }
+
+  const next =
+    [...items]
+
+  const [
+    movedItem,
+  ] =
+    next.splice(
+      fromIndex,
+      1
+    )
+
+  let insertionIndex =
+    toIndex
+
+  if (
+    toIndex >
+    fromIndex
+  ) {
+    insertionIndex -= 1
+  }
+
+  insertionIndex =
+    Math.max(
+      0,
+      Math.min(
+        insertionIndex,
+        next.length
+      )
+    )
+
+  next.splice(
+    insertionIndex,
+    0,
+    movedItem
+  )
+
+  return next
+}
+
+
 export default function PrePlanningWorkspace({
   project,
   activities = [],
@@ -203,6 +231,15 @@ export default function PrePlanningWorkspace({
 
 
   const [
+    orderedActivities,
+    setOrderedActivities,
+  ] =
+    useState(
+      normalizedActivities
+    )
+
+
+  const [
     selectedActivityId,
     setSelectedActivityId,
   ] =
@@ -213,27 +250,8 @@ export default function PrePlanningWorkspace({
 
 
   const [
-    startOffsets,
-    setStartOffsets,
-  ] =
-    useState(() => {
-      const initial = {}
-
-      normalizedActivities.forEach(
-        (activity) => {
-          initial[
-            activity.id
-          ] = 0
-        }
-      )
-
-      return initial
-    })
-
-
-  const [
-    dragging,
-    setDragging,
+    rowDrag,
+    setRowDrag,
   ] =
     useState(null)
 
@@ -260,31 +278,23 @@ export default function PrePlanningWorkspace({
     useRef(null)
 
 
+  /*
+   * If project/activity data changes,
+   * rebuild the local sequence.
+   */
   useEffect(
     () => {
-      setStartOffsets(
-        (current) => {
-          const next = {
-            ...current,
-          }
+      setOrderedActivities(
+        normalizedActivities
+      )
 
-          normalizedActivities.forEach(
-            (activity) => {
-              if (
-                next[
-                  activity.id
-                ] ===
-                undefined
-              ) {
-                next[
-                  activity.id
-                ] = 0
-              }
-            }
-          )
+      setSelectedActivityId(
+        normalizedActivities?.[0]?.id ||
+        null
+      )
 
-          return next
-        }
+      setRowDrag(
+        null
       )
     },
     [
@@ -296,63 +306,58 @@ export default function PrePlanningWorkspace({
   const selectedActivity =
     useMemo(
       () =>
-        normalizedActivities.find(
+        orderedActivities.find(
           (activity) =>
             activity.id ===
             selectedActivityId
         ) ||
-        normalizedActivities[0] ||
+        orderedActivities[0] ||
         null,
       [
-        normalizedActivities,
+        orderedActivities,
         selectedActivityId,
       ]
     )
 
 
-  const maxFinishOffset =
+  /*
+   * V1 timeline:
+   * all activities remain at Day 0.
+   *
+   * This iteration is focused only on
+   * vertical activity sequencing.
+   */
+  const maxRawDuration =
     useMemo(
       () => {
-        let maximum = 0
-
-        normalizedActivities.forEach(
-          (activity) => {
-            const duration =
-              Number(
-                activity.rawDuration
-              )
-
-            if (
-              !Number.isFinite(
-                duration
-              ) ||
-              duration <= 0
-            ) {
-              return
-            }
-
-            const start =
-              Number(
-                startOffsets[
-                  activity.id
-                ] ||
-                0
-              )
-
-            maximum =
-              Math.max(
-                maximum,
-                start +
+        const durations =
+          orderedActivities
+            .map(
+              (activity) =>
+                Number(
+                  activity.rawDuration
+                )
+            )
+            .filter(
+              (duration) =>
+                Number.isFinite(
                   duration
-              )
-          }
-        )
+                ) &&
+                duration > 0
+            )
 
-        return maximum
+        if (
+          durations.length === 0
+        ) {
+          return 0
+        }
+
+        return Math.max(
+          ...durations
+        )
       },
       [
-        normalizedActivities,
-        startOffsets,
+        orderedActivities,
       ]
     )
 
@@ -363,12 +368,12 @@ export default function PrePlanningWorkspace({
         Math.max(
           MIN_TIMELINE_DAYS,
           Math.ceil(
-            maxFinishOffset
+            maxRawDuration
           ) +
             TIMELINE_PADDING_DAYS
         ),
       [
-        maxFinishOffset,
+        maxRawDuration,
       ]
     )
 
@@ -379,8 +384,7 @@ export default function PrePlanningWorkspace({
         Array.from(
           {
             length:
-              timelineDays +
-              1,
+              timelineDays + 1,
           },
           (
             _,
@@ -399,9 +403,12 @@ export default function PrePlanningWorkspace({
     dayWidth
 
 
+  /*
+   * Vertical activity sequencing.
+   */
   useEffect(
     () => {
-      if (!dragging) {
+      if (!rowDrag) {
         return undefined
       }
 
@@ -409,76 +416,149 @@ export default function PrePlanningWorkspace({
       function handlePointerMove(
         event
       ) {
-        const ganttBody =
-          rightBodyRef.current
+        const body =
+          leftBodyRef.current
 
-        if (!ganttBody) {
+        if (!body) {
           return
         }
 
 
         const bounds =
-          ganttBody
-            .getBoundingClientRect()
+          body.getBoundingClientRect()
 
 
+        /*
+         * Auto-scroll vertically when
+         * dragging close to the top/bottom.
+         */
         if (
-          event.clientX >
-          bounds.right -
+          event.clientY <
+          bounds.top +
             AUTO_SCROLL_EDGE
         ) {
-          ganttBody.scrollLeft +=
-            AUTO_SCROLL_SPEED
-        } else if (
-          event.clientX <
-          bounds.left +
-            AUTO_SCROLL_EDGE
-        ) {
-          ganttBody.scrollLeft =
+          body.scrollTop =
             Math.max(
               0,
-              ganttBody.scrollLeft -
+              body.scrollTop -
                 AUTO_SCROLL_SPEED
             )
+
+          if (
+            rightBodyRef.current
+          ) {
+            rightBodyRef.current.scrollTop =
+              body.scrollTop
+          }
+        } else if (
+          event.clientY >
+          bounds.bottom -
+            AUTO_SCROLL_EDGE
+        ) {
+          body.scrollTop +=
+            AUTO_SCROLL_SPEED
+
+          if (
+            rightBodyRef.current
+          ) {
+            rightBodyRef.current.scrollTop =
+              body.scrollTop
+          }
         }
 
 
-        const scrollDelta =
-          ganttBody.scrollLeft -
-          dragging.initialScrollLeft
+        const relativeY =
+          event.clientY -
+          bounds.top +
+          body.scrollTop
 
 
-        const pixelDelta =
-          event.clientX -
-          dragging.startClientX +
-          scrollDelta
-
-
-        const dayDelta =
-          pixelDelta /
-          dayWidth
-
-
-        const nextStart =
-          snapDay(
-            dragging.initialOffset +
-              dayDelta
+        const rawIndex =
+          Math.floor(
+            relativeY /
+            ROW_HEIGHT
           )
 
 
-        setStartOffsets(
-          (current) => ({
-            ...current,
+        const withinRow =
+          relativeY %
+          ROW_HEIGHT
 
-            [dragging.activityId]:
-              nextStart,
-          })
+
+        /*
+         * The top half of a row means
+         * insert before it.
+         *
+         * The bottom half means
+         * insert after it.
+         */
+        const insertionIndex =
+          Math.max(
+            0,
+            Math.min(
+              rawIndex +
+                (
+                  withinRow >
+                  ROW_HEIGHT / 2
+                    ? 1
+                    : 0
+                ),
+              orderedActivities.length
+            )
+          )
+
+
+        setRowDrag(
+          (current) => {
+            if (!current) {
+              return current
+            }
+
+            if (
+              current.dropIndex ===
+              insertionIndex
+            ) {
+              return current
+            }
+
+            return {
+              ...current,
+              dropIndex:
+                insertionIndex,
+            }
+          }
         )
       }
 
 
       function handlePointerUp() {
-        setDragging(
+        setOrderedActivities(
+          (current) => {
+            const fromIndex =
+              current.findIndex(
+                (activity) =>
+                  activity.id ===
+                  rowDrag.activityId
+              )
+
+
+            if (
+              fromIndex < 0
+            ) {
+              return current
+            }
+
+
+            return moveItem(
+              current,
+              fromIndex,
+              rowDrag.dropIndex
+            )
+          }
+        )
+
+
+        setRowDrag(
           null
         )
       }
@@ -518,31 +598,17 @@ export default function PrePlanningWorkspace({
       }
     },
     [
-      dragging,
-      dayWidth,
+      rowDrag,
+      orderedActivities.length,
     ]
   )
 
 
-  function beginDrag(
+  function beginRowDrag(
     event,
-    activity
+    activity,
+    index
   ) {
-    const duration =
-      Number(
-        activity.rawDuration
-      )
-
-    if (
-      !Number.isFinite(
-        duration
-      ) ||
-      duration <= 0
-    ) {
-      return
-    }
-
-
     event.preventDefault()
     event.stopPropagation()
 
@@ -558,30 +624,15 @@ export default function PrePlanningWorkspace({
     )
 
 
-    const currentOffset =
-      Number(
-        startOffsets[
-          activity.id
-        ] ||
-        0
-      )
-
-
-    setDragging({
+    setRowDrag({
       activityId:
         activity.id,
 
-      startClientX:
-        event.clientX,
+      sourceIndex:
+        index,
 
-      initialOffset:
-        currentOffset,
-
-      initialScrollLeft:
-        rightBodyRef
-          .current
-          ?.scrollLeft ||
-        0,
+      dropIndex:
+        index,
     })
   }
 
@@ -596,6 +647,7 @@ export default function PrePlanningWorkspace({
     ) {
       return
     }
+
 
     scrollOwnerRef.current =
       source
@@ -705,17 +757,6 @@ export default function PrePlanningWorkspace({
     'approved'
 
 
-  const selectedStartOffset =
-    selectedActivity
-      ? Number(
-          startOffsets[
-            selectedActivity.id
-          ] ||
-          0
-        )
-      : 0
-
-
   const selectedRawDuration =
     selectedActivity
       ? Number(
@@ -724,12 +765,28 @@ export default function PrePlanningWorkspace({
       : null
 
 
-  const selectedFinishOffset =
-    Number.isFinite(
-      selectedRawDuration
-    )
-      ? selectedStartOffset +
-        selectedRawDuration
+  const selectedSequenceIndex =
+    selectedActivity
+      ? orderedActivities.findIndex(
+          (activity) =>
+            activity.id ===
+            selectedActivity.id
+        )
+      : -1
+
+
+  const selectedSequence =
+    selectedSequenceIndex >= 0
+      ? getActivityCode(
+          selectedSequenceIndex
+        )
+      : '—'
+
+
+  const dropIndicatorTop =
+    rowDrag
+      ? rowDrag.dropIndex *
+        ROW_HEIGHT
       : null
 
 
@@ -793,8 +850,8 @@ export default function PrePlanningWorkspace({
               styles.projectDescription
             }
           >
-            Use the drag handle to position activities horizontally.
-            Raw Duration remains calculated and locked.
+            Drag the sequence handle beside the Activity ID to reorder
+            production activities. Raw Duration remains calculated and locked.
           </p>
         </div>
 
@@ -819,7 +876,7 @@ export default function PrePlanningWorkspace({
 
             <strong>
               {
-                normalizedActivities.length
+                orderedActivities.length
               }
             </strong>
           </div>
@@ -888,10 +945,10 @@ export default function PrePlanningWorkspace({
 
           <span
             className={
-              styles.dragHint
+              styles.sequenceHint
             }
           >
-            ⠿ DRAG HANDLE
+            ⠿ DRAG TO REORDER
           </span>
         </div>
 
@@ -975,6 +1032,15 @@ export default function PrePlanningWorkspace({
           >
             <div
               className={
+                styles.activityHeaderHandleCell
+              }
+              aria-hidden="true"
+            >
+              ⠿
+            </div>
+
+            <div
+              className={
                 styles.activityHeaderCell
               }
             >
@@ -1052,180 +1118,252 @@ export default function PrePlanningWorkspace({
               )
             }
           >
-            {normalizedActivities.length >
-            0 ? (
-              normalizedActivities.map(
-                (
-                  activity,
-                  index
-                ) => {
-                  const isSelected =
-                    selectedActivity?.id ===
-                    activity.id
+            <div
+              className={
+                styles.activityRowsContainer
+              }
+              style={{
+                height:
+                  Math.max(
+                    orderedActivities.length *
+                      ROW_HEIGHT,
+                    ROW_HEIGHT
+                  ),
+              }}
+            >
+              {rowDrag ? (
+                <div
+                  className={
+                    styles.sequenceDropIndicator
+                  }
+                  style={{
+                    top:
+                      dropIndicatorTop,
+                  }}
+                />
+              ) : null}
 
-                  const hasDuration =
-                    Number.isFinite(
-                      Number(
-                        activity.rawDuration
-                      )
-                    )
 
-                  return (
-                    <button
-                      key={
-                        activity.id
-                      }
-                      type="button"
-                      className={
-                        isSelected
-                          ? styles.activityRowSelected
-                          : styles.activityRow
-                      }
-                      onClick={() =>
-                        setSelectedActivityId(
-                          activity.id
+              {orderedActivities.length >
+              0 ? (
+                orderedActivities.map(
+                  (
+                    activity,
+                    index
+                  ) => {
+                    const isSelected =
+                      selectedActivity?.id ===
+                      activity.id
+
+                    const isDragging =
+                      rowDrag?.activityId ===
+                      activity.id
+
+                    const hasDuration =
+                      Number.isFinite(
+                        Number(
+                          activity.rawDuration
                         )
-                      }
-                    >
-                      <div
-                        className={
-                          styles.activityId
-                        }
-                      >
-                        {getActivityCode(
-                          index
-                        )}
-                      </div>
+                      )
 
+
+                    return (
                       <div
-                        className={
-                          styles.workPackageCode
+                        key={
+                          activity.id
+                        }
+                        className={`${styles.activityRowShell} ${
+                          isSelected
+                            ? styles.activityRowShellSelected
+                            : ''
+                        } ${
+                          isDragging
+                            ? styles.activityRowShellDragging
+                            : ''
+                        }`}
+                        style={{
+                          top:
+                            index *
+                            ROW_HEIGHT,
+                        }}
+                        onClick={() =>
+                          setSelectedActivityId(
+                            activity.id
+                          )
                         }
                       >
-                        <span
+                        <div
                           className={
-                            styles.workPackageIndicator
-                          }
-                          style={{
-                            background:
-                              activity.workPackageColor ||
-                              '#00998b',
-                          }}
-                        />
-
-                        <span>
-                          {activity.workPackageCode ||
-                            '—'}
-                        </span>
-                      </div>
-
-                      <div
-                        className={
-                          styles.scopeItemName
-                        }
-                        title={
-                          activity.scopeItemName ||
-                          ''
-                        }
-                      >
-                        {activity.scopeItemName ||
-                          'Scope Item'}
-                      </div>
-
-                      <div
-                        className={
-                          styles.locationName
-                        }
-                        title={
-                          activity.locationName ||
-                          ''
-                        }
-                      >
-                        {activity.locationName ||
-                          '—'}
-                      </div>
-
-                      <div
-                        className={
-                          styles.divisionName
-                        }
-                        title={
-                          activity.divisionName ||
-                          ''
-                        }
-                      >
-                        {activity.divisionName ||
-                          '—'}
-                      </div>
-
-                      <div
-                        className={
-                          styles.numericCell
-                        }
-                      >
-                        {safeNumber(
-                          activity.quantity
-                        )}{' '}
-
-                        <span
-                          className={
-                            styles.unitText
+                            styles.sequenceHandleCell
                           }
                         >
-                          {activity.unit ||
-                            ''}
-                        </span>
-                      </div>
+                          <button
+                            type="button"
+                            className={
+                              styles.sequenceHandle
+                            }
+                            onPointerDown={(
+                              event
+                            ) =>
+                              beginRowDrag(
+                                event,
+                                activity,
+                                index
+                              )
+                            }
+                            title="Click, hold and drag to change activity sequence"
+                            aria-label={`Reorder ${activity.scopeItemName}`}
+                          >
+                            <span
+                              className={
+                                styles.sequenceHandleIcon
+                              }
+                            >
+                              ⠿
+                            </span>
+                          </button>
+                        </div>
 
-                      <div
-                        className={
-                          styles.numericCell
-                        }
-                      >
-                        {Number.isFinite(
-                          Number(
-                            activity.productionCapacity
-                          )
-                        )
-                          ? `${safeNumber(
+                        <div
+                          className={
+                            styles.activityId
+                          }
+                        >
+                          {getActivityCode(
+                            index
+                          )}
+                        </div>
+
+                        <div
+                          className={
+                            styles.workPackageCode
+                          }
+                        >
+                          <span
+                            className={
+                              styles.workPackageIndicator
+                            }
+                            style={{
+                              background:
+                                activity.workPackageColor ||
+                                '#00998b',
+                            }}
+                          />
+
+                          <span>
+                            {activity.workPackageCode ||
+                              '—'}
+                          </span>
+                        </div>
+
+                        <div
+                          className={
+                            styles.scopeItemName
+                          }
+                          title={
+                            activity.scopeItemName ||
+                            ''
+                          }
+                        >
+                          {activity.scopeItemName ||
+                            'Scope Item'}
+                        </div>
+
+                        <div
+                          className={
+                            styles.locationName
+                          }
+                          title={
+                            activity.locationName ||
+                            ''
+                          }
+                        >
+                          {activity.locationName ||
+                            '—'}
+                        </div>
+
+                        <div
+                          className={
+                            styles.divisionName
+                          }
+                          title={
+                            activity.divisionName ||
+                            ''
+                          }
+                        >
+                          {activity.divisionName ||
+                            '—'}
+                        </div>
+
+                        <div
+                          className={
+                            styles.numericCell
+                          }
+                        >
+                          {safeNumber(
+                            activity.quantity
+                          )}{' '}
+
+                          <span
+                            className={
+                              styles.unitText
+                            }
+                          >
+                            {activity.unit ||
+                              ''}
+                          </span>
+                        </div>
+
+                        <div
+                          className={
+                            styles.numericCell
+                          }
+                        >
+                          {Number.isFinite(
+                            Number(
                               activity.productionCapacity
-                            )}/d`
-                          : '—'}
-                      </div>
+                            )
+                          )
+                            ? `${safeNumber(
+                                activity.productionCapacity
+                              )}/d`
+                            : '—'}
+                        </div>
 
-                      <div
-                        className={
-                          hasDuration
-                            ? styles.durationCell
-                            : styles.missingDurationCell
-                        }
-                      >
-                        {hasDuration
-                          ? `${safeNumber(
-                              activity.rawDuration
-                            )} d`
-                          : '—'}
+                        <div
+                          className={
+                            hasDuration
+                              ? styles.durationCell
+                              : styles.missingDurationCell
+                          }
+                        >
+                          {hasDuration
+                            ? `${safeNumber(
+                                activity.rawDuration
+                              )} d`
+                            : '—'}
+                        </div>
                       </div>
-                    </button>
-                  )
-                }
-              )
-            ) : (
-              <div
-                className={
-                  styles.emptyActivityState
-                }
-              >
-                <strong>
-                  No production activities
-                </strong>
+                    )
+                  }
+                )
+              ) : (
+                <div
+                  className={
+                    styles.emptyActivityState
+                  }
+                >
+                  <strong>
+                    No production activities
+                  </strong>
 
-                <span>
-                  Positive location quantities are required before
-                  activities can be visualized.
-                </span>
-              </div>
-            )}
+                  <span>
+                    Positive location quantities are required before
+                    activities can be visualized.
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -1303,7 +1441,7 @@ export default function PrePlanningWorkspace({
 
                 height:
                   Math.max(
-                    normalizedActivities.length *
+                    orderedActivities.length *
                       ROW_HEIGHT,
                     ROW_HEIGHT
                   ),
@@ -1339,7 +1477,20 @@ export default function PrePlanningWorkspace({
               )}
 
 
-              {normalizedActivities.map(
+              {rowDrag ? (
+                <div
+                  className={
+                    styles.ganttDropIndicator
+                  }
+                  style={{
+                    top:
+                      dropIndicatorTop,
+                  }}
+                />
+              ) : null}
+
+
+              {orderedActivities.map(
                 (
                   activity,
                   index
@@ -1362,17 +1513,8 @@ export default function PrePlanningWorkspace({
 
 
                   const isDragging =
-                    dragging?.activityId ===
+                    rowDrag?.activityId ===
                     activity.id
-
-
-                  const startOffset =
-                    Number(
-                      startOffsets[
-                        activity.id
-                      ] ||
-                      0
-                    )
 
 
                   const status =
@@ -1387,14 +1529,9 @@ export default function PrePlanningWorkspace({
                       ? Math.max(
                           rawDuration *
                             dayWidth,
-                          26
+                          4
                         )
                       : 0
-
-
-                  const left =
-                    startOffset *
-                    dayWidth
 
 
                   return (
@@ -1402,11 +1539,15 @@ export default function PrePlanningWorkspace({
                       key={
                         activity.id
                       }
-                      className={
+                      className={`${styles.ganttRow} ${
                         isSelected
                           ? styles.ganttRowSelected
-                          : styles.ganttRow
-                      }
+                          : ''
+                      } ${
+                        isDragging
+                          ? styles.ganttRowDragging
+                          : ''
+                      }`}
                       style={{
                         top:
                           index *
@@ -1431,56 +1572,12 @@ export default function PrePlanningWorkspace({
                                     'underloaded'
                                   ? styles.ganttBarUnderloaded
                                   : styles.ganttBarWaiting
-                          } ${
-                            isDragging
-                              ? styles.ganttBarDragging
-                              : ''
                           }`}
                           style={{
-                            left,
+                            left: 0,
                             width,
                           }}
-                          onClick={(
-                            event
-                          ) => {
-                            event.stopPropagation()
-
-                            setSelectedActivityId(
-                              activity.id
-                            )
-                          }}
-                          title={`Start Day ${safeNumber(
-                            startOffset
-                          )} · Duration ${safeNumber(
-                            rawDuration
-                          )} days`}
                         >
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            className={
-                              styles.dragHandle
-                            }
-                            onPointerDown={(
-                              event
-                            ) =>
-                              beginDrag(
-                                event,
-                                activity
-                              )
-                            }
-                            title="Click, hold and drag"
-                            aria-label={`Move ${activity.scopeItemName}`}
-                          >
-                            <span
-                              className={
-                                styles.dragHandleDots
-                              }
-                            >
-                              ⠿
-                            </span>
-                          </div>
-
                           <span
                             className={
                               styles.ganttBarLabel
@@ -1574,6 +1671,15 @@ export default function PrePlanningWorkspace({
               }
             >
               <InspectorMetric
+                label="Sequence"
+                value={
+                  selectedSequence
+                }
+                detail="Drag handle to reorder"
+                emphasized
+              />
+
+              <InspectorMetric
                 label="Location"
                 value={
                   selectedActivity.locationName ||
@@ -1636,6 +1742,24 @@ export default function PrePlanningWorkspace({
               />
 
               <InspectorMetric
+                label="Capacity"
+                value={
+                  Number.isFinite(
+                    Number(
+                      selectedActivity.productionCapacity
+                    )
+                  )
+                    ? `${safeNumber(
+                        selectedActivity.productionCapacity
+                      )} ${
+                        selectedActivity.unit ||
+                        ''
+                      }/day`
+                    : '—'
+                }
+              />
+
+              <InspectorMetric
                 label="Raw Duration"
                 value={
                   Number.isFinite(
@@ -1644,28 +1768,6 @@ export default function PrePlanningWorkspace({
                     ? `${safeNumber(
                         selectedRawDuration
                       )} d`
-                    : '—'
-                }
-                emphasized
-              />
-
-              <InspectorMetric
-                label="Start Offset"
-                value={`Day ${safeNumber(
-                  selectedStartOffset
-                )}`}
-                detail="Drag handle to change"
-              />
-
-              <InspectorMetric
-                label="Finish Offset"
-                value={
-                  Number.isFinite(
-                    selectedFinishOffset
-                  )
-                    ? `Day ${safeNumber(
-                        selectedFinishOffset
-                      )}`
                     : '—'
                 }
               />
