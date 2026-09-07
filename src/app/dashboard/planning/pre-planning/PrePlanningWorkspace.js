@@ -221,7 +221,9 @@ export default function PrePlanningWorkspace({
 
       normalizedActivities.forEach(
         (activity) => {
-          initial[activity.id] = 0
+          initial[
+            activity.id
+          ] = 0
         }
       )
 
@@ -258,10 +260,6 @@ export default function PrePlanningWorkspace({
     useRef(null)
 
 
-  /*
-   * Make sure any activities loaded later
-   * also receive a Day 0 start position.
-   */
   useEffect(
     () => {
       setStartOffsets(
@@ -312,16 +310,6 @@ export default function PrePlanningWorkspace({
     )
 
 
-  /*
-   * Timeline length now considers BOTH:
-   *
-   * Start Offset
-   * +
-   * Raw Duration
-   *
-   * so the canvas grows as activities
-   * are moved further to the right.
-   */
   const maxFinishOffset =
     useMemo(
       () => {
@@ -411,12 +399,6 @@ export default function PrePlanningWorkspace({
     dayWidth
 
 
-  /*
-   * Horizontal dragging.
-   *
-   * Position changes.
-   * Duration does NOT.
-   */
   useEffect(
     () => {
       if (!dragging) {
@@ -436,14 +418,10 @@ export default function PrePlanningWorkspace({
 
 
         const bounds =
-          ganttBody.getBoundingClientRect()
+          ganttBody
+            .getBoundingClientRect()
 
 
-        /*
-         * Gentle horizontal auto-scroll
-         * while the planner drags close
-         * to either edge of the Gantt.
-         */
         if (
           event.clientX >
           bounds.right -
@@ -567,6 +545,12 @@ export default function PrePlanningWorkspace({
 
     event.preventDefault()
     event.stopPropagation()
+
+
+    event.currentTarget
+      .setPointerCapture?.(
+        event.pointerId
+      )
 
 
     setSelectedActivityId(
@@ -809,7 +793,7 @@ export default function PrePlanningWorkspace({
               styles.projectDescription
             }
           >
-            Drag activities horizontally to test the production sequence.
+            Use the drag handle to position activities horizontally.
             Raw Duration remains calculated and locked.
           </p>
         </div>
@@ -907,7 +891,7 @@ export default function PrePlanningWorkspace({
               styles.dragHint
             }
           >
-            DRAG TO SEQUENCE
+            ⠿ DRAG HANDLE
           </span>
         </div>
 
@@ -1275,7 +1259,9 @@ export default function PrePlanningWorkspace({
                       day
                     }
                     className={
-                      day % 5 === 0
+                      day %
+                        5 ===
+                      0
                         ? styles.dayHeaderMajor
                         : styles.dayHeader
                     }
@@ -1335,7 +1321,8 @@ export default function PrePlanningWorkspace({
 
               {dayMarkers.map(
                 (day) =>
-                  day % 5 ===
+                  day %
+                    5 ===
                   0 ? (
                     <div
                       key={`major-${day}`}
@@ -1384,7 +1371,7 @@ export default function PrePlanningWorkspace({
                       startOffsets[
                         activity.id
                       ] ||
-                        0
+                      0
                     )
 
 
@@ -1400,7 +1387,7 @@ export default function PrePlanningWorkspace({
                       ? Math.max(
                           rawDuration *
                             dayWidth,
-                          4
+                          26
                         )
                       : 0
 
@@ -1433,8 +1420,6 @@ export default function PrePlanningWorkspace({
                     >
                       {hasDuration ? (
                         <div
-                          role="button"
-                          tabIndex={0}
                           className={`${styles.ganttBar} ${
                             status.key ===
                             'gap'
@@ -1455,18 +1440,47 @@ export default function PrePlanningWorkspace({
                             left,
                             width,
                           }}
-                          onPointerDown={(
+                          onClick={(
                             event
-                          ) =>
-                            beginDrag(
-                              event,
-                              activity
+                          ) => {
+                            event.stopPropagation()
+
+                            setSelectedActivityId(
+                              activity.id
                             )
-                          }
-                          title={`Drag horizontally · Start Day ${safeNumber(
+                          }}
+                          title={`Start Day ${safeNumber(
                             startOffset
-                          )}`}
+                          )} · Duration ${safeNumber(
+                            rawDuration
+                          )} days`}
                         >
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            className={
+                              styles.dragHandle
+                            }
+                            onPointerDown={(
+                              event
+                            ) =>
+                              beginDrag(
+                                event,
+                                activity
+                              )
+                            }
+                            title="Click, hold and drag"
+                            aria-label={`Move ${activity.scopeItemName}`}
+                          >
+                            <span
+                              className={
+                                styles.dragHandleDots
+                              }
+                            >
+                              ⠿
+                            </span>
+                          </div>
+
                           <span
                             className={
                               styles.ganttBarLabel
@@ -1476,14 +1490,6 @@ export default function PrePlanningWorkspace({
                               rawDuration
                             )}{' '}
                             d
-                          </span>
-
-                          <span
-                            className={
-                              styles.dragGrip
-                            }
-                          >
-                            ⋮⋮
                           </span>
                         </div>
                       ) : (
@@ -1598,20 +1604,34 @@ export default function PrePlanningWorkspace({
               />
 
               <InspectorMetric
-                label="Capacity"
+                label="Productivity"
                 value={
                   Number.isFinite(
                     Number(
-                      selectedActivity.productionCapacity
+                      selectedActivity.productivity
                     )
                   )
                     ? `${safeNumber(
-                        selectedActivity.productionCapacity
+                        selectedActivity.productivity
                       )} ${
                         selectedActivity.unit ||
                         ''
-                      }/day`
+                      }`
                     : '—'
+                }
+                detail={
+                  getBasisLabel(
+                    selectedActivity.productivityBasis
+                  )
+                }
+              />
+
+              <InspectorMetric
+                label="Resource"
+                value={
+                  getResourceLabel(
+                    selectedActivity
+                  )
                 }
               />
 
@@ -1634,7 +1654,7 @@ export default function PrePlanningWorkspace({
                 value={`Day ${safeNumber(
                   selectedStartOffset
                 )}`}
-                detail="Drag to change"
+                detail="Drag handle to change"
               />
 
               <InspectorMetric
@@ -1647,31 +1667,6 @@ export default function PrePlanningWorkspace({
                         selectedFinishOffset
                       )}`
                     : '—'
-                }
-              />
-
-              <InspectorMetric
-                label="Takt Status"
-                value={
-                  getActivityStatus(
-                    selectedActivity,
-                    targetTakt
-                  ).label
-                }
-                detail={
-                  hasTargetTakt &&
-                  Number.isFinite(
-                    selectedRawDuration
-                  )
-                    ? `${safeNumber(
-                        (
-                          selectedRawDuration /
-                          targetTaktNumber
-                        ) *
-                          100,
-                        0
-                      )}% utilization`
-                    : 'Target Takt required'
                 }
               />
             </div>
