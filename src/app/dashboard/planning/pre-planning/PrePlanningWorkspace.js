@@ -3,6 +3,7 @@
 import Link from 'next/link'
 
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -37,8 +38,7 @@ function safeNumber(
     'en-US',
     {
       minimumFractionDigits: 0,
-      maximumFractionDigits:
-        digits,
+      maximumFractionDigits: digits,
     }
   ).format(numeric)
 }
@@ -57,13 +57,9 @@ function getActivityStatus(
     Number(targetTakt)
 
   if (
-    !Number.isFinite(
-      rawDuration
-    ) ||
+    !Number.isFinite(rawDuration) ||
     rawDuration <= 0 ||
-    !Number.isFinite(
-      takt
-    ) ||
+    !Number.isFinite(takt) ||
     takt <= 0
   ) {
     return {
@@ -73,8 +69,7 @@ function getActivityStatus(
   }
 
   const utilization =
-    rawDuration /
-    takt
+    rawDuration / takt
 
   if (
     utilization > 1
@@ -105,8 +100,7 @@ function getBasisLabel(
   basis
 ) {
   if (
-    basis ===
-    'crew_day'
+    basis === 'crew_day'
   ) {
     return 'Per crew / day'
   }
@@ -125,9 +119,7 @@ function getResourceLabel(
     )
 
   if (
-    !Number.isFinite(
-      value
-    ) ||
+    !Number.isFinite(value) ||
     value <= 0
   ) {
     return '—'
@@ -162,6 +154,138 @@ function getActivityCode(
 }
 
 
+function HeaderFilter({
+  label,
+  options,
+  selectedValue,
+  onChange,
+  isOpen,
+  onToggle,
+  allLabel,
+}) {
+  const active =
+    selectedValue !== 'all'
+
+  const selectedOption =
+    options.find(
+      (option) =>
+        option.id ===
+        selectedValue
+    )
+
+  return (
+    <div
+      className={
+        styles.headerFilter
+      }
+    >
+      <button
+        type="button"
+        className={
+          active
+            ? styles.headerFilterButtonActive
+            : styles.headerFilterButton
+        }
+        onClick={
+          onToggle
+        }
+        aria-expanded={
+          isOpen
+        }
+      >
+        <span>
+          {label}
+        </span>
+
+        <span
+          className={
+            isOpen
+              ? styles.headerFilterArrowOpen
+              : styles.headerFilterArrow
+          }
+        >
+          ▾
+        </span>
+      </button>
+
+      {active ? (
+        <span
+          className={
+            styles.headerFilterDot
+          }
+        />
+      ) : null}
+
+      {isOpen ? (
+        <div
+          className={
+            styles.headerFilterMenu
+          }
+        >
+          <button
+            type="button"
+            className={
+              selectedValue ===
+              'all'
+                ? styles.headerFilterOptionSelected
+                : styles.headerFilterOption
+            }
+            onClick={() =>
+              onChange(
+                'all'
+              )
+            }
+          >
+            {allLabel}
+          </button>
+
+          {options.map(
+            (option) => (
+              <button
+                key={
+                  option.id
+                }
+                type="button"
+                className={
+                  selectedValue ===
+                  option.id
+                    ? styles.headerFilterOptionSelected
+                    : styles.headerFilterOption
+                }
+                onClick={() =>
+                  onChange(
+                    option.id
+                  )
+                }
+              >
+                {
+                  option.name
+                }
+              </button>
+            )
+          )}
+
+          {active ? (
+            <div
+              className={
+                styles.headerFilterSelection
+              }
+            >
+              Filtered by:{' '}
+              <strong>
+                {selectedOption
+                  ?.name ||
+                  ''}
+              </strong>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+
 export default function PrePlanningWorkspace({
   project,
   activities = [],
@@ -191,6 +315,12 @@ export default function PrePlanningWorkspace({
     useState('all')
 
   const [
+    openFilter,
+    setOpenFilter,
+  ] =
+    useState(null)
+
+  const [
     dayWidth,
     setDayWidth,
   ] =
@@ -211,6 +341,9 @@ export default function PrePlanningWorkspace({
   const scrollOwnerRef =
     useRef(null)
 
+  const workspaceRef =
+    useRef(null)
+
 
   const normalizedActivities =
     useMemo(
@@ -223,10 +356,6 @@ export default function PrePlanningWorkspace({
       [activities]
     )
 
-
-  /* =========================================================
-     FILTER OPTIONS
-     ========================================================= */
 
   const locationOptions =
     useMemo(
@@ -269,8 +398,7 @@ export default function PrePlanningWorkspace({
                 second.name,
                 undefined,
                 {
-                  numeric:
-                    true,
+                  numeric: true,
                 }
               )
           )
@@ -332,8 +460,7 @@ export default function PrePlanningWorkspace({
                 second.name,
                 undefined,
                 {
-                  numeric:
-                    true,
+                  numeric: true,
                 }
               )
           )
@@ -392,10 +519,6 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
-  /* =========================================================
-     TIMELINE
-     ========================================================= */
 
   const maxRawDuration =
     useMemo(
@@ -459,10 +582,12 @@ export default function PrePlanningWorkspace({
         Array.from(
           {
             length:
-              timelineDays +
-              1,
+              timelineDays + 1,
           },
-          (_, index) =>
+          (
+            _,
+            index
+          ) =>
             index
         ),
       [
@@ -476,9 +601,39 @@ export default function PrePlanningWorkspace({
     dayWidth
 
 
-  /* =========================================================
-     SCROLL
-     ========================================================= */
+  useEffect(
+    () => {
+      function handleClickOutside(
+        event
+      ) {
+        if (
+          !workspaceRef
+            .current
+            ?.contains(
+              event.target
+            )
+        ) {
+          setOpenFilter(
+            null
+          )
+        }
+      }
+
+      document.addEventListener(
+        'mousedown',
+        handleClickOutside
+      )
+
+      return () => {
+        document.removeEventListener(
+          'mousedown',
+          handleClickOutside
+        )
+      }
+    },
+    []
+  )
+
 
   function syncVerticalScroll(
     source
@@ -538,58 +693,35 @@ export default function PrePlanningWorkspace({
   }
 
 
-  /* =========================================================
-     FILTERS
-     ========================================================= */
-
   function handleLocationChange(
-    event
+    value
   ) {
     setSelectedLocation(
-      event.target.value
+      value
     )
 
-    /*
-     * Division depends on Location,
-     * therefore reset Division whenever
-     * Location changes.
-     */
     setSelectedDivision(
       'all'
+    )
+
+    setOpenFilter(
+      null
     )
   }
 
 
   function handleDivisionChange(
-    event
+    value
   ) {
     setSelectedDivision(
-      event.target.value
+      value
+    )
+
+    setOpenFilter(
+      null
     )
   }
 
-
-  function clearFilters() {
-    setSelectedLocation(
-      'all'
-    )
-
-    setSelectedDivision(
-      'all'
-    )
-  }
-
-
-  const hasFilters =
-    selectedLocation !==
-      'all' ||
-    selectedDivision !==
-      'all'
-
-
-  /* =========================================================
-     ZOOM
-     ========================================================= */
 
   function zoomIn() {
     setDayWidth(
@@ -643,17 +775,17 @@ export default function PrePlanningWorkspace({
     ) &&
     targetTaktNumber > 0
 
+
   const isApproved =
     strategyStatus ===
     'approved'
 
 
-  /* =========================================================
-     RENDER
-     ========================================================= */
-
   return (
     <div
+      ref={
+        workspaceRef
+      }
       className={
         styles.workspace
       }
@@ -787,133 +919,24 @@ export default function PrePlanningWorkspace({
       >
         <div
           className={
-            styles.toolbarLeft
+            styles.toolbarGroup
           }
         >
           <div
             className={
-              styles.toolbarGroup
+              styles.toolbarTitle
             }
           >
-            <div
-              className={
-                styles.toolbarTitle
-              }
-            >
-              Production Gantt
-            </div>
-
-            <span
-              className={
-                styles.lockedBadge
-              }
-            >
-              DURATIONS LOCKED
-            </span>
+            Production Gantt
           </div>
 
-
-          <div
+          <span
             className={
-              styles.filterGroup
+              styles.lockedBadge
             }
           >
-            <label
-              className={
-                styles.filterControl
-              }
-            >
-              <span>
-                Location
-              </span>
-
-              <select
-                value={
-                  selectedLocation
-                }
-                onChange={
-                  handleLocationChange
-                }
-              >
-                <option value="all">
-                  All Locations
-                </option>
-
-                {locationOptions.map(
-                  (location) => (
-                    <option
-                      key={
-                        location.id
-                      }
-                      value={
-                        location.id
-                      }
-                    >
-                      {
-                        location.name
-                      }
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-
-
-            <label
-              className={
-                styles.filterControl
-              }
-            >
-              <span>
-                Division
-              </span>
-
-              <select
-                value={
-                  selectedDivision
-                }
-                onChange={
-                  handleDivisionChange
-                }
-              >
-                <option value="all">
-                  All Divisions
-                </option>
-
-                {divisionOptions.map(
-                  (division) => (
-                    <option
-                      key={
-                        division.id
-                      }
-                      value={
-                        division.id
-                      }
-                    >
-                      {
-                        division.name
-                      }
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-
-
-            {hasFilters ? (
-              <button
-                type="button"
-                className={
-                  styles.clearFiltersButton
-                }
-                onClick={
-                  clearFilters
-                }
-              >
-                Clear
-              </button>
-            ) : null}
-          </div>
+            DURATIONS LOCKED
+          </span>
         </div>
 
 
@@ -934,7 +957,6 @@ export default function PrePlanningWorkspace({
             className={
               styles.toolbarButton
             }
-            title="Zoom out"
           >
             −
           </button>
@@ -959,7 +981,6 @@ export default function PrePlanningWorkspace({
             className={
               styles.toolbarButton
             }
-            title="Zoom in"
           >
             +
           </button>
@@ -1020,18 +1041,72 @@ export default function PrePlanningWorkspace({
 
             <div
               className={
-                styles.activityHeaderCell
+                styles.activityHeaderFilterCell
               }
             >
-              Location
+              <HeaderFilter
+                label="Location"
+                options={
+                  locationOptions
+                }
+                selectedValue={
+                  selectedLocation
+                }
+                onChange={
+                  handleLocationChange
+                }
+                isOpen={
+                  openFilter ===
+                  'location'
+                }
+                onToggle={() =>
+                  setOpenFilter(
+                    (
+                      current
+                    ) =>
+                      current ===
+                      'location'
+                        ? null
+                        : 'location'
+                  )
+                }
+                allLabel="All Locations"
+              />
             </div>
 
             <div
               className={
-                styles.activityHeaderCell
+                styles.activityHeaderFilterCell
               }
             >
-              Division
+              <HeaderFilter
+                label="Division"
+                options={
+                  divisionOptions
+                }
+                selectedValue={
+                  selectedDivision
+                }
+                onChange={
+                  handleDivisionChange
+                }
+                isOpen={
+                  openFilter ===
+                  'division'
+                }
+                onToggle={() =>
+                  setOpenFilter(
+                    (
+                      current
+                    ) =>
+                      current ===
+                      'division'
+                        ? null
+                        : 'division'
+                  )
+                }
+                allLabel="All Divisions"
+              />
             </div>
 
             <div
@@ -1144,10 +1219,6 @@ export default function PrePlanningWorkspace({
                         className={
                           styles.scopeItemName
                         }
-                        title={
-                          activity.scopeItemName ||
-                          ''
-                        }
                       >
                         {activity.scopeItemName ||
                           'Scope Item'}
@@ -1157,10 +1228,6 @@ export default function PrePlanningWorkspace({
                         className={
                           styles.locationName
                         }
-                        title={
-                          activity.locationName ||
-                          ''
-                        }
                       >
                         {activity.locationName ||
                           '—'}
@@ -1169,10 +1236,6 @@ export default function PrePlanningWorkspace({
                       <div
                         className={
                           styles.divisionName
-                        }
-                        title={
-                          activity.divisionName ||
-                          ''
                         }
                       >
                         {activity.divisionName ||
@@ -1242,7 +1305,7 @@ export default function PrePlanningWorkspace({
                 </strong>
 
                 <span>
-                  Change the Location or Division filter to display production activities.
+                  Change the Location or Division filter from the column header.
                 </span>
               </div>
             )}
@@ -1277,7 +1340,9 @@ export default function PrePlanningWorkspace({
                   <div
                     key={day}
                     className={
-                      day % 5 === 0
+                      day %
+                        5 ===
+                      0
                         ? styles.dayHeaderMajor
                         : styles.dayHeader
                     }
@@ -1335,7 +1400,8 @@ export default function PrePlanningWorkspace({
 
               {dayMarkers.map(
                 (day) =>
-                  day % 5 ===
+                  day %
+                    5 ===
                   0 ? (
                     <div
                       key={`major-${day}`}
