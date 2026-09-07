@@ -393,12 +393,6 @@ function applyVersionSequence(
     )
 
 
-  /*
-   * Activities created after a historical
-   * version was saved remain visible.
-   *
-   * They are appended rather than removed.
-   */
   activities.forEach(
     (activity) => {
       if (
@@ -779,10 +773,6 @@ export default function PrePlanningWorkspace({
   versionSequences = {},
   currentVersion = null,
 
-  /*
-   * Kept temporarily for compatibility
-   * with the previous page.js contract.
-   */
   activeVersion = null,
   versionCount = 0,
 
@@ -2063,12 +2053,30 @@ export default function PrePlanningWorkspace({
         )
 
 
+        setSelectedActivityId(
+          normalizedActivities
+            ?.[0]
+            ?.id ||
+          null
+        )
+
+
+        setSelectedLocation(
+          'all'
+        )
+
+
+        setSelectedDivision(
+          'all'
+        )
+
+
         setNotice({
           type:
             'success',
 
           text:
-            'Historical version deleted.',
+            'Historical version deleted successfully.',
         })
       }
 
@@ -3343,13 +3351,13 @@ export default function PrePlanningWorkspace({
                 title={
                   selectedVersion.isCurrent
                     ? 'The current working version cannot be deleted'
-                    : 'Delete this historical version'
+                    : `Delete ${selectedVersion.versionName}`
                 }
               >
                 {actionState ===
                 'delete_version'
                   ? 'Deleting...'
-                  : 'Delete'}
+                  : 'Delete Version'}
               </button>
             </>
           ) : null}
