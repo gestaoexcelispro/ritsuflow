@@ -1,873 +1,1730 @@
-.workspace {
-  --navy: #052c49;
-  --navy-dark: #031f35;
-  --teal: #00998b;
-  --text: #263c4d;
-  --muted: #6b7d8d;
-  --border: #dce5ed;
-  --border-soft: #edf2f6;
-  --row-height: 44px;
-  --header-height: 40px;
+'use client'
 
-  display: grid;
-  grid-template-rows: auto auto minmax(420px, 1fr) auto;
-  width: 100%;
-  min-width: 0;
-  min-height: calc(100vh - 145px);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow:
-    0 1px 2px rgba(5, 44, 73, 0.04),
-    0 10px 30px rgba(5, 44, 73, 0.04);
-}
+import Link from 'next/link'
 
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
-/* =========================================================
-   HEADER
-   ========================================================= */
+import styles from './pre-planning.module.css'
 
-.workspaceHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--border);
-  background: #ffffff;
-}
 
-.projectIdentity {
-  min-width: 0;
-}
+const DEFAULT_DAY_WIDTH = 34
+const MIN_DAY_WIDTH = 24
+const MAX_DAY_WIDTH = 84
 
-.eyebrow {
-  color: var(--teal);
-  font-size: 10px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0.09em;
-}
+const MIN_TIMELINE_DAYS = 30
+const TIMELINE_PADDING_DAYS = 15
 
-.projectTitleRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  margin-top: 7px;
-}
+const SNAP_INCREMENT = 0.25
+const ROW_HEIGHT = 44
 
-.projectTitle {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: var(--navy);
-  font-size: 19px;
-  line-height: 1.2;
-  font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+const AUTO_SCROLL_EDGE = 70
+const AUTO_SCROLL_SPEED = 18
 
-.statusDraft,
-.statusApproved {
-  display: inline-flex;
-  flex: 0 0 auto;
-  min-height: 24px;
-  align-items: center;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 9px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
 
-.statusDraft {
-  background: #eef2f6;
-  color: #637789;
-}
+function safeNumber(
+  value,
+  digits = 2
+) {
+  const numeric =
+    Number(value)
 
-.statusApproved {
-  background: #e7f7f3;
-  color: #087f73;
-}
-
-.projectDescription {
-  max-width: 820px;
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.headerActions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: stretch;
-  gap: 8px;
-}
-
-.summaryMetric {
-  display: grid;
-  min-width: 92px;
-  align-content: center;
-  gap: 3px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: #fafcfd;
-}
-
-.summaryMetricLabel {
-  color: #718096;
-  font-size: 8px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.summaryMetric strong {
-  color: var(--navy);
-  font-size: 13px;
-  line-height: 1.1;
-  font-weight: 900;
-}
-
-.changeProjectButton {
-  display: inline-flex;
-  min-height: 38px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: #ffffff;
-  color: var(--navy);
-  font-size: 10px;
-  font-weight: 900;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-
-/* =========================================================
-   TOOLBAR
-   ========================================================= */
-
-.toolbar {
-  display: flex;
-  min-height: 52px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 6px 10px 6px 14px;
-  border-bottom: 1px solid var(--border);
-  background: #f7f9fb;
-}
-
-.toolbarGroup {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.toolbarTitle {
-  color: var(--navy);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.lockedBadge,
-.dragHint {
-  display: inline-flex;
-  min-height: 22px;
-  align-items: center;
-  padding: 0 7px;
-  border-radius: 4px;
-  font-size: 8px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-}
-
-.lockedBadge {
-  border: 1px solid #d8e3ea;
-  background: #ffffff;
-  color: #728393;
-}
-
-.dragHint {
-  border: 1px solid #b9ddd8;
-  background: #edf9f7;
-  color: #087f73;
-}
-
-.toolbarButton,
-.toolbarButtonWide {
-  min-height: 30px;
-  border: 1px solid #cad6df;
-  border-radius: 5px;
-  background: #ffffff;
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.toolbarButton {
-  width: 32px;
-}
-
-.toolbarButtonWide {
-  padding: 0 11px;
-  font-size: 10px;
-}
-
-.toolbarButton:hover:not(:disabled),
-.toolbarButtonWide:hover:not(:disabled) {
-  border-color: #9eb2c0;
-  background: #f8fafc;
-}
-
-.toolbarButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.zoomValue {
-  min-width: 76px;
-  color: #637789;
-  font-size: 9px;
-  font-weight: 800;
-  text-align: center;
-}
-
-
-/* =========================================================
-   PLANNING GRID
-   ========================================================= */
-
-.planningGrid {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  grid-template-columns: minmax(770px, 58%) minmax(0, 42%);
-  overflow: hidden;
-  background: #ffffff;
-}
-
-.activityPane,
-.ganttPane {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  grid-template-rows: var(--header-height) minmax(0, 1fr);
-}
-
-.activityPane {
-  border-right: 2px solid #aebdca;
-}
-
-.activityHeader,
-.activityRow,
-.activityRowSelected {
-  display: grid;
-  min-width: 770px;
-  grid-template-columns:
-    46px
-    58px
-    minmax(150px, 1.3fr)
-    minmax(105px, 0.85fr)
-    minmax(105px, 0.85fr)
-    76px
-    80px
-    72px;
-}
-
-.activityHeader {
-  border-bottom: 1px solid #c9d5de;
-  background: #e9eef2;
-}
-
-.activityHeaderCell,
-.activityHeaderCellRight {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  padding: 0 8px;
-  border-right: 1px solid #d2dce4;
-  color: #4f6477;
-  font-size: 8px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.activityHeaderCellRight {
-  justify-content: flex-end;
-}
-
-.activityBody {
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #c3ced7 transparent;
-}
-
-.activityRow,
-.activityRowSelected {
-  width: 100%;
-  height: var(--row-height);
-  align-items: stretch;
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid var(--border-soft);
-  background: #ffffff;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.activityRow:nth-child(even) {
-  background: #fbfcfd;
-}
-
-.activityRow:hover {
-  background: #f3f8fa;
-}
-
-.activityRowSelected {
-  background: #eaf5f5;
-  box-shadow:
-    inset 3px 0 0 var(--teal);
-}
-
-.activityId,
-.workPackageCode,
-.scopeItemName,
-.locationName,
-.divisionName,
-.numericCell,
-.durationCell,
-.missingDurationCell {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  padding: 0 8px;
-  border-right: 1px solid #edf1f4;
-  font-size: 9px;
-}
-
-.activityId {
-  justify-content: flex-end;
-  color: #7b8b99;
-  font-variant-numeric: tabular-nums;
-}
-
-.workPackageCode {
-  gap: 6px;
-  color: var(--teal);
-  font-weight: 900;
-}
-
-.workPackageIndicator {
-  display: block;
-  width: 4px;
-  height: 19px;
-  flex: 0 0 auto;
-  border-radius: 2px;
-}
-
-.scopeItemName {
-  overflow: hidden;
-  color: var(--navy);
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.locationName {
-  overflow: hidden;
-  color: #425b70;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.divisionName {
-  overflow: hidden;
-  color: #637789;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.numericCell,
-.durationCell,
-.missingDurationCell {
-  justify-content: flex-end;
-  color: #42576a;
-  font-variant-numeric: tabular-nums;
-}
-
-.durationCell {
-  color: var(--navy);
-  font-weight: 900;
-}
-
-.missingDurationCell {
-  color: #b42318;
-  font-weight: 900;
-}
-
-.unitText {
-  margin-left: 3px;
-  color: #8493a0;
-  font-size: 8px;
-}
-
-.emptyActivityState {
-  display: grid;
-  min-height: 180px;
-  place-content: center;
-  gap: 7px;
-  padding: 24px;
-  color: #728393;
-  text-align: center;
-}
-
-.emptyActivityState strong {
-  color: var(--navy);
-  font-size: 13px;
-}
-
-.emptyActivityState span {
-  max-width: 340px;
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-
-/* =========================================================
-   GANTT
-   ========================================================= */
-
-.ganttHeaderScroll {
-  min-width: 0;
-  overflow: hidden;
-  border-bottom: 1px solid #c9d5de;
-  background: #e9eef2;
-}
-
-.ganttHeader {
-  position: relative;
-  height: var(--header-height);
-  min-width: 100%;
-}
-
-.dayHeader,
-.dayHeaderMajor {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-left: 1px solid #d2dce4;
-  color: #647789;
-  font-size: 9px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
-.dayHeaderMajor {
-  border-left-color: #9caebc;
-  color: var(--navy);
-  font-weight: 900;
-}
-
-.ganttBody {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #b9c7d1 #eef2f5;
-}
-
-.ganttCanvas {
-  position: relative;
-  min-width: 100%;
-  min-height: 44px;
-}
-
-.gridBackground {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(
-      to right,
-      #e8eef2 1px,
-      transparent 1px
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(var(--row-height) - 1px),
-      #edf1f4 calc(var(--row-height) - 1px),
-      #edf1f4 var(--row-height)
-    );
-  background-repeat: repeat;
-  pointer-events: none;
-}
-
-.majorGridLine {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: #bcc9d2;
-  pointer-events: none;
-}
-
-.ganttRow,
-.ganttRowSelected {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: var(--row-height);
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.ganttRow:hover {
-  background:
-    rgba(
-      0,
-      153,
-      139,
-      0.035
-    );
-}
-
-.ganttRowSelected {
-  background:
-    rgba(
-      0,
-      153,
-      139,
-      0.08
-    );
-}
-
-
-/* =========================================================
-   DRAGGABLE BAR
-   ========================================================= */
-
-.ganttBar {
-  position: absolute;
-  top: 9px;
-  display: flex;
-  height: 26px;
-  min-width: 4px;
-  align-items: center;
-  overflow: hidden;
-  border-radius: 3px;
-  box-shadow:
-    inset 0 0 0 1px rgba(5, 44, 73, 0.16);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  transition:
-    box-shadow 120ms ease,
-    filter 120ms ease;
-}
-
-.ganttBar:hover {
-  box-shadow:
-    inset 0 0 0 1px rgba(5, 44, 73, 0.28),
-    0 2px 7px rgba(5, 44, 73, 0.2);
-  filter: brightness(1.03);
-}
-
-.ganttBarDragging {
-  z-index: 50;
-  cursor: grabbing;
-  box-shadow:
-    inset 0 0 0 1px rgba(5, 44, 73, 0.32),
-    0 5px 14px rgba(5, 44, 73, 0.28);
-  filter: brightness(1.06);
-}
-
-.ganttBarBalanced {
-  background: #159b8f;
-}
-
-.ganttBarGap {
-  background: #c94f45;
-}
-
-.ganttBarUnderloaded {
-  background: #c5962f;
-}
-
-.ganttBarWaiting {
-  background: #718596;
-}
-
-.ganttBarLabel {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  padding-left: 7px;
-  color: #ffffff;
-  font-size: 9px;
-  font-weight: 900;
-  pointer-events: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dragGrip {
-  display: flex;
-  height: 100%;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 0 5px;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 8px;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.missingBar {
-  position: absolute;
-  top: 12px;
-  left: 8px;
-  color: #b42318;
-  font-size: 9px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-
-/* =========================================================
-   INSPECTOR
-   ========================================================= */
-
-.inspector {
-  display: grid;
-  grid-template-columns:
-    minmax(220px, 0.8fr)
-    minmax(0, 3.2fr);
-  gap: 18px;
-  min-height: 116px;
-  padding: 13px 16px;
-  border-top: 1px solid #cbd7df;
-  background: #f8fafb;
-}
-
-.inspectorIdentity {
-  display: grid;
-  min-width: 0;
-  align-content: center;
-}
-
-.inspectorEyebrow {
-  color: #7a8b99;
-  font-size: 8px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-
-.inspectorTitle {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 7px;
-  margin-top: 7px;
-  overflow: hidden;
-  color: var(--navy);
-  font-size: 12px;
-  line-height: 1.2;
-  font-weight: 900;
-}
-
-.inspectorTitle > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inspectorWorkPackage {
-  flex: 0 0 auto;
-  color: var(--teal);
-}
-
-.inspectorLocation {
-  margin-top: 5px;
-  overflow: hidden;
-  color: #647789;
-  font-size: 9px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inspectorMetrics {
-  display: grid;
-  min-width: 0;
-  grid-template-columns:
-    repeat(
-      8,
-      minmax(88px, 1fr)
-    );
-  gap: 7px;
-}
-
-.inspectorMetric,
-.inspectorMetricEmphasized {
-  display: grid;
-  min-width: 0;
-  align-content: center;
-  gap: 4px;
-  padding: 8px 9px;
-  border: 1px solid #dbe4ea;
-  border-radius: 6px;
-  background: #ffffff;
-}
-
-.inspectorMetricEmphasized {
-  border-color: #a9d8d2;
-  background: #effaf8;
-}
-
-.inspectorMetricLabel {
-  overflow: hidden;
-  color: #788a98;
-  font-size: 7px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.inspectorMetricValue {
-  overflow: hidden;
-  color: var(--navy);
-  font-size: 11px;
-  line-height: 1.1;
-  font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inspectorMetricDetail {
-  overflow: hidden;
-  color: #7b8c99;
-  font-size: 7px;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.noSelection {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #728393;
-  font-size: 11px;
-}
-
-
-/* =========================================================
-   SCROLLBARS
-   ========================================================= */
-
-.activityBody::-webkit-scrollbar,
-.ganttBody::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.activityBody::-webkit-scrollbar-track,
-.ganttBody::-webkit-scrollbar-track {
-  background: #eef2f5;
-}
-
-.activityBody::-webkit-scrollbar-thumb,
-.ganttBody::-webkit-scrollbar-thumb {
-  border: 2px solid #eef2f5;
-  border-radius: 999px;
-  background: #b9c7d1;
-}
-
-.activityBody::-webkit-scrollbar-thumb:hover,
-.ganttBody::-webkit-scrollbar-thumb:hover {
-  background: #9fafbb;
-}
-
-
-/* =========================================================
-   RESPONSIVE
-   ========================================================= */
-
-@media (max-width: 1350px) {
-  .planningGrid {
-    grid-template-columns:
-      minmax(750px, 63%)
-      minmax(0, 37%);
+  if (
+    !Number.isFinite(
+      numeric
+    )
+  ) {
+    return '—'
   }
 
-  .inspector {
-    grid-template-columns: 1fr;
+  return new Intl.NumberFormat(
+    'en-US',
+    {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: digits,
+    }
+  ).format(numeric)
+}
+
+
+function snapDay(
+  value
+) {
+  const snapped =
+    Math.round(
+      value /
+      SNAP_INCREMENT
+    ) *
+    SNAP_INCREMENT
+
+  return Math.max(
+    0,
+    Number(
+      snapped.toFixed(2)
+    )
+  )
+}
+
+
+function getActivityStatus(
+  activity,
+  targetTakt
+) {
+  const rawDuration =
+    Number(
+      activity?.rawDuration
+    )
+
+  const takt =
+    Number(targetTakt)
+
+  if (
+    !Number.isFinite(
+      rawDuration
+    ) ||
+    rawDuration <= 0 ||
+    !Number.isFinite(
+      takt
+    ) ||
+    takt <= 0
+  ) {
+    return {
+      key: 'waiting',
+      label: 'Waiting',
+    }
   }
 
-  .inspectorMetrics {
-    grid-template-columns:
-      repeat(
-        4,
-        minmax(100px, 1fr)
-      );
+  const utilization =
+    rawDuration /
+    takt
+
+  if (
+    utilization > 1
+  ) {
+    return {
+      key: 'gap',
+      label: 'Capacity Gap',
+    }
+  }
+
+  if (
+    utilization >= 0.75
+  ) {
+    return {
+      key: 'balanced',
+      label: 'Balanced',
+    }
+  }
+
+  return {
+    key: 'underloaded',
+    label: 'Underloaded',
   }
 }
 
 
-@media (max-width: 1050px) {
-  .workspaceHeader {
-    flex-direction: column;
+function getBasisLabel(
+  basis
+) {
+  if (
+    basis === 'crew_day'
+  ) {
+    return 'Per crew / day'
   }
 
-  .headerActions {
-    width: 100%;
-    flex-wrap: wrap;
+  return 'Per worker / day'
+}
+
+
+function getResourceLabel(
+  activity
+) {
+  const value =
+    Number(
+      activity?.effectiveWorkforce
+    )
+
+  if (
+    !Number.isFinite(value) ||
+    value <= 0
+  ) {
+    return '—'
   }
 
-  .planningGrid {
-    grid-template-columns:
-      770px
-      420px;
-    overflow-x: auto;
+  const unit =
+    activity?.productivityBasis ===
+    'crew_day'
+      ? value === 1
+        ? 'crew'
+        : 'crews'
+      : value === 1
+        ? 'worker'
+        : 'workers'
+
+  return `${safeNumber(
+    value
+  )} ${unit}`
+}
+
+
+function getActivityCode(
+  index
+) {
+  return String(
+    (index + 1) * 10
+  ).padStart(
+    4,
+    '0'
+  )
+}
+
+
+export default function PrePlanningWorkspace({
+  project,
+  activities = [],
+  targetTakt = null,
+  strategyStatus = 'draft',
+  changeProjectHref = '/dashboard/planning/pre-planning',
+}) {
+  const normalizedActivities =
+    useMemo(
+      () =>
+        Array.isArray(
+          activities
+        )
+          ? activities
+          : [],
+      [activities]
+    )
+
+
+  const [
+    selectedActivityId,
+    setSelectedActivityId,
+  ] =
+    useState(
+      normalizedActivities?.[0]?.id ||
+      null
+    )
+
+
+  const [
+    startOffsets,
+    setStartOffsets,
+  ] =
+    useState(() => {
+      const initial = {}
+
+      normalizedActivities.forEach(
+        (activity) => {
+          initial[
+            activity.id
+          ] = 0
+        }
+      )
+
+      return initial
+    })
+
+
+  const [
+    dragging,
+    setDragging,
+  ] =
+    useState(null)
+
+
+  const [
+    dayWidth,
+    setDayWidth,
+  ] =
+    useState(
+      DEFAULT_DAY_WIDTH
+    )
+
+
+  const leftBodyRef =
+    useRef(null)
+
+  const rightBodyRef =
+    useRef(null)
+
+  const ganttHeaderRef =
+    useRef(null)
+
+  const scrollOwnerRef =
+    useRef(null)
+
+
+  useEffect(
+    () => {
+      setStartOffsets(
+        (current) => {
+          const next = {
+            ...current,
+          }
+
+          normalizedActivities.forEach(
+            (activity) => {
+              if (
+                next[
+                  activity.id
+                ] ===
+                undefined
+              ) {
+                next[
+                  activity.id
+                ] = 0
+              }
+            }
+          )
+
+          return next
+        }
+      )
+    },
+    [
+      normalizedActivities,
+    ]
+  )
+
+
+  const selectedActivity =
+    useMemo(
+      () =>
+        normalizedActivities.find(
+          (activity) =>
+            activity.id ===
+            selectedActivityId
+        ) ||
+        normalizedActivities[0] ||
+        null,
+      [
+        normalizedActivities,
+        selectedActivityId,
+      ]
+    )
+
+
+  const maxFinishOffset =
+    useMemo(
+      () => {
+        let maximum = 0
+
+        normalizedActivities.forEach(
+          (activity) => {
+            const duration =
+              Number(
+                activity.rawDuration
+              )
+
+            if (
+              !Number.isFinite(
+                duration
+              ) ||
+              duration <= 0
+            ) {
+              return
+            }
+
+            const start =
+              Number(
+                startOffsets[
+                  activity.id
+                ] ||
+                0
+              )
+
+            maximum =
+              Math.max(
+                maximum,
+                start +
+                  duration
+              )
+          }
+        )
+
+        return maximum
+      },
+      [
+        normalizedActivities,
+        startOffsets,
+      ]
+    )
+
+
+  const timelineDays =
+    useMemo(
+      () =>
+        Math.max(
+          MIN_TIMELINE_DAYS,
+          Math.ceil(
+            maxFinishOffset
+          ) +
+            TIMELINE_PADDING_DAYS
+        ),
+      [
+        maxFinishOffset,
+      ]
+    )
+
+
+  const dayMarkers =
+    useMemo(
+      () =>
+        Array.from(
+          {
+            length:
+              timelineDays +
+              1,
+          },
+          (
+            _,
+            index
+          ) =>
+            index
+        ),
+      [
+        timelineDays,
+      ]
+    )
+
+
+  const timelineWidth =
+    timelineDays *
+    dayWidth
+
+
+  useEffect(
+    () => {
+      if (!dragging) {
+        return undefined
+      }
+
+
+      function handlePointerMove(
+        event
+      ) {
+        const ganttBody =
+          rightBodyRef.current
+
+        if (!ganttBody) {
+          return
+        }
+
+
+        const bounds =
+          ganttBody
+            .getBoundingClientRect()
+
+
+        if (
+          event.clientX >
+          bounds.right -
+            AUTO_SCROLL_EDGE
+        ) {
+          ganttBody.scrollLeft +=
+            AUTO_SCROLL_SPEED
+        } else if (
+          event.clientX <
+          bounds.left +
+            AUTO_SCROLL_EDGE
+        ) {
+          ganttBody.scrollLeft =
+            Math.max(
+              0,
+              ganttBody.scrollLeft -
+                AUTO_SCROLL_SPEED
+            )
+        }
+
+
+        const scrollDelta =
+          ganttBody.scrollLeft -
+          dragging.initialScrollLeft
+
+
+        const pixelDelta =
+          event.clientX -
+          dragging.startClientX +
+          scrollDelta
+
+
+        const dayDelta =
+          pixelDelta /
+          dayWidth
+
+
+        const nextStart =
+          snapDay(
+            dragging.initialOffset +
+              dayDelta
+          )
+
+
+        setStartOffsets(
+          (current) => ({
+            ...current,
+
+            [dragging.activityId]:
+              nextStart,
+          })
+        )
+      }
+
+
+      function handlePointerUp() {
+        setDragging(
+          null
+        )
+      }
+
+
+      window.addEventListener(
+        'pointermove',
+        handlePointerMove
+      )
+
+      window.addEventListener(
+        'pointerup',
+        handlePointerUp
+      )
+
+      window.addEventListener(
+        'pointercancel',
+        handlePointerUp
+      )
+
+
+      return () => {
+        window.removeEventListener(
+          'pointermove',
+          handlePointerMove
+        )
+
+        window.removeEventListener(
+          'pointerup',
+          handlePointerUp
+        )
+
+        window.removeEventListener(
+          'pointercancel',
+          handlePointerUp
+        )
+      }
+    },
+    [
+      dragging,
+      dayWidth,
+    ]
+  )
+
+
+  function beginDrag(
+    event,
+    activity
+  ) {
+    const duration =
+      Number(
+        activity.rawDuration
+      )
+
+    if (
+      !Number.isFinite(
+        duration
+      ) ||
+      duration <= 0
+    ) {
+      return
+    }
+
+
+    event.preventDefault()
+    event.stopPropagation()
+
+
+    event.currentTarget
+      .setPointerCapture?.(
+        event.pointerId
+      )
+
+
+    setSelectedActivityId(
+      activity.id
+    )
+
+
+    const currentOffset =
+      Number(
+        startOffsets[
+          activity.id
+        ] ||
+        0
+      )
+
+
+    setDragging({
+      activityId:
+        activity.id,
+
+      startClientX:
+        event.clientX,
+
+      initialOffset:
+        currentOffset,
+
+      initialScrollLeft:
+        rightBodyRef
+          .current
+          ?.scrollLeft ||
+        0,
+    })
   }
 
-  .inspectorMetrics {
-    grid-template-columns:
-      repeat(
-        2,
-        minmax(120px, 1fr)
-      );
+
+  function syncVerticalScroll(
+    source
+  ) {
+    if (
+      scrollOwnerRef.current &&
+      scrollOwnerRef.current !==
+        source
+    ) {
+      return
+    }
+
+    scrollOwnerRef.current =
+      source
+
+
+    if (
+      source === 'left'
+    ) {
+      if (
+        leftBodyRef.current &&
+        rightBodyRef.current
+      ) {
+        rightBodyRef.current.scrollTop =
+          leftBodyRef.current.scrollTop
+      }
+    } else {
+      if (
+        leftBodyRef.current &&
+        rightBodyRef.current
+      ) {
+        leftBodyRef.current.scrollTop =
+          rightBodyRef.current.scrollTop
+      }
+    }
+
+
+    window.requestAnimationFrame(
+      () => {
+        scrollOwnerRef.current =
+          null
+      }
+    )
   }
+
+
+  function handleGanttScroll() {
+    syncVerticalScroll(
+      'right'
+    )
+
+    if (
+      rightBodyRef.current &&
+      ganttHeaderRef.current
+    ) {
+      ganttHeaderRef.current.scrollLeft =
+        rightBodyRef.current.scrollLeft
+    }
+  }
+
+
+  function zoomIn() {
+    setDayWidth(
+      (current) =>
+        Math.min(
+          MAX_DAY_WIDTH,
+          current + 6
+        )
+    )
+  }
+
+
+  function zoomOut() {
+    setDayWidth(
+      (current) =>
+        Math.max(
+          MIN_DAY_WIDTH,
+          current - 6
+        )
+    )
+  }
+
+
+  function fitTimeline() {
+    setDayWidth(
+      DEFAULT_DAY_WIDTH
+    )
+
+    if (
+      rightBodyRef.current
+    ) {
+      rightBodyRef.current.scrollLeft =
+        0
+    }
+
+    if (
+      ganttHeaderRef.current
+    ) {
+      ganttHeaderRef.current.scrollLeft =
+        0
+    }
+  }
+
+
+  const targetTaktNumber =
+    Number(targetTakt)
+
+
+  const hasTargetTakt =
+    Number.isFinite(
+      targetTaktNumber
+    ) &&
+    targetTaktNumber > 0
+
+
+  const isApproved =
+    strategyStatus ===
+    'approved'
+
+
+  const selectedStartOffset =
+    selectedActivity
+      ? Number(
+          startOffsets[
+            selectedActivity.id
+          ] ||
+          0
+        )
+      : 0
+
+
+  const selectedRawDuration =
+    selectedActivity
+      ? Number(
+          selectedActivity.rawDuration
+        )
+      : null
+
+
+  const selectedFinishOffset =
+    Number.isFinite(
+      selectedRawDuration
+    )
+      ? selectedStartOffset +
+        selectedRawDuration
+      : null
+
+
+  return (
+    <div
+      className={
+        styles.workspace
+      }
+    >
+      <header
+        className={
+          styles.workspaceHeader
+        }
+      >
+        <div
+          className={
+            styles.projectIdentity
+          }
+        >
+          <div
+            className={
+              styles.eyebrow
+            }
+          >
+            PRE-PLANNING
+          </div>
+
+          <div
+            className={
+              styles.projectTitleRow
+            }
+          >
+            <h1
+              className={
+                styles.projectTitle
+              }
+            >
+              {project?.code
+                ? `${project.code} · `
+                : ''}
+
+              {project?.name ||
+                'Project'}
+            </h1>
+
+            <span
+              className={
+                isApproved
+                  ? styles.statusApproved
+                  : styles.statusDraft
+              }
+            >
+              {isApproved
+                ? 'Approved'
+                : 'Draft'}
+            </span>
+          </div>
+
+          <p
+            className={
+              styles.projectDescription
+            }
+          >
+            Use the drag handle to position activities horizontally.
+            Raw Duration remains calculated and locked.
+          </p>
+        </div>
+
+
+        <div
+          className={
+            styles.headerActions
+          }
+        >
+          <div
+            className={
+              styles.summaryMetric
+            }
+          >
+            <span
+              className={
+                styles.summaryMetricLabel
+              }
+            >
+              Activities
+            </span>
+
+            <strong>
+              {
+                normalizedActivities.length
+              }
+            </strong>
+          </div>
+
+          <div
+            className={
+              styles.summaryMetric
+            }
+          >
+            <span
+              className={
+                styles.summaryMetricLabel
+              }
+            >
+              Target Takt
+            </span>
+
+            <strong>
+              {hasTargetTakt
+                ? `${safeNumber(
+                    targetTaktNumber
+                  )} d`
+                : '—'}
+            </strong>
+          </div>
+
+          <Link
+            href={
+              changeProjectHref
+            }
+            className={
+              styles.changeProjectButton
+            }
+          >
+            Change Project
+          </Link>
+        </div>
+      </header>
+
+
+      <div
+        className={
+          styles.toolbar
+        }
+      >
+        <div
+          className={
+            styles.toolbarGroup
+          }
+        >
+          <div
+            className={
+              styles.toolbarTitle
+            }
+          >
+            Production Gantt
+          </div>
+
+          <span
+            className={
+              styles.lockedBadge
+            }
+          >
+            DURATIONS LOCKED
+          </span>
+
+          <span
+            className={
+              styles.dragHint
+            }
+          >
+            ⠿ DRAG HANDLE
+          </span>
+        </div>
+
+
+        <div
+          className={
+            styles.toolbarGroup
+          }
+        >
+          <button
+            type="button"
+            onClick={
+              zoomOut
+            }
+            disabled={
+              dayWidth <=
+              MIN_DAY_WIDTH
+            }
+            className={
+              styles.toolbarButton
+            }
+            title="Zoom out"
+          >
+            −
+          </button>
+
+          <div
+            className={
+              styles.zoomValue
+            }
+          >
+            {dayWidth}px / day
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              zoomIn
+            }
+            disabled={
+              dayWidth >=
+              MAX_DAY_WIDTH
+            }
+            className={
+              styles.toolbarButton
+            }
+            title="Zoom in"
+          >
+            +
+          </button>
+
+          <button
+            type="button"
+            onClick={
+              fitTimeline
+            }
+            className={
+              styles.toolbarButtonWide
+            }
+          >
+            Fit
+          </button>
+        </div>
+      </div>
+
+
+      <div
+        className={
+          styles.planningGrid
+        }
+      >
+        <section
+          className={
+            styles.activityPane
+          }
+        >
+          <div
+            className={
+              styles.activityHeader
+            }
+          >
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              ID
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              WP
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Scope Item
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Location
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Division
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCellRight
+              }
+            >
+              Qty
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCellRight
+              }
+            >
+              Capacity
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCellRight
+              }
+            >
+              Raw Dur.
+            </div>
+          </div>
+
+
+          <div
+            ref={
+              leftBodyRef
+            }
+            className={
+              styles.activityBody
+            }
+            onScroll={() =>
+              syncVerticalScroll(
+                'left'
+              )
+            }
+          >
+            {normalizedActivities.length >
+            0 ? (
+              normalizedActivities.map(
+                (
+                  activity,
+                  index
+                ) => {
+                  const isSelected =
+                    selectedActivity?.id ===
+                    activity.id
+
+                  const hasDuration =
+                    Number.isFinite(
+                      Number(
+                        activity.rawDuration
+                      )
+                    )
+
+                  return (
+                    <button
+                      key={
+                        activity.id
+                      }
+                      type="button"
+                      className={
+                        isSelected
+                          ? styles.activityRowSelected
+                          : styles.activityRow
+                      }
+                      onClick={() =>
+                        setSelectedActivityId(
+                          activity.id
+                        )
+                      }
+                    >
+                      <div
+                        className={
+                          styles.activityId
+                        }
+                      >
+                        {getActivityCode(
+                          index
+                        )}
+                      </div>
+
+                      <div
+                        className={
+                          styles.workPackageCode
+                        }
+                      >
+                        <span
+                          className={
+                            styles.workPackageIndicator
+                          }
+                          style={{
+                            background:
+                              activity.workPackageColor ||
+                              '#00998b',
+                          }}
+                        />
+
+                        <span>
+                          {activity.workPackageCode ||
+                            '—'}
+                        </span>
+                      </div>
+
+                      <div
+                        className={
+                          styles.scopeItemName
+                        }
+                        title={
+                          activity.scopeItemName ||
+                          ''
+                        }
+                      >
+                        {activity.scopeItemName ||
+                          'Scope Item'}
+                      </div>
+
+                      <div
+                        className={
+                          styles.locationName
+                        }
+                        title={
+                          activity.locationName ||
+                          ''
+                        }
+                      >
+                        {activity.locationName ||
+                          '—'}
+                      </div>
+
+                      <div
+                        className={
+                          styles.divisionName
+                        }
+                        title={
+                          activity.divisionName ||
+                          ''
+                        }
+                      >
+                        {activity.divisionName ||
+                          '—'}
+                      </div>
+
+                      <div
+                        className={
+                          styles.numericCell
+                        }
+                      >
+                        {safeNumber(
+                          activity.quantity
+                        )}{' '}
+
+                        <span
+                          className={
+                            styles.unitText
+                          }
+                        >
+                          {activity.unit ||
+                            ''}
+                        </span>
+                      </div>
+
+                      <div
+                        className={
+                          styles.numericCell
+                        }
+                      >
+                        {Number.isFinite(
+                          Number(
+                            activity.productionCapacity
+                          )
+                        )
+                          ? `${safeNumber(
+                              activity.productionCapacity
+                            )}/d`
+                          : '—'}
+                      </div>
+
+                      <div
+                        className={
+                          hasDuration
+                            ? styles.durationCell
+                            : styles.missingDurationCell
+                        }
+                      >
+                        {hasDuration
+                          ? `${safeNumber(
+                              activity.rawDuration
+                            )} d`
+                          : '—'}
+                      </div>
+                    </button>
+                  )
+                }
+              )
+            ) : (
+              <div
+                className={
+                  styles.emptyActivityState
+                }
+              >
+                <strong>
+                  No production activities
+                </strong>
+
+                <span>
+                  Positive location quantities are required before
+                  activities can be visualized.
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
+
+
+        <section
+          className={
+            styles.ganttPane
+          }
+        >
+          <div
+            ref={
+              ganttHeaderRef
+            }
+            className={
+              styles.ganttHeaderScroll
+            }
+          >
+            <div
+              className={
+                styles.ganttHeader
+              }
+              style={{
+                width:
+                  timelineWidth,
+              }}
+            >
+              {dayMarkers.map(
+                (day) => (
+                  <div
+                    key={
+                      day
+                    }
+                    className={
+                      day %
+                        5 ===
+                      0
+                        ? styles.dayHeaderMajor
+                        : styles.dayHeader
+                    }
+                    style={{
+                      width:
+                        dayWidth,
+
+                      left:
+                        day *
+                        dayWidth,
+                    }}
+                  >
+                    {day}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+
+
+          <div
+            ref={
+              rightBodyRef
+            }
+            className={
+              styles.ganttBody
+            }
+            onScroll={
+              handleGanttScroll
+            }
+          >
+            <div
+              className={
+                styles.ganttCanvas
+              }
+              style={{
+                width:
+                  timelineWidth,
+
+                height:
+                  Math.max(
+                    normalizedActivities.length *
+                      ROW_HEIGHT,
+                    ROW_HEIGHT
+                  ),
+              }}
+            >
+              <div
+                className={
+                  styles.gridBackground
+                }
+                style={{
+                  backgroundSize: `${dayWidth}px 100%`,
+                }}
+              />
+
+
+              {dayMarkers.map(
+                (day) =>
+                  day %
+                    5 ===
+                  0 ? (
+                    <div
+                      key={`major-${day}`}
+                      className={
+                        styles.majorGridLine
+                      }
+                      style={{
+                        left:
+                          day *
+                          dayWidth,
+                      }}
+                    />
+                  ) : null
+              )}
+
+
+              {normalizedActivities.map(
+                (
+                  activity,
+                  index
+                ) => {
+                  const rawDuration =
+                    Number(
+                      activity.rawDuration
+                    )
+
+                  const hasDuration =
+                    Number.isFinite(
+                      rawDuration
+                    ) &&
+                    rawDuration > 0
+
+
+                  const isSelected =
+                    selectedActivity?.id ===
+                    activity.id
+
+
+                  const isDragging =
+                    dragging?.activityId ===
+                    activity.id
+
+
+                  const startOffset =
+                    Number(
+                      startOffsets[
+                        activity.id
+                      ] ||
+                      0
+                    )
+
+
+                  const status =
+                    getActivityStatus(
+                      activity,
+                      targetTakt
+                    )
+
+
+                  const width =
+                    hasDuration
+                      ? Math.max(
+                          rawDuration *
+                            dayWidth,
+                          26
+                        )
+                      : 0
+
+
+                  const left =
+                    startOffset *
+                    dayWidth
+
+
+                  return (
+                    <div
+                      key={
+                        activity.id
+                      }
+                      className={
+                        isSelected
+                          ? styles.ganttRowSelected
+                          : styles.ganttRow
+                      }
+                      style={{
+                        top:
+                          index *
+                          ROW_HEIGHT,
+                      }}
+                      onClick={() =>
+                        setSelectedActivityId(
+                          activity.id
+                        )
+                      }
+                    >
+                      {hasDuration ? (
+                        <div
+                          className={`${styles.ganttBar} ${
+                            status.key ===
+                            'gap'
+                              ? styles.ganttBarGap
+                              : status.key ===
+                                  'balanced'
+                                ? styles.ganttBarBalanced
+                                : status.key ===
+                                    'underloaded'
+                                  ? styles.ganttBarUnderloaded
+                                  : styles.ganttBarWaiting
+                          } ${
+                            isDragging
+                              ? styles.ganttBarDragging
+                              : ''
+                          }`}
+                          style={{
+                            left,
+                            width,
+                          }}
+                          onClick={(
+                            event
+                          ) => {
+                            event.stopPropagation()
+
+                            setSelectedActivityId(
+                              activity.id
+                            )
+                          }}
+                          title={`Start Day ${safeNumber(
+                            startOffset
+                          )} · Duration ${safeNumber(
+                            rawDuration
+                          )} days`}
+                        >
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            className={
+                              styles.dragHandle
+                            }
+                            onPointerDown={(
+                              event
+                            ) =>
+                              beginDrag(
+                                event,
+                                activity
+                              )
+                            }
+                            title="Click, hold and drag"
+                            aria-label={`Move ${activity.scopeItemName}`}
+                          >
+                            <span
+                              className={
+                                styles.dragHandleDots
+                              }
+                            >
+                              ⠿
+                            </span>
+                          </div>
+
+                          <span
+                            className={
+                              styles.ganttBarLabel
+                            }
+                          >
+                            {safeNumber(
+                              rawDuration
+                            )}{' '}
+                            d
+                          </span>
+                        </div>
+                      ) : (
+                        <span
+                          className={
+                            styles.missingBar
+                          }
+                        >
+                          Missing Production Parameters
+                        </span>
+                      )}
+                    </div>
+                  )
+                }
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+
+
+      <footer
+        className={
+          styles.inspector
+        }
+      >
+        {selectedActivity ? (
+          <>
+            <div
+              className={
+                styles.inspectorIdentity
+              }
+            >
+              <div
+                className={
+                  styles.inspectorEyebrow
+                }
+              >
+                SELECTED ACTIVITY
+              </div>
+
+              <div
+                className={
+                  styles.inspectorTitle
+                }
+              >
+                <span
+                  className={
+                    styles.inspectorWorkPackage
+                  }
+                >
+                  {selectedActivity.workPackageCode ||
+                    '—'}
+                </span>
+
+                <span>
+                  {selectedActivity.scopeItemName ||
+                    'Scope Item'}
+                </span>
+              </div>
+
+              <div
+                className={
+                  styles.inspectorLocation
+                }
+              >
+                {selectedActivity.locationName ||
+                  '—'}
+
+                {selectedActivity.divisionName &&
+                selectedActivity.divisionName !==
+                  '—'
+                  ? ` / ${selectedActivity.divisionName}`
+                  : ''}
+              </div>
+            </div>
+
+
+            <div
+              className={
+                styles.inspectorMetrics
+              }
+            >
+              <InspectorMetric
+                label="Location"
+                value={
+                  selectedActivity.locationName ||
+                  '—'
+                }
+              />
+
+              <InspectorMetric
+                label="Division"
+                value={
+                  selectedActivity.divisionName ||
+                  '—'
+                }
+                detail={
+                  selectedActivity.divisionType ||
+                  ''
+                }
+              />
+
+              <InspectorMetric
+                label="Quantity"
+                value={`${safeNumber(
+                  selectedActivity.quantity
+                )} ${
+                  selectedActivity.unit ||
+                  ''
+                }`}
+              />
+
+              <InspectorMetric
+                label="Productivity"
+                value={
+                  Number.isFinite(
+                    Number(
+                      selectedActivity.productivity
+                    )
+                  )
+                    ? `${safeNumber(
+                        selectedActivity.productivity
+                      )} ${
+                        selectedActivity.unit ||
+                        ''
+                      }`
+                    : '—'
+                }
+                detail={
+                  getBasisLabel(
+                    selectedActivity.productivityBasis
+                  )
+                }
+              />
+
+              <InspectorMetric
+                label="Resource"
+                value={
+                  getResourceLabel(
+                    selectedActivity
+                  )
+                }
+              />
+
+              <InspectorMetric
+                label="Raw Duration"
+                value={
+                  Number.isFinite(
+                    selectedRawDuration
+                  )
+                    ? `${safeNumber(
+                        selectedRawDuration
+                      )} d`
+                    : '—'
+                }
+                emphasized
+              />
+
+              <InspectorMetric
+                label="Start Offset"
+                value={`Day ${safeNumber(
+                  selectedStartOffset
+                )}`}
+                detail="Drag handle to change"
+              />
+
+              <InspectorMetric
+                label="Finish Offset"
+                value={
+                  Number.isFinite(
+                    selectedFinishOffset
+                  )
+                    ? `Day ${safeNumber(
+                        selectedFinishOffset
+                      )}`
+                    : '—'
+                }
+              />
+            </div>
+          </>
+        ) : (
+          <div
+            className={
+              styles.noSelection
+            }
+          >
+            Select an activity to inspect its production data.
+          </div>
+        )}
+      </footer>
+    </div>
+  )
+}
+
+
+function InspectorMetric({
+  label,
+  value,
+  detail = '',
+  emphasized = false,
+}) {
+  return (
+    <div
+      className={
+        emphasized
+          ? styles.inspectorMetricEmphasized
+          : styles.inspectorMetric
+      }
+    >
+      <span
+        className={
+          styles.inspectorMetricLabel
+        }
+      >
+        {label}
+      </span>
+
+      <strong
+        className={
+          styles.inspectorMetricValue
+        }
+      >
+        {value}
+      </strong>
+
+      {detail ? (
+        <span
+          className={
+            styles.inspectorMetricDetail
+          }
+        >
+          {detail}
+        </span>
+      ) : null}
+    </div>
+  )
 }
