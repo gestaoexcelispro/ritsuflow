@@ -9,6 +9,10 @@ import {
   useState,
 } from 'react'
 
+import {
+  useRouter,
+} from 'next/navigation'
+
 import styles from './pre-planning.module.css'
 
 
@@ -44,61 +48,12 @@ function safeNumber(
     'en-US',
     {
       minimumFractionDigits: 0,
-      maximumFractionDigits: digits,
+      maximumFractionDigits:
+        digits,
     }
-  ).format(numeric)
-}
-
-
-function getActivityStatus(
-  activity,
-  targetTakt
-) {
-  const rawDuration =
-    Number(
-      activity?.rawDuration
-    )
-
-  const takt =
-    Number(targetTakt)
-
-  if (
-    !Number.isFinite(rawDuration) ||
-    rawDuration <= 0 ||
-    !Number.isFinite(takt) ||
-    takt <= 0
-  ) {
-    return {
-      key: 'waiting',
-      label: 'Waiting',
-    }
-  }
-
-  const utilization =
-    rawDuration / takt
-
-  if (
-    utilization > 1
-  ) {
-    return {
-      key: 'gap',
-      label: 'Capacity Gap',
-    }
-  }
-
-  if (
-    utilization >= 0.75
-  ) {
-    return {
-      key: 'balanced',
-      label: 'Balanced',
-    }
-  }
-
-  return {
-    key: 'underloaded',
-    label: 'Underloaded',
-  }
+  ).format(
+    numeric
+  )
 }
 
 
@@ -106,7 +61,8 @@ function getBasisLabel(
   basis
 ) {
   if (
-    basis === 'crew_day'
+    basis ===
+    'crew_day'
   ) {
     return 'Per crew / day'
   }
@@ -120,18 +76,24 @@ function getResourceLabel(
 ) {
   const value =
     Number(
-      activity?.effectiveWorkforce
+      activity
+        ?.effectiveWorkforce
     )
 
+
   if (
-    !Number.isFinite(value) ||
+    !Number.isFinite(
+      value
+    ) ||
     value <= 0
   ) {
     return '—'
   }
 
+
   const unit =
-    activity?.productivityBasis ===
+    activity
+      ?.productivityBasis ===
     'crew_day'
       ? value === 1
         ? 'crew'
@@ -139,6 +101,7 @@ function getResourceLabel(
       : value === 1
         ? 'worker'
         : 'workers'
+
 
   return `${safeNumber(
     value
@@ -150,7 +113,8 @@ function getActivityCode(
   index
 ) {
   return String(
-    (index + 1) * 10
+    (index + 1) *
+      10
   ).padStart(
     4,
     '0'
@@ -165,13 +129,16 @@ function moveItem(
 ) {
   if (
     fromIndex < 0 ||
-    fromIndex >= items.length
+    fromIndex >=
+      items.length
   ) {
     return items
   }
 
+
   const next =
     [...items]
+
 
   const [
     movedItem,
@@ -181,8 +148,10 @@ function moveItem(
       1
     )
 
+
   let insertionIndex =
     toIndex
+
 
   if (
     toIndex >
@@ -190,6 +159,7 @@ function moveItem(
   ) {
     insertionIndex -= 1
   }
+
 
   insertionIndex =
     Math.max(
@@ -200,22 +170,18 @@ function moveItem(
       )
     )
 
+
   next.splice(
     insertionIndex,
     0,
     movedItem
   )
 
+
   return next
 }
 
 
-/*
- * Reorder only the visible activities.
- *
- * Hidden activities remain in their existing
- * positions in the complete project sequence.
- */
 function reorderVisibleActivities({
   fullOrder,
   visibleIds,
@@ -223,9 +189,14 @@ function reorderVisibleActivities({
   dropIndex,
 }) {
   if (
-    !Array.isArray(fullOrder) ||
-    !Array.isArray(visibleIds) ||
-    visibleIds.length === 0
+    !Array.isArray(
+      fullOrder
+    ) ||
+    !Array.isArray(
+      visibleIds
+    ) ||
+    visibleIds.length ===
+      0
   ) {
     return fullOrder
   }
@@ -255,7 +226,8 @@ function reorderVisibleActivities({
 
 
   if (
-    sourceIndex < 0
+    sourceIndex <
+    0
   ) {
     return fullOrder
   }
@@ -269,7 +241,8 @@ function reorderVisibleActivities({
     )
 
 
-  let visibleCursor = 0
+  let visibleCursor =
+    0
 
 
   return fullOrder.map(
@@ -282,16 +255,32 @@ function reorderVisibleActivities({
         return activity
       }
 
+
       const replacement =
         reorderedVisible[
           visibleCursor
         ]
 
-      visibleCursor += 1
+
+      visibleCursor +=
+        1
+
 
       return replacement
     }
   )
+}
+
+
+function orderSignature(
+  activities
+) {
+  return activities
+    .map(
+      (activity) =>
+        activity.id
+    )
+    .join('|')
 }
 
 
@@ -300,8 +289,14 @@ export default function PrePlanningWorkspace({
   activities = [],
   targetTakt = null,
   strategyStatus = 'draft',
+  activeVersion = null,
+  versionCount = 0,
   changeProjectHref = '/dashboard/planning/pre-planning',
 }) {
+  const router =
+    useRouter()
+
+
   const normalizedActivities =
     useMemo(
       () =>
@@ -310,7 +305,9 @@ export default function PrePlanningWorkspace({
         )
           ? activities
           : [],
-      [activities]
+      [
+        activities,
+      ]
     )
 
 
@@ -324,11 +321,24 @@ export default function PrePlanningWorkspace({
 
 
   const [
+    savedSignature,
+    setSavedSignature,
+  ] =
+    useState(
+      orderSignature(
+        normalizedActivities
+      )
+    )
+
+
+  const [
     selectedActivityId,
     setSelectedActivityId,
   ] =
     useState(
-      normalizedActivities?.[0]?.id ||
+      normalizedActivities
+        ?.[0]
+        ?.id ||
       null
     )
 
@@ -337,21 +347,27 @@ export default function PrePlanningWorkspace({
     selectedLocation,
     setSelectedLocation,
   ] =
-    useState('all')
+    useState(
+      'all'
+    )
 
 
   const [
     selectedDivision,
     setSelectedDivision,
   ] =
-    useState('all')
+    useState(
+      'all'
+    )
 
 
   const [
     rowDrag,
     setRowDrag,
   ] =
-    useState(null)
+    useState(
+      null
+    )
 
 
   const [
@@ -363,20 +379,48 @@ export default function PrePlanningWorkspace({
     )
 
 
+  const [
+    actionState,
+    setActionState,
+  ] =
+    useState(
+      'idle'
+    )
+
+
+  const [
+    notice,
+    setNotice,
+  ] =
+    useState(
+      null
+    )
+
+
   const leftBodyRef =
-    useRef(null)
+    useRef(
+      null
+    )
 
   const rightBodyRef =
-    useRef(null)
+    useRef(
+      null
+    )
 
   const ganttHeaderRef =
-    useRef(null)
+    useRef(
+      null
+    )
 
   const scrollOwnerRef =
-    useRef(null)
+    useRef(
+      null
+    )
 
   const rowDragRef =
-    useRef(null)
+    useRef(
+      null
+    )
 
 
   useEffect(
@@ -385,30 +429,62 @@ export default function PrePlanningWorkspace({
         normalizedActivities
       )
 
+
+      setSavedSignature(
+        orderSignature(
+          normalizedActivities
+        )
+      )
+
+
       setSelectedActivityId(
-        normalizedActivities?.[0]?.id ||
+        normalizedActivities
+          ?.[0]
+          ?.id ||
         null
       )
+
 
       setSelectedLocation(
         'all'
       )
 
+
       setSelectedDivision(
         'all'
       )
 
+
       setRowDrag(
         null
       )
+
 
       rowDragRef.current =
         null
     },
     [
       normalizedActivities,
+      activeVersion?.id,
     ]
   )
+
+
+  const currentSignature =
+    useMemo(
+      () =>
+        orderSignature(
+          orderedActivities
+        ),
+      [
+        orderedActivities,
+      ]
+    )
+
+
+  const hasUnsavedChanges =
+    currentSignature !==
+    savedSignature
 
 
   /* =========================================================
@@ -420,6 +496,7 @@ export default function PrePlanningWorkspace({
       () => {
         const values =
           new Map()
+
 
         orderedActivities.forEach(
           (activity) => {
@@ -434,6 +511,7 @@ export default function PrePlanningWorkspace({
             }
           }
         )
+
 
         return Array.from(
           values.entries()
@@ -473,6 +551,7 @@ export default function PrePlanningWorkspace({
         const values =
           new Map()
 
+
         orderedActivities
           .filter(
             (activity) =>
@@ -489,10 +568,6 @@ export default function PrePlanningWorkspace({
                 activity.divisionName !==
                   '—'
               ) {
-                /*
-                 * Division ID is unique to its actual
-                 * location node, which is what we want.
-                 */
                 values.set(
                   activity.divisionId,
                   activity.divisionName
@@ -500,6 +575,7 @@ export default function PrePlanningWorkspace({
               }
             }
           )
+
 
         return Array.from(
           values.entries()
@@ -533,13 +609,6 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
-  /* =========================================================
-     FILTERED VIEW
-
-     The complete orderedActivities array remains
-     the source of truth for local sequencing.
-     ========================================================= */
 
   const filteredActivities =
     useMemo(
@@ -593,6 +662,7 @@ export default function PrePlanningWorkspace({
         const map =
           new Map()
 
+
         orderedActivities.forEach(
           (
             activity,
@@ -604,6 +674,7 @@ export default function PrePlanningWorkspace({
             )
           }
         )
+
 
         return map
       },
@@ -622,6 +693,7 @@ export default function PrePlanningWorkspace({
               activity.id ===
               selectedActivityId
           )
+
 
         return (
           selected ||
@@ -663,14 +735,18 @@ export default function PrePlanningWorkspace({
                 Number.isFinite(
                   duration
                 ) &&
-                duration > 0
+                duration >
+                  0
             )
 
+
         if (
-          durations.length === 0
+          durations.length ===
+          0
         ) {
           return 0
         }
+
 
         return Math.max(
           ...durations
@@ -687,6 +763,7 @@ export default function PrePlanningWorkspace({
       () =>
         Math.max(
           MIN_TIMELINE_DAYS,
+
           Math.ceil(
             maxRawDuration
           ) +
@@ -725,7 +802,7 @@ export default function PrePlanningWorkspace({
 
 
   /* =========================================================
-     FILTER HANDLERS
+     FILTERS
      ========================================================= */
 
   function handleLocationChange(
@@ -735,16 +812,16 @@ export default function PrePlanningWorkspace({
       event.target.value
     )
 
-    /*
-     * Division options depend on Location.
-     */
+
     setSelectedDivision(
       'all'
     )
 
+
     setRowDrag(
       null
     )
+
 
     rowDragRef.current =
       null
@@ -758,9 +835,11 @@ export default function PrePlanningWorkspace({
       event.target.value
     )
 
+
     setRowDrag(
       null
     )
+
 
     rowDragRef.current =
       null
@@ -772,13 +851,16 @@ export default function PrePlanningWorkspace({
       'all'
     )
 
+
     setSelectedDivision(
       'all'
     )
 
+
     setRowDrag(
       null
     )
+
 
     rowDragRef.current =
       null
@@ -786,7 +868,176 @@ export default function PrePlanningWorkspace({
 
 
   /* =========================================================
-     VERTICAL SEQUENCE DRAG
+     SAVE / VERSIONING
+     ========================================================= */
+
+  async function runSequenceAction(
+    action
+  ) {
+    if (
+      actionState !==
+      'idle'
+    ) {
+      return
+    }
+
+
+    if (
+      orderedActivities.length ===
+      0
+    ) {
+      return
+    }
+
+
+    if (
+      action ===
+        'create_version' &&
+      !activeVersion
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Save Sequence first to create Version 1.',
+      })
+
+      return
+    }
+
+
+    setActionState(
+      action ===
+        'save'
+        ? 'saving'
+        : 'creating'
+    )
+
+
+    setNotice(
+      null
+    )
+
+
+    try {
+      const response =
+        await fetch(
+          '/api/pre-planning/sequence',
+          {
+            method:
+              'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              JSON.stringify({
+                action,
+
+                projectId:
+                  project.id,
+
+                versionId:
+                  activeVersion?.id ||
+                  null,
+
+                /*
+                 * Always save the FULL
+                 * project sequence,
+                 * regardless of active
+                 * filters.
+                 */
+                allocationIds:
+                  orderedActivities.map(
+                    (activity) =>
+                      activity.id
+                  ),
+              }),
+          }
+        )
+
+
+      const result =
+        await response.json()
+
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          result?.error ||
+          'Sequence could not be saved.'
+        )
+      }
+
+
+      setSavedSignature(
+        currentSignature
+      )
+
+
+      if (
+        action ===
+        'save'
+      ) {
+        setNotice({
+          type:
+            'success',
+
+          text:
+            `${result.version.versionName} saved successfully.`,
+        })
+      } else {
+        setNotice({
+          type:
+            'success',
+
+          text:
+            `${result.version.versionName} created from the current sequence.`,
+        })
+      }
+
+
+      router.refresh()
+    } catch (
+      error
+    ) {
+      setNotice({
+        type:
+          'error',
+
+        text:
+          error?.message ||
+          'Sequence could not be saved.',
+      })
+    } finally {
+      setActionState(
+        'idle'
+      )
+    }
+  }
+
+
+  const saveDisabled =
+    actionState !==
+      'idle' ||
+    (
+      activeVersion &&
+      !hasUnsavedChanges
+    )
+
+
+  const createVersionDisabled =
+    actionState !==
+      'idle' ||
+    !activeVersion
+
+
+  /* =========================================================
+     VERTICAL DRAG
      ========================================================= */
 
   useEffect(
@@ -796,6 +1047,7 @@ export default function PrePlanningWorkspace({
       ) {
         const currentDrag =
           rowDragRef.current
+
 
         if (
           !currentDrag
@@ -807,19 +1059,16 @@ export default function PrePlanningWorkspace({
         const body =
           leftBodyRef.current
 
+
         if (!body) {
           return
         }
 
 
         const bounds =
-          body
-            .getBoundingClientRect()
+          body.getBoundingClientRect()
 
 
-        /*
-         * Vertical auto-scroll.
-         */
         if (
           event.clientY <
           bounds.top +
@@ -831,6 +1080,7 @@ export default function PrePlanningWorkspace({
               body.scrollTop -
                 AUTO_SCROLL_SPEED
             )
+
 
           if (
             rightBodyRef.current
@@ -845,6 +1095,7 @@ export default function PrePlanningWorkspace({
         ) {
           body.scrollTop +=
             AUTO_SCROLL_SPEED
+
 
           if (
             rightBodyRef.current
@@ -880,10 +1131,12 @@ export default function PrePlanningWorkspace({
               rowIndex +
                 (
                   offsetInsideRow >
-                  ROW_HEIGHT / 2
+                  ROW_HEIGHT /
+                    2
                     ? 1
                     : 0
                 ),
+
               filteredActivities.length
             )
           )
@@ -906,6 +1159,7 @@ export default function PrePlanningWorkspace({
         rowDragRef.current =
           nextDrag
 
+
         setRowDrag(
           nextDrag
         )
@@ -915,6 +1169,7 @@ export default function PrePlanningWorkspace({
       function handlePointerUp() {
         const currentDrag =
           rowDragRef.current
+
 
         if (
           !currentDrag
@@ -944,6 +1199,7 @@ export default function PrePlanningWorkspace({
         rowDragRef.current =
           null
 
+
         setRowDrag(
           null
         )
@@ -955,10 +1211,12 @@ export default function PrePlanningWorkspace({
         handlePointerMove
       )
 
+
       window.addEventListener(
         'pointerup',
         handlePointerUp
       )
+
 
       window.addEventListener(
         'pointercancel',
@@ -972,10 +1230,12 @@ export default function PrePlanningWorkspace({
           handlePointerMove
         )
 
+
         window.removeEventListener(
           'pointerup',
           handlePointerUp
         )
+
 
         window.removeEventListener(
           'pointercancel',
@@ -1027,6 +1287,7 @@ export default function PrePlanningWorkspace({
     rowDragRef.current =
       nextDrag
 
+
     setRowDrag(
       nextDrag
     )
@@ -1054,7 +1315,8 @@ export default function PrePlanningWorkspace({
 
 
     if (
-      source === 'left'
+      source ===
+      'left'
     ) {
       if (
         leftBodyRef.current &&
@@ -1063,14 +1325,12 @@ export default function PrePlanningWorkspace({
         rightBodyRef.current.scrollTop =
           leftBodyRef.current.scrollTop
       }
-    } else {
-      if (
-        leftBodyRef.current &&
-        rightBodyRef.current
-      ) {
-        leftBodyRef.current.scrollTop =
-          rightBodyRef.current.scrollTop
-      }
+    } else if (
+      leftBodyRef.current &&
+      rightBodyRef.current
+    ) {
+      leftBodyRef.current.scrollTop =
+        rightBodyRef.current.scrollTop
     }
 
 
@@ -1149,27 +1409,17 @@ export default function PrePlanningWorkspace({
 
 
   const targetTaktNumber =
-    Number(targetTakt)
+    Number(
+      targetTakt
+    )
 
 
   const hasTargetTakt =
     Number.isFinite(
       targetTaktNumber
     ) &&
-    targetTaktNumber > 0
-
-
-  const isApproved =
-    strategyStatus ===
-    'approved'
-
-
-  const selectedRawDuration =
-    selectedActivity
-      ? Number(
-          selectedActivity.rawDuration
-        )
-      : null
+    targetTaktNumber >
+      0
 
 
   const selectedSequenceIndex =
@@ -1221,6 +1471,7 @@ export default function PrePlanningWorkspace({
             PRE-PLANNING
           </div>
 
+
           <div
             className={
               styles.projectTitleRow
@@ -1239,26 +1490,29 @@ export default function PrePlanningWorkspace({
                 'Project'}
             </h1>
 
+
             <span
               className={
-                isApproved
+                strategyStatus ===
+                'approved'
                   ? styles.statusApproved
                   : styles.statusDraft
               }
             >
-              {isApproved
+              {strategyStatus ===
+              'approved'
                 ? 'Approved'
                 : 'Draft'}
             </span>
           </div>
+
 
           <p
             className={
               styles.projectDescription
             }
           >
-            Drag the sequence handle beside the Activity ID to reorder
-            production activities. Raw Duration remains calculated and locked.
+            Define the preliminary production sequence. Raw Duration is calculated from Project Setup data and remains locked.
           </p>
         </div>
 
@@ -1301,6 +1555,7 @@ export default function PrePlanningWorkspace({
             </strong>
           </div>
 
+
           <div
             className={
               styles.summaryMetric
@@ -1322,6 +1577,7 @@ export default function PrePlanningWorkspace({
                 : '—'}
             </strong>
           </div>
+
 
           <Link
             href={
@@ -1360,6 +1616,7 @@ export default function PrePlanningWorkspace({
               Production Gantt
             </div>
 
+
             <span
               className={
                 styles.lockedBadge
@@ -1367,6 +1624,7 @@ export default function PrePlanningWorkspace({
             >
               DURATIONS LOCKED
             </span>
+
 
             <span
               className={
@@ -1494,7 +1752,6 @@ export default function PrePlanningWorkspace({
                 onClick={
                   clearFilters
                 }
-                title="Clear Location and Division filters"
               >
                 Clear
               </button>
@@ -1520,10 +1777,10 @@ export default function PrePlanningWorkspace({
             className={
               styles.toolbarButton
             }
-            title="Zoom out"
           >
             −
           </button>
+
 
           <div
             className={
@@ -1532,6 +1789,7 @@ export default function PrePlanningWorkspace({
           >
             {dayWidth}px / day
           </div>
+
 
           <button
             type="button"
@@ -1545,10 +1803,10 @@ export default function PrePlanningWorkspace({
             className={
               styles.toolbarButton
             }
-            title="Zoom in"
           >
             +
           </button>
+
 
           <button
             type="button"
@@ -1560,6 +1818,153 @@ export default function PrePlanningWorkspace({
             }
           >
             Fit
+          </button>
+        </div>
+      </div>
+
+
+      <div
+        className={
+          styles.versionBar
+        }
+      >
+        <div
+          className={
+            styles.versionIdentity
+          }
+        >
+          <span
+            className={
+              styles.versionLabel
+            }
+          >
+            SEQUENCE VERSION
+          </span>
+
+
+          <strong
+            className={
+              styles.versionName
+            }
+          >
+            {activeVersion
+              ? activeVersion.versionName
+              : 'Not saved yet'}
+          </strong>
+
+
+          {activeVersion ? (
+            <span
+              className={
+                styles.currentVersionBadge
+              }
+            >
+              CURRENT
+            </span>
+          ) : null}
+
+
+          {versionCount >
+          0 ? (
+            <span
+              className={
+                styles.versionCount
+              }
+            >
+              {versionCount}{' '}
+              {versionCount ===
+              1
+                ? 'version'
+                : 'versions'}
+            </span>
+          ) : null}
+
+
+          {hasUnsavedChanges ? (
+            <span
+              className={
+                styles.unsavedBadge
+              }
+            >
+              UNSAVED CHANGES
+            </span>
+          ) : activeVersion ? (
+            <span
+              className={
+                styles.savedBadge
+              }
+            >
+              SAVED
+            </span>
+          ) : null}
+        </div>
+
+
+        <div
+          className={
+            styles.versionActions
+          }
+        >
+          {notice ? (
+            <span
+              className={`${styles.actionNotice} ${
+                notice.type ===
+                'success'
+                  ? styles.actionNoticeSuccess
+                  : notice.type ===
+                      'warning'
+                    ? styles.actionNoticeWarning
+                    : styles.actionNoticeError
+              }`}
+            >
+              {
+                notice.text
+              }
+            </span>
+          ) : null}
+
+
+          <button
+            type="button"
+            className={
+              styles.createVersionButton
+            }
+            disabled={
+              createVersionDisabled
+            }
+            onClick={() =>
+              runSequenceAction(
+                'create_version'
+              )
+            }
+          >
+            {actionState ===
+            'creating'
+              ? 'Creating...'
+              : 'Create Version'}
+          </button>
+
+
+          <button
+            type="button"
+            className={
+              styles.saveSequenceButton
+            }
+            disabled={
+              saveDisabled
+            }
+            onClick={() =>
+              runSequenceAction(
+                'save'
+              )
+            }
+          >
+            {actionState ===
+            'saving'
+              ? 'Saving...'
+              : activeVersion
+                ? 'Save Sequence'
+                : 'Save Sequence · Create V1'}
           </button>
         </div>
       </div>
@@ -1584,7 +1989,6 @@ export default function PrePlanningWorkspace({
               className={
                 styles.activityHeaderHandleCell
               }
-              aria-hidden="true"
             >
               ⠿
             </div>
@@ -1634,22 +2038,6 @@ export default function PrePlanningWorkspace({
                 styles.activityHeaderCellRight
               }
             >
-              Qty
-            </div>
-
-            <div
-              className={
-                styles.activityHeaderCellRight
-              }
-            >
-              Capacity
-            </div>
-
-            <div
-              className={
-                styles.activityHeaderCellRight
-              }
-            >
               Raw Dur.
             </div>
           </div>
@@ -1677,6 +2065,7 @@ export default function PrePlanningWorkspace({
                   Math.max(
                     filteredActivities.length *
                       ROW_HEIGHT,
+
                     ROW_HEIGHT
                   ),
               }}
@@ -1711,12 +2100,18 @@ export default function PrePlanningWorkspace({
                       activity.id
 
 
+                    const rawDuration =
+                      Number(
+                        activity.rawDuration
+                      )
+
+
                     const hasDuration =
                       Number.isFinite(
-                        Number(
-                          activity.rawDuration
-                        )
-                      )
+                        rawDuration
+                      ) &&
+                      rawDuration >
+                        0
 
 
                     const globalSequenceIndex =
@@ -1769,8 +2164,7 @@ export default function PrePlanningWorkspace({
                                 visibleIndex
                               )
                             }
-                            title="Click, hold and drag to change activity sequence"
-                            aria-label={`Reorder ${activity.scopeItemName}`}
+                            title="Drag to change activity sequence"
                           >
                             <span
                               className={
@@ -1781,6 +2175,7 @@ export default function PrePlanningWorkspace({
                             </span>
                           </button>
                         </div>
+
 
                         <div
                           className={
@@ -1795,6 +2190,7 @@ export default function PrePlanningWorkspace({
                               )
                             : '—'}
                         </div>
+
 
                         <div
                           className={
@@ -1818,6 +2214,7 @@ export default function PrePlanningWorkspace({
                           </span>
                         </div>
 
+
                         <div
                           className={
                             styles.scopeItemName
@@ -1830,6 +2227,7 @@ export default function PrePlanningWorkspace({
                           {activity.scopeItemName ||
                             'Scope Item'}
                         </div>
+
 
                         <div
                           className={
@@ -1844,6 +2242,7 @@ export default function PrePlanningWorkspace({
                             '—'}
                         </div>
 
+
                         <div
                           className={
                             styles.divisionName
@@ -1857,40 +2256,6 @@ export default function PrePlanningWorkspace({
                             '—'}
                         </div>
 
-                        <div
-                          className={
-                            styles.numericCell
-                          }
-                        >
-                          {safeNumber(
-                            activity.quantity
-                          )}{' '}
-
-                          <span
-                            className={
-                              styles.unitText
-                            }
-                          >
-                            {activity.unit ||
-                              ''}
-                          </span>
-                        </div>
-
-                        <div
-                          className={
-                            styles.numericCell
-                          }
-                        >
-                          {Number.isFinite(
-                            Number(
-                              activity.productionCapacity
-                            )
-                          )
-                            ? `${safeNumber(
-                                activity.productionCapacity
-                              )}/d`
-                            : '—'}
-                        </div>
 
                         <div
                           className={
@@ -1901,7 +2266,7 @@ export default function PrePlanningWorkspace({
                         >
                           {hasDuration
                             ? `${safeNumber(
-                                activity.rawDuration
+                                rawDuration
                               )} d`
                             : '—'}
                         </div>
@@ -1920,7 +2285,7 @@ export default function PrePlanningWorkspace({
                   </strong>
 
                   <span>
-                    Change the Location or Division filter, or clear the filters to display all production activities.
+                    Change or clear the Location and Division filters.
                   </span>
 
                   <button
@@ -2016,6 +2381,7 @@ export default function PrePlanningWorkspace({
                   Math.max(
                     filteredActivities.length *
                       ROW_HEIGHT,
+
                     ROW_HEIGHT
                   ),
               }}
@@ -2078,7 +2444,8 @@ export default function PrePlanningWorkspace({
                     Number.isFinite(
                       rawDuration
                     ) &&
-                    rawDuration > 0
+                    rawDuration >
+                      0
 
 
                   const isSelected =
@@ -2091,18 +2458,12 @@ export default function PrePlanningWorkspace({
                     activity.id
 
 
-                  const status =
-                    getActivityStatus(
-                      activity,
-                      targetTakt
-                    )
-
-
                   const width =
                     hasDuration
                       ? Math.max(
                           rawDuration *
                             dayWidth,
+
                           4
                         )
                       : 0
@@ -2135,21 +2496,15 @@ export default function PrePlanningWorkspace({
                     >
                       {hasDuration ? (
                         <div
-                          className={`${styles.ganttBar} ${
-                            status.key ===
-                            'gap'
-                              ? styles.ganttBarGap
-                              : status.key ===
-                                  'balanced'
-                                ? styles.ganttBarBalanced
-                                : status.key ===
-                                    'underloaded'
-                                  ? styles.ganttBarUnderloaded
-                                  : styles.ganttBarWaiting
-                          }`}
+                          className={
+                            styles.ganttBar
+                          }
                           style={{
                             left: 0,
                             width,
+                            background:
+                              activity.workPackageColor ||
+                              '#00998b',
                           }}
                         >
                           <span
@@ -2202,6 +2557,7 @@ export default function PrePlanningWorkspace({
                 SELECTED ACTIVITY
               </div>
 
+
               <div
                 className={
                   styles.inspectorTitle
@@ -2221,6 +2577,7 @@ export default function PrePlanningWorkspace({
                     'Scope Item'}
                 </span>
               </div>
+
 
               <div
                 className={
@@ -2253,6 +2610,7 @@ export default function PrePlanningWorkspace({
                 emphasized
               />
 
+
               <InspectorMetric
                 label="Location"
                 value={
@@ -2260,6 +2618,7 @@ export default function PrePlanningWorkspace({
                   '—'
                 }
               />
+
 
               <InspectorMetric
                 label="Division"
@@ -2273,15 +2632,6 @@ export default function PrePlanningWorkspace({
                 }
               />
 
-              <InspectorMetric
-                label="Quantity"
-                value={`${safeNumber(
-                  selectedActivity.quantity
-                )} ${
-                  selectedActivity.unit ||
-                  ''
-                }`}
-              />
 
               <InspectorMetric
                 label="Productivity"
@@ -2306,6 +2656,7 @@ export default function PrePlanningWorkspace({
                 }
               />
 
+
               <InspectorMetric
                 label="Resource"
                 value={
@@ -2315,32 +2666,17 @@ export default function PrePlanningWorkspace({
                 }
               />
 
-              <InspectorMetric
-                label="Capacity"
-                value={
-                  Number.isFinite(
-                    Number(
-                      selectedActivity.productionCapacity
-                    )
-                  )
-                    ? `${safeNumber(
-                        selectedActivity.productionCapacity
-                      )} ${
-                        selectedActivity.unit ||
-                        ''
-                      }/day`
-                    : '—'
-                }
-              />
 
               <InspectorMetric
                 label="Raw Duration"
                 value={
                   Number.isFinite(
-                    selectedRawDuration
+                    Number(
+                      selectedActivity.rawDuration
+                    )
                   )
                     ? `${safeNumber(
-                        selectedRawDuration
+                        selectedActivity.rawDuration
                       )} d`
                     : '—'
                 }
