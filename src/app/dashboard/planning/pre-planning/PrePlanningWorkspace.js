@@ -164,7 +164,6 @@ function moveItem(
   toIndex
 ) {
   if (
-    fromIndex === toIndex ||
     fromIndex < 0 ||
     fromIndex >= items.length
   ) {
@@ -211,6 +210,91 @@ function moveItem(
 }
 
 
+/*
+ * Reorder only the visible activities.
+ *
+ * Hidden activities remain in their existing
+ * positions in the complete project sequence.
+ */
+function reorderVisibleActivities({
+  fullOrder,
+  visibleIds,
+  movedActivityId,
+  dropIndex,
+}) {
+  if (
+    !Array.isArray(fullOrder) ||
+    !Array.isArray(visibleIds) ||
+    visibleIds.length === 0
+  ) {
+    return fullOrder
+  }
+
+
+  const visibleIdSet =
+    new Set(
+      visibleIds
+    )
+
+
+  const visibleActivities =
+    fullOrder.filter(
+      (activity) =>
+        visibleIdSet.has(
+          activity.id
+        )
+    )
+
+
+  const sourceIndex =
+    visibleActivities.findIndex(
+      (activity) =>
+        activity.id ===
+        movedActivityId
+    )
+
+
+  if (
+    sourceIndex < 0
+  ) {
+    return fullOrder
+  }
+
+
+  const reorderedVisible =
+    moveItem(
+      visibleActivities,
+      sourceIndex,
+      dropIndex
+    )
+
+
+  let visibleCursor = 0
+
+
+  return fullOrder.map(
+    (activity) => {
+      if (
+        !visibleIdSet.has(
+          activity.id
+        )
+      ) {
+        return activity
+      }
+
+      const replacement =
+        reorderedVisible[
+          visibleCursor
+        ]
+
+      visibleCursor += 1
+
+      return replacement
+    }
+  )
+}
+
+
 export default function PrePlanningWorkspace({
   project,
   activities = [],
@@ -250,6 +334,20 @@ export default function PrePlanningWorkspace({
 
 
   const [
+    selectedLocation,
+    setSelectedLocation,
+  ] =
+    useState('all')
+
+
+  const [
+    selectedDivision,
+    setSelectedDivision,
+  ] =
+    useState('all')
+
+
+  const [
     rowDrag,
     setRowDrag,
   ] =
@@ -277,11 +375,10 @@ export default function PrePlanningWorkspace({
   const scrollOwnerRef =
     useRef(null)
 
+  const rowDragRef =
+    useRef(null)
 
-  /*
-   * If project/activity data changes,
-   * rebuild the local sequence.
-   */
+
   useEffect(
     () => {
       setOrderedActivities(
@@ -293,9 +390,20 @@ export default function PrePlanningWorkspace({
         null
       )
 
+      setSelectedLocation(
+        'all'
+      )
+
+      setSelectedDivision(
+        'all'
+      )
+
       setRowDrag(
         null
       )
+
+      rowDragRef.current =
+        null
     },
     [
       normalizedActivities,
@@ -303,35 +411,247 @@ export default function PrePlanningWorkspace({
   )
 
 
-  const selectedActivity =
+  /* =========================================================
+     FILTER OPTIONS
+     ========================================================= */
+
+  const locationOptions =
     useMemo(
-      () =>
-        orderedActivities.find(
-          (activity) =>
-            activity.id ===
-            selectedActivityId
-        ) ||
-        orderedActivities[0] ||
-        null,
+      () => {
+        const values =
+          new Map()
+
+        orderedActivities.forEach(
+          (activity) => {
+            if (
+              activity.locationId &&
+              activity.locationName
+            ) {
+              values.set(
+                activity.locationId,
+                activity.locationName
+              )
+            }
+          }
+        )
+
+        return Array.from(
+          values.entries()
+        )
+          .map(
+            ([
+              id,
+              name,
+            ]) => ({
+              id,
+              name,
+            })
+          )
+          .sort(
+            (
+              first,
+              second
+            ) =>
+              first.name.localeCompare(
+                second.name,
+                undefined,
+                {
+                  numeric: true,
+                }
+              )
+          )
+      },
       [
         orderedActivities,
+      ]
+    )
+
+
+  const divisionOptions =
+    useMemo(
+      () => {
+        const values =
+          new Map()
+
+        orderedActivities
+          .filter(
+            (activity) =>
+              selectedLocation ===
+                'all' ||
+              activity.locationId ===
+                selectedLocation
+          )
+          .forEach(
+            (activity) => {
+              if (
+                activity.divisionId &&
+                activity.divisionName &&
+                activity.divisionName !==
+                  '—'
+              ) {
+                /*
+                 * Division ID is unique to its actual
+                 * location node, which is what we want.
+                 */
+                values.set(
+                  activity.divisionId,
+                  activity.divisionName
+                )
+              }
+            }
+          )
+
+        return Array.from(
+          values.entries()
+        )
+          .map(
+            ([
+              id,
+              name,
+            ]) => ({
+              id,
+              name,
+            })
+          )
+          .sort(
+            (
+              first,
+              second
+            ) =>
+              first.name.localeCompare(
+                second.name,
+                undefined,
+                {
+                  numeric: true,
+                }
+              )
+          )
+      },
+      [
+        orderedActivities,
+        selectedLocation,
+      ]
+    )
+
+
+  /* =========================================================
+     FILTERED VIEW
+
+     The complete orderedActivities array remains
+     the source of truth for local sequencing.
+     ========================================================= */
+
+  const filteredActivities =
+    useMemo(
+      () =>
+        orderedActivities.filter(
+          (activity) => {
+            const matchesLocation =
+              selectedLocation ===
+                'all' ||
+              activity.locationId ===
+                selectedLocation
+
+
+            const matchesDivision =
+              selectedDivision ===
+                'all' ||
+              activity.divisionId ===
+                selectedDivision
+
+
+            return (
+              matchesLocation &&
+              matchesDivision
+            )
+          }
+        ),
+      [
+        orderedActivities,
+        selectedLocation,
+        selectedDivision,
+      ]
+    )
+
+
+  const visibleActivityIds =
+    useMemo(
+      () =>
+        filteredActivities.map(
+          (activity) =>
+            activity.id
+        ),
+      [
+        filteredActivities,
+      ]
+    )
+
+
+  const sequenceIndexMap =
+    useMemo(
+      () => {
+        const map =
+          new Map()
+
+        orderedActivities.forEach(
+          (
+            activity,
+            index
+          ) => {
+            map.set(
+              activity.id,
+              index
+            )
+          }
+        )
+
+        return map
+      },
+      [
+        orderedActivities,
+      ]
+    )
+
+
+  const selectedActivity =
+    useMemo(
+      () => {
+        const selected =
+          filteredActivities.find(
+            (activity) =>
+              activity.id ===
+              selectedActivityId
+          )
+
+        return (
+          selected ||
+          filteredActivities[0] ||
+          null
+        )
+      },
+      [
+        filteredActivities,
         selectedActivityId,
       ]
     )
 
 
-  /*
-   * V1 timeline:
-   * all activities remain at Day 0.
-   *
-   * This iteration is focused only on
-   * vertical activity sequencing.
-   */
+  const hasFilters =
+    selectedLocation !==
+      'all' ||
+    selectedDivision !==
+      'all'
+
+
+  /* =========================================================
+     TIMELINE
+     ========================================================= */
+
   const maxRawDuration =
     useMemo(
       () => {
         const durations =
-          orderedActivities
+          filteredActivities
             .map(
               (activity) =>
                 Number(
@@ -357,7 +677,7 @@ export default function PrePlanningWorkspace({
         )
       },
       [
-        orderedActivities,
+        filteredActivities,
       ]
     )
 
@@ -384,7 +704,8 @@ export default function PrePlanningWorkspace({
         Array.from(
           {
             length:
-              timelineDays + 1,
+              timelineDays +
+              1,
           },
           (
             _,
@@ -403,19 +724,86 @@ export default function PrePlanningWorkspace({
     dayWidth
 
 
-  /*
-   * Vertical activity sequencing.
-   */
+  /* =========================================================
+     FILTER HANDLERS
+     ========================================================= */
+
+  function handleLocationChange(
+    event
+  ) {
+    setSelectedLocation(
+      event.target.value
+    )
+
+    /*
+     * Division options depend on Location.
+     */
+    setSelectedDivision(
+      'all'
+    )
+
+    setRowDrag(
+      null
+    )
+
+    rowDragRef.current =
+      null
+  }
+
+
+  function handleDivisionChange(
+    event
+  ) {
+    setSelectedDivision(
+      event.target.value
+    )
+
+    setRowDrag(
+      null
+    )
+
+    rowDragRef.current =
+      null
+  }
+
+
+  function clearFilters() {
+    setSelectedLocation(
+      'all'
+    )
+
+    setSelectedDivision(
+      'all'
+    )
+
+    setRowDrag(
+      null
+    )
+
+    rowDragRef.current =
+      null
+  }
+
+
+  /* =========================================================
+     VERTICAL SEQUENCE DRAG
+     ========================================================= */
+
   useEffect(
     () => {
-      if (!rowDrag) {
-        return undefined
-      }
-
-
       function handlePointerMove(
         event
       ) {
+        const currentDrag =
+          rowDragRef.current
+
+        if (
+          !currentDrag
+        ) {
+          return
+        }
+
+
         const body =
           leftBodyRef.current
 
@@ -425,12 +813,12 @@ export default function PrePlanningWorkspace({
 
 
         const bounds =
-          body.getBoundingClientRect()
+          body
+            .getBoundingClientRect()
 
 
         /*
-         * Auto-scroll vertically when
-         * dragging close to the top/bottom.
+         * Vertical auto-scroll.
          */
         if (
           event.clientY <
@@ -473,90 +861,88 @@ export default function PrePlanningWorkspace({
           body.scrollTop
 
 
-        const rawIndex =
+        const rowIndex =
           Math.floor(
             relativeY /
             ROW_HEIGHT
           )
 
 
-        const withinRow =
+        const offsetInsideRow =
           relativeY %
           ROW_HEIGHT
 
 
-        /*
-         * The top half of a row means
-         * insert before it.
-         *
-         * The bottom half means
-         * insert after it.
-         */
-        const insertionIndex =
+        const dropIndex =
           Math.max(
             0,
             Math.min(
-              rawIndex +
+              rowIndex +
                 (
-                  withinRow >
+                  offsetInsideRow >
                   ROW_HEIGHT / 2
                     ? 1
                     : 0
                 ),
-              orderedActivities.length
+              filteredActivities.length
             )
           )
 
 
+        if (
+          currentDrag.dropIndex ===
+          dropIndex
+        ) {
+          return
+        }
+
+
+        const nextDrag = {
+          ...currentDrag,
+          dropIndex,
+        }
+
+
+        rowDragRef.current =
+          nextDrag
+
         setRowDrag(
-          (current) => {
-            if (!current) {
-              return current
-            }
-
-            if (
-              current.dropIndex ===
-              insertionIndex
-            ) {
-              return current
-            }
-
-            return {
-              ...current,
-              dropIndex:
-                insertionIndex,
-            }
-          }
+          nextDrag
         )
       }
 
 
       function handlePointerUp() {
+        const currentDrag =
+          rowDragRef.current
+
+        if (
+          !currentDrag
+        ) {
+          return
+        }
+
+
         setOrderedActivities(
-          (current) => {
-            const fromIndex =
-              current.findIndex(
-                (activity) =>
-                  activity.id ===
-                  rowDrag.activityId
-              )
+          (currentOrder) =>
+            reorderVisibleActivities({
+              fullOrder:
+                currentOrder,
 
+              visibleIds:
+                currentDrag.visibleIds,
 
-            if (
-              fromIndex < 0
-            ) {
-              return current
-            }
+              movedActivityId:
+                currentDrag.activityId,
 
-
-            return moveItem(
-              current,
-              fromIndex,
-              rowDrag.dropIndex
-            )
-          }
+              dropIndex:
+                currentDrag.dropIndex,
+            })
         )
 
+
+        rowDragRef.current =
+          null
 
         setRowDrag(
           null
@@ -598,8 +984,7 @@ export default function PrePlanningWorkspace({
       }
     },
     [
-      rowDrag,
-      orderedActivities.length,
+      filteredActivities.length,
     ]
   )
 
@@ -607,7 +992,7 @@ export default function PrePlanningWorkspace({
   function beginRowDrag(
     event,
     activity,
-    index
+    visibleIndex
   ) {
     event.preventDefault()
     event.stopPropagation()
@@ -624,18 +1009,33 @@ export default function PrePlanningWorkspace({
     )
 
 
-    setRowDrag({
+    const nextDrag = {
       activityId:
         activity.id,
 
       sourceIndex:
-        index,
+        visibleIndex,
 
       dropIndex:
-        index,
-    })
+        visibleIndex,
+
+      visibleIds:
+        [...visibleActivityIds],
+    }
+
+
+    rowDragRef.current =
+      nextDrag
+
+    setRowDrag(
+      nextDrag
+    )
   }
 
+
+  /* =========================================================
+     SCROLL
+     ========================================================= */
 
   function syncVerticalScroll(
     source
@@ -688,6 +1088,7 @@ export default function PrePlanningWorkspace({
       'right'
     )
 
+
     if (
       rightBodyRef.current &&
       ganttHeaderRef.current
@@ -697,6 +1098,10 @@ export default function PrePlanningWorkspace({
     }
   }
 
+
+  /* =========================================================
+     ZOOM
+     ========================================================= */
 
   function zoomIn() {
     setDayWidth(
@@ -725,12 +1130,14 @@ export default function PrePlanningWorkspace({
       DEFAULT_DAY_WIDTH
     )
 
+
     if (
       rightBodyRef.current
     ) {
       rightBodyRef.current.scrollLeft =
         0
     }
+
 
     if (
       ganttHeaderRef.current
@@ -767,16 +1174,16 @@ export default function PrePlanningWorkspace({
 
   const selectedSequenceIndex =
     selectedActivity
-      ? orderedActivities.findIndex(
-          (activity) =>
-            activity.id ===
-            selectedActivity.id
+      ? sequenceIndexMap.get(
+          selectedActivity.id
         )
-      : -1
+      : undefined
 
 
   const selectedSequence =
-    selectedSequenceIndex >= 0
+    Number.isInteger(
+      selectedSequenceIndex
+    )
       ? getActivityCode(
           selectedSequenceIndex
         )
@@ -876,8 +1283,21 @@ export default function PrePlanningWorkspace({
 
             <strong>
               {
-                orderedActivities.length
+                filteredActivities.length
               }
+
+              {hasFilters ? (
+                <span
+                  className={
+                    styles.filteredActivityCount
+                  }
+                >
+                  {' '}
+                  / {
+                    orderedActivities.length
+                  }
+                </span>
+              ) : null}
             </strong>
           </div>
 
@@ -924,32 +1344,162 @@ export default function PrePlanningWorkspace({
       >
         <div
           className={
-            styles.toolbarGroup
+            styles.toolbarLeft
           }
         >
           <div
             className={
-              styles.toolbarTitle
+              styles.toolbarGroup
             }
           >
-            Production Gantt
+            <div
+              className={
+                styles.toolbarTitle
+              }
+            >
+              Production Gantt
+            </div>
+
+            <span
+              className={
+                styles.lockedBadge
+              }
+            >
+              DURATIONS LOCKED
+            </span>
+
+            <span
+              className={
+                styles.sequenceHint
+              }
+            >
+              ⠿ DRAG TO REORDER
+            </span>
           </div>
 
-          <span
-            className={
-              styles.lockedBadge
-            }
-          >
-            DURATIONS LOCKED
-          </span>
 
-          <span
+          <div
             className={
-              styles.sequenceHint
+              styles.filterGroup
             }
           >
-            ⠿ DRAG TO REORDER
-          </span>
+            <label
+              className={
+                styles.filterControl
+              }
+            >
+              <span
+                className={
+                  styles.filterLabel
+                }
+              >
+                Location
+              </span>
+
+              <select
+                value={
+                  selectedLocation
+                }
+                onChange={
+                  handleLocationChange
+                }
+                className={
+                  selectedLocation !==
+                  'all'
+                    ? styles.filterSelectActive
+                    : styles.filterSelect
+                }
+              >
+                <option value="all">
+                  All Locations
+                </option>
+
+                {locationOptions.map(
+                  (location) => (
+                    <option
+                      key={
+                        location.id
+                      }
+                      value={
+                        location.id
+                      }
+                    >
+                      {
+                        location.name
+                      }
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+
+
+            <label
+              className={
+                styles.filterControl
+              }
+            >
+              <span
+                className={
+                  styles.filterLabel
+                }
+              >
+                Division
+              </span>
+
+              <select
+                value={
+                  selectedDivision
+                }
+                onChange={
+                  handleDivisionChange
+                }
+                className={
+                  selectedDivision !==
+                  'all'
+                    ? styles.filterSelectActive
+                    : styles.filterSelect
+                }
+              >
+                <option value="all">
+                  All Divisions
+                </option>
+
+                {divisionOptions.map(
+                  (division) => (
+                    <option
+                      key={
+                        division.id
+                      }
+                      value={
+                        division.id
+                      }
+                    >
+                      {
+                        division.name
+                      }
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+
+
+            {hasFilters ? (
+              <button
+                type="button"
+                className={
+                  styles.clearFiltersButton
+                }
+                onClick={
+                  clearFilters
+                }
+                title="Clear Location and Division filters"
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         </div>
 
 
@@ -1125,7 +1675,7 @@ export default function PrePlanningWorkspace({
               style={{
                 height:
                   Math.max(
-                    orderedActivities.length *
+                    filteredActivities.length *
                       ROW_HEIGHT,
                     ROW_HEIGHT
                   ),
@@ -1144,26 +1694,34 @@ export default function PrePlanningWorkspace({
               ) : null}
 
 
-              {orderedActivities.length >
+              {filteredActivities.length >
               0 ? (
-                orderedActivities.map(
+                filteredActivities.map(
                   (
                     activity,
-                    index
+                    visibleIndex
                   ) => {
                     const isSelected =
                       selectedActivity?.id ===
                       activity.id
 
+
                     const isDragging =
                       rowDrag?.activityId ===
                       activity.id
+
 
                     const hasDuration =
                       Number.isFinite(
                         Number(
                           activity.rawDuration
                         )
+                      )
+
+
+                    const globalSequenceIndex =
+                      sequenceIndexMap.get(
+                        activity.id
                       )
 
 
@@ -1183,7 +1741,7 @@ export default function PrePlanningWorkspace({
                         }`}
                         style={{
                           top:
-                            index *
+                            visibleIndex *
                             ROW_HEIGHT,
                         }}
                         onClick={() =>
@@ -1208,7 +1766,7 @@ export default function PrePlanningWorkspace({
                               beginRowDrag(
                                 event,
                                 activity,
-                                index
+                                visibleIndex
                               )
                             }
                             title="Click, hold and drag to change activity sequence"
@@ -1229,9 +1787,13 @@ export default function PrePlanningWorkspace({
                             styles.activityId
                           }
                         >
-                          {getActivityCode(
-                            index
-                          )}
+                          {Number.isInteger(
+                            globalSequenceIndex
+                          )
+                            ? getActivityCode(
+                                globalSequenceIndex
+                              )
+                            : '—'}
                         </div>
 
                         <div
@@ -1354,13 +1916,24 @@ export default function PrePlanningWorkspace({
                   }
                 >
                   <strong>
-                    No production activities
+                    No activities match the selected filters
                   </strong>
 
                   <span>
-                    Positive location quantities are required before
-                    activities can be visualized.
+                    Change the Location or Division filter, or clear the filters to display all production activities.
                   </span>
+
+                  <button
+                    type="button"
+                    className={
+                      styles.emptyClearButton
+                    }
+                    onClick={
+                      clearFilters
+                    }
+                  >
+                    Clear Filters
+                  </button>
                 </div>
               )}
             </div>
@@ -1441,7 +2014,7 @@ export default function PrePlanningWorkspace({
 
                 height:
                   Math.max(
-                    orderedActivities.length *
+                    filteredActivities.length *
                       ROW_HEIGHT,
                     ROW_HEIGHT
                   ),
@@ -1490,15 +2063,16 @@ export default function PrePlanningWorkspace({
               ) : null}
 
 
-              {orderedActivities.map(
+              {filteredActivities.map(
                 (
                   activity,
-                  index
+                  visibleIndex
                 ) => {
                   const rawDuration =
                     Number(
                       activity.rawDuration
                     )
+
 
                   const hasDuration =
                     Number.isFinite(
@@ -1550,7 +2124,7 @@ export default function PrePlanningWorkspace({
                       }`}
                       style={{
                         top:
-                          index *
+                          visibleIndex *
                           ROW_HEIGHT,
                       }}
                       onClick={() =>
@@ -1779,7 +2353,7 @@ export default function PrePlanningWorkspace({
               styles.noSelection
             }
           >
-            Select an activity to inspect its production data.
+            No activity is available with the current filters.
           </div>
         )}
       </footer>
