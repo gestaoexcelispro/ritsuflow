@@ -84,6 +84,98 @@ function normalizeVersionName(
 }
 
 
+function normalizeDurationStrategies(
+  value
+) {
+  if (
+    !Array.isArray(
+      value
+    )
+  ) {
+    return []
+  }
+
+
+  const strategies =
+    new Map()
+
+
+  value.forEach(
+    (item) => {
+      const allocationId =
+        String(
+          item?.allocationId ||
+          ''
+        ).trim()
+
+
+      if (
+        !allocationId
+      ) {
+        return
+      }
+
+
+      const rawValue =
+        item?.desiredDuration
+
+
+      if (
+        rawValue ===
+          null ||
+        rawValue ===
+          undefined ||
+        rawValue ===
+          ''
+      ) {
+        strategies.set(
+          allocationId,
+          {
+            allocationId,
+            desiredDuration:
+              null,
+          }
+        )
+
+
+        return
+      }
+
+
+      const desiredDuration =
+        Number(
+          rawValue
+        )
+
+
+      if (
+        !Number.isFinite(
+          desiredDuration
+        ) ||
+        desiredDuration <=
+          0
+      ) {
+        return
+      }
+
+
+      strategies.set(
+        allocationId,
+        {
+          allocationId,
+          desiredDuration,
+        }
+      )
+    }
+  )
+
+
+  return Array.from(
+    strategies.values()
+  )
+}
+
+
 /* =========================================================
    RESPONSE HELPERS
    ========================================================= */
@@ -462,6 +554,310 @@ async function getStoredSequence({
 
 
 /* =========================================================
+   DURATION STRATEGY HELPERS
+   ========================================================= */
+
+async function getStoredDurationStrategy({
+  supabase,
+  projectId,
+  versionId,
+}) {
+  const {
+    data,
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_activity_strategy'
+      )
+      .select(
+        `
+          allocation_id,
+          desired_duration,
+          created_by
+        `
+      )
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'version_id',
+        versionId
+      )
+
+
+  if (error) {
+    throw error
+  }
+
+
+  return (
+    data ||
+    []
+  )
+}
+
+
+async function restoreDurationStrategy({
+  supabase,
+  projectId,
+  versionId,
+  backup,
+  userId,
+}) {
+  if (
+    !Array.isArray(
+      backup
+    ) ||
+    backup.length ===
+      0
+  ) {
+    return
+  }
+
+
+  const timestamp =
+    new Date()
+      .toISOString()
+
+
+  const rows =
+    backup.map(
+      (row) => ({
+        project_id:
+          projectId,
+
+        version_id:
+          versionId,
+
+        allocation_id:
+          row.allocation_id,
+
+        desired_duration:
+          row.desired_duration,
+
+        created_by:
+          row.created_by ||
+          userId,
+
+        updated_at:
+          timestamp,
+      })
+    )
+
+
+  const {
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_activity_strategy'
+      )
+      .insert(
+        rows
+      )
+
+
+  if (error) {
+    console.error(
+      'Pre-Planning duration strategy backup restoration failed.',
+      error
+    )
+  }
+}
+
+
+async function replaceDurationStrategy({
+  supabase,
+  projectId,
+  versionId,
+  strategies,
+  userId,
+}) {
+  const backup =
+    await getStoredDurationStrategy({
+      supabase,
+      projectId,
+      versionId,
+    })
+
+
+  const {
+    error:
+      deleteError,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_activity_strategy'
+      )
+      .delete()
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'version_id',
+        versionId
+      )
+
+
+  if (
+    deleteError
+  ) {
+    throw deleteError
+  }
+
+
+  const rows =
+    strategies
+      .filter(
+        (strategy) =>
+          strategy.desiredDuration !==
+          null
+      )
+      .map(
+        (strategy) => ({
+          project_id:
+            projectId,
+
+          version_id:
+            versionId,
+
+          allocation_id:
+            strategy.allocationId,
+
+          desired_duration:
+            strategy.desiredDuration,
+
+          created_by:
+            userId,
+
+          updated_at:
+            new Date()
+              .toISOString(),
+        })
+      )
+
+
+  if (
+    rows.length ===
+    0
+  ) {
+    return
+  }
+
+
+  const {
+    error:
+      insertError,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_activity_strategy'
+      )
+      .insert(
+        rows
+      )
+
+
+  if (
+    insertError
+  ) {
+    await restoreDurationStrategy({
+      supabase,
+      projectId,
+      versionId,
+      backup,
+      userId,
+    })
+
+
+    throw insertError
+  }
+}
+
+
+async function copyDurationStrategy({
+  supabase,
+  projectId,
+  sourceVersionId,
+  targetVersionId,
+  userId,
+}) {
+  if (
+    !sourceVersionId ||
+    !targetVersionId
+  ) {
+    return
+  }
+
+
+  const sourceRows =
+    await getStoredDurationStrategy({
+      supabase,
+      projectId,
+      versionId:
+        sourceVersionId,
+    })
+
+
+  if (
+    sourceRows.length ===
+    0
+  ) {
+    return
+  }
+
+
+  const timestamp =
+    new Date()
+      .toISOString()
+
+
+  const rows =
+    sourceRows.map(
+      (row) => ({
+        project_id:
+          projectId,
+
+        version_id:
+          targetVersionId,
+
+        allocation_id:
+          row.allocation_id,
+
+        desired_duration:
+          row.desired_duration,
+
+        created_by:
+          userId,
+
+        updated_at:
+          timestamp,
+      })
+    )
+
+
+  const {
+    error,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_activity_strategy'
+      )
+      .insert(
+        rows
+      )
+
+
+  if (error) {
+    throw error
+  }
+}
+
+
+/* =========================================================
    VERSION QUERIES
    ========================================================= */
 
@@ -820,7 +1216,7 @@ async function createInitialVersion({
 
 
 /* =========================================================
-   SAVE CURRENT VERSION
+   SAVE CURRENT SEQUENCE
    ========================================================= */
 
 async function handleSaveSequence({
@@ -937,11 +1333,6 @@ async function handleSaveSequence({
   } catch (
     error
   ) {
-    /*
-     * If the first version was created
-     * by this request but the sequence
-     * failed, remove the empty version.
-     */
     if (
       createdVersion
     ) {
@@ -963,6 +1354,116 @@ async function handleSaveSequence({
 
     throw error
   }
+}
+
+
+/* =========================================================
+   SAVE DURATION STRATEGY
+   ========================================================= */
+
+async function handleSaveDurationStrategy({
+  supabase,
+  projectId,
+  requestedVersionId,
+  strategies,
+  userId,
+}) {
+  if (
+    !requestedVersionId
+  ) {
+    return badRequest(
+      'A Pre-Planning version is required before Desired Durations can be saved.'
+    )
+  }
+
+
+  const version =
+    await getVersion({
+      supabase,
+      projectId,
+      versionId:
+        requestedVersionId,
+    })
+
+
+  if (
+    !version
+  ) {
+    return notFound(
+      'The selected Pre-Planning version was not found.'
+    )
+  }
+
+
+  if (
+    version.status !==
+      'working' ||
+    !version.is_current
+  ) {
+    return conflict(
+      'Desired Durations can only be edited in the current working version.'
+    )
+  }
+
+
+  await replaceDurationStrategy({
+    supabase,
+    projectId,
+    versionId:
+      version.id,
+    strategies,
+    userId,
+  })
+
+
+  const {
+    error:
+      versionUpdateError,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_versions'
+      )
+      .update({
+        updated_at:
+          new Date()
+            .toISOString(),
+      })
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'id',
+        version.id
+      )
+
+
+  if (
+    versionUpdateError
+  ) {
+    throw versionUpdateError
+  }
+
+
+  return NextResponse.json({
+    ok: true,
+
+    action:
+      'save_duration_strategy',
+
+    version:
+      versionResponse(
+        version
+      ),
+
+    savedActivities:
+      strategies.filter(
+        (strategy) =>
+          strategy.desiredDuration !==
+          null
+      ).length,
+  })
 }
 
 
@@ -1028,6 +1529,26 @@ async function handleCreateVersion({
       allocationIds,
       userId,
     })
+
+
+    /*
+     * A new version inherits the saved
+     * duration strategy from the previous
+     * current version.
+     */
+    if (
+      currentVersion?.id
+    ) {
+      await copyDurationStrategy({
+        supabase,
+        projectId,
+        sourceVersionId:
+          currentVersion.id,
+        targetVersionId:
+          newVersion.id,
+        userId,
+      })
+    }
 
 
     return NextResponse.json({
@@ -1187,6 +1708,22 @@ async function handleDuplicateVersion({
         newVersion.id,
       allocationIds:
         sourceAllocationIds,
+      userId,
+    })
+
+
+    /*
+     * Duplicate means duplicate the
+     * planning strategy, not only the
+     * activity order.
+     */
+    await copyDurationStrategy({
+      supabase,
+      projectId,
+      sourceVersionId:
+        sourceVersion.id,
+      targetVersionId:
+        newVersion.id,
       userId,
     })
 
@@ -1414,13 +1951,6 @@ async function handleSetCurrentVersion({
     })
 
 
-  /*
-   * Because the database has a partial
-   * unique index allowing only one current
-   * version per project, archive the old
-   * current version before activating the
-   * selected one.
-   */
   if (
     currentVersion?.id
   ) {
@@ -1465,10 +1995,6 @@ async function handleSetCurrentVersion({
   } catch (
     error
   ) {
-    /*
-     * Best-effort restoration of the
-     * previous current version.
-     */
     if (
       currentVersion?.id
     ) {
@@ -1531,11 +2057,38 @@ async function handleDeleteVersion({
 
 
   /*
-   * Explicitly delete sequence rows first.
+   * Delete version-owned child data first.
    *
-   * This keeps the behavior clear even if
-   * the FK is not configured with CASCADE.
+   * Migration 126 also uses ON DELETE CASCADE,
+   * but keeping the cleanup explicit makes
+   * this endpoint's behavior clear.
    */
+  const {
+    error:
+      strategyDeleteError,
+  } =
+    await supabase
+      .from(
+        'project_pre_planning_activity_strategy'
+      )
+      .delete()
+      .eq(
+        'project_id',
+        projectId
+      )
+      .eq(
+        'version_id',
+        versionId
+      )
+
+
+  if (
+    strategyDeleteError
+  ) {
+    throw strategyDeleteError
+  }
+
+
   const {
     error:
       sequenceDeleteError,
@@ -1675,6 +2228,12 @@ export async function POST(
       )
 
 
+    const durationStrategies =
+      normalizeDurationStrategies(
+        body?.strategies
+      )
+
+
     if (
       !projectId
     ) {
@@ -1685,11 +2244,8 @@ export async function POST(
 
 
     /*
-     * Only these two actions require
-     * activity IDs from the browser.
-     *
-     * Duplicate uses the stored source
-     * version sequence instead.
+     * Sequence save/create actions require
+     * the full browser activity order.
      */
     if (
       (
@@ -1716,6 +2272,22 @@ export async function POST(
         projectId,
         requestedVersionId,
         allocationIds,
+        userId:
+          user.id,
+      })
+    }
+
+
+    if (
+      action ===
+      'save_duration_strategy'
+    ) {
+      return await handleSaveDurationStrategy({
+        supabase,
+        projectId,
+        requestedVersionId,
+        strategies:
+          durationStrategies,
         userId:
           user.id,
       })
@@ -1800,7 +2372,7 @@ export async function POST(
     error
   ) {
     console.error(
-      'Pre-Planning sequence API error:',
+      'Pre-Planning API error:',
       error
     )
 
@@ -1809,7 +2381,7 @@ export async function POST(
       {
         error:
           error?.message ||
-          'Pre-Planning version operation failed.',
+          'Pre-Planning operation failed.',
       },
       {
         status: 500,
