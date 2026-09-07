@@ -78,6 +78,26 @@ function getBasisLabel(
 }
 
 
+function getResourceUnit(
+  activity,
+  value = 2
+) {
+  if (
+    activity?.productivityBasis ===
+    'crew_day'
+  ) {
+    return value === 1
+      ? 'crew'
+      : 'crews'
+  }
+
+
+  return value === 1
+    ? 'worker'
+    : 'workers'
+}
+
+
 function getResourceLabel(
   activity
 ) {
@@ -98,21 +118,12 @@ function getResourceLabel(
   }
 
 
-  const unit =
-    activity
-      ?.productivityBasis ===
-    'crew_day'
-      ? value === 1
-        ? 'crew'
-        : 'crews'
-      : value === 1
-        ? 'worker'
-        : 'workers'
-
-
   return `${safeNumber(
     value
-  )} ${unit}`
+  )} ${getResourceUnit(
+    activity,
+    value
+  )}`
 }
 
 
@@ -126,6 +137,220 @@ function getActivityCode(
     4,
     '0'
   )
+}
+
+
+/* =========================================================
+   RESOURCE CALCULATION
+   ========================================================= */
+
+function calculateRequiredResource(
+  activity,
+  desiredDuration
+) {
+  const quantity =
+    Number(
+      activity?.quantity
+    )
+
+
+  const productivity =
+    Number(
+      activity?.productivity
+    )
+
+
+  const duration =
+    Number(
+      desiredDuration
+    )
+
+
+  if (
+    !Number.isFinite(
+      quantity
+    ) ||
+    quantity <= 0 ||
+    !Number.isFinite(
+      productivity
+    ) ||
+    productivity <= 0 ||
+    !Number.isFinite(
+      duration
+    ) ||
+    duration <= 0
+  ) {
+    return {
+      exact:
+        null,
+
+      recommended:
+        null,
+
+      current:
+        Number.isFinite(
+          Number(
+            activity?.effectiveWorkforce
+          )
+        )
+          ? Number(
+              activity.effectiveWorkforce
+            )
+          : null,
+
+      difference:
+        null,
+    }
+  }
+
+
+  const exact =
+    quantity /
+    (
+      productivity *
+      duration
+    )
+
+
+  const recommended =
+    Math.ceil(
+      exact
+    )
+
+
+  const current =
+    Number(
+      activity?.effectiveWorkforce
+    )
+
+
+  const validCurrent =
+    Number.isFinite(
+      current
+    ) &&
+    current >= 0
+      ? current
+      : null
+
+
+  const difference =
+    validCurrent !==
+      null
+      ? recommended -
+        validCurrent
+      : null
+
+
+  return {
+    exact,
+    recommended,
+    current:
+      validCurrent,
+    difference,
+  }
+}
+
+
+/* =========================================================
+   DURATION STRATEGY HELPERS
+   ========================================================= */
+
+function normalizeDurationMap(
+  value
+) {
+  if (
+    !value ||
+    typeof value !==
+      'object' ||
+    Array.isArray(
+      value
+    )
+  ) {
+    return {}
+  }
+
+
+  const result = {}
+
+
+  Object.entries(
+    value
+  ).forEach(
+    ([
+      allocationId,
+      duration,
+    ]) => {
+      const numeric =
+        Number(
+          duration
+        )
+
+
+      if (
+        Number.isFinite(
+          numeric
+        ) &&
+        numeric > 0
+      ) {
+        result[
+          allocationId
+        ] =
+          numeric
+      }
+    }
+  )
+
+
+  return result
+}
+
+
+function durationSignature(
+  durationMap
+) {
+  return Object.entries(
+    durationMap ||
+    {}
+  )
+    .filter(
+      ([
+        ,
+        value,
+      ]) => {
+        const numeric =
+          Number(value)
+
+        return (
+          Number.isFinite(
+            numeric
+          ) &&
+          numeric > 0
+        )
+      }
+    )
+    .sort(
+      (
+        first,
+        second
+      ) =>
+        String(
+          first[0]
+        ).localeCompare(
+          String(
+            second[0]
+          )
+        )
+    )
+    .map(
+      ([
+        allocationId,
+        value,
+      ]) =>
+        `${allocationId}:${Number(
+          value
+        )}`
+    )
+    .join('|')
 }
 
 
@@ -771,6 +996,8 @@ export default function PrePlanningWorkspace({
 
   versions = [],
   versionSequences = {},
+  versionDurationStrategies = {},
+
   currentVersion = null,
 
   activeVersion = null,
@@ -820,6 +1047,15 @@ export default function PrePlanningWorkspace({
 
 
   const [
+    activeTab,
+    setActiveTab,
+  ] =
+    useState(
+      'sequence'
+    )
+
+
+  const [
     selectedVersionId,
     setSelectedVersionId,
   ] =
@@ -845,6 +1081,43 @@ export default function PrePlanningWorkspace({
     useState(
       orderSignature(
         normalizedActivities
+      )
+    )
+
+
+  const initialDurationMap =
+    useMemo(
+      () =>
+        normalizeDurationMap(
+          workingVersion?.id
+            ? versionDurationStrategies?.[
+                workingVersion.id
+              ]
+            : {}
+        ),
+      [
+        workingVersion?.id,
+        versionDurationStrategies,
+      ]
+    )
+
+
+  const [
+    desiredDurations,
+    setDesiredDurations,
+  ] =
+    useState(
+      initialDurationMap
+    )
+
+
+  const [
+    savedDurationSignature,
+    setSavedDurationSignature,
+  ] =
+    useState(
+      durationSignature(
+        initialDurationMap
       )
     )
 
@@ -993,6 +1266,16 @@ export default function PrePlanningWorkspace({
         ''
 
 
+      const nextDurationMap =
+        normalizeDurationMap(
+          nextVersionId
+            ? versionDurationStrategies?.[
+                nextVersionId
+              ]
+            : {}
+        )
+
+
       setSelectedVersionId(
         nextVersionId
       )
@@ -1006,6 +1289,18 @@ export default function PrePlanningWorkspace({
       setSavedSignature(
         orderSignature(
           normalizedActivities
+        )
+      )
+
+
+      setDesiredDurations(
+        nextDurationMap
+      )
+
+
+      setSavedDurationSignature(
+        durationSignature(
+          nextDurationMap
         )
       )
 
@@ -1039,6 +1334,7 @@ export default function PrePlanningWorkspace({
     [
       normalizedActivities,
       workingVersion?.id,
+      versionDurationStrategies,
     ]
   )
 
@@ -1055,10 +1351,33 @@ export default function PrePlanningWorkspace({
     )
 
 
-  const hasUnsavedChanges =
+  const currentDurationSignature =
+    useMemo(
+      () =>
+        durationSignature(
+          desiredDurations
+        ),
+      [
+        desiredDurations,
+      ]
+    )
+
+
+  const hasUnsavedSequenceChanges =
     isViewingCurrentVersion &&
     currentSignature !==
       savedSignature
+
+
+  const hasUnsavedDurationChanges =
+    isViewingCurrentVersion &&
+    currentDurationSignature !==
+      savedDurationSignature
+
+
+  const hasUnsavedChanges =
+    hasUnsavedSequenceChanges ||
+    hasUnsavedDurationChanges
 
 
   /* =========================================================
@@ -1101,6 +1420,19 @@ export default function PrePlanningWorkspace({
   }
 
 
+  function getVersionDurations(
+    versionId
+  ) {
+    return normalizeDurationMap(
+      versionId
+        ? versionDurationStrategies?.[
+            versionId
+          ]
+        : {}
+    )
+  }
+
+
   function handleVersionSelection(
     event
   ) {
@@ -1124,7 +1456,7 @@ export default function PrePlanningWorkspace({
           'warning',
 
         text:
-          'Save the current version before switching to another version.',
+          'Save your current changes before switching to another version.',
       })
 
 
@@ -1134,6 +1466,12 @@ export default function PrePlanningWorkspace({
 
     const nextActivities =
       getVersionActivities(
+        nextVersionId
+      )
+
+
+    const nextDurations =
+      getVersionDurations(
         nextVersionId
       )
 
@@ -1151,6 +1489,18 @@ export default function PrePlanningWorkspace({
     setSavedSignature(
       orderSignature(
         nextActivities
+      )
+    )
+
+
+    setDesiredDurations(
+      nextDurations
+    )
+
+
+    setSavedDurationSignature(
+      durationSignature(
+        nextDurations
       )
     )
 
@@ -1457,16 +1807,40 @@ export default function PrePlanningWorkspace({
      TIMELINE
      ========================================================= */
 
-  const maxRawDuration =
+  const maxDisplayedDuration =
     useMemo(
       () => {
         const durations =
           filteredActivities
             .map(
-              (activity) =>
-                Number(
+              (activity) => {
+                if (
+                  activeTab ===
+                  'duration'
+                ) {
+                  const desired =
+                    Number(
+                      desiredDurations[
+                        activity.id
+                      ]
+                    )
+
+
+                  if (
+                    Number.isFinite(
+                      desired
+                    ) &&
+                    desired > 0
+                  ) {
+                    return desired
+                  }
+                }
+
+
+                return Number(
                   activity.rawDuration
                 )
+              }
             )
             .filter(
               (duration) =>
@@ -1492,6 +1866,8 @@ export default function PrePlanningWorkspace({
       },
       [
         filteredActivities,
+        activeTab,
+        desiredDurations,
       ]
     )
 
@@ -1503,12 +1879,12 @@ export default function PrePlanningWorkspace({
           MIN_TIMELINE_DAYS,
 
           Math.ceil(
-            maxRawDuration
+            maxDisplayedDuration
           ) +
             TIMELINE_PADDING_DAYS
         ),
       [
-        maxRawDuration,
+        maxDisplayedDuration,
       ]
     )
 
@@ -1537,6 +1913,28 @@ export default function PrePlanningWorkspace({
   const timelineWidth =
     timelineDays *
     dayWidth
+
+
+  /* =========================================================
+     TAB CHANGE
+     ========================================================= */
+
+  function handleTabChange(
+    tab
+  ) {
+    setActiveTab(
+      tab
+    )
+
+
+    setRowDrag(
+      null
+    )
+
+
+    rowDragRef.current =
+      null
+  }
 
 
   /* =========================================================
@@ -1602,6 +2000,219 @@ export default function PrePlanningWorkspace({
 
     rowDragRef.current =
       null
+  }
+
+
+  /* =========================================================
+     DESIRED DURATION
+     ========================================================= */
+
+  function handleDesiredDurationChange(
+    allocationId,
+    value
+  ) {
+    if (
+      !isViewingCurrentVersion
+    ) {
+      return
+    }
+
+
+    if (
+      value ===
+      ''
+    ) {
+      setDesiredDurations(
+        (current) => {
+          const next = {
+            ...current,
+          }
+
+
+          delete next[
+            allocationId
+          ]
+
+
+          return next
+        }
+      )
+
+
+      return
+    }
+
+
+    const numeric =
+      Number(
+        value
+      )
+
+
+    if (
+      !Number.isFinite(
+        numeric
+      ) ||
+      numeric <= 0
+    ) {
+      return
+    }
+
+
+    setDesiredDurations(
+      (current) => ({
+        ...current,
+
+        [
+          allocationId
+        ]:
+          numeric,
+      })
+    )
+  }
+
+
+  async function saveDurationStrategy() {
+    if (
+      actionState !==
+        'idle'
+    ) {
+      return
+    }
+
+
+    if (
+      !workingVersion
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Save the sequence first to create a Pre-Planning version.',
+      })
+
+
+      return
+    }
+
+
+    if (
+      !isViewingCurrentVersion
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Historical versions are read-only.',
+      })
+
+
+      return
+    }
+
+
+    setActionState(
+      'saving_duration'
+    )
+
+
+    setNotice(
+      null
+    )
+
+
+    try {
+      const strategies =
+        orderedActivities.map(
+          (activity) => ({
+            allocationId:
+              activity.id,
+
+            desiredDuration:
+              desiredDurations[
+                activity.id
+              ] ||
+              null,
+          })
+        )
+
+
+      const response =
+        await fetch(
+          '/api/pre-planning/sequence',
+          {
+            method:
+              'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              JSON.stringify({
+                action:
+                  'save_duration_strategy',
+
+                projectId:
+                  project.id,
+
+                versionId:
+                  workingVersion.id,
+
+                strategies,
+              }),
+          }
+        )
+
+
+      const result =
+        await response.json()
+
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          result?.error ||
+          'Duration strategy could not be saved.'
+        )
+      }
+
+
+      setSavedDurationSignature(
+        currentDurationSignature
+      )
+
+
+      setNotice({
+        type:
+          'success',
+
+        text:
+          `Duration & Resources saved for ${result.savedActivities || 0} activities.`,
+      })
+
+
+      router.refresh()
+    } catch (
+      error
+    ) {
+      setNotice({
+        type:
+          'error',
+
+        text:
+          error?.message ||
+          'Duration strategy could not be saved.',
+      })
+    } finally {
+      setActionState(
+        'idle'
+      )
+    }
   }
 
 
@@ -1784,6 +2395,24 @@ export default function PrePlanningWorkspace({
 
         text:
           'Save Sequence first to create Version 1.',
+      })
+
+
+      return
+    }
+
+
+    if (
+      action ===
+        'create_version' &&
+      hasUnsavedDurationChanges
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Save Duration & Resources before creating a new version.',
       })
 
 
@@ -2035,6 +2664,12 @@ export default function PrePlanningWorkspace({
         action ===
         'delete_version'
       ) {
+        const currentDurations =
+          getVersionDurations(
+            workingVersion?.id
+          )
+
+
         setSelectedVersionId(
           workingVersion?.id ||
           ''
@@ -2049,6 +2684,18 @@ export default function PrePlanningWorkspace({
         setSavedSignature(
           orderSignature(
             normalizedActivities
+          )
+        )
+
+
+        setDesiredDurations(
+          currentDurations
+        )
+
+
+        setSavedDurationSignature(
+          durationSignature(
+            currentDurations
           )
         )
 
@@ -2110,6 +2757,22 @@ export default function PrePlanningWorkspace({
     }
 
 
+    if (
+      hasUnsavedChanges
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Save your current changes first.',
+      })
+
+
+      return
+    }
+
+
     runVersionAction({
       action:
         'set_current',
@@ -2136,7 +2799,7 @@ export default function PrePlanningWorkspace({
           'warning',
 
         text:
-          'Save the current version before duplicating another saved version.',
+          'Save your current changes before duplicating a version.',
       })
 
 
@@ -2271,8 +2934,16 @@ export default function PrePlanningWorkspace({
     !isViewingCurrentVersion ||
     (
       workingVersion &&
-      !hasUnsavedChanges
+      !hasUnsavedSequenceChanges
     )
+
+
+  const durationSaveDisabled =
+    actionState !==
+      'idle' ||
+    !workingVersion ||
+    !isViewingCurrentVersion ||
+    !hasUnsavedDurationChanges
 
 
   const createVersionDisabled =
@@ -2441,7 +3112,9 @@ export default function PrePlanningWorkspace({
 
 
         if (
-          !isViewingCurrentVersion
+          !isViewingCurrentVersion ||
+          activeTab !==
+            'sequence'
         ) {
           rowDragRef.current =
             null
@@ -2524,6 +3197,7 @@ export default function PrePlanningWorkspace({
     [
       filteredActivities.length,
       isViewingCurrentVersion,
+      activeTab,
     ]
   )
 
@@ -2534,7 +3208,9 @@ export default function PrePlanningWorkspace({
     visibleIndex
   ) {
     if (
-      !isViewingCurrentVersion
+      !isViewingCurrentVersion ||
+      activeTab !==
+        'sequence'
     ) {
       return
     }
@@ -2730,6 +3406,29 @@ export default function PrePlanningWorkspace({
       : '—'
 
 
+  const selectedDesiredDuration =
+    selectedActivity
+      ? desiredDurations[
+          selectedActivity.id
+        ] ||
+        null
+      : null
+
+
+  const selectedResourceCalculation =
+    selectedActivity
+      ? calculateRequiredResource(
+          selectedActivity,
+          selectedDesiredDuration
+        )
+      : {
+          exact: null,
+          recommended: null,
+          current: null,
+          difference: null,
+        }
+
+
   const dropIndicatorTop =
     rowDrag
       ? rowDrag.dropIndex *
@@ -2806,7 +3505,7 @@ export default function PrePlanningWorkspace({
               styles.projectDescription
             }
           >
-            Define the preliminary production sequence. Raw Duration is calculated from Project Setup data and remains locked.
+            Define the preliminary production sequence and test duration-driven resource strategies.
           </p>
         </div>
 
@@ -2902,33 +3601,86 @@ export default function PrePlanningWorkspace({
               styles.toolbarGroup
             }
           >
-            <div
+            <button
+              type="button"
               className={
-                styles.toolbarTitle
+                activeTab ===
+                'sequence'
+                  ? styles.filterSelectActive
+                  : styles.toolbarButtonWide
+              }
+              onClick={() =>
+                handleTabChange(
+                  'sequence'
+                )
               }
             >
-              Production Gantt
-            </div>
+              Sequence
+            </button>
 
 
-            <span
+            <button
+              type="button"
               className={
-                styles.lockedBadge
+                activeTab ===
+                'duration'
+                  ? styles.filterSelectActive
+                  : styles.toolbarButtonWide
+              }
+              onClick={() =>
+                handleTabChange(
+                  'duration'
+                )
               }
             >
-              DURATIONS LOCKED
-            </span>
+              Duration & Resources
+            </button>
 
 
-            <span
-              className={
-                styles.sequenceHint
-              }
-            >
-              {isViewingCurrentVersion
-                ? '⠿ DRAG TO REORDER'
-                : 'HISTORICAL VIEW · READ ONLY'}
-            </span>
+            {activeTab ===
+            'sequence' ? (
+              <>
+                <span
+                  className={
+                    styles.lockedBadge
+                  }
+                >
+                  DURATIONS LOCKED
+                </span>
+
+
+                <span
+                  className={
+                    styles.sequenceHint
+                  }
+                >
+                  {isViewingCurrentVersion
+                    ? '⠿ DRAG TO REORDER'
+                    : 'HISTORICAL VIEW · READ ONLY'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span
+                  className={
+                    styles.lockedBadge
+                  }
+                >
+                  RAW DURATIONS LOCKED
+                </span>
+
+
+                <span
+                  className={
+                    styles.sequenceHint
+                  }
+                >
+                  {isViewingCurrentVersion
+                    ? 'ENTER DESIRED DURATION'
+                    : 'HISTORICAL VIEW · READ ONLY'}
+                </span>
+              </>
+            )}
           </div>
 
 
@@ -3155,7 +3907,6 @@ export default function PrePlanningWorkspace({
               className={
                 styles.filterSelectActive
               }
-              title="Choose a saved sequence version"
             >
               {normalizedVersions.map(
                 (version) => (
@@ -3348,11 +4099,6 @@ export default function PrePlanningWorkspace({
                 onClick={
                   handleDeleteVersion
                 }
-                title={
-                  selectedVersion.isCurrent
-                    ? 'The current working version cannot be deleted'
-                    : `Delete ${selectedVersion.versionName}`
-                }
               >
                 {actionState ===
                 'delete_version'
@@ -3363,71 +4109,87 @@ export default function PrePlanningWorkspace({
           ) : null}
 
 
-          <button
-            type="button"
-            className={
-              styles.createVersionButton
-            }
-            disabled={
-              applySequenceDisabled
-            }
-            onClick={
-              handleApplySequenceToAll
-            }
-            title={
-              isHistoricalView
-                ? 'Historical versions are read-only'
-                : hasExactSourceFilter
-                  ? 'Use this Location / Division sequence as the template for every other production area'
-                  : 'Select one Location and one Division first'
-            }
-          >
-            Apply Sequence to All
-          </button>
+          {activeTab ===
+          'sequence' ? (
+            <>
+              <button
+                type="button"
+                className={
+                  styles.createVersionButton
+                }
+                disabled={
+                  applySequenceDisabled
+                }
+                onClick={
+                  handleApplySequenceToAll
+                }
+              >
+                Apply Sequence to All
+              </button>
 
 
-          <button
-            type="button"
-            className={
-              styles.createVersionButton
-            }
-            disabled={
-              createVersionDisabled
-            }
-            onClick={() =>
-              runSequenceAction(
-                'create_version'
-              )
-            }
-          >
-            {actionState ===
-            'creating'
-              ? 'Creating...'
-              : 'Create Version'}
-          </button>
+              <button
+                type="button"
+                className={
+                  styles.createVersionButton
+                }
+                disabled={
+                  createVersionDisabled
+                }
+                onClick={() =>
+                  runSequenceAction(
+                    'create_version'
+                  )
+                }
+              >
+                {actionState ===
+                'creating'
+                  ? 'Creating...'
+                  : 'Create Version'}
+              </button>
 
 
-          <button
-            type="button"
-            className={
-              styles.saveSequenceButton
-            }
-            disabled={
-              saveDisabled
-            }
-            onClick={() =>
-              runSequenceAction(
-                'save'
-              )
-            }
-          >
-            {actionState ===
-            'saving'
-              ? 'Saving...'
-              : workingVersion
-                ? 'Save Sequence'
-                : 'Save Sequence · Create V1'}
-          </button>
+              <button
+                type="button"
+                className={
+                  styles.saveSequenceButton
+                }
+                disabled={
+                  saveDisabled
+                }
+                onClick={() =>
+                  runSequenceAction(
+                    'save'
+                  )
+                }
+              >
+                {actionState ===
+                'saving'
+                  ? 'Saving...'
+                  : workingVersion
+                    ? 'Save Sequence'
+                    : 'Save Sequence · Create V1'}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className={
+                styles.saveSequenceButton
+              }
+              disabled={
+                durationSaveDisabled
+              }
+              onClick={
+                saveDurationStrategy
+              }
+            >
+              {actionState ===
+              'saving_duration'
+                ? 'Saving...'
+                : 'Save Duration & Resources'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -3452,7 +4214,10 @@ export default function PrePlanningWorkspace({
                 styles.activityHeaderHandleCell
               }
             >
-              ⠿
+              {activeTab ===
+              'sequence'
+                ? '⠿'
+                : ''}
             </div>
 
             <div
@@ -3500,7 +4265,10 @@ export default function PrePlanningWorkspace({
                 styles.activityHeaderCellRight
               }
             >
-              Raw Dur.
+              {activeTab ===
+              'sequence'
+                ? 'Raw Dur.'
+                : 'Desired Dur.'}
             </div>
           </div>
 
@@ -3545,73 +4313,78 @@ export default function PrePlanningWorkspace({
               ) : null}
 
 
-              {filteredActivities.length >
-              0 ? (
-                filteredActivities.map(
-                  (
-                    activity,
-                    visibleIndex
-                  ) => {
-                    const isSelected =
-                      selectedActivity?.id ===
+              {filteredActivities.map(
+                (
+                  activity,
+                  visibleIndex
+                ) => {
+                  const isSelected =
+                    selectedActivity?.id ===
+                    activity.id
+
+
+                  const isDragging =
+                    rowDrag?.activityId ===
+                    activity.id
+
+
+                  const rawDuration =
+                    Number(
+                      activity.rawDuration
+                    )
+
+
+                  const hasRawDuration =
+                    Number.isFinite(
+                      rawDuration
+                    ) &&
+                    rawDuration > 0
+
+
+                  const globalSequenceIndex =
+                    sequenceIndexMap.get(
                       activity.id
+                    )
 
 
-                    const isDragging =
-                      rowDrag?.activityId ===
+                  const desiredDuration =
+                    desiredDurations[
                       activity.id
+                    ]
 
 
-                    const rawDuration =
-                      Number(
-                        activity.rawDuration
-                      )
-
-
-                    const hasDuration =
-                      Number.isFinite(
-                        rawDuration
-                      ) &&
-                      rawDuration >
-                        0
-
-
-                    const globalSequenceIndex =
-                      sequenceIndexMap.get(
+                  return (
+                    <div
+                      key={
                         activity.id
-                      )
-
-
-                    return (
-                      <div
-                        key={
+                      }
+                      className={`${styles.activityRowShell} ${
+                        isSelected
+                          ? styles.activityRowShellSelected
+                          : ''
+                      } ${
+                        isDragging
+                          ? styles.activityRowShellDragging
+                          : ''
+                      }`}
+                      style={{
+                        top:
+                          visibleIndex *
+                          ROW_HEIGHT,
+                      }}
+                      onClick={() =>
+                        setSelectedActivityId(
                           activity.id
-                        }
-                        className={`${styles.activityRowShell} ${
-                          isSelected
-                            ? styles.activityRowShellSelected
-                            : ''
-                        } ${
-                          isDragging
-                            ? styles.activityRowShellDragging
-                            : ''
-                        }`}
-                        style={{
-                          top:
-                            visibleIndex *
-                            ROW_HEIGHT,
-                        }}
-                        onClick={() =>
-                          setSelectedActivityId(
-                            activity.id
-                          )
+                        )
+                      }
+                    >
+                      <div
+                        className={
+                          styles.sequenceHandleCell
                         }
                       >
-                        <div
-                          className={
-                            styles.sequenceHandleCell
-                          }
-                        >
+                        {activeTab ===
+                        'sequence' ? (
                           <button
                             type="button"
                             className={
@@ -3629,11 +4402,6 @@ export default function PrePlanningWorkspace({
                                 visibleIndex
                               )
                             }
-                            title={
-                              isViewingCurrentVersion
-                                ? 'Drag to change activity sequence'
-                                : 'Historical versions are read-only'
-                            }
                           >
                             <span
                               className={
@@ -3643,132 +4411,178 @@ export default function PrePlanningWorkspace({
                               ⠿
                             </span>
                           </button>
-                        </div>
+                        ) : null}
+                      </div>
 
 
-                        <div
+                      <div
+                        className={
+                          styles.activityId
+                        }
+                      >
+                        {Number.isInteger(
+                          globalSequenceIndex
+                        )
+                          ? getActivityCode(
+                              globalSequenceIndex
+                            )
+                          : '—'}
+                      </div>
+
+
+                      <div
+                        className={
+                          styles.workPackageCode
+                        }
+                      >
+                        <span
                           className={
-                            styles.activityId
+                            styles.workPackageIndicator
                           }
-                        >
-                          {Number.isInteger(
-                            globalSequenceIndex
-                          )
-                            ? getActivityCode(
-                                globalSequenceIndex
-                              )
-                            : '—'}
-                        </div>
+                          style={{
+                            background:
+                              activity.workPackageColor ||
+                              '#00998b',
+                          }}
+                        />
 
-
-                        <div
-                          className={
-                            styles.workPackageCode
-                          }
-                        >
-                          <span
-                            className={
-                              styles.workPackageIndicator
-                            }
-                            style={{
-                              background:
-                                activity.workPackageColor ||
-                                '#00998b',
-                            }}
-                          />
-
-                          <span>
-                            {activity.workPackageCode ||
-                              '—'}
-                          </span>
-                        </div>
-
-
-                        <div
-                          className={
-                            styles.scopeItemName
-                          }
-                          title={
-                            activity.scopeItemName ||
-                            ''
-                          }
-                        >
-                          {activity.scopeItemName ||
-                            'Scope Item'}
-                        </div>
-
-
-                        <div
-                          className={
-                            styles.locationName
-                          }
-                          title={
-                            activity.locationName ||
-                            ''
-                          }
-                        >
-                          {activity.locationName ||
+                        <span>
+                          {activity.workPackageCode ||
                             '—'}
-                        </div>
+                        </span>
+                      </div>
 
 
+                      <div
+                        className={
+                          styles.scopeItemName
+                        }
+                      >
+                        {activity.scopeItemName ||
+                          'Scope Item'}
+                      </div>
+
+
+                      <div
+                        className={
+                          styles.locationName
+                        }
+                      >
+                        {activity.locationName ||
+                          '—'}
+                      </div>
+
+
+                      <div
+                        className={
+                          styles.divisionName
+                        }
+                      >
+                        {activity.divisionName ||
+                          '—'}
+                      </div>
+
+
+                      {activeTab ===
+                      'sequence' ? (
                         <div
                           className={
-                            styles.divisionName
-                          }
-                          title={
-                            activity.divisionName ||
-                            ''
-                          }
-                        >
-                          {activity.divisionName ||
-                            '—'}
-                        </div>
-
-
-                        <div
-                          className={
-                            hasDuration
+                            hasRawDuration
                               ? styles.durationCell
                               : styles.missingDurationCell
                           }
                         >
-                          {hasDuration
+                          {hasRawDuration
                             ? `${safeNumber(
                                 rawDuration
                               )} d`
                             : '—'}
                         </div>
-                      </div>
-                    )
-                  }
-                )
-              ) : (
-                <div
-                  className={
-                    styles.emptyActivityState
-                  }
-                >
-                  <strong>
-                    No activities match the selected filters
-                  </strong>
+                      ) : (
+                        <div
+                          className={
+                            styles.durationCell
+                          }
+                          onClick={(
+                            event
+                          ) =>
+                            event.stopPropagation()
+                          }
+                        >
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={
+                              desiredDuration ??
+                              ''
+                            }
+                            placeholder={
+                              hasRawDuration
+                                ? safeNumber(
+                                    rawDuration
+                                  )
+                                : '—'
+                            }
+                            disabled={
+                              !isViewingCurrentVersion
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              handleDesiredDurationChange(
+                                activity.id,
+                                event.target.value
+                              )
+                            }
+                            style={{
+                              width:
+                                '64px',
 
-                  <span>
-                    Change or clear the Location and Division filters.
-                  </span>
+                              height:
+                                '28px',
 
-                  <button
-                    type="button"
-                    className={
-                      styles.emptyClearButton
-                    }
-                    onClick={
-                      clearFilters
-                    }
-                  >
-                    Clear Filters
-                  </button>
-                </div>
+                              padding:
+                                '0 7px',
+
+                              border:
+                                '1px solid #cbd7e2',
+
+                              borderRadius:
+                                '6px',
+
+                              background:
+                                isViewingCurrentVersion
+                                  ? '#ffffff'
+                                  : '#f4f7f9',
+
+                              color:
+                                '#052c49',
+
+                              fontSize:
+                                '12px',
+
+                              fontWeight:
+                                800,
+
+                              textAlign:
+                                'right',
+                            }}
+                          />
+
+                          <span
+                            style={{
+                              marginLeft:
+                                '4px',
+                            }}
+                          >
+                            d
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
               )}
             </div>
           </div>
@@ -3885,19 +4699,6 @@ export default function PrePlanningWorkspace({
               )}
 
 
-              {rowDrag ? (
-                <div
-                  className={
-                    styles.ganttDropIndicator
-                  }
-                  style={{
-                    top:
-                      dropIndicatorTop,
-                  }}
-                />
-              ) : null}
-
-
               {filteredActivities.map(
                 (
                   activity,
@@ -3909,28 +4710,45 @@ export default function PrePlanningWorkspace({
                     )
 
 
+                  const desiredDuration =
+                    Number(
+                      desiredDurations[
+                        activity.id
+                      ]
+                    )
+
+
+                  const displayedDuration =
+                    activeTab ===
+                      'duration' &&
+                    Number.isFinite(
+                      desiredDuration
+                    ) &&
+                    desiredDuration >
+                      0
+                      ? desiredDuration
+                      : rawDuration
+
+
                   const hasDuration =
                     Number.isFinite(
-                      rawDuration
+                      displayedDuration
                     ) &&
-                    rawDuration >
+                    displayedDuration >
                       0
 
 
-                  const isSelected =
-                    selectedActivity?.id ===
-                    activity.id
-
-
-                  const isDragging =
-                    rowDrag?.activityId ===
-                    activity.id
+                  const resource =
+                    calculateRequiredResource(
+                      activity,
+                      desiredDuration
+                    )
 
 
                   const width =
                     hasDuration
                       ? Math.max(
-                          rawDuration *
+                          displayedDuration *
                             dayWidth,
 
                           4
@@ -3944,12 +4762,9 @@ export default function PrePlanningWorkspace({
                         activity.id
                       }
                       className={`${styles.ganttRow} ${
-                        isSelected
+                        selectedActivity?.id ===
+                        activity.id
                           ? styles.ganttRowSelected
-                          : ''
-                      } ${
-                        isDragging
-                          ? styles.ganttRowDragging
                           : ''
                       }`}
                       style={{
@@ -3981,10 +4796,18 @@ export default function PrePlanningWorkspace({
                               styles.ganttBarLabel
                             }
                           >
-                            {safeNumber(
-                              rawDuration
-                            )}{' '}
-                            d
+                            {activeTab ===
+                              'duration' &&
+                            resource.recommended
+                              ? `${safeNumber(
+                                  displayedDuration
+                                )} d · ${resource.recommended} ${getResourceUnit(
+                                  activity,
+                                  resource.recommended
+                                )}`
+                              : `${safeNumber(
+                                  displayedDuration
+                                )} d`}
                           </span>
                         </div>
                       ) : (
@@ -4065,96 +4888,212 @@ export default function PrePlanningWorkspace({
             </div>
 
 
-            <div
-              className={
-                styles.inspectorMetrics
-              }
-            >
-              <InspectorMetric
-                label="Sequence"
-                value={
-                  selectedSequence
+            {activeTab ===
+            'sequence' ? (
+              <div
+                className={
+                  styles.inspectorMetrics
                 }
-                detail={
-                  isViewingCurrentVersion
-                    ? 'Drag handle to reorder'
-                    : 'Historical sequence'
-                }
-                emphasized
-              />
+              >
+                <InspectorMetric
+                  label="Sequence"
+                  value={
+                    selectedSequence
+                  }
+                  detail={
+                    isViewingCurrentVersion
+                      ? 'Drag handle to reorder'
+                      : 'Historical sequence'
+                  }
+                  emphasized
+                />
 
 
-              <InspectorMetric
-                label="Location"
-                value={
-                  selectedActivity.locationName ||
-                  '—'
-                }
-              />
+                <InspectorMetric
+                  label="Location"
+                  value={
+                    selectedActivity.locationName ||
+                    '—'
+                  }
+                />
 
 
-              <InspectorMetric
-                label="Division"
-                value={
-                  selectedActivity.divisionName ||
-                  '—'
-                }
-                detail={
-                  selectedActivity.divisionType ||
-                  ''
-                }
-              />
+                <InspectorMetric
+                  label="Division"
+                  value={
+                    selectedActivity.divisionName ||
+                    '—'
+                  }
+                  detail={
+                    selectedActivity.divisionType ||
+                    ''
+                  }
+                />
 
 
-              <InspectorMetric
-                label="Productivity"
-                value={
-                  Number.isFinite(
-                    Number(
-                      selectedActivity.productivity
-                    )
-                  )
-                    ? `${safeNumber(
+                <InspectorMetric
+                  label="Productivity"
+                  value={
+                    Number.isFinite(
+                      Number(
                         selectedActivity.productivity
-                      )} ${
-                        selectedActivity.unit ||
-                        ''
-                      }`
-                    : '—'
-                }
-                detail={
-                  getBasisLabel(
-                    selectedActivity.productivityBasis
-                  )
-                }
-              />
-
-
-              <InspectorMetric
-                label="Resource"
-                value={
-                  getResourceLabel(
-                    selectedActivity
-                  )
-                }
-              />
-
-
-              <InspectorMetric
-                label="Raw Duration"
-                value={
-                  Number.isFinite(
-                    Number(
-                      selectedActivity.rawDuration
+                      )
                     )
-                  )
-                    ? `${safeNumber(
+                      ? `${safeNumber(
+                          selectedActivity.productivity
+                        )} ${
+                          selectedActivity.unit ||
+                          ''
+                        }`
+                      : '—'
+                  }
+                  detail={
+                    getBasisLabel(
+                      selectedActivity.productivityBasis
+                    )
+                  }
+                />
+
+
+                <InspectorMetric
+                  label="Resource"
+                  value={
+                    getResourceLabel(
+                      selectedActivity
+                    )
+                  }
+                />
+
+
+                <InspectorMetric
+                  label="Raw Duration"
+                  value={
+                    Number.isFinite(
+                      Number(
                         selectedActivity.rawDuration
-                      )} d`
-                    : '—'
+                      )
+                    )
+                      ? `${safeNumber(
+                          selectedActivity.rawDuration
+                        )} d`
+                      : '—'
+                  }
+                />
+              </div>
+            ) : (
+              <div
+                className={
+                  styles.inspectorMetrics
                 }
-              />
-            </div>
+              >
+                <InspectorMetric
+                  label="Raw Duration"
+                  value={
+                    Number.isFinite(
+                      Number(
+                        selectedActivity.rawDuration
+                      )
+                    )
+                      ? `${safeNumber(
+                          selectedActivity.rawDuration
+                        )} d`
+                      : '—'
+                  }
+                />
+
+
+                <InspectorMetric
+                  label="Desired Duration"
+                  value={
+                    selectedDesiredDuration
+                      ? `${safeNumber(
+                          selectedDesiredDuration
+                        )} d`
+                      : '—'
+                  }
+                  detail="Planner input"
+                  emphasized
+                />
+
+
+                <InspectorMetric
+                  label="Current Resource"
+                  value={
+                    getResourceLabel(
+                      selectedActivity
+                    )
+                  }
+                />
+
+
+                <InspectorMetric
+                  label="Calculated Resource"
+                  value={
+                    selectedResourceCalculation.exact
+                      ? `${safeNumber(
+                          selectedResourceCalculation.exact
+                        )} ${getResourceUnit(
+                          selectedActivity,
+                          selectedResourceCalculation.exact
+                        )}`
+                      : '—'
+                  }
+                  detail="Mathematical result"
+                />
+
+
+                <InspectorMetric
+                  label="Required Resource"
+                  value={
+                    selectedResourceCalculation.recommended
+                      ? `${selectedResourceCalculation.recommended} ${getResourceUnit(
+                          selectedActivity,
+                          selectedResourceCalculation.recommended
+                        )}`
+                      : '—'
+                  }
+                  detail="Rounded up"
+                  emphasized
+                />
+
+
+                <InspectorMetric
+                  label="Resource Difference"
+                  value={
+                    Number.isFinite(
+                      selectedResourceCalculation.difference
+                    )
+                      ? `${
+                          selectedResourceCalculation.difference >
+                          0
+                            ? '+'
+                            : ''
+                        }${safeNumber(
+                          selectedResourceCalculation.difference
+                        )} ${getResourceUnit(
+                          selectedActivity,
+                          Math.abs(
+                            selectedResourceCalculation.difference
+                          )
+                        )}`
+                      : '—'
+                  }
+                  detail={
+                    Number.isFinite(
+                      selectedResourceCalculation.difference
+                    )
+                      ? selectedResourceCalculation.difference >
+                        0
+                        ? 'Additional resource needed'
+                        : selectedResourceCalculation.difference <
+                            0
+                          ? 'Resource reduction possible'
+                          : 'Current resource matches requirement'
+                      : ''
+                  }
+                />
+              </div>
+            )}
           </>
         ) : (
           <div
