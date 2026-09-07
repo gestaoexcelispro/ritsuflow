@@ -196,6 +196,14 @@
 }
 
 
+.filteredActivityCount {
+  color: #8a99a6;
+
+  font-size: 9px;
+  font-weight: 800;
+}
+
+
 .changeProjectButton {
   display: inline-flex;
 
@@ -229,7 +237,7 @@
 .toolbar {
   display: flex;
 
-  min-height: 52px;
+  min-height: 54px;
 
   align-items: center;
   justify-content: space-between;
@@ -242,6 +250,17 @@
     1px solid var(--border);
 
   background: #f7f9fb;
+}
+
+
+.toolbarLeft {
+  display: flex;
+
+  min-width: 0;
+
+  align-items: center;
+
+  gap: 12px;
 }
 
 
@@ -259,6 +278,8 @@
 
   font-size: 11px;
   font-weight: 900;
+
+  white-space: nowrap;
 }
 
 
@@ -279,6 +300,8 @@
   font-weight: 900;
 
   letter-spacing: 0.06em;
+
+  white-space: nowrap;
 }
 
 
@@ -299,6 +322,126 @@
   color: #087f73;
 }
 
+
+/* =========================================================
+   TOOLBAR FILTERS
+   ========================================================= */
+
+.filterGroup {
+  display: flex;
+
+  align-items: flex-end;
+
+  gap: 6px;
+}
+
+
+.filterControl {
+  display: grid;
+
+  gap: 2px;
+}
+
+
+.filterLabel {
+  color: #738493;
+
+  font-size: 7px;
+  line-height: 1;
+  font-weight: 900;
+
+  letter-spacing: 0.05em;
+
+  text-transform: uppercase;
+}
+
+
+.filterSelect,
+.filterSelectActive {
+  height: 30px;
+
+  min-width: 125px;
+
+  padding:
+    0 28px
+    0 8px;
+
+  border: 1px solid #cad6df;
+  border-radius: 5px;
+
+  outline: none;
+
+  background: #ffffff;
+
+  color: var(--navy);
+
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+
+.filterSelect:hover {
+  border-color: #aebec9;
+}
+
+
+.filterSelect:focus,
+.filterSelectActive:focus {
+  border-color: var(--teal);
+
+  box-shadow:
+    0 0 0 2px
+      rgba(
+        0,
+        153,
+        139,
+        0.08
+      );
+}
+
+
+.filterSelectActive {
+  border-color: #8bcfc7;
+
+  background: #edf9f7;
+
+  color: #087f73;
+}
+
+
+.clearFiltersButton {
+  height: 30px;
+
+  padding: 0 9px;
+
+  border: 1px solid #d1dbe3;
+  border-radius: 5px;
+
+  background: #ffffff;
+
+  color: #6d7e8d;
+
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+
+.clearFiltersButton:hover {
+  border-color: #aab9c4;
+
+  color: var(--navy);
+}
+
+
+/* =========================================================
+   TOOLBAR ZOOM
+   ========================================================= */
 
 .toolbarButton,
 .toolbarButtonWide {
@@ -479,6 +622,7 @@
   overflow-x: hidden;
 
   scrollbar-width: thin;
+
   scrollbar-color:
     #c3ced7
     transparent;
@@ -640,7 +784,12 @@
 
   box-shadow:
     0 0 0 1px
-      rgba(0, 153, 139, 0.08);
+      rgba(
+        0,
+        153,
+        139,
+        0.08
+      );
 
   pointer-events: none;
 }
@@ -664,7 +813,7 @@
 
 
 /* =========================================================
-   TABLE CELLS
+   ACTIVITY CELLS
    ========================================================= */
 
 .activityId,
@@ -791,13 +940,17 @@
 
 
 .emptyActivityState {
+  position: absolute;
+
+  inset: 0;
+
   display: grid;
 
   min-height: 180px;
 
   place-content: center;
 
-  gap: 7px;
+  gap: 8px;
 
   padding: 24px;
 
@@ -815,10 +968,36 @@
 
 
 .emptyActivityState span {
-  max-width: 340px;
+  max-width: 360px;
 
   font-size: 10px;
   line-height: 1.45;
+}
+
+
+.emptyClearButton {
+  width: fit-content;
+
+  justify-self: center;
+
+  min-height: 30px;
+
+  margin-top: 4px;
+
+  padding: 0 11px;
+
+  border: 1px solid #b9ddd8;
+  border-radius: 5px;
+
+  background: #edf9f7;
+
+  color: #087f73;
+
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 900;
+
+  cursor: pointer;
 }
 
 
@@ -889,6 +1068,7 @@
   overflow: auto;
 
   scrollbar-width: thin;
+
   scrollbar-color:
     #b9c7d1
     #eef2f5;
@@ -1032,7 +1212,12 @@
 
   box-shadow:
     inset 0 0 0 1px
-      rgba(5, 44, 73, 0.16);
+      rgba(
+        5,
+        44,
+        73,
+        0.16
+      );
 
   pointer-events: none;
 }
@@ -1324,7 +1509,34 @@
    RESPONSIVE
    ========================================================= */
 
-@media (max-width: 1350px) {
+@media (max-width: 1450px) {
+  .toolbarLeft {
+    gap: 8px;
+  }
+
+
+  .filterSelect,
+  .filterSelectActive {
+    min-width: 110px;
+  }
+}
+
+
+@media (max-width: 1250px) {
+  .toolbar {
+    align-items: flex-start;
+
+    flex-wrap: wrap;
+  }
+
+
+  .toolbarLeft {
+    align-items: flex-start;
+
+    flex-wrap: wrap;
+  }
+
+
   .planningGrid {
     grid-template-columns:
       minmax(780px, 63%)
@@ -1356,6 +1568,11 @@
   .headerActions {
     width: 100%;
 
+    flex-wrap: wrap;
+  }
+
+
+  .filterGroup {
     flex-wrap: wrap;
   }
 
