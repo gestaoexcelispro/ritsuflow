@@ -5370,12 +5370,17 @@ export default function PrePlanningWorkspace({
                           width:
                             barWidth,
 
+                          /*
+                           * Work Package color is the permanent
+                           * visual identity of the activity.
+                           *
+                           * Duration & Resources may change the
+                           * bar length and resource information,
+                           * but never the base activity color.
+                           */
                           background:
-                            activeTab ===
-                            'sequence'
-                              ? activity.workPackageColor ||
-                                '#00998b'
-                              : undefined,
+                            activity.workPackageColor ||
+                            '#00998b',
                         }}
                       >
                         <span
