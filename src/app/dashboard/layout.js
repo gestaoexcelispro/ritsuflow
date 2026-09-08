@@ -380,7 +380,7 @@ const baseNavigationGroups = [
 
       {
         label: 'Pre-Planning',
-        href: '/dashboard/planning/pre-planning',
+        href: '/planning/pre-planning',
         icon: 'preplanning',
       },
 
@@ -614,10 +614,6 @@ export default function DashboardLayout({
     )
 
 
-  // ==========================================================
-  // SIDEBAR
-  // ==========================================================
-
   const [
     isCollapsed,
     setIsCollapsed,
@@ -632,20 +628,12 @@ export default function DashboardLayout({
     useState(false)
 
 
-  // ==========================================================
-  // TOOLTIP
-  // ==========================================================
-
   const [
     hoveredNavigationItem,
     setHoveredNavigationItem,
   ] =
     useState(null)
 
-
-  // ==========================================================
-  // PLATFORM
-  // ==========================================================
 
   const [
     isPlatformOwner,
@@ -660,10 +648,6 @@ export default function DashboardLayout({
   ] =
     useState(false)
 
-
-  // ==========================================================
-  // MODULE EXPANSION
-  // ==========================================================
 
   const [
     expandedGroups,
@@ -691,10 +675,6 @@ export default function DashboardLayout({
 
     })
 
-
-  // ==========================================================
-  // PLATFORM AUTHORIZATION
-  // ==========================================================
 
   useEffect(
     () => {
@@ -794,10 +774,6 @@ export default function DashboardLayout({
   )
 
 
-  // ==========================================================
-  // NAVIGATION GROUPS
-  // ==========================================================
-
   const navigationGroups =
     useMemo(
       () => {
@@ -823,10 +799,6 @@ export default function DashboardLayout({
     )
 
 
-  // ==========================================================
-  // LEGACY PROJECT SETUP ROUTE
-  // ==========================================================
-
   const isProjectSetupLegacyRoute =
     projectSetupLegacyRoutes.some(
       (
@@ -839,10 +811,6 @@ export default function DashboardLayout({
         )
     )
 
-
-  // ==========================================================
-  // ACTIVE ROUTE
-  // ==========================================================
 
   function isActive(
     href
@@ -916,10 +884,6 @@ export default function DashboardLayout({
   }
 
 
-  // ==========================================================
-  // CURRENT GROUP
-  // ==========================================================
-
   const currentNavigationGroup =
     navigationGroups.find(
       (
@@ -935,10 +899,6 @@ export default function DashboardLayout({
         )
     )
 
-
-  // ==========================================================
-  // CURRENT PAGE
-  // ==========================================================
 
   const currentNavigationItem =
     navigationGroups
@@ -969,10 +929,6 @@ export default function DashboardLayout({
       ?.label ||
     'Overview'
 
-
-  // ==========================================================
-  // KEEP ACTIVE GROUP OPEN
-  // ==========================================================
 
   useEffect(
     () => {
@@ -1026,10 +982,6 @@ export default function DashboardLayout({
   )
 
 
-  // ==========================================================
-  // GROUP TOGGLE
-  // ==========================================================
-
   function toggleGroup(
     groupLabel
   ) {
@@ -1051,10 +1003,6 @@ export default function DashboardLayout({
 
   }
 
-
-  // ==========================================================
-  // SIDEBAR TOGGLE
-  // ==========================================================
 
   function toggleNavigation() {
 
@@ -1110,19 +1058,13 @@ export default function DashboardLayout({
   }
 
 
-  // ==========================================================
-  // SIDEBAR CLASS
-  // ==========================================================
-
   const sidebarClassName = [
 
     styles.sidebar,
 
-
     isCollapsed
       ? styles.sidebarCollapsed
       : '',
-
 
     isMobileOpen
       ? styles.sidebarMobileOpen
@@ -1136,10 +1078,6 @@ export default function DashboardLayout({
       ' '
     )
 
-
-  // ==========================================================
-  // RENDER
-  // ==========================================================
 
   return (
 
@@ -1403,7 +1341,6 @@ export default function DashboardLayout({
 
                             styles.navigationLink,
 
-
                             active
                               ? styles.navigationLinkActive
                               : '',
@@ -1636,7 +1573,7 @@ export default function DashboardLayout({
                                       position:
                                         'absolute',
 
-                                    left:
+                                      left:
                                         '-5px',
 
                                       top:
