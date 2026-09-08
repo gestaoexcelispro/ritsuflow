@@ -1085,6 +1085,257 @@ function applyDurationTemplate({
 
 
 /* =========================================================
+   WBS VIEW
+   ========================================================= */
+
+function buildWbsRows(
+  activities,
+  desiredDurations
+) {
+  const rows = []
+  const locations = new Map()
+
+  activities.forEach(
+    (activity) => {
+      const locationKey =
+        activity.locationId ||
+        activity.locationName ||
+        '__no_location__'
+
+      const divisionKey =
+        activity.divisionId ||
+        activity.divisionName ||
+        '__no_division__'
+
+      const workPackageKey =
+        activity.workPackageCode ||
+        '__no_work_package__'
+
+      if (
+        !locations.has(
+          locationKey
+        )
+      ) {
+        locations.set(
+          locationKey,
+          {
+            name:
+              activity.locationName ||
+              'Unassigned Location',
+            divisions:
+              new Map(),
+          }
+        )
+      }
+
+      const location =
+        locations.get(
+          locationKey
+        )
+
+      if (
+        !location.divisions.has(
+          divisionKey
+        )
+      ) {
+        location.divisions.set(
+          divisionKey,
+          {
+            name:
+              activity.divisionName &&
+              activity.divisionName !==
+                '—'
+                ? activity.divisionName
+                : 'Unassigned Division',
+            workPackages:
+              new Map(),
+          }
+        )
+      }
+
+      const division =
+        location.divisions.get(
+          divisionKey
+        )
+
+      if (
+        !division.workPackages.has(
+          workPackageKey
+        )
+      ) {
+        division.workPackages.set(
+          workPackageKey,
+          {
+            code:
+              activity.workPackageCode ||
+              'WP',
+            color:
+              activity.workPackageColor ||
+              '#00998b',
+            activities: [],
+          }
+        )
+      }
+
+      division.workPackages
+        .get(
+          workPackageKey
+        )
+        .activities.push(
+          activity
+        )
+    }
+  )
+
+  let locationIndex = 0
+
+  locations.forEach(
+    (location) => {
+      locationIndex += 1
+
+      const locationCode =
+        `${locationIndex}.0`
+
+      rows.push({
+        id:
+          `wbs-location-${locationIndex}`,
+        type:
+          'location',
+        wbs:
+          locationCode,
+        name:
+          location.name,
+        duration:
+          null,
+        predecessor:
+          '—',
+        relationship:
+          '—',
+        activity:
+          null,
+      })
+
+      let divisionIndex = 0
+
+      location.divisions.forEach(
+        (division) => {
+          divisionIndex += 1
+
+          const divisionCode =
+            `${locationIndex}.${divisionIndex}`
+
+          rows.push({
+            id:
+              `wbs-division-${locationIndex}-${divisionIndex}`,
+            type:
+              'division',
+            wbs:
+              divisionCode,
+            name:
+              division.name,
+            duration:
+              null,
+            predecessor:
+              '—',
+            relationship:
+              '—',
+            activity:
+              null,
+          })
+
+          let workPackageIndex = 0
+
+          division.workPackages.forEach(
+            (workPackage) => {
+              workPackageIndex += 1
+
+              const workPackageCode =
+                `${divisionCode}.${workPackageIndex}`
+
+              rows.push({
+                id:
+                  `wbs-wp-${locationIndex}-${divisionIndex}-${workPackageIndex}`,
+                type:
+                  'workPackage',
+                wbs:
+                  workPackageCode,
+                name:
+                  workPackage.code,
+                color:
+                  workPackage.color,
+                duration:
+                  null,
+                predecessor:
+                  '—',
+                relationship:
+                  '—',
+                activity:
+                  null,
+              })
+
+              workPackage.activities.forEach(
+                (
+                  activity,
+                  activityIndex
+                ) => {
+                  const desired =
+                    Number(
+                      desiredDurations?.[
+                        activity.id
+                      ]
+                    )
+
+                  const raw =
+                    Number(
+                      activity.rawDuration
+                    )
+
+                  const duration =
+                    Number.isFinite(
+                      desired
+                    ) &&
+                    desired > 0
+                      ? desired
+                      : Number.isFinite(
+                            raw
+                          ) &&
+                          raw > 0
+                        ? raw
+                        : null
+
+                  rows.push({
+                    id:
+                      `wbs-activity-${activity.id}`,
+                    type:
+                      'activity',
+                    wbs:
+                      `${workPackageCode}.${activityIndex + 1}`,
+                    name:
+                      activity.scopeItemName,
+                    duration,
+                    predecessor:
+                      '—',
+                    relationship:
+                      '—',
+                    color:
+                      activity.workPackageColor ||
+                      '#00998b',
+                    activity,
+                  })
+                }
+              )
+            }
+          )
+        }
+      )
+    }
+  )
+
+  return rows
+}
+
+
+/* =========================================================
    RAIL BUTTON
    ========================================================= */
 
@@ -1825,6 +2076,26 @@ export default function PrePlanningWorkspace({
         selectedDivision,
       ]
     )
+
+  const wbsRows =
+    useMemo(
+      () =>
+        buildWbsRows(
+          filteredActivities,
+          desiredDurations
+        ),
+      [
+        filteredActivities,
+        desiredDurations,
+      ]
+    )
+
+  const displayedRowCount =
+    activeTab ===
+      'wbs'
+      ? wbsRows.length
+      : filteredActivities.length
+
 
   const visibleActivityIds =
     useMemo(
@@ -3703,6 +3974,23 @@ export default function PrePlanningWorkspace({
           >
             Duration & Resources
           </button>
+
+          <button
+            type="button"
+            className={
+              activeTab ===
+              'wbs'
+                ? styles.tabButtonActive
+                : styles.tabButton
+            }
+            onClick={() =>
+              handleTabChange(
+                'wbs'
+              )
+            }
+          >
+            WBS
+          </button>
         </div>
 
         <div
@@ -3921,6 +4209,20 @@ export default function PrePlanningWorkspace({
         onClick={() =>
           handleTabChange(
             'duration'
+          )
+        }
+      />
+
+      <RailButton
+        label="WBS"
+        symbol="W"
+        active={
+          activeTab ===
+          'wbs'
+        }
+        onClick={() =>
+          handleTabChange(
+            'wbs'
           )
         }
       />
@@ -4382,7 +4684,8 @@ export default function PrePlanningWorkspace({
                 : 'Save Sequence · Create V1'}
             </button>
           </>
-        ) : (
+        ) : activeTab ===
+        'duration' ? (
           <>
             <button
               type="button"
@@ -4414,7 +4717,7 @@ export default function PrePlanningWorkspace({
               Save Duration & Resources
             </button>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -4654,7 +4957,8 @@ export default function PrePlanningWorkspace({
             }
           />
         </>
-      ) : (
+      ) : activeTab ===
+      'duration' ? (
         <>
           <RailButton
             label="Save Duration & Resources"
@@ -4678,7 +4982,7 @@ export default function PrePlanningWorkspace({
             }
           />
         </>
-      )}
+      ) : null}
 
       {notice ? (
         <div
@@ -4717,73 +5021,126 @@ export default function PrePlanningWorkspace({
           styles.activityPane
         }
       >
-        <div
-          className={
-            styles.activityHeader
-          }
-        >
+        {activeTab ===
+        'wbs' ? (
           <div
             className={
-              styles.activityHeaderHandleCell
+              styles.activityHeader
             }
+            style={{
+              gridTemplateColumns:
+                '92px minmax(250px, 1fr) 92px 118px 112px',
+            }}
           >
-            {activeTab ===
-            'sequence'
-              ? '⠿'
-              : ''}
-          </div>
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              WBS
+            </div>
 
-          <div
-            className={
-              styles.activityHeaderCell
-            }
-          >
-            ID
-          </div>
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Name
+            </div>
 
-          <div
-            className={
-              styles.activityHeaderCell
-            }
-          >
-            WP
-          </div>
+            <div
+              className={
+                styles.activityHeaderCellRight
+              }
+            >
+              Duration
+            </div>
 
-          <div
-            className={
-              styles.activityHeaderCell
-            }
-          >
-            Scope Item
-          </div>
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Predecessor
+            </div>
 
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Relationship
+            </div>
+          </div>
+        ) : (
           <div
             className={
-              styles.activityHeaderCell
+              styles.activityHeader
             }
           >
-            Location
-          </div>
+            <div
+              className={
+                styles.activityHeaderHandleCell
+              }
+            >
+              {activeTab ===
+              'sequence'
+                ? '⠿'
+                : ''}
+            </div>
 
-          <div
-            className={
-              styles.activityHeaderCell
-            }
-          >
-            Division
-          </div>
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              ID
+            </div>
 
-          <div
-            className={
-              styles.activityHeaderCellRight
-            }
-          >
-            {activeTab ===
-            'sequence'
-              ? 'Raw Dur.'
-              : 'Desired Dur.'}
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              WP
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Scope Item
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Location
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCell
+              }
+            >
+              Division
+            </div>
+
+            <div
+              className={
+                styles.activityHeaderCellRight
+              }
+            >
+              {activeTab ===
+              'sequence'
+                ? 'Raw Dur.'
+                : 'Desired Dur.'}
+            </div>
           </div>
-        </div>
+        )}
 
         <div
           ref={
@@ -4805,14 +5162,15 @@ export default function PrePlanningWorkspace({
             style={{
               height:
                 Math.max(
-                  filteredActivities.length *
+                  displayedRowCount *
                     ROW_HEIGHT,
-
                   ROW_HEIGHT
                 ),
             }}
           >
-            {rowDrag ? (
+            {activeTab ===
+              'sequence' &&
+            rowDrag ? (
               <div
                 className={
                   styles.sequenceDropIndicator
@@ -4824,7 +5182,221 @@ export default function PrePlanningWorkspace({
               />
             ) : null}
 
-            {filteredActivities.length >
+            {activeTab ===
+            'wbs' ? (
+              wbsRows.length >
+              0 ? (
+                wbsRows.map(
+                  (
+                    row,
+                    rowIndex
+                  ) => {
+                    const isActivity =
+                      row.type ===
+                      'activity'
+
+                    const selected =
+                      isActivity &&
+                      selectedActivity?.id ===
+                        row.activity?.id
+
+                    const level =
+                      row.type ===
+                        'location'
+                        ? 0
+                        : row.type ===
+                            'division'
+                          ? 1
+                          : row.type ===
+                              'workPackage'
+                            ? 2
+                            : 3
+
+                    const background =
+                      row.type ===
+                        'location'
+                        ? '#e8f1f4'
+                        : row.type ===
+                            'division'
+                          ? '#f1f6f8'
+                          : row.type ===
+                              'workPackage'
+                            ? '#f8fafb'
+                            : undefined
+
+                    return (
+                      <div
+                        key={
+                          row.id
+                        }
+                        className={`${styles.activityRowShell} ${
+                          selected
+                            ? styles.activityRowShellSelected
+                            : ''
+                        }`}
+                        style={{
+                          top:
+                            rowIndex *
+                            ROW_HEIGHT,
+                          gridTemplateColumns:
+                            '92px minmax(250px, 1fr) 92px 118px 112px',
+                          background,
+                          cursor:
+                            isActivity
+                              ? 'pointer'
+                              : 'default',
+                          fontWeight:
+                            isActivity
+                              ? 500
+                              : 700,
+                        }}
+                        onClick={() => {
+                          if (
+                            isActivity
+                          ) {
+                            setSelectedActivityId(
+                              row.activity.id
+                            )
+                          }
+                        }}
+                      >
+                        <div
+                          className={
+                            styles.activityId
+                          }
+                          style={{
+                            paddingLeft:
+                              `${10 + level * 8}px`,
+                            fontWeight:
+                              isActivity
+                                ? 600
+                                : 800,
+                          }}
+                        >
+                          {
+                            row.wbs
+                          }
+                        </div>
+
+                        <div
+                          className={
+                            styles.scopeItemName
+                          }
+                          title={
+                            row.name
+                          }
+                          style={{
+                            paddingLeft:
+                              `${8 + level * 14}px`,
+                            display:
+                              'flex',
+                            alignItems:
+                              'center',
+                            gap:
+                              '8px',
+                          }}
+                        >
+                          {row.type ===
+                          'workPackage' ? (
+                            <span
+                              className={
+                                styles.workPackageIndicator
+                              }
+                              style={{
+                                background:
+                                  row.color ||
+                                  '#00998b',
+                              }}
+                            />
+                          ) : null}
+
+                          <span>
+                            {
+                              row.name
+                            }
+                          </span>
+                        </div>
+
+                        <div
+                          className={
+                            styles.durationCell
+                          }
+                        >
+                          {isActivity &&
+                          Number.isFinite(
+                            Number(
+                              row.duration
+                            )
+                          )
+                            ? `${safeNumber(
+                                row.duration
+                              )} d`
+                            : '—'}
+                        </div>
+
+                        <div
+                          className={
+                            styles.divisionName
+                          }
+                          title={
+                            isActivity
+                              ? 'Predecessor logic will be connected in the next scheduling step.'
+                              : ''
+                          }
+                        >
+                          {
+                            row.predecessor
+                          }
+                        </div>
+
+                        <div
+                          className={
+                            styles.divisionName
+                          }
+                          title={
+                            isActivity
+                              ? 'Relationship types: FS, SS, FF, SF.'
+                              : ''
+                          }
+                        >
+                          {
+                            row.relationship
+                          }
+                        </div>
+                      </div>
+                    )
+                  }
+                )
+              ) : (
+                <div
+                  className={
+                    styles.emptyActivityState
+                  }
+                >
+                  <strong>
+                    No WBS rows found
+                  </strong>
+
+                  <span>
+                    No activities match the selected Location and Division.
+                  </span>
+
+                  {hasFilters ? (
+                    <button
+                      type="button"
+                      className={
+                        styles.emptyClearButton
+                      }
+                      onClick={
+                        clearFilters
+                      }
+                    >
+                      Clear Filters
+                    </button>
+                  ) : null}
+                </div>
+              )
+            ) : filteredActivities.length >
             0 ? (
               filteredActivities.map(
                 (
@@ -5175,9 +5747,8 @@ export default function PrePlanningWorkspace({
 
               height:
                 Math.max(
-                  filteredActivities.length *
+                  displayedRowCount *
                     ROW_HEIGHT,
-
                   ROW_HEIGHT
                 ),
             }}
@@ -5217,7 +5788,9 @@ export default function PrePlanningWorkspace({
                 )
               )}
 
-            {rowDrag ? (
+            {activeTab ===
+              'sequence' &&
+            rowDrag ? (
               <div
                 className={
                   styles.ganttDropIndicator
@@ -5229,196 +5802,283 @@ export default function PrePlanningWorkspace({
               />
             ) : null}
 
-            {filteredActivities.map(
-              (
-                activity,
-                visibleIndex
-              ) => {
-                const desired =
-                  Number(
-                    desiredDurations[
-                      activity.id
-                    ]
-                  )
+            {activeTab ===
+            'wbs'
+              ? wbsRows.map(
+                  (
+                    row,
+                    rowIndex
+                  ) => {
+                    const isActivity =
+                      row.type ===
+                      'activity'
 
-                const rawDuration =
-                  Number(
-                    activity.rawDuration
-                  )
+                    const selected =
+                      isActivity &&
+                      selectedActivity?.id ===
+                        row.activity?.id
 
-                const displayedDuration =
-                  activeTab ===
-                    'duration' &&
-                  Number.isFinite(
-                    desired
-                  ) &&
-                  desired > 0
-                    ? desired
-                    : rawDuration
+                    const hasDuration =
+                      isActivity &&
+                      Number.isFinite(
+                        Number(
+                          row.duration
+                        )
+                      ) &&
+                      Number(
+                        row.duration
+                      ) > 0
 
-                const hasDuration =
-                  Number.isFinite(
-                    displayedDuration
-                  ) &&
-                  displayedDuration > 0
+                    const barWidth =
+                      hasDuration
+                        ? Math.max(
+                            4,
+                            Number(
+                              row.duration
+                            ) *
+                              dayWidth
+                          )
+                        : 0
 
-                const selected =
-                  selectedActivity?.id ===
-                  activity.id
-
-                const dragging =
-                  rowDrag?.activityId ===
-                  activity.id
-
-                /*
-                 * Important:
-                 * Resource calculations only belong
-                 * to Duration & Resources mode.
-                 *
-                 * Sequence mode intentionally uses null.
-                 */
-                const resource =
-                  activeTab ===
-                    'duration'
-                    ? calculateRequiredResource(
-                        activity,
-                        desired
-                      )
-                    : null
-
-                const barWidth =
-                  hasDuration
-                    ? Math.max(
-                        4,
-
-                        displayedDuration *
-                          dayWidth
-                      )
-                    : 0
-
-                let resourceClass =
-                  styles.ganttBarWaiting
-
-                /*
-                 * NULL GUARD
-                 *
-                 * Do not read resource.difference unless
-                 * a resource calculation actually exists.
-                 */
-                if (
-                  resource &&
-                  resource.recommended !==
-                    null &&
-                  resource.current !==
-                    null
-                ) {
-                  if (
-                    resource.difference ===
-                    0
-                  ) {
-                    resourceClass =
-                      styles.ganttBarBalanced
-                  } else if (
-                    resource.difference >
-                    0
-                  ) {
-                    resourceClass =
-                      styles.ganttBarGap
-                  } else {
-                    resourceClass =
-                      styles.ganttBarUnderloaded
-                  }
-                }
-
-                return (
-                  <button
-                    key={
-                      activity.id
-                    }
-                    type="button"
-                    className={`${styles.ganttRow} ${
-                      selected
-                        ? styles.ganttRowSelected
-                        : ''
-                    } ${
-                      dragging
-                        ? styles.ganttRowDragging
-                        : ''
-                    }`}
-                    style={{
-                      top:
-                        visibleIndex *
-                        ROW_HEIGHT,
-                    }}
-                    onClick={() =>
-                      setSelectedActivityId(
-                        activity.id
-                      )
-                    }
-                  >
-                    {hasDuration ? (
-                      <div
-                        className={`${styles.ganttBar} ${
-                          activeTab ===
-                          'duration'
-                            ? resourceClass
+                    return (
+                      <button
+                        key={
+                          `gantt-${row.id}`
+                        }
+                        type="button"
+                        className={`${styles.ganttRow} ${
+                          selected
+                            ? styles.ganttRowSelected
                             : ''
                         }`}
                         style={{
-                          left: 0,
-
-                          width:
-                            barWidth,
-
-                          /*
-                           * Work Package color is the permanent
-                           * visual identity of the activity.
-                           *
-                           * Duration & Resources may change the
-                           * bar length and resource information,
-                           * but never the base activity color.
-                           */
+                          top:
+                            rowIndex *
+                            ROW_HEIGHT,
                           background:
-                            activity.workPackageColor ||
-                            '#00998b',
+                            row.type ===
+                              'location'
+                              ? 'rgba(220, 234, 239, 0.72)'
+                              : row.type ===
+                                  'division'
+                                ? 'rgba(239, 246, 248, 0.72)'
+                                : row.type ===
+                                    'workPackage'
+                                  ? 'rgba(248, 250, 251, 0.82)'
+                                  : undefined,
+                          cursor:
+                            isActivity
+                              ? 'pointer'
+                              : 'default',
+                        }}
+                        onClick={() => {
+                          if (
+                            isActivity
+                          ) {
+                            setSelectedActivityId(
+                              row.activity.id
+                            )
+                          }
                         }}
                       >
-                        <span
-                          className={
-                            styles.ganttBarLabel
-                          }
-                        >
-                          {safeNumber(
-                            displayedDuration
-                          )}{' '}
-                          d
+                        {hasDuration ? (
+                          <div
+                            className={
+                              styles.ganttBar
+                            }
+                            style={{
+                              left: 0,
+                              width:
+                                barWidth,
+                              background:
+                                row.color ||
+                                '#00998b',
+                            }}
+                          >
+                            <span
+                              className={
+                                styles.ganttBarLabel
+                              }
+                            >
+                              {safeNumber(
+                                row.duration
+                              )}{' '}
+                              d
+                            </span>
+                          </div>
+                        ) : null}
+                      </button>
+                    )
+                  }
+                )
+              : filteredActivities.map(
+                  (
+                    activity,
+                    visibleIndex
+                  ) => {
+                    const desired =
+                      Number(
+                        desiredDurations[
+                          activity.id
+                        ]
+                      )
 
-                          {activeTab ===
-                            'duration' &&
-                          resource?.recommended !==
-                            null &&
-                          resource?.recommended !==
-                            undefined
-                            ? ` · ${resource.recommended} ${getResourceUnit(
-                                activity,
-                                resource.recommended
-                              )}`
-                            : ''}
-                        </span>
-                      </div>
-                    ) : (
-                      <span
-                        className={
-                          styles.missingBar
+                    const rawDuration =
+                      Number(
+                        activity.rawDuration
+                      )
+
+                    const displayedDuration =
+                      activeTab ===
+                        'duration' &&
+                      Number.isFinite(
+                        desired
+                      ) &&
+                      desired > 0
+                        ? desired
+                        : rawDuration
+
+                    const hasDuration =
+                      Number.isFinite(
+                        displayedDuration
+                      ) &&
+                      displayedDuration > 0
+
+                    const selected =
+                      selectedActivity?.id ===
+                      activity.id
+
+                    const dragging =
+                      rowDrag?.activityId ===
+                      activity.id
+
+                    const resource =
+                      activeTab ===
+                        'duration'
+                        ? calculateRequiredResource(
+                            activity,
+                            desired
+                          )
+                        : null
+
+                    const barWidth =
+                      hasDuration
+                        ? Math.max(
+                            4,
+                            displayedDuration *
+                              dayWidth
+                          )
+                        : 0
+
+                    let resourceClass =
+                      styles.ganttBarWaiting
+
+                    if (
+                      resource &&
+                      resource.recommended !==
+                        null &&
+                      resource.current !==
+                        null
+                    ) {
+                      if (
+                        resource.difference ===
+                        0
+                      ) {
+                        resourceClass =
+                          styles.ganttBarBalanced
+                      } else if (
+                        resource.difference >
+                        0
+                      ) {
+                        resourceClass =
+                          styles.ganttBarGap
+                      } else {
+                        resourceClass =
+                          styles.ganttBarUnderloaded
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={
+                          activity.id
+                        }
+                        type="button"
+                        className={`${styles.ganttRow} ${
+                          selected
+                            ? styles.ganttRowSelected
+                            : ''
+                        } ${
+                          dragging
+                            ? styles.ganttRowDragging
+                            : ''
+                        }`}
+                        style={{
+                          top:
+                            visibleIndex *
+                            ROW_HEIGHT,
+                        }}
+                        onClick={() =>
+                          setSelectedActivityId(
+                            activity.id
+                          )
                         }
                       >
-                        Missing production data
-                      </span>
-                    )}
-                  </button>
-                )
-              }
-            )}
+                        {hasDuration ? (
+                          <div
+                            className={`${styles.ganttBar} ${
+                              activeTab ===
+                              'duration'
+                                ? resourceClass
+                                : ''
+                            }`}
+                            style={{
+                              left: 0,
+
+                              width:
+                                barWidth,
+
+                              background:
+                                activity.workPackageColor ||
+                                '#00998b',
+                            }}
+                          >
+                            <span
+                              className={
+                                styles.ganttBarLabel
+                              }
+                            >
+                              {safeNumber(
+                                displayedDuration
+                              )}{' '}
+                              d
+
+                              {activeTab ===
+                                'duration' &&
+                              resource?.recommended !==
+                                null &&
+                              resource?.recommended !==
+                                undefined
+                                ? ` · ${resource.recommended} ${getResourceUnit(
+                                    activity,
+                                    resource.recommended
+                                  )}`
+                                : ''}
+                            </span>
+                          </div>
+                        ) : (
+                          <span
+                            className={
+                              styles.missingBar
+                            }
+                          >
+                            Missing production data
+                          </span>
+                        )}
+                      </button>
+                    )
+                  }
+                )}
           </div>
         </div>
       </section>
