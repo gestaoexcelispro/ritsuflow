@@ -15,6 +15,8 @@ import {
 
 import styles from './pre-planning.module.css'
 
+import PrePlanningWbsEditor from './PrePlanningWbsEditor'
+
 
 const DEFAULT_DAY_WIDTH = 34
 const MIN_DAY_WIDTH = 24
@@ -5010,7 +5012,7 @@ export default function PrePlanningWorkspace({
      PLANNING GRID
      ======================================================= */
 
-  const planningGrid = (
+  const legacyPlanningGrid = (
     <div
       className={
         styles.planningGrid
@@ -6084,6 +6086,40 @@ export default function PrePlanningWorkspace({
       </section>
     </div>
   )
+
+
+  const planningGrid =
+    activeTab ===
+      'wbs' ? (
+        <PrePlanningWbsEditor
+          projectId={
+            project?.id ||
+            ''
+          }
+          versionId={
+            selectedVersion?.id ||
+            workingVersion?.id ||
+            ''
+          }
+          editable={
+            Boolean(
+              workingVersion?.id &&
+              isViewingCurrentVersion
+            )
+          }
+          dayWidth={
+            dayWidth
+          }
+          timelineDays={
+            timelineDays
+          }
+          onNotice={
+            setNotice
+          }
+        />
+      ) : (
+        legacyPlanningGrid
+      )
 
 
   /* =======================================================
