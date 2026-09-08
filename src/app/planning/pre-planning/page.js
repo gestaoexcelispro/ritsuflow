@@ -59,11 +59,11 @@ function getLocationChain(
   locationMap
 ) {
   const chain = []
-  const visited =
-    new Set()
+  const visited = new Set()
 
   let cursor =
-    location || null
+    location ||
+    null
 
   while (
     cursor &&
@@ -132,8 +132,9 @@ function resolveProductionLocation(
     index += 1
   ) {
     const type =
-      chain[index]
-        ?.location_type
+      chain[
+        index
+      ]?.location_type
 
     if (
       type === 'floor' ||
@@ -340,7 +341,7 @@ function calculateActivity({
 
 
 /* =========================================================
-   DEFAULT ORDER
+   DEFAULT ACTIVITY ORDER
    ========================================================= */
 
 function sortDefaultActivities(
@@ -551,7 +552,10 @@ function buildVersionSequenceMap(
   const grouped =
     new Map()
 
-  ;(rows || []).forEach(
+  ;(
+    rows ||
+    []
+  ).forEach(
     (row) => {
       if (
         !row.version_id ||
@@ -597,14 +601,15 @@ function buildVersionSequenceMap(
       result[
         versionId
       ] =
-        [...sequence].sort(
-          (
-            first,
-            second
-          ) =>
-            first.sequenceNumber -
-            second.sequenceNumber
-        )
+        [...sequence]
+          .sort(
+            (
+              first,
+              second
+            ) =>
+              first.sequenceNumber -
+              second.sequenceNumber
+          )
     }
   )
 
@@ -612,12 +617,19 @@ function buildVersionSequenceMap(
 }
 
 
+/* =========================================================
+   DURATION STRATEGY HELPERS
+   ========================================================= */
+
 function buildVersionDurationStrategyMap(
   rows
 ) {
   const result = {}
 
-  ;(rows || []).forEach(
+  ;(
+    rows ||
+    []
+  ).forEach(
     (row) => {
       const versionId =
         row.version_id
@@ -655,7 +667,8 @@ function buildVersionDurationStrategyMap(
         Number.isFinite(
           desiredDuration
         ) &&
-        desiredDuration > 0
+        desiredDuration >
+          0
           ? desiredDuration
           : null
     }
@@ -675,46 +688,33 @@ function ProjectSelector({
   return (
     <main
       style={{
-        minHeight:
-          '100vh',
-        padding:
-          '32px',
-        background:
-          '#f5f8fa',
+        minHeight: '100vh',
+        padding: '32px',
+        background: '#f5f8fa',
       }}
     >
       <section
         style={{
-          maxWidth:
-            '1200px',
-          margin:
-            '0 auto',
-          display:
-            'grid',
-          gap:
-            '18px',
+          maxWidth: '1200px',
+          margin: '0 auto',
+          display: 'grid',
+          gap: '18px',
         }}
       >
         <div
           style={{
-            padding:
-              '22px',
+            padding: '22px',
             border:
               `1px solid ${BORDER}`,
-            borderRadius:
-              '12px',
-            background:
-              '#ffffff',
+            borderRadius: '12px',
+            background: '#ffffff',
           }}
         >
           <div
             style={{
-              color:
-                TEAL,
-              fontSize:
-                '10px',
-              fontWeight:
-                900,
+              color: TEAL,
+              fontSize: '10px',
+              fontWeight: 900,
               letterSpacing:
                 '0.08em',
             }}
@@ -724,14 +724,10 @@ function ProjectSelector({
 
           <h1
             style={{
-              margin:
-                '7px 0 0',
-              color:
-                NAVY,
-              fontSize:
-                '24px',
-              fontWeight:
-                900,
+              margin: '7px 0 0',
+              color: NAVY,
+              fontSize: '24px',
+              fontWeight: 900,
             }}
           >
             Pre-Planning
@@ -739,16 +735,11 @@ function ProjectSelector({
 
           <p
             style={{
-              maxWidth:
-                '800px',
-              margin:
-                '8px 0 0',
-              color:
-                MUTED,
-              fontSize:
-                '13px',
-              lineHeight:
-                1.55,
+              maxWidth: '800px',
+              margin: '8px 0 0',
+              color: MUTED,
+              fontSize: '13px',
+              lineHeight: 1.55,
             }}
           >
             Select a project to open the standalone Pre-Planning workspace.
@@ -757,12 +748,10 @@ function ProjectSelector({
 
         <div
           style={{
-            display:
-              'grid',
+            display: 'grid',
             gridTemplateColumns:
               'repeat(auto-fit, minmax(280px, 1fr))',
-            gap:
-              '12px',
+            gap: '12px',
           }}
         >
           {projects.length >
@@ -775,30 +764,24 @@ function ProjectSelector({
                   }
                   href={`/planning/pre-planning?projectId=${project.id}`}
                   style={{
-                    display:
-                      'block',
-                    padding:
-                      '18px',
+                    display: 'block',
+                    padding: '18px',
                     border:
                       `1px solid ${BORDER}`,
                     borderRadius:
                       '12px',
                     background:
                       '#ffffff',
-                    color:
-                      'inherit',
+                    color: 'inherit',
                     textDecoration:
                       'none',
                   }}
                 >
                   <div
                     style={{
-                      color:
-                        TEAL,
-                      fontSize:
-                        '11px',
-                      fontWeight:
-                        900,
+                      color: TEAL,
+                      fontSize: '11px',
+                      fontWeight: 900,
                     }}
                   >
                     {
@@ -808,14 +791,10 @@ function ProjectSelector({
 
                   <div
                     style={{
-                      marginTop:
-                        '5px',
-                      color:
-                        NAVY,
-                      fontSize:
-                        '15px',
-                      fontWeight:
-                        900,
+                      marginTop: '5px',
+                      color: NAVY,
+                      fontSize: '15px',
+                      fontWeight: 900,
                     }}
                   >
                     {
@@ -825,12 +804,9 @@ function ProjectSelector({
 
                   <div
                     style={{
-                      marginTop:
-                        '10px',
-                      color:
-                        MUTED,
-                      fontSize:
-                        '11px',
+                      marginTop: '10px',
+                      color: MUTED,
+                      fontSize: '11px',
                     }}
                   >
                     Open Pre-Planning
@@ -841,18 +817,15 @@ function ProjectSelector({
           ) : (
             <div
               style={{
-                padding:
-                  '20px',
+                padding: '20px',
                 border:
                   `1px solid ${BORDER}`,
                 borderRadius:
                   '12px',
                 background:
                   '#ffffff',
-                color:
-                  MUTED,
-                fontSize:
-                  '13px',
+                color: MUTED,
+                fontSize: '13px',
               }}
             >
               No accessible projects were found.
@@ -895,8 +868,7 @@ export default async function PrePlanningPage({
     return (
       <div
         style={{
-          padding:
-            '24px',
+          padding: '24px',
         }}
       >
         Authentication is required.
@@ -942,7 +914,8 @@ export default async function PrePlanningPage({
   }
 
   const projects =
-    projectsData || []
+    projectsData ||
+    []
 
   const selectedProject =
     projects.find(
@@ -999,8 +972,7 @@ export default async function PrePlanningPage({
         .order(
           'code',
           {
-            ascending:
-              true,
+            ascending: true,
           }
         ),
 
@@ -1026,8 +998,7 @@ export default async function PrePlanningPage({
         .order(
           'sequence_number',
           {
-            ascending:
-              true,
+            ascending: true,
           }
         ),
 
@@ -1051,8 +1022,7 @@ export default async function PrePlanningPage({
         .order(
           'sequence_number',
           {
-            ascending:
-              true,
+            ascending: true,
           }
         ),
 
@@ -1138,8 +1108,7 @@ export default async function PrePlanningPage({
         .order(
           'version_number',
           {
-            ascending:
-              false,
+            ascending: false,
           }
         ),
     ])
@@ -1163,6 +1132,11 @@ export default async function PrePlanningPage({
       loadErrors
     )
   }
+
+
+  /* =======================================================
+     NORMALIZED DATA
+     ======================================================= */
 
   const workPackages =
     (
@@ -1213,10 +1187,11 @@ export default async function PrePlanningPage({
 
 
   /* =======================================================
-     VERSION DATA
+     VERSION-OWNED DATA
      ======================================================= */
 
   let allSequenceRows = []
+
   let allDurationStrategyRows =
     []
 
@@ -1247,8 +1222,7 @@ export default async function PrePlanningPage({
           .order(
             'sequence_number',
             {
-              ascending:
-                true,
+              ascending: true,
             }
           ),
 
@@ -1296,6 +1270,7 @@ export default async function PrePlanningPage({
     }
   }
 
+
   const currentSequenceRows =
     currentVersion
       ? allSequenceRows.filter(
@@ -1327,7 +1302,7 @@ export default async function PrePlanningPage({
 
 
   /* =======================================================
-     LOOKUPS
+     LOOKUP MAPS
      ======================================================= */
 
   const workPackageMap =
@@ -1367,7 +1342,7 @@ export default async function PrePlanningPage({
 
 
   /* =======================================================
-     ACTIVITIES
+     BUILD ACTIVITIES
      ======================================================= */
 
   const activities =
@@ -1443,18 +1418,13 @@ export default async function PrePlanningPage({
   return (
     <main
       style={{
-        width:
-          '100%',
-        height:
-          '100vh',
-        minWidth:
-          0,
-        overflow:
-          'hidden',
-        padding:
-          '8px',
-        background:
-          '#f4f7f9',
+        width: '100%',
+        height: '100dvh',
+        minWidth: 0,
+        minHeight: 0,
+        overflow: 'hidden',
+        padding: '8px',
+        background: '#f4f7f9',
       }}
     >
       <PrePlanningWorkspace
@@ -1505,6 +1475,8 @@ export default async function PrePlanningPage({
         }
 
         changeProjectHref="/planning/pre-planning"
+
+        standalone
       />
     </main>
   )
