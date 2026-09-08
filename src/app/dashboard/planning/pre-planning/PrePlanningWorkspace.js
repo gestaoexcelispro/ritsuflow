@@ -40,7 +40,6 @@ function safeNumber(
   const numeric =
     Number(value)
 
-
   if (
     !Number.isFinite(
       numeric
@@ -48,7 +47,6 @@ function safeNumber(
   ) {
     return '—'
   }
-
 
   return new Intl.NumberFormat(
     'en-US',
@@ -66,15 +64,10 @@ function safeNumber(
 function getBasisLabel(
   basis
 ) {
-  if (
-    basis ===
+  return basis ===
     'crew_day'
-  ) {
-    return 'Per crew / day'
-  }
-
-
-  return 'Per worker / day'
+    ? 'Per crew / day'
+    : 'Per worker / day'
 }
 
 
@@ -91,7 +84,6 @@ function getResourceUnit(
       : 'crews'
   }
 
-
   return value === 1
     ? 'worker'
     : 'workers'
@@ -103,10 +95,8 @@ function getResourceLabel(
 ) {
   const value =
     Number(
-      activity
-        ?.effectiveWorkforce
+      activity?.effectiveWorkforce
     )
-
 
   if (
     !Number.isFinite(
@@ -116,7 +106,6 @@ function getResourceLabel(
   ) {
     return '—'
   }
-
 
   return `${safeNumber(
     value
@@ -153,18 +142,28 @@ function calculateRequiredResource(
       activity?.quantity
     )
 
-
   const productivity =
     Number(
       activity?.productivity
     )
-
 
   const duration =
     Number(
       desiredDuration
     )
 
+  const current =
+    Number(
+      activity?.effectiveWorkforce
+    )
+
+  const validCurrent =
+    Number.isFinite(
+      current
+    ) &&
+    current >= 0
+      ? current
+      : null
 
   if (
     !Number.isFinite(
@@ -181,28 +180,13 @@ function calculateRequiredResource(
     duration <= 0
   ) {
     return {
-      exact:
-        null,
-
-      recommended:
-        null,
-
+      exact: null,
+      recommended: null,
       current:
-        Number.isFinite(
-          Number(
-            activity?.effectiveWorkforce
-          )
-        )
-          ? Number(
-              activity.effectiveWorkforce
-            )
-          : null,
-
-      difference:
-        null,
+        validCurrent,
+      difference: null,
     }
   }
-
 
   const exact =
     quantity /
@@ -211,48 +195,30 @@ function calculateRequiredResource(
       duration
     )
 
-
   const recommended =
     Math.ceil(
       exact
     )
 
-
-  const current =
-    Number(
-      activity?.effectiveWorkforce
-    )
-
-
-  const validCurrent =
-    Number.isFinite(
-      current
-    ) &&
-    current >= 0
-      ? current
-      : null
-
-
-  const difference =
-    validCurrent !==
-      null
-      ? recommended -
-        validCurrent
-      : null
-
-
   return {
     exact,
     recommended,
+
     current:
       validCurrent,
-    difference,
+
+    difference:
+      validCurrent !==
+        null
+        ? recommended -
+          validCurrent
+        : null,
   }
 }
 
 
 /* =========================================================
-   DURATION STRATEGY HELPERS
+   DURATION HELPERS
    ========================================================= */
 
 function normalizeDurationMap(
@@ -269,9 +235,7 @@ function normalizeDurationMap(
     return {}
   }
 
-
   const result = {}
-
 
   Object.entries(
     value
@@ -284,7 +248,6 @@ function normalizeDurationMap(
         Number(
           duration
         )
-
 
       if (
         Number.isFinite(
@@ -299,7 +262,6 @@ function normalizeDurationMap(
       }
     }
   )
-
 
   return result
 }
@@ -321,7 +283,6 @@ function durationSignature(
           Number(
             value
           )
-
 
         return (
           Number.isFinite(
@@ -386,10 +347,8 @@ function moveItem(
     return items
   }
 
-
   const next =
     [...items]
-
 
   const [
     movedItem,
@@ -399,18 +358,16 @@ function moveItem(
       1
     )
 
-
   let insertionIndex =
     toIndex
-
 
   if (
     toIndex >
     fromIndex
   ) {
-    insertionIndex -= 1
+    insertionIndex -=
+      1
   }
-
 
   insertionIndex =
     Math.max(
@@ -421,13 +378,11 @@ function moveItem(
       )
     )
 
-
   next.splice(
     insertionIndex,
     0,
     movedItem
   )
-
 
   return next
 }
@@ -452,12 +407,10 @@ function reorderVisibleActivities({
     return fullOrder
   }
 
-
   const visibleIdSet =
     new Set(
       visibleIds
     )
-
 
   const visibleActivities =
     fullOrder.filter(
@@ -467,14 +420,12 @@ function reorderVisibleActivities({
         )
     )
 
-
   const sourceIndex =
     visibleActivities.findIndex(
       (activity) =>
         activity.id ===
         movedActivityId
     )
-
 
   if (
     sourceIndex <
@@ -483,7 +434,6 @@ function reorderVisibleActivities({
     return fullOrder
   }
 
-
   const reorderedVisible =
     moveItem(
       visibleActivities,
@@ -491,10 +441,8 @@ function reorderVisibleActivities({
       dropIndex
     )
 
-
   let visibleCursor =
     0
-
 
   return fullOrder.map(
     (activity) => {
@@ -506,16 +454,13 @@ function reorderVisibleActivities({
         return activity
       }
 
-
       const replacement =
         reorderedVisible[
           visibleCursor
         ]
 
-
       visibleCursor +=
         1
-
 
       return replacement
     }
@@ -524,7 +469,7 @@ function reorderVisibleActivities({
 
 
 /* =========================================================
-   VERSION SEQUENCE HELPERS
+   VERSION ORDER
    ========================================================= */
 
 function applyVersionSequence(
@@ -534,13 +479,10 @@ function applyVersionSequence(
   if (
     !Array.isArray(
       activities
-    ) ||
-    activities.length ===
-      0
+    )
   ) {
     return []
   }
-
 
   if (
     !Array.isArray(
@@ -554,7 +496,6 @@ function applyVersionSequence(
     ]
   }
 
-
   const activityMap =
     new Map(
       activities.map(
@@ -565,11 +506,10 @@ function applyVersionSequence(
       )
     )
 
-
-  const ordered = []
   const used =
     new Set()
 
+  const ordered = []
 
   ;[
     ...sequenceRows,
@@ -595,7 +535,6 @@ function applyVersionSequence(
             row.allocationId
           )
 
-
         if (
           !activity ||
           used.has(
@@ -605,11 +544,9 @@ function applyVersionSequence(
           return
         }
 
-
         ordered.push(
           activity
         )
-
 
         used.add(
           activity.id
@@ -617,31 +554,26 @@ function applyVersionSequence(
       }
     )
 
-
   activities.forEach(
     (activity) => {
       if (
-        used.has(
+        !used.has(
           activity.id
         )
       ) {
-        return
+        ordered.push(
+          activity
+        )
       }
-
-
-      ordered.push(
-        activity
-      )
     }
   )
-
 
   return ordered
 }
 
 
 /* =========================================================
-   SHARED PRODUCTION TEMPLATE HELPERS
+   PRODUCTION GROUP HELPERS
    ========================================================= */
 
 function getScopeSequenceKey(
@@ -653,13 +585,9 @@ function getScopeSequenceKey(
     activity?.projectServiceId ||
     null
 
-
-  if (
-    stableId
-  ) {
+  if (stableId) {
     return `id:${stableId}`
   }
-
 
   const workPackage =
     String(
@@ -669,7 +597,6 @@ function getScopeSequenceKey(
       .trim()
       .toLowerCase()
 
-
   const scopeItem =
     String(
       activity?.scopeItemName ||
@@ -677,7 +604,6 @@ function getScopeSequenceKey(
     )
       .trim()
       .toLowerCase()
-
 
   return `text:${workPackage}::${scopeItem}`
 }
@@ -690,18 +616,16 @@ function getProductionGroupKey(
     activity?.locationId ||
     '__no_location__'
 
-
   const division =
     activity?.divisionId ||
     '__no_division__'
-
 
   return `${location}::${division}`
 }
 
 
 /* =========================================================
-   APPLY SEQUENCE TO ALL
+   APPLY SEQUENCE TEMPLATE
    ========================================================= */
 
 function applySequenceTemplate({
@@ -712,7 +636,6 @@ function applySequenceTemplate({
   const sourceGroupKey =
     `${sourceLocationId}::${sourceDivisionId}`
 
-
   const sourceActivities =
     fullOrder.filter(
       (activity) =>
@@ -721,7 +644,6 @@ function applySequenceTemplate({
         ) ===
         sourceGroupKey
     )
-
 
   if (
     sourceActivities.length ===
@@ -742,10 +664,8 @@ function applySequenceTemplate({
     }
   }
 
-
   const sourceRank =
     new Map()
-
 
   sourceActivities.forEach(
     (
@@ -756,7 +676,6 @@ function applySequenceTemplate({
         getScopeSequenceKey(
           activity
         )
-
 
       if (
         !sourceRank.has(
@@ -771,10 +690,8 @@ function applySequenceTemplate({
     }
   )
 
-
   const groups =
     new Map()
-
 
   fullOrder.forEach(
     (
@@ -785,7 +702,6 @@ function applySequenceTemplate({
         getProductionGroupKey(
           activity
         )
-
 
       if (
         !groups.has(
@@ -798,7 +714,6 @@ function applySequenceTemplate({
         )
       }
 
-
       groups
         .get(
           groupKey
@@ -810,15 +725,12 @@ function applySequenceTemplate({
     }
   )
 
-
   const replacements =
     new Map()
-
 
   let targetGroups = 0
   let changedGroups = 0
   let matchedActivities = 0
-
 
   groups.forEach(
     (
@@ -832,7 +744,6 @@ function applySequenceTemplate({
         return
       }
 
-
       const matchingEntries =
         entries.filter(
           ({
@@ -845,7 +756,6 @@ function applySequenceTemplate({
             )
         )
 
-
       if (
         matchingEntries.length ===
         0
@@ -853,13 +763,12 @@ function applySequenceTemplate({
         return
       }
 
-
       targetGroups += 1
+
       matchedActivities +=
         matchingEntries.length
 
-
-      const sortedMatchingActivities =
+      const sortedActivities =
         matchingEntries
           .map(
             (
@@ -884,14 +793,12 @@ function applySequenceTemplate({
                   )
                 )
 
-
               const secondRank =
                 sourceRank.get(
                   getScopeSequenceKey(
                     second.activity
                   )
                 )
-
 
               if (
                 firstRank !==
@@ -902,7 +809,6 @@ function applySequenceTemplate({
                   secondRank
                 )
               }
-
 
               return (
                 first.originalIndex -
@@ -917,7 +823,6 @@ function applySequenceTemplate({
               activity
           )
 
-
       const groupChanged =
         matchingEntries.some(
           (
@@ -925,11 +830,10 @@ function applySequenceTemplate({
             index
           ) =>
             entry.activity.id !==
-            sortedMatchingActivities[
+            sortedActivities[
               index
             ]?.id
         )
-
 
       if (
         groupChanged
@@ -938,7 +842,6 @@ function applySequenceTemplate({
           1
       }
 
-
       matchingEntries.forEach(
         (
           entry,
@@ -946,7 +849,7 @@ function applySequenceTemplate({
         ) => {
           replacements.set(
             entry.globalIndex,
-            sortedMatchingActivities[
+            sortedActivities[
               index
             ]
           )
@@ -955,23 +858,18 @@ function applySequenceTemplate({
     }
   )
 
-
-  const nextActivities =
-    fullOrder.map(
-      (
-        activity,
-        index
-      ) =>
-        replacements.get(
-          index
-        ) ||
-        activity
-    )
-
-
   return {
     activities:
-      nextActivities,
+      fullOrder.map(
+        (
+          activity,
+          index
+        ) =>
+          replacements.get(
+            index
+          ) ||
+          activity
+      ),
 
     targetGroups,
     changedGroups,
@@ -981,7 +879,7 @@ function applySequenceTemplate({
 
 
 /* =========================================================
-   APPLY DURATION TO ALL
+   APPLY DURATION TEMPLATE
    ========================================================= */
 
 function applyDurationTemplate({
@@ -993,7 +891,6 @@ function applyDurationTemplate({
   const sourceGroupKey =
     `${sourceLocationId}::${sourceDivisionId}`
 
-
   const sourceActivities =
     fullOrder.filter(
       (activity) =>
@@ -1003,41 +900,8 @@ function applyDurationTemplate({
         sourceGroupKey
     )
 
-
-  if (
-    sourceActivities.length ===
-    0
-  ) {
-    return {
-      durations:
-        desiredDurations,
-
-      sourceDurations:
-        0,
-
-      targetGroups:
-        0,
-
-      changedGroups:
-        0,
-
-      matchedActivities:
-        0,
-    }
-  }
-
-
-  /*
-   * Only activities with an explicitly
-   * entered Desired Duration become part
-   * of the template.
-   *
-   * Empty source durations NEVER erase
-   * existing durations in target areas.
-   */
   const sourceDurationMap =
     new Map()
-
 
   sourceActivities.forEach(
     (activity) => {
@@ -1048,26 +912,21 @@ function applyDurationTemplate({
           ]
         )
 
-
       if (
-        !Number.isFinite(
+        Number.isFinite(
           duration
-        ) ||
-        duration <= 0
+        ) &&
+        duration > 0
       ) {
-        return
+        sourceDurationMap.set(
+          getScopeSequenceKey(
+            activity
+          ),
+          duration
+        )
       }
-
-
-      sourceDurationMap.set(
-        getScopeSequenceKey(
-          activity
-        ),
-        duration
-      )
     }
   )
-
 
   if (
     sourceDurationMap.size ===
@@ -1091,15 +950,8 @@ function applyDurationTemplate({
     }
   }
 
-
-  const nextDurations = {
-    ...desiredDurations,
-  }
-
-
   const groups =
     new Map()
-
 
   fullOrder.forEach(
     (activity) => {
@@ -1107,7 +959,6 @@ function applyDurationTemplate({
         getProductionGroupKey(
           activity
         )
-
 
       if (
         !groups.has(
@@ -1120,7 +971,6 @@ function applyDurationTemplate({
         )
       }
 
-
       groups
         .get(
           groupKey
@@ -1131,11 +981,13 @@ function applyDurationTemplate({
     }
   )
 
+  const nextDurations = {
+    ...desiredDurations,
+  }
 
   let targetGroups = 0
   let changedGroups = 0
   let matchedActivities = 0
-
 
   groups.forEach(
     (
@@ -1149,7 +1001,6 @@ function applyDurationTemplate({
         return
       }
 
-
       const matchingActivities =
         groupActivities.filter(
           (activity) =>
@@ -1160,7 +1011,6 @@ function applyDurationTemplate({
             )
         )
 
-
       if (
         matchingActivities.length ===
         0
@@ -1168,14 +1018,11 @@ function applyDurationTemplate({
         return
       }
 
-
       targetGroups +=
         1
 
-
       let groupChanged =
         false
-
 
       matchingActivities.forEach(
         (activity) => {
@@ -1186,7 +1033,6 @@ function applyDurationTemplate({
               )
             )
 
-
           const currentDuration =
             Number(
               nextDurations[
@@ -1194,10 +1040,8 @@ function applyDurationTemplate({
               ]
             )
 
-
           matchedActivities +=
             1
-
 
           if (
             !Number.isFinite(
@@ -1211,13 +1055,11 @@ function applyDurationTemplate({
             ] =
               sourceDuration
 
-
             groupChanged =
               true
           }
         }
       )
-
 
       if (
         groupChanged
@@ -1227,7 +1069,6 @@ function applyDurationTemplate({
       }
     }
   )
-
 
   return {
     durations:
@@ -1240,6 +1081,55 @@ function applyDurationTemplate({
     changedGroups,
     matchedActivities,
   }
+}
+
+
+/* =========================================================
+   RAIL ICON
+   ========================================================= */
+
+function RailButton({
+  label,
+  symbol,
+  active = false,
+  disabled = false,
+  onClick,
+}) {
+  return (
+    <button
+      type="button"
+      className={`${styles.railButton} ${
+        active
+          ? styles.railButtonActive
+          : ''
+      }`}
+      disabled={
+        disabled
+      }
+      onClick={
+        onClick
+      }
+      title={
+        label
+      }
+    >
+      <span
+        className={
+          styles.railIcon
+        }
+      >
+        {symbol}
+      </span>
+
+      <span
+        className={
+          styles.railTooltip
+        }
+      >
+        {label}
+      </span>
+    </button>
+  )
 }
 
 
@@ -1264,16 +1154,21 @@ export default function PrePlanningWorkspace({
   strategyStatus = 'draft',
 
   changeProjectHref = '/dashboard/planning/pre-planning',
+
+  standalone = false,
 }) {
   const router =
     useRouter()
-
 
   const workingVersion =
     currentVersion ||
     activeVersion ||
     null
 
+
+  /* =======================================================
+     NORMALIZED INPUT
+     ======================================================= */
 
   const normalizedActivities =
     useMemo(
@@ -1287,7 +1182,6 @@ export default function PrePlanningWorkspace({
         activities,
       ]
     )
-
 
   const normalizedVersions =
     useMemo(
@@ -1303,6 +1197,10 @@ export default function PrePlanningWorkspace({
     )
 
 
+  /* =======================================================
+     UI STATE
+     ======================================================= */
+
   const [
     activeTab,
     setActiveTab,
@@ -1311,6 +1209,13 @@ export default function PrePlanningWorkspace({
       'sequence'
     )
 
+  const [
+    openRailPanel,
+    setOpenRailPanel,
+  ] =
+    useState(
+      null
+    )
 
   const [
     selectedVersionId,
@@ -1321,7 +1226,6 @@ export default function PrePlanningWorkspace({
       ''
     )
 
-
   const [
     orderedActivities,
     setOrderedActivities,
@@ -1329,7 +1233,6 @@ export default function PrePlanningWorkspace({
     useState(
       normalizedActivities
     )
-
 
   const [
     savedSignature,
@@ -1340,7 +1243,6 @@ export default function PrePlanningWorkspace({
         normalizedActivities
       )
     )
-
 
   const initialDurationMap =
     useMemo(
@@ -1358,7 +1260,6 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const [
     desiredDurations,
     setDesiredDurations,
@@ -1366,7 +1267,6 @@ export default function PrePlanningWorkspace({
     useState(
       initialDurationMap
     )
-
 
   const [
     savedDurationSignature,
@@ -1377,7 +1277,6 @@ export default function PrePlanningWorkspace({
         initialDurationMap
       )
     )
-
 
   const [
     selectedActivityId,
@@ -1390,7 +1289,6 @@ export default function PrePlanningWorkspace({
       null
     )
 
-
   const [
     selectedLocation,
     setSelectedLocation,
@@ -1398,7 +1296,6 @@ export default function PrePlanningWorkspace({
     useState(
       'all'
     )
-
 
   const [
     selectedDivision,
@@ -1408,7 +1305,6 @@ export default function PrePlanningWorkspace({
       'all'
     )
 
-
   const [
     rowDrag,
     setRowDrag,
@@ -1416,7 +1312,6 @@ export default function PrePlanningWorkspace({
     useState(
       null
     )
-
 
   const [
     dayWidth,
@@ -1426,7 +1321,6 @@ export default function PrePlanningWorkspace({
       DEFAULT_DAY_WIDTH
     )
 
-
   const [
     actionState,
     setActionState,
@@ -1434,7 +1328,6 @@ export default function PrePlanningWorkspace({
     useState(
       'idle'
     )
-
 
   const [
     notice,
@@ -1444,6 +1337,10 @@ export default function PrePlanningWorkspace({
       null
     )
 
+
+  /* =======================================================
+     REFS
+     ======================================================= */
 
   const leftBodyRef =
     useRef(
@@ -1471,9 +1368,9 @@ export default function PrePlanningWorkspace({
     )
 
 
-  /* =========================================================
+  /* =======================================================
      VERSION STATE
-     ========================================================= */
+     ======================================================= */
 
   const selectedVersion =
     useMemo(
@@ -1492,13 +1389,11 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const isViewingCurrentVersion =
     !workingVersion
       ? !selectedVersion
       : selectedVersion?.id ===
         workingVersion.id
-
 
   const isHistoricalView =
     Boolean(
@@ -1508,7 +1403,6 @@ export default function PrePlanningWorkspace({
         workingVersion.id
     )
 
-
   const effectiveVersionCount =
     normalizedVersions.length >
     0
@@ -1516,12 +1410,15 @@ export default function PrePlanningWorkspace({
       : versionCount
 
 
+  /* =======================================================
+     RESET FROM SERVER
+     ======================================================= */
+
   useEffect(
     () => {
       const nextVersionId =
         workingVersion?.id ||
         ''
-
 
       const nextDurationMap =
         normalizeDurationMap(
@@ -1532,16 +1429,13 @@ export default function PrePlanningWorkspace({
             : {}
         )
 
-
       setSelectedVersionId(
         nextVersionId
       )
 
-
       setOrderedActivities(
         normalizedActivities
       )
-
 
       setSavedSignature(
         orderSignature(
@@ -1549,18 +1443,15 @@ export default function PrePlanningWorkspace({
         )
       )
 
-
       setDesiredDurations(
         nextDurationMap
       )
-
 
       setSavedDurationSignature(
         durationSignature(
           nextDurationMap
         )
       )
-
 
       setSelectedActivityId(
         normalizedActivities
@@ -1569,21 +1460,21 @@ export default function PrePlanningWorkspace({
         null
       )
 
-
       setSelectedLocation(
         'all'
       )
-
 
       setSelectedDivision(
         'all'
       )
 
+      setOpenRailPanel(
+        null
+      )
 
       setRowDrag(
         null
       )
-
 
       rowDragRef.current =
         null
@@ -1596,6 +1487,10 @@ export default function PrePlanningWorkspace({
   )
 
 
+  /* =======================================================
+     DIRTY STATE
+     ======================================================= */
+
   const currentSignature =
     useMemo(
       () =>
@@ -1606,7 +1501,6 @@ export default function PrePlanningWorkspace({
         orderedActivities,
       ]
     )
-
 
   const currentDurationSignature =
     useMemo(
@@ -1619,60 +1513,44 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const hasUnsavedSequenceChanges =
     isViewingCurrentVersion &&
     currentSignature !==
       savedSignature
-
 
   const hasUnsavedDurationChanges =
     isViewingCurrentVersion &&
     currentDurationSignature !==
       savedDurationSignature
 
-
   const hasUnsavedChanges =
     hasUnsavedSequenceChanges ||
     hasUnsavedDurationChanges
 
 
-  /* =========================================================
+  /* =======================================================
      VERSION SELECTION
-     ========================================================= */
+     ======================================================= */
 
   function getVersionActivities(
     versionId
   ) {
     if (
-      !versionId
-    ) {
-      return [
-        ...normalizedActivities,
-      ]
-    }
-
-
-    if (
+      !versionId ||
       versionId ===
-      workingVersion?.id
+        workingVersion?.id
     ) {
       return [
         ...normalizedActivities,
       ]
     }
 
-
-    const sequence =
+    return applyVersionSequence(
+      normalizedActivities,
       versionSequences?.[
         versionId
       ] ||
       []
-
-
-    return applyVersionSequence(
-      normalizedActivities,
-      sequence
     )
   }
 
@@ -1696,14 +1574,12 @@ export default function PrePlanningWorkspace({
     const nextVersionId =
       event.target.value
 
-
     if (
       nextVersionId ===
       selectedVersionId
     ) {
       return
     }
-
 
     if (
       hasUnsavedChanges
@@ -1716,32 +1592,26 @@ export default function PrePlanningWorkspace({
           'Save your current changes before switching to another version.',
       })
 
-
       return
     }
-
 
     const nextActivities =
       getVersionActivities(
         nextVersionId
       )
 
-
     const nextDurations =
       getVersionDurations(
         nextVersionId
       )
 
-
     setSelectedVersionId(
       nextVersionId
     )
 
-
     setOrderedActivities(
       nextActivities
     )
-
 
     setSavedSignature(
       orderSignature(
@@ -1749,18 +1619,15 @@ export default function PrePlanningWorkspace({
       )
     )
 
-
     setDesiredDurations(
       nextDurations
     )
-
 
     setSavedDurationSignature(
       durationSignature(
         nextDurations
       )
     )
-
 
     setSelectedActivityId(
       nextActivities
@@ -1769,25 +1636,17 @@ export default function PrePlanningWorkspace({
       null
     )
 
-
     setSelectedLocation(
       'all'
     )
-
 
     setSelectedDivision(
       'all'
     )
 
-
-    setRowDrag(
+    setOpenRailPanel(
       null
     )
-
-
-    rowDragRef.current =
-      null
-
 
     const version =
       normalizedVersions.find(
@@ -1795,7 +1654,6 @@ export default function PrePlanningWorkspace({
           item.id ===
           nextVersionId
       )
-
 
     if (
       version?.isCurrent
@@ -1817,24 +1675,19 @@ export default function PrePlanningWorkspace({
         text:
           `${version.versionName} opened in historical read-only mode.`,
       })
-    } else {
-      setNotice(
-        null
-      )
     }
   }
 
 
-  /* =========================================================
+  /* =======================================================
      FILTER OPTIONS
-     ========================================================= */
+     ======================================================= */
 
   const locationOptions =
     useMemo(
       () => {
         const values =
           new Map()
-
 
         orderedActivities.forEach(
           (activity) => {
@@ -1849,7 +1702,6 @@ export default function PrePlanningWorkspace({
             }
           }
         )
-
 
         return Array.from(
           values.entries()
@@ -1882,13 +1734,11 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const divisionOptions =
     useMemo(
       () => {
         const values =
           new Map()
-
 
         orderedActivities
           .filter(
@@ -1914,7 +1764,6 @@ export default function PrePlanningWorkspace({
             }
           )
 
-
         return Array.from(
           values.entries()
         )
@@ -1947,7 +1796,6 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const filteredActivities =
     useMemo(
       () =>
@@ -1959,13 +1807,11 @@ export default function PrePlanningWorkspace({
               activity.locationId ===
                 selectedLocation
 
-
             const matchesDivision =
               selectedDivision ===
                 'all' ||
               activity.divisionId ===
                 selectedDivision
-
 
             return (
               matchesLocation &&
@@ -1980,7 +1826,6 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const visibleActivityIds =
     useMemo(
       () =>
@@ -1993,13 +1838,11 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const sequenceIndexMap =
     useMemo(
       () => {
         const map =
           new Map()
-
 
         orderedActivities.forEach(
           (
@@ -2013,7 +1856,6 @@ export default function PrePlanningWorkspace({
           }
         )
 
-
         return map
       },
       [
@@ -2021,30 +1863,21 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const selectedActivity =
     useMemo(
-      () => {
-        const selected =
-          filteredActivities.find(
-            (activity) =>
-              activity.id ===
-              selectedActivityId
-          )
-
-
-        return (
-          selected ||
-          filteredActivities[0] ||
-          null
-        )
-      },
+      () =>
+        filteredActivities.find(
+          (activity) =>
+            activity.id ===
+            selectedActivityId
+        ) ||
+        filteredActivities[0] ||
+        null,
       [
         filteredActivities,
         selectedActivityId,
       ]
     )
-
 
   const hasFilters =
     selectedLocation !==
@@ -2052,13 +1885,11 @@ export default function PrePlanningWorkspace({
     selectedDivision !==
       'all'
 
-
   const hasExactSourceFilter =
     selectedLocation !==
       'all' &&
     selectedDivision !==
       'all'
-
 
   const sourceHasDesiredDurations =
     useMemo(
@@ -2069,7 +1900,6 @@ export default function PrePlanningWorkspace({
           return false
         }
 
-
         return filteredActivities.some(
           (activity) => {
             const duration =
@@ -2078,7 +1908,6 @@ export default function PrePlanningWorkspace({
                   activity.id
                 ]
               )
-
 
             return (
               Number.isFinite(
@@ -2097,9 +1926,9 @@ export default function PrePlanningWorkspace({
     )
 
 
-  /* =========================================================
+  /* =======================================================
      TIMELINE
-     ========================================================= */
+     ======================================================= */
 
   const maxDisplayedDuration =
     useMemo(
@@ -2119,7 +1948,6 @@ export default function PrePlanningWorkspace({
                       ]
                     )
 
-
                   if (
                     Number.isFinite(
                       desired
@@ -2129,7 +1957,6 @@ export default function PrePlanningWorkspace({
                     return desired
                   }
                 }
-
 
                 return Number(
                   activity.rawDuration
@@ -2144,18 +1971,11 @@ export default function PrePlanningWorkspace({
                 duration > 0
             )
 
-
-        if (
-          durations.length ===
-          0
-        ) {
-          return 0
-        }
-
-
-        return Math.max(
-          ...durations
-        )
+        return durations.length
+          ? Math.max(
+              ...durations
+            )
+          : 0
       },
       [
         filteredActivities,
@@ -2163,7 +1983,6 @@ export default function PrePlanningWorkspace({
         desiredDurations,
       ]
     )
-
 
   const timelineDays =
     useMemo(
@@ -2180,7 +1999,6 @@ export default function PrePlanningWorkspace({
         maxDisplayedDuration,
       ]
     )
-
 
   const dayMarkers =
     useMemo(
@@ -2202,15 +2020,14 @@ export default function PrePlanningWorkspace({
       ]
     )
 
-
   const timelineWidth =
     timelineDays *
     dayWidth
 
 
-  /* =========================================================
-     TAB CHANGE
-     ========================================================= */
+  /* =======================================================
+     MODE / FILTERS
+     ======================================================= */
 
   function handleTabChange(
     tab
@@ -2219,20 +2036,18 @@ export default function PrePlanningWorkspace({
       tab
     )
 
+    setOpenRailPanel(
+      null
+    )
 
     setRowDrag(
       null
     )
 
-
     rowDragRef.current =
       null
   }
 
-
-  /* =========================================================
-     FILTERS
-     ========================================================= */
 
   function handleLocationChange(
     event
@@ -2241,16 +2056,13 @@ export default function PrePlanningWorkspace({
       event.target.value
     )
 
-
     setSelectedDivision(
       'all'
     )
 
-
     setRowDrag(
       null
     )
-
 
     rowDragRef.current =
       null
@@ -2264,11 +2076,9 @@ export default function PrePlanningWorkspace({
       event.target.value
     )
 
-
     setRowDrag(
       null
     )
-
 
     rowDragRef.current =
       null
@@ -2280,25 +2090,38 @@ export default function PrePlanningWorkspace({
       'all'
     )
 
-
     setSelectedDivision(
       'all'
     )
 
+    setOpenRailPanel(
+      null
+    )
 
     setRowDrag(
       null
     )
-
 
     rowDragRef.current =
       null
   }
 
 
-  /* =========================================================
+  function toggleRailPanel(
+    panel
+  ) {
+    setOpenRailPanel(
+      (current) =>
+        current === panel
+          ? null
+          : panel
+    )
+  }
+
+
+  /* =======================================================
      DESIRED DURATION
-     ========================================================= */
+     ======================================================= */
 
   function handleDesiredDurationChange(
     allocationId,
@@ -2310,7 +2133,6 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     if (
       value ===
       ''
@@ -2321,26 +2143,21 @@ export default function PrePlanningWorkspace({
             ...current,
           }
 
-
           delete next[
             allocationId
           ]
-
 
           return next
         }
       )
 
-
       return
     }
-
 
     const numeric =
       Number(
         value
       )
-
 
     if (
       !Number.isFinite(
@@ -2350,7 +2167,6 @@ export default function PrePlanningWorkspace({
     ) {
       return
     }
-
 
     setDesiredDurations(
       (current) => ({
@@ -2363,6 +2179,10 @@ export default function PrePlanningWorkspace({
   }
 
 
+  /* =======================================================
+     SAVE DURATION STRATEGY
+     ======================================================= */
+
   async function saveDurationStrategy() {
     if (
       actionState !==
@@ -2370,7 +2190,6 @@ export default function PrePlanningWorkspace({
     ) {
       return
     }
-
 
     if (
       !workingVersion
@@ -2383,10 +2202,8 @@ export default function PrePlanningWorkspace({
           'Save the sequence first to create a Pre-Planning version.',
       })
 
-
       return
     }
-
 
     if (
       !isViewingCurrentVersion
@@ -2399,20 +2216,16 @@ export default function PrePlanningWorkspace({
           'Historical versions are read-only.',
       })
 
-
       return
     }
-
 
     setActionState(
       'saving_duration'
     )
 
-
     setNotice(
       null
     )
-
 
     try {
       const strategies =
@@ -2428,7 +2241,6 @@ export default function PrePlanningWorkspace({
               null,
           })
         )
-
 
       const response =
         await fetch(
@@ -2458,10 +2270,8 @@ export default function PrePlanningWorkspace({
           }
         )
 
-
       const result =
         await response.json()
-
 
       if (
         !response.ok
@@ -2472,11 +2282,9 @@ export default function PrePlanningWorkspace({
         )
       }
 
-
       setSavedDurationSignature(
         currentDurationSignature
       )
-
 
       setNotice({
         type:
@@ -2485,7 +2293,6 @@ export default function PrePlanningWorkspace({
         text:
           `Duration & Resources saved for ${result.savedActivities || 0} activities.`,
       })
-
 
       router.refresh()
     } catch (
@@ -2507,9 +2314,9 @@ export default function PrePlanningWorkspace({
   }
 
 
-  /* =========================================================
+  /* =======================================================
      APPLY DURATION TO ALL
-     ========================================================= */
+     ======================================================= */
 
   function handleApplyDurationToAll() {
     if (
@@ -2520,12 +2327,8 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     if (
-      selectedLocation ===
-        'all' ||
-      selectedDivision ===
-        'all'
+      !hasExactSourceFilter
     ) {
       setNotice({
         type:
@@ -2535,10 +2338,8 @@ export default function PrePlanningWorkspace({
           'Select one Location and one Division to use as the source duration strategy.',
       })
 
-
       return
     }
-
 
     const result =
       applyDurationTemplate({
@@ -2554,7 +2355,6 @@ export default function PrePlanningWorkspace({
           selectedDivision,
       })
 
-
     if (
       result.sourceDurations ===
       0
@@ -2567,10 +2367,8 @@ export default function PrePlanningWorkspace({
           'Enter at least one Desired Duration in the selected source area first.',
       })
 
-
       return
     }
-
 
     if (
       result.targetGroups ===
@@ -2584,22 +2382,18 @@ export default function PrePlanningWorkspace({
           'No other Location / Division groups contain matching scope items.',
       })
 
-
       return
     }
-
 
     const beforeSignature =
       durationSignature(
         desiredDurations
       )
 
-
     const afterSignature =
       durationSignature(
         result.durations
       )
-
 
     if (
       beforeSignature ===
@@ -2610,23 +2404,15 @@ export default function PrePlanningWorkspace({
           'success',
 
         text:
-          `${result.targetGroups} target ${
-            result.targetGroups ===
-            1
-              ? 'area already follows'
-              : 'areas already follow'
-          } this duration strategy.`,
+          'The target areas already follow this duration strategy.',
       })
-
 
       return
     }
 
-
     setDesiredDurations(
       result.durations
     )
-
 
     setNotice({
       type:
@@ -2638,14 +2424,14 @@ export default function PrePlanningWorkspace({
           1
             ? 'area'
             : 'areas'
-        }. Required resources were recalculated automatically. Review and save when ready.`,
+        }. Required resources were recalculated automatically.`,
     })
   }
 
 
-  /* =========================================================
+  /* =======================================================
      APPLY SEQUENCE TO ALL
-     ========================================================= */
+     ======================================================= */
 
   function handleApplySequenceToAll() {
     if (
@@ -2656,12 +2442,8 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     if (
-      selectedLocation ===
-        'all' ||
-      selectedDivision ===
-        'all'
+      !hasExactSourceFilter
     ) {
       setNotice({
         type:
@@ -2671,27 +2453,15 @@ export default function PrePlanningWorkspace({
           'Select one Location and one Division to use as the source sequence.',
       })
 
-
       return
     }
-
 
     if (
       filteredActivities.length ===
       0
     ) {
-      setNotice({
-        type:
-          'warning',
-
-        text:
-          'The selected source area has no activities.',
-      })
-
-
       return
     }
-
 
     const result =
       applySequenceTemplate({
@@ -2705,7 +2475,6 @@ export default function PrePlanningWorkspace({
           selectedDivision,
       })
 
-
     if (
       result.targetGroups ===
       0
@@ -2718,16 +2487,13 @@ export default function PrePlanningWorkspace({
           'No other Location / Division groups contain matching scope items.',
       })
 
-
       return
     }
-
 
     const nextSignature =
       orderSignature(
         result.activities
       )
-
 
     if (
       nextSignature ===
@@ -2738,23 +2504,15 @@ export default function PrePlanningWorkspace({
           'success',
 
         text:
-          `${result.targetGroups} target ${
-            result.targetGroups ===
-            1
-              ? 'area already follows'
-              : 'areas already follow'
-          } this sequence.`,
+          'The target areas already follow this sequence.',
       })
-
 
       return
     }
 
-
     setOrderedActivities(
       result.activities
     )
-
 
     setNotice({
       type:
@@ -2771,28 +2529,21 @@ export default function PrePlanningWorkspace({
   }
 
 
-  /* =========================================================
-     SEQUENCE SAVE / CREATE VERSION
-     ========================================================= */
+  /* =======================================================
+     SAVE / CREATE VERSION
+     ======================================================= */
 
   async function runSequenceAction(
     action
   ) {
     if (
       actionState !==
-      'idle'
-    ) {
-      return
-    }
-
-
-    if (
+        'idle' ||
       orderedActivities.length ===
-      0
+        0
     ) {
       return
     }
-
 
     if (
       !isViewingCurrentVersion &&
@@ -2806,10 +2557,8 @@ export default function PrePlanningWorkspace({
           'Historical versions are read-only. Make this version current or duplicate it first.',
       })
 
-
       return
     }
-
 
     if (
       action ===
@@ -2824,10 +2573,8 @@ export default function PrePlanningWorkspace({
           'Save Sequence first to create Version 1.',
       })
 
-
       return
     }
-
 
     if (
       action ===
@@ -2842,10 +2589,8 @@ export default function PrePlanningWorkspace({
           'Save Duration & Resources before creating a new version.',
       })
 
-
       return
     }
-
 
     setActionState(
       action ===
@@ -2854,11 +2599,9 @@ export default function PrePlanningWorkspace({
         : 'creating'
     )
 
-
     setNotice(
       null
     )
-
 
     try {
       const response =
@@ -2893,10 +2636,8 @@ export default function PrePlanningWorkspace({
           }
         )
 
-
       const result =
         await response.json()
-
 
       if (
         !response.ok
@@ -2907,33 +2648,20 @@ export default function PrePlanningWorkspace({
         )
       }
 
-
       setSavedSignature(
         currentSignature
       )
 
+      setNotice({
+        type:
+          'success',
 
-      if (
-        action ===
-        'save'
-      ) {
-        setNotice({
-          type:
-            'success',
-
-          text:
-            `${result.version.versionName} saved successfully.`,
-        })
-      } else {
-        setNotice({
-          type:
-            'success',
-
-          text:
-            `${result.version.versionName} created from the current sequence.`,
-        })
-      }
-
+        text:
+          action ===
+            'save'
+            ? `${result.version.versionName} saved successfully.`
+            : `${result.version.versionName} created from the current sequence.`,
+      })
 
       router.refresh()
     } catch (
@@ -2955,9 +2683,9 @@ export default function PrePlanningWorkspace({
   }
 
 
-  /* =========================================================
+  /* =======================================================
      VERSION MANAGEMENT
-     ========================================================= */
+     ======================================================= */
 
   async function runVersionAction({
     action,
@@ -2966,21 +2694,18 @@ export default function PrePlanningWorkspace({
   }) {
     if (
       actionState !==
-      'idle'
+        'idle'
     ) {
       return
     }
-
 
     setActionState(
       action
     )
 
-
     setNotice(
       null
     )
-
 
     try {
       const payload = {
@@ -2992,7 +2717,6 @@ export default function PrePlanningWorkspace({
         versionId,
       }
 
-
       if (
         action ===
         'duplicate_version'
@@ -3001,7 +2725,6 @@ export default function PrePlanningWorkspace({
           versionId
       }
 
-
       if (
         action ===
         'rename_version'
@@ -3009,7 +2732,6 @@ export default function PrePlanningWorkspace({
         payload.versionName =
           versionName
       }
-
 
       const response =
         await fetch(
@@ -3030,10 +2752,8 @@ export default function PrePlanningWorkspace({
           }
         )
 
-
       const result =
         await response.json()
-
 
       if (
         !response.ok
@@ -3044,7 +2764,6 @@ export default function PrePlanningWorkspace({
         )
       }
 
-
       if (
         action ===
         'duplicate_version'
@@ -3054,10 +2773,9 @@ export default function PrePlanningWorkspace({
             'success',
 
           text:
-            `${result.version.versionName} created from ${selectedVersion?.versionName || 'the selected version'}.`,
+            `${result.version.versionName} created successfully.`,
         })
       }
-
 
       if (
         action ===
@@ -3072,7 +2790,6 @@ export default function PrePlanningWorkspace({
         })
       }
 
-
       if (
         action ===
         'set_current'
@@ -3086,65 +2803,10 @@ export default function PrePlanningWorkspace({
         })
       }
 
-
       if (
         action ===
         'delete_version'
       ) {
-        const currentDurations =
-          getVersionDurations(
-            workingVersion?.id
-          )
-
-
-        setSelectedVersionId(
-          workingVersion?.id ||
-          ''
-        )
-
-
-        setOrderedActivities(
-          normalizedActivities
-        )
-
-
-        setSavedSignature(
-          orderSignature(
-            normalizedActivities
-          )
-        )
-
-
-        setDesiredDurations(
-          currentDurations
-        )
-
-
-        setSavedDurationSignature(
-          durationSignature(
-            currentDurations
-          )
-        )
-
-
-        setSelectedActivityId(
-          normalizedActivities
-            ?.[0]
-            ?.id ||
-          null
-        )
-
-
-        setSelectedLocation(
-          'all'
-        )
-
-
-        setSelectedDivision(
-          'all'
-        )
-
-
         setNotice({
           type:
             'success',
@@ -3154,6 +2816,9 @@ export default function PrePlanningWorkspace({
         })
       }
 
+      setOpenRailPanel(
+        null
+      )
 
       router.refresh()
     } catch (
@@ -3183,7 +2848,6 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     if (
       hasUnsavedChanges
     ) {
@@ -3195,10 +2859,8 @@ export default function PrePlanningWorkspace({
           'Save your current changes first.',
       })
 
-
       return
     }
-
 
     runVersionAction({
       action:
@@ -3217,7 +2879,6 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     if (
       hasUnsavedChanges
     ) {
@@ -3229,10 +2890,8 @@ export default function PrePlanningWorkspace({
           'Save your current changes before duplicating a version.',
       })
 
-
       return
     }
-
 
     runVersionAction({
       action:
@@ -3251,13 +2910,11 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     const proposedName =
       window.prompt(
         'Enter a name for this version:',
         selectedVersion.versionName
       )
-
 
     if (
       proposedName ===
@@ -3266,10 +2923,8 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     const versionName =
       proposedName.trim()
-
 
     if (
       !versionName
@@ -3282,10 +2937,8 @@ export default function PrePlanningWorkspace({
           'Version name cannot be empty.',
       })
 
-
       return
     }
-
 
     if (
       versionName ===
@@ -3293,7 +2946,6 @@ export default function PrePlanningWorkspace({
     ) {
       return
     }
-
 
     runVersionAction({
       action:
@@ -3314,7 +2966,6 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     if (
       selectedVersion.isCurrent
     ) {
@@ -3326,23 +2977,19 @@ export default function PrePlanningWorkspace({
           'The current working version cannot be deleted. Make another version current first.',
       })
 
-
       return
     }
-
 
     const confirmed =
       window.confirm(
         `Delete ${selectedVersion.versionName}? This action cannot be undone.`
       )
 
-
     if (
       !confirmed
     ) {
       return
     }
-
 
     runVersionAction({
       action:
@@ -3354,6 +3001,10 @@ export default function PrePlanningWorkspace({
   }
 
 
+  /* =======================================================
+     DISABLED STATES
+     ======================================================= */
+
   const saveDisabled =
     actionState !==
       'idle' ||
@@ -3363,7 +3014,6 @@ export default function PrePlanningWorkspace({
       !hasUnsavedSequenceChanges
     )
 
-
   const durationSaveDisabled =
     actionState !==
       'idle' ||
@@ -3371,13 +3021,11 @@ export default function PrePlanningWorkspace({
     !isViewingCurrentVersion ||
     !hasUnsavedDurationChanges
 
-
   const createVersionDisabled =
     actionState !==
       'idle' ||
     !workingVersion ||
     !isViewingCurrentVersion
-
 
   const applySequenceDisabled =
     actionState !==
@@ -3386,7 +3034,6 @@ export default function PrePlanningWorkspace({
     !hasExactSourceFilter ||
     filteredActivities.length ===
       0
-
 
   const applyDurationDisabled =
     actionState !==
@@ -3397,15 +3044,14 @@ export default function PrePlanningWorkspace({
       0 ||
     !sourceHasDesiredDurations
 
-
   const versionManagementDisabled =
     actionState !==
-    'idle'
+      'idle'
 
 
-  /* =========================================================
+  /* =======================================================
      VERTICAL DRAG
-     ========================================================= */
+     ======================================================= */
 
   useEffect(
     () => {
@@ -3415,28 +3061,21 @@ export default function PrePlanningWorkspace({
         const currentDrag =
           rowDragRef.current
 
-
         if (
           !currentDrag
         ) {
           return
         }
 
-
         const body =
           leftBodyRef.current
 
-
-        if (
-          !body
-        ) {
+        if (!body) {
           return
         }
 
-
         const bounds =
           body.getBoundingClientRect()
-
 
         if (
           event.clientY <
@@ -3446,10 +3085,10 @@ export default function PrePlanningWorkspace({
           body.scrollTop =
             Math.max(
               0,
+
               body.scrollTop -
                 AUTO_SCROLL_SPEED
             )
-
 
           if (
             rightBodyRef.current
@@ -3465,7 +3104,6 @@ export default function PrePlanningWorkspace({
           body.scrollTop +=
             AUTO_SCROLL_SPEED
 
-
           if (
             rightBodyRef.current
           ) {
@@ -3474,28 +3112,25 @@ export default function PrePlanningWorkspace({
           }
         }
 
-
         const relativeY =
           event.clientY -
           bounds.top +
           body.scrollTop
 
-
         const rowIndex =
           Math.floor(
             relativeY /
-            ROW_HEIGHT
+              ROW_HEIGHT
           )
-
 
         const offsetInsideRow =
           relativeY %
           ROW_HEIGHT
 
-
         const dropIndex =
           Math.max(
             0,
+
             Math.min(
               rowIndex +
                 (
@@ -3510,7 +3145,6 @@ export default function PrePlanningWorkspace({
             )
           )
 
-
         if (
           currentDrag.dropIndex ===
           dropIndex
@@ -3518,16 +3152,13 @@ export default function PrePlanningWorkspace({
           return
         }
 
-
         const nextDrag = {
           ...currentDrag,
           dropIndex,
         }
 
-
         rowDragRef.current =
           nextDrag
-
 
         setRowDrag(
           nextDrag
@@ -3539,13 +3170,11 @@ export default function PrePlanningWorkspace({
         const currentDrag =
           rowDragRef.current
 
-
         if (
           !currentDrag
         ) {
           return
         }
-
 
         if (
           !isViewingCurrentVersion ||
@@ -3555,15 +3184,12 @@ export default function PrePlanningWorkspace({
           rowDragRef.current =
             null
 
-
           setRowDrag(
             null
           )
 
-
           return
         }
-
 
         setOrderedActivities(
           (currentOrder) =>
@@ -3582,10 +3208,8 @@ export default function PrePlanningWorkspace({
             })
         )
 
-
         rowDragRef.current =
           null
-
 
         setRowDrag(
           null
@@ -3598,18 +3222,15 @@ export default function PrePlanningWorkspace({
         handlePointerMove
       )
 
-
       window.addEventListener(
         'pointerup',
         handlePointerUp
       )
 
-
       window.addEventListener(
         'pointercancel',
         handlePointerUp
       )
-
 
       return () => {
         window.removeEventListener(
@@ -3617,12 +3238,10 @@ export default function PrePlanningWorkspace({
           handlePointerMove
         )
 
-
         window.removeEventListener(
           'pointerup',
           handlePointerUp
         )
-
 
         window.removeEventListener(
           'pointercancel',
@@ -3644,28 +3263,24 @@ export default function PrePlanningWorkspace({
     visibleIndex
   ) {
     if (
-      !isViewingCurrentVersion ||
       activeTab !==
-        'sequence'
+        'sequence' ||
+      !isViewingCurrentVersion
     ) {
       return
     }
 
-
     event.preventDefault()
     event.stopPropagation()
-
 
     event.currentTarget
       .setPointerCapture?.(
         event.pointerId
       )
 
-
     setSelectedActivityId(
       activity.id
     )
-
 
     const nextDrag = {
       activityId:
@@ -3681,10 +3296,8 @@ export default function PrePlanningWorkspace({
         [...visibleActivityIds],
     }
 
-
     rowDragRef.current =
       nextDrag
-
 
     setRowDrag(
       nextDrag
@@ -3692,9 +3305,9 @@ export default function PrePlanningWorkspace({
   }
 
 
-  /* =========================================================
+  /* =======================================================
      SCROLL
-     ========================================================= */
+     ======================================================= */
 
   function syncVerticalScroll(
     source
@@ -3707,10 +3320,8 @@ export default function PrePlanningWorkspace({
       return
     }
 
-
     scrollOwnerRef.current =
       source
-
 
     if (
       source ===
@@ -3731,7 +3342,6 @@ export default function PrePlanningWorkspace({
         rightBodyRef.current.scrollTop
     }
 
-
     window.requestAnimationFrame(
       () => {
         scrollOwnerRef.current =
@@ -3746,7 +3356,6 @@ export default function PrePlanningWorkspace({
       'right'
     )
 
-
     if (
       rightBodyRef.current &&
       ganttHeaderRef.current
@@ -3757,9 +3366,9 @@ export default function PrePlanningWorkspace({
   }
 
 
-  /* =========================================================
+  /* =======================================================
      ZOOM
-     ========================================================= */
+     ======================================================= */
 
   function zoomIn() {
     setDayWidth(
@@ -3788,14 +3397,12 @@ export default function PrePlanningWorkspace({
       DEFAULT_DAY_WIDTH
     )
 
-
     if (
       rightBodyRef.current
     ) {
       rightBodyRef.current.scrollLeft =
         0
     }
-
 
     if (
       ganttHeaderRef.current
@@ -3806,15 +3413,14 @@ export default function PrePlanningWorkspace({
   }
 
 
-  /* =========================================================
-     DERIVED VALUES
-     ========================================================= */
+  /* =======================================================
+     DERIVED INSPECTOR VALUES
+     ======================================================= */
 
   const targetTaktNumber =
     Number(
       targetTakt
     )
-
 
   const hasTargetTakt =
     Number.isFinite(
@@ -3822,14 +3428,12 @@ export default function PrePlanningWorkspace({
     ) &&
     targetTaktNumber > 0
 
-
   const selectedSequenceIndex =
     selectedActivity
       ? sequenceIndexMap.get(
           selectedActivity.id
         )
       : undefined
-
 
   const selectedSequence =
     Number.isInteger(
@@ -3840,7 +3444,6 @@ export default function PrePlanningWorkspace({
         )
       : '—'
 
-
   const selectedDesiredDuration =
     selectedActivity
       ? desiredDurations[
@@ -3848,7 +3451,6 @@ export default function PrePlanningWorkspace({
         ] ||
         null
       : null
-
 
   const selectedResourceCalculation =
     selectedActivity
@@ -3863,7 +3465,6 @@ export default function PrePlanningWorkspace({
           difference: null,
         }
 
-
   const dropIndicatorTop =
     rowDrag
       ? rowDrag.dropIndex *
@@ -3871,26 +3472,52 @@ export default function PrePlanningWorkspace({
       : null
 
 
-  /* =========================================================
-     RENDER
-     ========================================================= */
+  /* =======================================================
+     HEADER
+     ======================================================= */
 
-  return (
-    <div
+  const header = (
+    <header
       className={
-        styles.workspace
+        styles.workspaceHeader
       }
     >
-      <header
+      <div
         className={
-          styles.workspaceHeader
+          styles.projectIdentity
         }
       >
-        <div
-          className={
-            styles.projectIdentity
-          }
-        >
+        {standalone ? (
+          <>
+            <div
+              className={
+                styles.standaloneBrand
+              }
+            >
+              RitsuFlow
+            </div>
+
+            <div
+              className={
+                styles.headerDivider
+              }
+            />
+
+            <div
+              className={
+                styles.standaloneModule
+              }
+            >
+              PLANNING / PRE-PLANNING
+            </div>
+
+            <div
+              className={
+                styles.headerDivider
+              }
+            />
+          </>
+        ) : (
           <div
             className={
               styles.eyebrow
@@ -3898,43 +3525,42 @@ export default function PrePlanningWorkspace({
           >
             PRE-PLANNING
           </div>
+        )}
 
-
-          <div
+        <div
+          className={
+            styles.projectTitleRow
+          }
+        >
+          <h1
             className={
-              styles.projectTitleRow
+              styles.projectTitle
             }
           >
-            <h1
-              className={
-                styles.projectTitle
-              }
-            >
-              {project?.code
-                ? `${project.code} · `
-                : ''}
+            {project?.code
+              ? `${project.code} · `
+              : ''}
 
-              {project?.name ||
-                'Project'}
-            </h1>
+            {project?.name ||
+              'Project'}
+          </h1>
 
-
-            <span
-              className={
-                strategyStatus ===
+          <span
+            className={
+              strategyStatus ===
                 'approved'
-                  ? styles.statusApproved
-                  : styles.statusDraft
-              }
-            >
-              {strategyStatus ===
-              'approved'
-                ? 'Approved'
-                : 'Draft'}
-            </span>
-          </div>
+                ? styles.statusApproved
+                : styles.statusDraft
+            }
+          >
+            {strategyStatus ===
+            'approved'
+              ? 'Approved'
+              : 'Draft'}
+          </span>
+        </div>
 
-
+        {!standalone ? (
           <p
             className={
               styles.projectDescription
@@ -3942,307 +3568,103 @@ export default function PrePlanningWorkspace({
           >
             Define the preliminary production sequence and test duration-driven resource strategies.
           </p>
-        </div>
-
-
-        <div
-          className={
-            styles.headerActions
-          }
-        >
-          <div
-            className={
-              styles.summaryMetric
-            }
-          >
-            <span
-              className={
-                styles.summaryMetricLabel
-              }
-            >
-              Activities
-            </span>
-
-            <strong>
-              {
-                filteredActivities.length
-              }
-
-              {hasFilters ? (
-                <span
-                  className={
-                    styles.filteredActivityCount
-                  }
-                >
-                  {' '}
-                  / {
-                    orderedActivities.length
-                  }
-                </span>
-              ) : null}
-            </strong>
-          </div>
-
-
-          <div
-            className={
-              styles.summaryMetric
-            }
-          >
-            <span
-              className={
-                styles.summaryMetricLabel
-              }
-            >
-              Target Takt
-            </span>
-
-            <strong>
-              {hasTargetTakt
-                ? `${safeNumber(
-                    targetTaktNumber
-                  )} d`
-                : '—'}
-            </strong>
-          </div>
-
-
-          <Link
-            href={
-              changeProjectHref
-            }
-            className={
-              styles.changeProjectButton
-            }
-          >
-            Change Project
-          </Link>
-        </div>
-      </header>
-
+        ) : null}
+      </div>
 
       <div
         className={
-          styles.toolbar
+          styles.headerActions
         }
       >
         <div
           className={
-            styles.toolbarLeft
+            styles.summaryMetric
           }
         >
-          <div
+          <span
             className={
-              styles.toolbarGroup
+              styles.summaryMetricLabel
             }
           >
-            <button
-              type="button"
-              className={
-                activeTab ===
-                'sequence'
-                  ? styles.filterSelectActive
-                  : styles.toolbarButtonWide
-              }
-              onClick={() =>
-                handleTabChange(
-                  'sequence'
-                )
-              }
-            >
-              Sequence
-            </button>
+            Activities
+          </span>
 
-
-            <button
-              type="button"
-              className={
-                activeTab ===
-                'duration'
-                  ? styles.filterSelectActive
-                  : styles.toolbarButtonWide
-              }
-              onClick={() =>
-                handleTabChange(
-                  'duration'
-                )
-              }
-            >
-              Duration & Resources
-            </button>
-
-
-            {activeTab ===
-            'sequence' ? (
-              <>
-                <span
-                  className={
-                    styles.lockedBadge
-                  }
-                >
-                  DURATIONS LOCKED
-                </span>
-
-
-                <span
-                  className={
-                    styles.sequenceHint
-                  }
-                >
-                  {isViewingCurrentVersion
-                    ? '⠿ DRAG TO REORDER'
-                    : 'HISTORICAL VIEW · READ ONLY'}
-                </span>
-              </>
-            ) : (
-              <>
-                <span
-                  className={
-                    styles.lockedBadge
-                  }
-                >
-                  RAW DURATIONS LOCKED
-                </span>
-
-
-                <span
-                  className={
-                    styles.sequenceHint
-                  }
-                >
-                  {isViewingCurrentVersion
-                    ? 'ENTER DESIRED DURATION'
-                    : 'HISTORICAL VIEW · READ ONLY'}
-                </span>
-              </>
-            )}
-          </div>
-
-
-          <div
-            className={
-              styles.filterGroup
+          <strong>
+            {
+              filteredActivities.length
             }
-          >
-            <label
-              className={
-                styles.filterControl
-              }
-            >
-              <span
-                className={
-                  styles.filterLabel
-                }
-              >
-                Location
-              </span>
-
-              <select
-                value={
-                  selectedLocation
-                }
-                onChange={
-                  handleLocationChange
-                }
-                className={
-                  selectedLocation !==
-                  'all'
-                    ? styles.filterSelectActive
-                    : styles.filterSelect
-                }
-              >
-                <option value="all">
-                  All Locations
-                </option>
-
-                {locationOptions.map(
-                  (location) => (
-                    <option
-                      key={
-                        location.id
-                      }
-                      value={
-                        location.id
-                      }
-                    >
-                      {
-                        location.name
-                      }
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-
-
-            <label
-              className={
-                styles.filterControl
-              }
-            >
-              <span
-                className={
-                  styles.filterLabel
-                }
-              >
-                Division
-              </span>
-
-              <select
-                value={
-                  selectedDivision
-                }
-                onChange={
-                  handleDivisionChange
-                }
-                className={
-                  selectedDivision !==
-                  'all'
-                    ? styles.filterSelectActive
-                    : styles.filterSelect
-                }
-              >
-                <option value="all">
-                  All Divisions
-                </option>
-
-                {divisionOptions.map(
-                  (division) => (
-                    <option
-                      key={
-                        division.id
-                      }
-                      value={
-                        division.id
-                      }
-                    >
-                      {
-                        division.name
-                      }
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-
 
             {hasFilters ? (
-              <button
-                type="button"
+              <span
                 className={
-                  styles.clearFiltersButton
-                }
-                onClick={
-                  clearFilters
+                  styles.filteredActivityCount
                 }
               >
-                Clear
-              </button>
+                {' '}
+                / {
+                  orderedActivities.length
+                }
+              </span>
             ) : null}
-          </div>
+          </strong>
         </div>
 
+        <div
+          className={
+            styles.summaryMetric
+          }
+        >
+          <span
+            className={
+              styles.summaryMetricLabel
+            }
+          >
+            Target Takt
+          </span>
 
+          <strong>
+            {hasTargetTakt
+              ? `${safeNumber(
+                  targetTaktNumber
+                )} d`
+              : '—'}
+          </strong>
+        </div>
+
+        <Link
+          href={
+            standalone
+              ? '/dashboard'
+              : changeProjectHref
+          }
+          className={
+            styles.changeProjectButton
+          }
+        >
+          {standalone
+            ? '← RitsuFlow'
+            : 'Change Project'}
+        </Link>
+      </div>
+    </header>
+  )
+
+
+  /* =======================================================
+     DASHBOARD TOOLBAR
+     ======================================================= */
+
+  const dashboardToolbar = (
+    <div
+      className={
+        styles.toolbar
+      }
+    >
+      <div
+        className={
+          styles.toolbarLeft
+        }
+      >
         <div
           className={
             styles.toolbarGroup
@@ -4250,573 +3672,1183 @@ export default function PrePlanningWorkspace({
         >
           <button
             type="button"
-            onClick={
-              zoomOut
-            }
-            disabled={
-              dayWidth <=
-              MIN_DAY_WIDTH
-            }
             className={
-              styles.toolbarButton
+              activeTab ===
+              'sequence'
+                ? styles.tabButtonActive
+                : styles.tabButton
+            }
+            onClick={() =>
+              handleTabChange(
+                'sequence'
+              )
             }
           >
-            −
+            Sequence
           </button>
-
-
-          <div
-            className={
-              styles.zoomValue
-            }
-          >
-            {dayWidth}px / day
-          </div>
-
 
           <button
             type="button"
-            onClick={
-              zoomIn
-            }
-            disabled={
-              dayWidth >=
-              MAX_DAY_WIDTH
-            }
             className={
-              styles.toolbarButton
+              activeTab ===
+              'duration'
+                ? styles.tabButtonActive
+                : styles.tabButton
+            }
+            onClick={() =>
+              handleTabChange(
+                'duration'
+              )
             }
           >
-            +
-          </button>
-
-
-          <button
-            type="button"
-            onClick={
-              fitTimeline
-            }
-            className={
-              styles.toolbarButtonWide
-            }
-          >
-            Fit
+            Duration & Resources
           </button>
         </div>
-      </div>
 
-
-      <div
-        className={
-          styles.versionBar
-        }
-      >
         <div
           className={
-            styles.versionIdentity
+            styles.filterGroup
           }
         >
-          <span
+          <label
             className={
-              styles.versionLabel
+              styles.filterControl
             }
           >
-            SEQUENCE VERSION
-          </span>
-
-
-          {normalizedVersions.length >
-          0 ? (
-            <select
-              value={
-                selectedVersion?.id ||
-                ''
-              }
-              onChange={
-                handleVersionSelection
-              }
-              disabled={
-                actionState !==
-                  'idle'
-              }
+            <span
               className={
-                styles.filterSelectActive
+                styles.filterLabel
               }
             >
-              {normalizedVersions.map(
-                (version) => (
+              Location
+            </span>
+
+            <select
+              value={
+                selectedLocation
+              }
+              onChange={
+                handleLocationChange
+              }
+              className={
+                selectedLocation !==
+                'all'
+                  ? styles.filterSelectActive
+                  : styles.filterSelect
+              }
+            >
+              <option value="all">
+                All Locations
+              </option>
+
+              {locationOptions.map(
+                (location) => (
                   <option
                     key={
-                      version.id
+                      location.id
                     }
                     value={
-                      version.id
+                      location.id
                     }
                   >
-                    {version.versionName}
-                    {version.isCurrent
-                      ? ' · Current'
-                      : ''}
+                    {
+                      location.name
+                    }
                   </option>
                 )
               )}
             </select>
-          ) : (
-            <strong
-              className={
-                styles.versionName
-              }
-            >
-              Not saved yet
-            </strong>
-          )}
+          </label>
 
-
-          {selectedVersion?.isCurrent ? (
+          <label
+            className={
+              styles.filterControl
+            }
+          >
             <span
               className={
-                styles.currentVersionBadge
+                styles.filterLabel
               }
             >
-              CURRENT
+              Division
             </span>
-          ) : selectedVersion ? (
-            <span
-              className={
-                styles.savedBadge
-              }
-            >
-              HISTORICAL
-            </span>
-          ) : null}
 
+            <select
+              value={
+                selectedDivision
+              }
+              onChange={
+                handleDivisionChange
+              }
+              className={
+                selectedDivision !==
+                'all'
+                  ? styles.filterSelectActive
+                  : styles.filterSelect
+              }
+            >
+              <option value="all">
+                All Divisions
+              </option>
 
-          {effectiveVersionCount >
-          0 ? (
-            <span
-              className={
-                styles.versionCount
-              }
-            >
-              {
-                effectiveVersionCount
-              }{' '}
-              {effectiveVersionCount ===
-              1
-                ? 'version'
-                : 'versions'}
-            </span>
-          ) : null}
+              {divisionOptions.map(
+                (division) => (
+                  <option
+                    key={
+                      division.id
+                    }
+                    value={
+                      division.id
+                    }
+                  >
+                    {
+                      division.name
+                    }
+                  </option>
+                )
+              )}
+            </select>
+          </label>
 
-
-          {hasUnsavedChanges ? (
-            <span
+          {hasFilters ? (
+            <button
+              type="button"
               className={
-                styles.unsavedBadge
+                styles.clearFiltersButton
+              }
+              onClick={
+                clearFilters
               }
             >
-              UNSAVED CHANGES
-            </span>
-          ) : selectedVersion?.isCurrent ? (
-            <span
-              className={
-                styles.savedBadge
-              }
-            >
-              SAVED
-            </span>
-          ) : isHistoricalView ? (
-            <span
-              className={
-                styles.savedBadge
-              }
-            >
-              READ ONLY
-            </span>
+              Clear
+            </button>
           ) : null}
         </div>
+      </div>
 
+      <div
+        className={
+          styles.toolbarGroup
+        }
+      >
+        <button
+          type="button"
+          onClick={
+            zoomOut
+          }
+          disabled={
+            dayWidth <=
+            MIN_DAY_WIDTH
+          }
+          className={
+            styles.toolbarButton
+          }
+        >
+          −
+        </button>
 
         <div
           className={
-            styles.versionActions
+            styles.zoomValue
           }
         >
-          {notice ? (
-            <span
-              className={`${styles.actionNotice} ${
-                notice.type ===
-                'success'
-                  ? styles.actionNoticeSuccess
-                  : notice.type ===
-                      'warning'
-                    ? styles.actionNoticeWarning
-                    : styles.actionNoticeError
-              }`}
-            >
-              {
-                notice.text
+          {dayWidth}px / day
+        </div>
+
+        <button
+          type="button"
+          onClick={
+            zoomIn
+          }
+          disabled={
+            dayWidth >=
+            MAX_DAY_WIDTH
+          }
+          className={
+            styles.toolbarButton
+          }
+        >
+          +
+        </button>
+
+        <button
+          type="button"
+          onClick={
+            fitTimeline
+          }
+          className={
+            styles.toolbarButtonWide
+          }
+        >
+          Fit
+        </button>
+      </div>
+    </div>
+  )
+
+
+  /* =======================================================
+     STANDALONE LEFT RAIL
+     ======================================================= */
+
+  const standaloneLeftRail = (
+    <aside
+      className={
+        styles.leftRail
+      }
+    >
+      <RailButton
+        label="Sequence"
+        symbol="≡"
+        active={
+          activeTab ===
+          'sequence'
+        }
+        onClick={() =>
+          handleTabChange(
+            'sequence'
+          )
+        }
+      />
+
+      <RailButton
+        label="Duration & Resources"
+        symbol="◷"
+        active={
+          activeTab ===
+          'duration'
+        }
+        onClick={() =>
+          handleTabChange(
+            'duration'
+          )
+        }
+      />
+
+      <div
+        className={
+          styles.railDivider
+        }
+      />
+
+      <div
+        className={
+          styles.railControl
+        }
+      >
+        <RailButton
+          label="Location"
+          symbol="⌖"
+          active={
+            selectedLocation !==
+            'all'
+          }
+          onClick={() =>
+            toggleRailPanel(
+              'location'
+            )
+          }
+        />
+
+        {openRailPanel ===
+        'location' ? (
+          <div
+            className={
+              styles.leftRailPopover
+            }
+          >
+            <div
+              className={
+                styles.popoverHeader
               }
-            </span>
-          ) : null}
+            >
+              Location
+            </div>
+
+            <select
+              value={
+                selectedLocation
+              }
+              onChange={
+                handleLocationChange
+              }
+              className={
+                styles.popoverSelect
+              }
+            >
+              <option value="all">
+                All Locations
+              </option>
+
+              {locationOptions.map(
+                (location) => (
+                  <option
+                    key={
+                      location.id
+                    }
+                    value={
+                      location.id
+                    }
+                  >
+                    {
+                      location.name
+                    }
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        className={
+          styles.railControl
+        }
+      >
+        <RailButton
+          label="Division"
+          symbol="▦"
+          active={
+            selectedDivision !==
+            'all'
+          }
+          onClick={() =>
+            toggleRailPanel(
+              'division'
+            )
+          }
+        />
+
+        {openRailPanel ===
+        'division' ? (
+          <div
+            className={
+              styles.leftRailPopover
+            }
+          >
+            <div
+              className={
+                styles.popoverHeader
+              }
+            >
+              Division
+            </div>
+
+            <select
+              value={
+                selectedDivision
+              }
+              onChange={
+                handleDivisionChange
+              }
+              className={
+                styles.popoverSelect
+              }
+            >
+              <option value="all">
+                All Divisions
+              </option>
+
+              {divisionOptions.map(
+                (division) => (
+                  <option
+                    key={
+                      division.id
+                    }
+                    value={
+                      division.id
+                    }
+                  >
+                    {
+                      division.name
+                    }
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+        ) : null}
+      </div>
+
+      {hasFilters ? (
+        <RailButton
+          label="Clear Filters"
+          symbol="×"
+          onClick={
+            clearFilters
+          }
+        />
+      ) : null}
+
+      <div
+        className={
+          styles.railDivider
+        }
+      />
+
+      <RailButton
+        label="Zoom Out"
+        symbol="−"
+        disabled={
+          dayWidth <=
+          MIN_DAY_WIDTH
+        }
+        onClick={
+          zoomOut
+        }
+      />
+
+      <RailButton
+        label="Zoom In"
+        symbol="+"
+        disabled={
+          dayWidth >=
+          MAX_DAY_WIDTH
+        }
+        onClick={
+          zoomIn
+        }
+      />
+
+      <RailButton
+        label="Fit Timeline"
+        symbol="⤢"
+        onClick={
+          fitTimeline
+        }
+      />
+
+      <div
+        className={
+          styles.railZoomValue
+        }
+      >
+        {dayWidth}px
+      </div>
+    </aside>
+  )
 
 
-          {isHistoricalView ? (
+  /* =======================================================
+     VERSION BAR — DASHBOARD
+     ======================================================= */
+
+  const dashboardVersionBar = (
+    <div
+      className={
+        styles.versionBar
+      }
+    >
+      <div
+        className={
+          styles.versionIdentity
+        }
+      >
+        <span
+          className={
+            styles.versionEyebrow
+          }
+        >
+          Version
+        </span>
+
+        {normalizedVersions.length >
+        0 ? (
+          <select
+            value={
+              selectedVersion?.id ||
+              ''
+            }
+            onChange={
+              handleVersionSelection
+            }
+            className={
+              styles.versionSelect
+            }
+          >
+            {normalizedVersions.map(
+              (version) => (
+                <option
+                  key={
+                    version.id
+                  }
+                  value={
+                    version.id
+                  }
+                >
+                  {
+                    version.versionName
+                  }
+                  {version.isCurrent
+                    ? ' · Current'
+                    : ''}
+                </option>
+              )
+            )}
+          </select>
+        ) : (
+          <strong
+            className={
+              styles.versionName
+            }
+          >
+            Not saved
+          </strong>
+        )}
+
+        {selectedVersion?.isCurrent ? (
+          <span
+            className={
+              styles.versionBadge
+            }
+          >
+            Current
+          </span>
+        ) : null}
+
+        <span
+          className={
+            styles.versionCountBadge
+          }
+        >
+          {effectiveVersionCount}{' '}
+          {effectiveVersionCount ===
+          1
+            ? 'version'
+            : 'versions'}
+        </span>
+
+        {hasUnsavedChanges ? (
+          <span
+            className={
+              styles.dirtyBadge
+            }
+          >
+            Unsaved
+          </span>
+        ) : workingVersion ? (
+          <span
+            className={
+              styles.savedBadge
+            }
+          >
+            Saved
+          </span>
+        ) : null}
+      </div>
+
+      <div
+        className={
+          styles.versionActions
+        }
+      >
+        {notice ? (
+          <span
+            className={`${styles.actionNotice} ${
+              notice.type ===
+                'success'
+                ? styles.actionNoticeSuccess
+                : notice.type ===
+                    'warning'
+                  ? styles.actionNoticeWarning
+                  : styles.actionNoticeError
+            }`}
+          >
+            {
+              notice.text
+            }
+          </span>
+        ) : null}
+
+        {isHistoricalView ? (
+          <button
+            type="button"
+            className={
+              styles.saveSequenceButton
+            }
+            disabled={
+              versionManagementDisabled
+            }
+            onClick={
+              handleWorkOnSelectedVersion
+            }
+          >
+            Work on This Version
+          </button>
+        ) : null}
+
+        {selectedVersion ? (
+          <>
+            <button
+              type="button"
+              className={
+                styles.createVersionButton
+              }
+              disabled={
+                versionManagementDisabled
+              }
+              onClick={
+                handleDuplicateVersion
+              }
+            >
+              Duplicate
+            </button>
+
+            <button
+              type="button"
+              className={
+                styles.createVersionButton
+              }
+              disabled={
+                versionManagementDisabled
+              }
+              onClick={
+                handleRenameVersion
+              }
+            >
+              Rename
+            </button>
+
+            <button
+              type="button"
+              className={
+                styles.createVersionButton
+              }
+              disabled={
+                versionManagementDisabled ||
+                selectedVersion.isCurrent
+              }
+              onClick={
+                handleDeleteVersion
+              }
+            >
+              Delete Version
+            </button>
+          </>
+        ) : null}
+
+        {activeTab ===
+        'sequence' ? (
+          <>
+            <button
+              type="button"
+              className={
+                styles.createVersionButton
+              }
+              disabled={
+                applySequenceDisabled
+              }
+              onClick={
+                handleApplySequenceToAll
+              }
+            >
+              Apply Sequence to All
+            </button>
+
+            <button
+              type="button"
+              className={
+                styles.createVersionButton
+              }
+              disabled={
+                createVersionDisabled
+              }
+              onClick={() =>
+                runSequenceAction(
+                  'create_version'
+                )
+              }
+            >
+              Create Version
+            </button>
+
             <button
               type="button"
               className={
                 styles.saveSequenceButton
               }
               disabled={
-                versionManagementDisabled
+                saveDisabled
               }
-              onClick={
-                handleWorkOnSelectedVersion
+              onClick={() =>
+                runSequenceAction(
+                  'save'
+                )
               }
             >
-              {actionState ===
-              'set_current'
-                ? 'Switching...'
-                : 'Work on This Version'}
+              {workingVersion
+                ? 'Save Sequence'
+                : 'Save Sequence · Create V1'}
             </button>
-          ) : null}
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={
+                styles.createVersionButton
+              }
+              disabled={
+                applyDurationDisabled
+              }
+              onClick={
+                handleApplyDurationToAll
+              }
+            >
+              Apply Duration to All
+            </button>
 
-
-          {selectedVersion ? (
-            <>
-              <button
-                type="button"
-                className={
-                  styles.createVersionButton
-                }
-                disabled={
-                  versionManagementDisabled
-                }
-                onClick={
-                  handleDuplicateVersion
-                }
-              >
-                {actionState ===
-                'duplicate_version'
-                  ? 'Duplicating...'
-                  : 'Duplicate'}
-              </button>
-
-
-              <button
-                type="button"
-                className={
-                  styles.createVersionButton
-                }
-                disabled={
-                  versionManagementDisabled
-                }
-                onClick={
-                  handleRenameVersion
-                }
-              >
-                {actionState ===
-                'rename_version'
-                  ? 'Renaming...'
-                  : 'Rename'}
-              </button>
-
-
-              <button
-                type="button"
-                className={
-                  styles.createVersionButton
-                }
-                disabled={
-                  versionManagementDisabled ||
-                  selectedVersion.isCurrent
-                }
-                onClick={
-                  handleDeleteVersion
-                }
-              >
-                {actionState ===
-                'delete_version'
-                  ? 'Deleting...'
-                  : 'Delete Version'}
-              </button>
-            </>
-          ) : null}
-
-
-          {activeTab ===
-          'sequence' ? (
-            <>
-              <button
-                type="button"
-                className={
-                  styles.createVersionButton
-                }
-                disabled={
-                  applySequenceDisabled
-                }
-                onClick={
-                  handleApplySequenceToAll
-                }
-                title={
-                  hasExactSourceFilter
-                    ? 'Apply the selected Location / Division sequence to all matching production areas'
-                    : 'Select one Location and one Division first'
-                }
-              >
-                Apply Sequence to All
-              </button>
-
-
-              <button
-                type="button"
-                className={
-                  styles.createVersionButton
-                }
-                disabled={
-                  createVersionDisabled
-                }
-                onClick={() =>
-                  runSequenceAction(
-                    'create_version'
-                  )
-                }
-              >
-                {actionState ===
-                'creating'
-                  ? 'Creating...'
-                  : 'Create Version'}
-              </button>
-
-
-              <button
-                type="button"
-                className={
-                  styles.saveSequenceButton
-                }
-                disabled={
-                  saveDisabled
-                }
-                onClick={() =>
-                  runSequenceAction(
-                    'save'
-                  )
-                }
-              >
-                {actionState ===
-                'saving'
-                  ? 'Saving...'
-                  : workingVersion
-                    ? 'Save Sequence'
-                    : 'Save Sequence · Create V1'}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                className={
-                  styles.createVersionButton
-                }
-                disabled={
-                  applyDurationDisabled
-                }
-                onClick={
-                  handleApplyDurationToAll
-                }
-                title={
-                  !hasExactSourceFilter
-                    ? 'Select one Location and one Division first'
-                    : !sourceHasDesiredDurations
-                      ? 'Enter Desired Durations in the selected source area first'
-                      : 'Apply the selected Location / Division duration strategy to all matching production areas'
-                }
-              >
-                Apply Duration to All
-              </button>
-
-
-              <button
-                type="button"
-                className={
-                  styles.saveSequenceButton
-                }
-                disabled={
-                  durationSaveDisabled
-                }
-                onClick={
-                  saveDurationStrategy
-                }
-              >
-                {actionState ===
-                'saving_duration'
-                  ? 'Saving...'
-                  : 'Save Duration & Resources'}
-              </button>
-            </>
-          )}
-        </div>
+            <button
+              type="button"
+              className={
+                styles.saveSequenceButton
+              }
+              disabled={
+                durationSaveDisabled
+              }
+              onClick={
+                saveDurationStrategy
+              }
+            >
+              Save Duration & Resources
+            </button>
+          </>
+        )}
       </div>
+    </div>
+  )
 
+
+  /* =======================================================
+     STANDALONE RIGHT RAIL
+     ======================================================= */
+
+  const standaloneRightRail = (
+    <aside
+      className={
+        styles.rightRail
+      }
+    >
+      <div
+        className={
+          styles.railControl
+        }
+      >
+        <RailButton
+          label="Versions"
+          symbol="V"
+          active={
+            openRailPanel ===
+            'version'
+          }
+          onClick={() =>
+            toggleRailPanel(
+              'version'
+            )
+          }
+        />
+
+        {openRailPanel ===
+        'version' ? (
+          <div
+            className={
+              styles.rightRailPopover
+            }
+          >
+            <div
+              className={
+                styles.popoverHeader
+              }
+            >
+              Versions
+            </div>
+
+            {normalizedVersions.length >
+            0 ? (
+              <select
+                value={
+                  selectedVersion?.id ||
+                  ''
+                }
+                onChange={
+                  handleVersionSelection
+                }
+                className={
+                  styles.popoverSelect
+                }
+              >
+                {normalizedVersions.map(
+                  (version) => (
+                    <option
+                      key={
+                        version.id
+                      }
+                      value={
+                        version.id
+                      }
+                    >
+                      {
+                        version.versionName
+                      }
+                      {version.isCurrent
+                        ? ' · Current'
+                        : ''}
+                    </option>
+                  )
+                )}
+              </select>
+            ) : (
+              <div
+                className={
+                  styles.popoverMessage
+                }
+              >
+                No saved versions yet.
+              </div>
+            )}
+
+            <div
+              className={
+                styles.popoverStatusRow
+              }
+            >
+              {selectedVersion?.isCurrent ? (
+                <span
+                  className={
+                    styles.versionBadge
+                  }
+                >
+                  Current
+                </span>
+              ) : null}
+
+              {hasUnsavedChanges ? (
+                <span
+                  className={
+                    styles.dirtyBadge
+                  }
+                >
+                  Unsaved
+                </span>
+              ) : null}
+            </div>
+
+            {isHistoricalView ? (
+              <button
+                type="button"
+                className={
+                  styles.popoverPrimaryButton
+                }
+                disabled={
+                  versionManagementDisabled
+                }
+                onClick={
+                  handleWorkOnSelectedVersion
+                }
+              >
+                Work on This Version
+              </button>
+            ) : null}
+
+            {selectedVersion ? (
+              <>
+                <button
+                  type="button"
+                  className={
+                    styles.popoverButton
+                  }
+                  disabled={
+                    versionManagementDisabled
+                  }
+                  onClick={
+                    handleDuplicateVersion
+                  }
+                >
+                  Duplicate
+                </button>
+
+                <button
+                  type="button"
+                  className={
+                    styles.popoverButton
+                  }
+                  disabled={
+                    versionManagementDisabled
+                  }
+                  onClick={
+                    handleRenameVersion
+                  }
+                >
+                  Rename
+                </button>
+
+                <button
+                  type="button"
+                  className={
+                    styles.popoverDangerButton
+                  }
+                  disabled={
+                    versionManagementDisabled ||
+                    selectedVersion.isCurrent
+                  }
+                  onClick={
+                    handleDeleteVersion
+                  }
+                >
+                  Delete Version
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       <div
         className={
-          styles.planningGrid
+          styles.railDivider
+        }
+      />
+
+      {activeTab ===
+      'sequence' ? (
+        <>
+          <RailButton
+            label={
+              workingVersion
+                ? 'Save Sequence'
+                : 'Save Sequence · Create V1'
+            }
+            symbol="✓"
+            disabled={
+              saveDisabled
+            }
+            onClick={() =>
+              runSequenceAction(
+                'save'
+              )
+            }
+          />
+
+          <RailButton
+            label="Create Version"
+            symbol="+V"
+            disabled={
+              createVersionDisabled
+            }
+            onClick={() =>
+              runSequenceAction(
+                'create_version'
+              )
+            }
+          />
+
+          <RailButton
+            label="Apply Sequence to All"
+            symbol="⇄"
+            disabled={
+              applySequenceDisabled
+            }
+            onClick={
+              handleApplySequenceToAll
+            }
+          />
+        </>
+      ) : (
+        <>
+          <RailButton
+            label="Save Duration & Resources"
+            symbol="✓"
+            disabled={
+              durationSaveDisabled
+            }
+            onClick={
+              saveDurationStrategy
+            }
+          />
+
+          <RailButton
+            label="Apply Duration to All"
+            symbol="⇄"
+            disabled={
+              applyDurationDisabled
+            }
+            onClick={
+              handleApplyDurationToAll
+            }
+          />
+        </>
+      )}
+
+      {notice ? (
+        <div
+          className={`${styles.railNotice} ${
+            notice.type ===
+              'success'
+              ? styles.railNoticeSuccess
+              : notice.type ===
+                  'warning'
+                ? styles.railNoticeWarning
+                : styles.railNoticeError
+          }`}
+          title={
+            notice.text
+          }
+        >
+          !
+        </div>
+      ) : null}
+    </aside>
+  )
+
+
+  /* =======================================================
+     PLANNING GRID
+     ======================================================= */
+
+  const planningGrid = (
+    <div
+      className={
+        styles.planningGrid
+      }
+    >
+      <section
+        className={
+          styles.activityPane
         }
       >
-        <section
+        <div
           className={
-            styles.activityPane
+            styles.activityHeader
           }
         >
           <div
             className={
-              styles.activityHeader
+              styles.activityHeaderHandleCell
             }
           >
-            <div
-              className={
-                styles.activityHeaderHandleCell
-              }
-            >
-              {activeTab ===
-              'sequence'
-                ? '⠿'
-                : ''}
-            </div>
-
-            <div
-              className={
-                styles.activityHeaderCell
-              }
-            >
-              ID
-            </div>
-
-            <div
-              className={
-                styles.activityHeaderCell
-              }
-            >
-              WP
-            </div>
-
-            <div
-              className={
-                styles.activityHeaderCell
-              }
-            >
-              Scope Item
-            </div>
-
-            <div
-              className={
-                styles.activityHeaderCell
-              }
-            >
-              Location
-            </div>
-
-            <div
-              className={
-                styles.activityHeaderCell
-              }
-            >
-              Division
-            </div>
-
-            <div
-              className={
-                styles.activityHeaderCellRight
-              }
-            >
-              {activeTab ===
-              'sequence'
-                ? 'Raw Dur.'
-                : 'Desired Dur.'}
-            </div>
+            {activeTab ===
+            'sequence'
+              ? '⠿'
+              : ''}
           </div>
 
-
           <div
-            ref={
-              leftBodyRef
-            }
             className={
-              styles.activityBody
-            }
-            onScroll={() =>
-              syncVerticalScroll(
-                'left'
-              )
+              styles.activityHeaderCell
             }
           >
-            <div
-              className={
-                styles.activityRowsContainer
-              }
-              style={{
-                height:
-                  Math.max(
-                    filteredActivities.length *
-                      ROW_HEIGHT,
+            ID
+          </div>
 
-                    ROW_HEIGHT
-                  ),
-              }}
-            >
-              {rowDrag ? (
-                <div
-                  className={
-                    styles.sequenceDropIndicator
-                  }
-                  style={{
-                    top:
-                      dropIndicatorTop,
-                  }}
-                />
-              ) : null}
+          <div
+            className={
+              styles.activityHeaderCell
+            }
+          >
+            WP
+          </div>
 
+          <div
+            className={
+              styles.activityHeaderCell
+            }
+          >
+            Scope Item
+          </div>
 
-              {filteredActivities.map(
+          <div
+            className={
+              styles.activityHeaderCell
+            }
+          >
+            Location
+          </div>
+
+          <div
+            className={
+              styles.activityHeaderCell
+            }
+          >
+            Division
+          </div>
+
+          <div
+            className={
+              styles.activityHeaderCellRight
+            }
+          >
+            {activeTab ===
+            'sequence'
+              ? 'Raw Dur.'
+              : 'Desired Dur.'}
+          </div>
+        </div>
+
+        <div
+          ref={
+            leftBodyRef
+          }
+          className={
+            styles.activityBody
+          }
+          onScroll={() =>
+            syncVerticalScroll(
+              'left'
+            )
+          }
+        >
+          <div
+            className={
+              styles.activityRowsContainer
+            }
+            style={{
+              height:
+                Math.max(
+                  filteredActivities.length *
+                    ROW_HEIGHT,
+
+                  ROW_HEIGHT
+                ),
+            }}
+          >
+            {rowDrag ? (
+              <div
+                className={
+                  styles.sequenceDropIndicator
+                }
+                style={{
+                  top:
+                    dropIndicatorTop,
+                }}
+              />
+            ) : null}
+
+            {filteredActivities.length >
+            0 ? (
+              filteredActivities.map(
                 (
                   activity,
                   visibleIndex
                 ) => {
-                  const isSelected =
-                    selectedActivity?.id ===
-                    activity.id
-
-
-                  const isDragging =
-                    rowDrag?.activityId ===
-                    activity.id
-
-
-                  const rawDuration =
-                    Number(
-                      activity.rawDuration
-                    )
-
-
-                  const hasRawDuration =
-                    Number.isFinite(
-                      rawDuration
-                    ) &&
-                    rawDuration > 0
-
-
-                  const globalSequenceIndex =
+                  const fullIndex =
                     sequenceIndexMap.get(
                       activity.id
                     )
 
+                  const selected =
+                    selectedActivity?.id ===
+                    activity.id
+
+                  const dragging =
+                    rowDrag?.activityId ===
+                    activity.id
 
                   const desiredDuration =
                     desiredDurations[
                       activity.id
-                    ]
-
+                    ] ||
+                    ''
 
                   return (
                     <div
@@ -4824,11 +4856,11 @@ export default function PrePlanningWorkspace({
                         activity.id
                       }
                       className={`${styles.activityRowShell} ${
-                        isSelected
+                        selected
                           ? styles.activityRowShellSelected
                           : ''
                       } ${
-                        isDragging
+                        dragging
                           ? styles.activityRowShellDragging
                           : ''
                       }`}
@@ -4879,21 +4911,19 @@ export default function PrePlanningWorkspace({
                         ) : null}
                       </div>
 
-
                       <div
                         className={
                           styles.activityId
                         }
                       >
                         {Number.isInteger(
-                          globalSequenceIndex
+                          fullIndex
                         )
                           ? getActivityCode(
-                              globalSequenceIndex
+                              fullIndex
                             )
                           : '—'}
                       </div>
-
 
                       <div
                         className={
@@ -4911,67 +4941,77 @@ export default function PrePlanningWorkspace({
                           }}
                         />
 
-                        <span>
-                          {activity.workPackageCode ||
-                            '—'}
-                        </span>
+                        {
+                          activity.workPackageCode
+                        }
                       </div>
-
 
                       <div
                         className={
                           styles.scopeItemName
                         }
+                        title={
+                          activity.scopeItemName
+                        }
                       >
-                        {activity.scopeItemName ||
-                          'Scope Item'}
+                        {
+                          activity.scopeItemName
+                        }
                       </div>
-
 
                       <div
                         className={
                           styles.locationName
                         }
+                        title={
+                          activity.locationName
+                        }
                       >
-                        {activity.locationName ||
-                          '—'}
+                        {
+                          activity.locationName
+                        }
                       </div>
-
 
                       <div
                         className={
                           styles.divisionName
                         }
+                        title={
+                          activity.divisionName
+                        }
                       >
-                        {activity.divisionName ||
-                          '—'}
+                        {
+                          activity.divisionName
+                        }
                       </div>
-
 
                       {activeTab ===
                       'sequence' ? (
                         <div
                           className={
-                            hasRawDuration
+                            Number.isFinite(
+                              Number(
+                                activity.rawDuration
+                              )
+                            )
                               ? styles.durationCell
                               : styles.missingDurationCell
                           }
                         >
-                          {hasRawDuration
+                          {Number.isFinite(
+                            Number(
+                              activity.rawDuration
+                            )
+                          )
                             ? `${safeNumber(
-                                rawDuration
+                                activity.rawDuration
                               )} d`
-                            : '—'}
+                            : 'Missing'}
                         </div>
                       ) : (
                         <div
                           className={
-                            styles.durationCell
-                          }
-                          onClick={(
-                            event
-                          ) =>
-                            event.stopPropagation()
+                            styles.durationInputCell
                           }
                         >
                           <input
@@ -4979,18 +5019,29 @@ export default function PrePlanningWorkspace({
                             min="0.01"
                             step="0.01"
                             value={
-                              desiredDuration ??
-                              ''
-                            }
-                            placeholder={
-                              hasRawDuration
-                                ? safeNumber(
-                                    rawDuration
-                                  )
-                                : '—'
+                              desiredDuration
                             }
                             disabled={
                               !isViewingCurrentVersion
+                            }
+                            placeholder={
+                              Number.isFinite(
+                                Number(
+                                  activity.rawDuration
+                                )
+                              )
+                                ? safeNumber(
+                                    activity.rawDuration
+                                  )
+                                : '—'
+                            }
+                            className={
+                              styles.durationInput
+                            }
+                            onClick={(
+                              event
+                            ) =>
+                              event.stopPropagation()
                             }
                             onChange={(
                               event
@@ -5000,46 +5051,12 @@ export default function PrePlanningWorkspace({
                                 event.target.value
                               )
                             }
-                            style={{
-                              width:
-                                '64px',
-
-                              height:
-                                '28px',
-
-                              padding:
-                                '0 7px',
-
-                              border:
-                                '1px solid #cbd7e2',
-
-                              borderRadius:
-                                '6px',
-
-                              background:
-                                isViewingCurrentVersion
-                                  ? '#ffffff'
-                                  : '#f4f7f9',
-
-                              color:
-                                '#052c49',
-
-                              fontSize:
-                                '12px',
-
-                              fontWeight:
-                                800,
-
-                              textAlign:
-                                'right',
-                            }}
                           />
 
                           <span
-                            style={{
-                              marginLeft:
-                                '4px',
-                            }}
+                            className={
+                              styles.unitText
+                            }
                           >
                             d
                           </span>
@@ -5048,576 +5065,644 @@ export default function PrePlanningWorkspace({
                     </div>
                   )
                 }
-              )}
-            </div>
+              )
+            ) : (
+              <div
+                className={
+                  styles.emptyActivityState
+                }
+              >
+                <strong>
+                  No activities found
+                </strong>
+
+                <span>
+                  No activities match the selected Location and Division.
+                </span>
+
+                {hasFilters ? (
+                  <button
+                    type="button"
+                    className={
+                      styles.emptyClearButton
+                    }
+                    onClick={
+                      clearFilters
+                    }
+                  >
+                    Clear Filters
+                  </button>
+                ) : null}
+              </div>
+            )}
           </div>
-        </section>
+        </div>
+      </section>
 
-
-        <section
+      <section
+        className={
+          styles.ganttPane
+        }
+      >
+        <div
+          ref={
+            ganttHeaderRef
+          }
           className={
-            styles.ganttPane
+            styles.ganttHeaderScroll
           }
         >
           <div
-            ref={
-              ganttHeaderRef
-            }
             className={
-              styles.ganttHeaderScroll
+              styles.ganttHeader
             }
+            style={{
+              width:
+                timelineWidth,
+            }}
+          >
+            {dayMarkers.map(
+              (day) => (
+                <div
+                  key={
+                    day
+                  }
+                  className={
+                    day %
+                      5 ===
+                    0
+                      ? styles.dayHeaderMajor
+                      : styles.dayHeader
+                  }
+                  style={{
+                    left:
+                      day *
+                      dayWidth,
+
+                    width:
+                      dayWidth,
+                  }}
+                >
+                  {day %
+                    5 ===
+                  0
+                    ? day
+                    : ''}
+                </div>
+              )
+            )}
+          </div>
+        </div>
+
+        <div
+          ref={
+            rightBodyRef
+          }
+          className={
+            styles.ganttBody
+          }
+          onScroll={
+            handleGanttScroll
+          }
+        >
+          <div
+            className={
+              styles.ganttCanvas
+            }
+            style={{
+              width:
+                timelineWidth,
+
+              height:
+                Math.max(
+                  filteredActivities.length *
+                    ROW_HEIGHT,
+
+                  ROW_HEIGHT
+                ),
+            }}
           >
             <div
               className={
-                styles.ganttHeader
+                styles.gridBackground
               }
               style={{
-                width:
-                  timelineWidth,
+                backgroundSize:
+                  `${dayWidth}px ${ROW_HEIGHT}px`,
               }}
-            >
-              {dayMarkers.map(
+            />
+
+            {dayMarkers
+              .filter(
+                (day) =>
+                  day %
+                    5 ===
+                  0
+              )
+              .map(
                 (day) => (
                   <div
                     key={
-                      day
+                      `major-${day}`
                     }
                     className={
-                      day %
-                        5 ===
-                      0
-                        ? styles.dayHeaderMajor
-                        : styles.dayHeader
+                      styles.majorGridLine
                     }
                     style={{
-                      width:
-                        dayWidth,
-
                       left:
                         day *
                         dayWidth,
                     }}
-                  >
-                    {day}
-                  </div>
+                  />
                 )
               )}
-            </div>
-          </div>
 
-
-          <div
-            ref={
-              rightBodyRef
-            }
-            className={
-              styles.ganttBody
-            }
-            onScroll={
-              handleGanttScroll
-            }
-          >
-            <div
-              className={
-                styles.ganttCanvas
-              }
-              style={{
-                width:
-                  timelineWidth,
-
-                height:
-                  Math.max(
-                    filteredActivities.length *
-                      ROW_HEIGHT,
-
-                    ROW_HEIGHT
-                  ),
-              }}
-            >
+            {rowDrag ? (
               <div
                 className={
-                  styles.gridBackground
+                  styles.ganttDropIndicator
                 }
                 style={{
-                  backgroundSize: `${dayWidth}px 100%`,
+                  top:
+                    dropIndicatorTop,
                 }}
               />
+            ) : null}
 
+            {filteredActivities.map(
+              (
+                activity,
+                visibleIndex
+              ) => {
+                const desired =
+                  Number(
+                    desiredDurations[
+                      activity.id
+                    ]
+                  )
 
-              {dayMarkers.map(
-                (day) =>
-                  day %
-                    5 ===
-                  0 ? (
-                    <div
-                      key={`major-${day}`}
-                      className={
-                        styles.majorGridLine
-                      }
-                      style={{
-                        left:
-                          day *
-                          dayWidth,
-                      }}
-                    />
-                  ) : null
-              )}
+                const rawDuration =
+                  Number(
+                    activity.rawDuration
+                  )
 
+                const displayedDuration =
+                  activeTab ===
+                    'duration' &&
+                  Number.isFinite(
+                    desired
+                  ) &&
+                  desired > 0
+                    ? desired
+                    : rawDuration
 
-              {filteredActivities.map(
-                (
-                  activity,
-                  visibleIndex
-                ) => {
-                  const rawDuration =
-                    Number(
-                      activity.rawDuration
-                    )
+                const hasDuration =
+                  Number.isFinite(
+                    displayedDuration
+                  ) &&
+                  displayedDuration > 0
 
+                const selected =
+                  selectedActivity?.id ===
+                  activity.id
 
-                  const desiredDuration =
-                    Number(
-                      desiredDurations[
+                const dragging =
+                  rowDrag?.activityId ===
+                  activity.id
+
+                const resource =
+                  activeTab ===
+                    'duration'
+                    ? calculateRequiredResource(
+                        activity,
+                        desired
+                      )
+                    : null
+
+                const barWidth =
+                  hasDuration
+                    ? Math.max(
+                        4,
+
+                        displayedDuration *
+                          dayWidth
+                      )
+                    : 0
+
+                let resourceClass =
+                  styles.ganttBarWaiting
+
+                if (
+                  resource?.recommended !==
+                    null &&
+                  resource?.current !==
+                    null
+                ) {
+                  if (
+                    resource.difference ===
+                    0
+                  ) {
+                    resourceClass =
+                      styles.ganttBarBalanced
+                  } else if (
+                    resource.difference >
+                    0
+                  ) {
+                    resourceClass =
+                      styles.ganttBarGap
+                  } else {
+                    resourceClass =
+                      styles.ganttBarUnderloaded
+                  }
+                }
+
+                return (
+                  <button
+                    key={
+                      activity.id
+                    }
+                    type="button"
+                    className={`${styles.ganttRow} ${
+                      selected
+                        ? styles.ganttRowSelected
+                        : ''
+                    } ${
+                      dragging
+                        ? styles.ganttRowDragging
+                        : ''
+                    }`}
+                    style={{
+                      top:
+                        visibleIndex *
+                        ROW_HEIGHT,
+                    }}
+                    onClick={() =>
+                      setSelectedActivityId(
                         activity.id
-                      ]
-                    )
+                      )
+                    }
+                  >
+                    {hasDuration ? (
+                      <div
+                        className={`${styles.ganttBar} ${
+                          activeTab ===
+                          'duration'
+                            ? resourceClass
+                            : ''
+                        }`}
+                        style={{
+                          left: 0,
 
+                          width:
+                            barWidth,
 
-                  const displayedDuration =
-                    activeTab ===
-                      'duration' &&
-                    Number.isFinite(
-                      desiredDuration
-                    ) &&
-                    desiredDuration >
-                      0
-                      ? desiredDuration
-                      : rawDuration
-
-
-                  const hasDuration =
-                    Number.isFinite(
-                      displayedDuration
-                    ) &&
-                    displayedDuration >
-                      0
-
-
-                  const resource =
-                    calculateRequiredResource(
-                      activity,
-                      desiredDuration
-                    )
-
-
-                  const width =
-                    hasDuration
-                      ? Math.max(
-                          displayedDuration *
-                            dayWidth,
-
-                          4
-                        )
-                      : 0
-
-
-                  return (
-                    <div
-                      key={
-                        activity.id
-                      }
-                      className={`${styles.ganttRow} ${
-                        selectedActivity?.id ===
-                        activity.id
-                          ? styles.ganttRowSelected
-                          : ''
-                      }`}
-                      style={{
-                        top:
-                          visibleIndex *
-                          ROW_HEIGHT,
-                      }}
-                      onClick={() =>
-                        setSelectedActivityId(
-                          activity.id
-                        )
-                      }
-                    >
-                      {hasDuration ? (
-                        <div
-                          className={
-                            styles.ganttBar
-                          }
-                          style={{
-                            left: 0,
-                            width,
-                            background:
-                              activity.workPackageColor ||
-                              '#00998b',
-                          }}
-                        >
-                          <span
-                            className={
-                              styles.ganttBarLabel
-                            }
-                          >
-                            {activeTab ===
-                              'duration' &&
-                            resource.recommended
-                              ? `${safeNumber(
-                                  displayedDuration
-                                )} d · ${resource.recommended} ${getResourceUnit(
-                                  activity,
-                                  resource.recommended
-                                )}`
-                              : `${safeNumber(
-                                  displayedDuration
-                                )} d`}
-                          </span>
-                        </div>
-                      ) : (
+                          background:
+                            activeTab ===
+                            'sequence'
+                              ? activity.workPackageColor ||
+                                '#00998b'
+                              : undefined,
+                        }}
+                      >
                         <span
                           className={
-                            styles.missingBar
+                            styles.ganttBarLabel
                           }
                         >
-                          Missing Production Parameters
+                          {safeNumber(
+                            displayedDuration
+                          )}{' '}
+                          d
+
+                          {activeTab ===
+                            'duration' &&
+                          resource?.recommended !==
+                            null
+                            ? ` · ${resource.recommended} ${getResourceUnit(
+                                activity,
+                                resource.recommended
+                              )}`
+                            : ''}
                         </span>
-                      )}
-                    </div>
-                  )
-                }
-              )}
-            </div>
-          </div>
-        </section>
-      </div>
-
-
-      <footer
-        className={
-          styles.inspector
-        }
-      >
-        {selectedActivity ? (
-          <>
-            <div
-              className={
-                styles.inspectorIdentity
+                      </div>
+                    ) : (
+                      <span
+                        className={
+                          styles.missingBar
+                        }
+                      >
+                        Missing production data
+                      </span>
+                    )}
+                  </button>
+                )
               }
-            >
-              <div
-                className={
-                  styles.inspectorEyebrow
-                }
-              >
-                SELECTED ACTIVITY
-              </div>
-
-
-              <div
-                className={
-                  styles.inspectorTitle
-                }
-              >
-                <span
-                  className={
-                    styles.inspectorWorkPackage
-                  }
-                >
-                  {selectedActivity.workPackageCode ||
-                    '—'}
-                </span>
-
-                <span>
-                  {selectedActivity.scopeItemName ||
-                    'Scope Item'}
-                </span>
-              </div>
-
-
-              <div
-                className={
-                  styles.inspectorLocation
-                }
-              >
-                {selectedActivity.locationName ||
-                  '—'}
-
-                {selectedActivity.divisionName &&
-                selectedActivity.divisionName !==
-                  '—'
-                  ? ` / ${selectedActivity.divisionName}`
-                  : ''}
-              </div>
-            </div>
-
-
-            {activeTab ===
-            'sequence' ? (
-              <div
-                className={
-                  styles.inspectorMetrics
-                }
-              >
-                <InspectorMetric
-                  label="Sequence"
-                  value={
-                    selectedSequence
-                  }
-                  detail={
-                    isViewingCurrentVersion
-                      ? 'Drag handle to reorder'
-                      : 'Historical sequence'
-                  }
-                  emphasized
-                />
-
-
-                <InspectorMetric
-                  label="Location"
-                  value={
-                    selectedActivity.locationName ||
-                    '—'
-                  }
-                />
-
-
-                <InspectorMetric
-                  label="Division"
-                  value={
-                    selectedActivity.divisionName ||
-                    '—'
-                  }
-                  detail={
-                    selectedActivity.divisionType ||
-                    ''
-                  }
-                />
-
-
-                <InspectorMetric
-                  label="Productivity"
-                  value={
-                    Number.isFinite(
-                      Number(
-                        selectedActivity.productivity
-                      )
-                    )
-                      ? `${safeNumber(
-                          selectedActivity.productivity
-                        )} ${
-                          selectedActivity.unit ||
-                          ''
-                        }`
-                      : '—'
-                  }
-                  detail={
-                    getBasisLabel(
-                      selectedActivity.productivityBasis
-                    )
-                  }
-                />
-
-
-                <InspectorMetric
-                  label="Resource"
-                  value={
-                    getResourceLabel(
-                      selectedActivity
-                    )
-                  }
-                />
-
-
-                <InspectorMetric
-                  label="Raw Duration"
-                  value={
-                    Number.isFinite(
-                      Number(
-                        selectedActivity.rawDuration
-                      )
-                    )
-                      ? `${safeNumber(
-                          selectedActivity.rawDuration
-                        )} d`
-                      : '—'
-                  }
-                />
-              </div>
-            ) : (
-              <div
-                className={
-                  styles.inspectorMetrics
-                }
-              >
-                <InspectorMetric
-                  label="Raw Duration"
-                  value={
-                    Number.isFinite(
-                      Number(
-                        selectedActivity.rawDuration
-                      )
-                    )
-                      ? `${safeNumber(
-                          selectedActivity.rawDuration
-                        )} d`
-                      : '—'
-                  }
-                />
-
-
-                <InspectorMetric
-                  label="Desired Duration"
-                  value={
-                    selectedDesiredDuration
-                      ? `${safeNumber(
-                          selectedDesiredDuration
-                        )} d`
-                      : '—'
-                  }
-                  detail="Planner input"
-                  emphasized
-                />
-
-
-                <InspectorMetric
-                  label="Current Resource"
-                  value={
-                    getResourceLabel(
-                      selectedActivity
-                    )
-                  }
-                />
-
-
-                <InspectorMetric
-                  label="Calculated Resource"
-                  value={
-                    selectedResourceCalculation.exact
-                      ? `${safeNumber(
-                          selectedResourceCalculation.exact
-                        )} ${getResourceUnit(
-                          selectedActivity,
-                          selectedResourceCalculation.exact
-                        )}`
-                      : '—'
-                  }
-                  detail="Mathematical result"
-                />
-
-
-                <InspectorMetric
-                  label="Required Resource"
-                  value={
-                    selectedResourceCalculation.recommended
-                      ? `${selectedResourceCalculation.recommended} ${getResourceUnit(
-                          selectedActivity,
-                          selectedResourceCalculation.recommended
-                        )}`
-                      : '—'
-                  }
-                  detail="Rounded up"
-                  emphasized
-                />
-
-
-                <InspectorMetric
-                  label="Resource Difference"
-                  value={
-                    Number.isFinite(
-                      selectedResourceCalculation.difference
-                    )
-                      ? `${
-                          selectedResourceCalculation.difference >
-                          0
-                            ? '+'
-                            : ''
-                        }${safeNumber(
-                          selectedResourceCalculation.difference
-                        )} ${getResourceUnit(
-                          selectedActivity,
-                          Math.abs(
-                            selectedResourceCalculation.difference
-                          )
-                        )}`
-                      : '—'
-                  }
-                  detail={
-                    Number.isFinite(
-                      selectedResourceCalculation.difference
-                    )
-                      ? selectedResourceCalculation.difference >
-                        0
-                        ? 'Additional resource needed'
-                        : selectedResourceCalculation.difference <
-                            0
-                          ? 'Resource reduction possible'
-                          : 'Current resource matches requirement'
-                      : ''
-                  }
-                />
-              </div>
             )}
-          </>
-        ) : (
-          <div
-            className={
-              styles.noSelection
-            }
-          >
-            No activity is available with the current filters.
           </div>
-        )}
-      </footer>
+        </div>
+      </section>
     </div>
   )
-}
 
 
-/* =========================================================
-   INSPECTOR METRIC
-   ========================================================= */
+  /* =======================================================
+     INSPECTOR
+     ======================================================= */
 
-function InspectorMetric({
-  label,
-  value,
-  detail = '',
-  emphasized = false,
-}) {
-  return (
-    <div
+  const inspector = (
+    <section
       className={
-        emphasized
-          ? styles.inspectorMetricEmphasized
-          : styles.inspectorMetric
+        styles.inspector
       }
     >
-      <span
-        className={
-          styles.inspectorMetricLabel
-        }
-      >
-        {label}
-      </span>
+      {selectedActivity ? (
+        <>
+          <div
+            className={
+              styles.inspectorIdentity
+            }
+          >
+            <div
+              className={
+                styles.inspectorEyebrow
+              }
+            >
+              SELECTED ACTIVITY
+            </div>
 
-      <strong
-        className={
-          styles.inspectorMetricValue
-        }
-      >
-        {value}
-      </strong>
+            <div
+              className={
+                styles.inspectorTitle
+              }
+            >
+              <span
+                className={
+                  styles.inspectorWorkPackage
+                }
+              >
+                {
+                  selectedActivity.workPackageCode
+                }
+              </span>
 
-      {detail ? (
-        <span
+              <span>
+                {
+                  selectedActivity.scopeItemName
+                }
+              </span>
+            </div>
+
+            <div
+              className={
+                styles.inspectorLocation
+              }
+            >
+              {
+                selectedActivity.locationName
+              }
+
+              {' · '}
+
+              {
+                selectedActivity.divisionName
+              }
+            </div>
+          </div>
+
+          <div
+            className={
+              styles.inspectorMetrics
+            }
+          >
+            <div
+              className={
+                styles.inspectorMetric
+              }
+            >
+              <span
+                className={
+                  styles.inspectorMetricLabel
+                }
+              >
+                Sequence
+              </span>
+
+              <strong
+                className={
+                  styles.inspectorMetricValue
+                }
+              >
+                {
+                  selectedSequence
+                }
+              </strong>
+            </div>
+
+            <div
+              className={
+                styles.inspectorMetric
+              }
+            >
+              <span
+                className={
+                  styles.inspectorMetricLabel
+                }
+              >
+                Productivity
+              </span>
+
+              <strong
+                className={
+                  styles.inspectorMetricValue
+                }
+              >
+                {safeNumber(
+                  selectedActivity.productivity
+                )}
+              </strong>
+
+              <span
+                className={
+                  styles.inspectorMetricDetail
+                }
+              >
+                {getBasisLabel(
+                  selectedActivity.productivityBasis
+                )}
+              </span>
+            </div>
+
+            <div
+              className={
+                styles.inspectorMetric
+              }
+            >
+              <span
+                className={
+                  styles.inspectorMetricLabel
+                }
+              >
+                Current Resource
+              </span>
+
+              <strong
+                className={
+                  styles.inspectorMetricValue
+                }
+              >
+                {getResourceLabel(
+                  selectedActivity
+                )}
+              </strong>
+            </div>
+
+            <div
+              className={
+                styles.inspectorMetric
+              }
+            >
+              <span
+                className={
+                  styles.inspectorMetricLabel
+                }
+              >
+                Raw Duration
+              </span>
+
+              <strong
+                className={
+                  styles.inspectorMetricValue
+                }
+              >
+                {Number.isFinite(
+                  Number(
+                    selectedActivity.rawDuration
+                  )
+                )
+                  ? `${safeNumber(
+                      selectedActivity.rawDuration
+                    )} d`
+                  : '—'}
+              </strong>
+            </div>
+
+            <div
+              className={
+                activeTab ===
+                  'duration'
+                  ? styles.inspectorMetricEmphasized
+                  : styles.inspectorMetric
+              }
+            >
+              <span
+                className={
+                  styles.inspectorMetricLabel
+                }
+              >
+                Desired Duration
+              </span>
+
+              <strong
+                className={
+                  styles.inspectorMetricValue
+                }
+              >
+                {selectedDesiredDuration
+                  ? `${safeNumber(
+                      selectedDesiredDuration
+                    )} d`
+                  : '—'}
+              </strong>
+            </div>
+
+            <div
+              className={
+                activeTab ===
+                  'duration'
+                  ? styles.inspectorMetricEmphasized
+                  : styles.inspectorMetric
+              }
+            >
+              <span
+                className={
+                  styles.inspectorMetricLabel
+                }
+              >
+                Required Resource
+              </span>
+
+              <strong
+                className={
+                  styles.inspectorMetricValue
+                }
+              >
+                {selectedResourceCalculation.recommended !==
+                null
+                  ? `${selectedResourceCalculation.recommended} ${getResourceUnit(
+                      selectedActivity,
+                      selectedResourceCalculation.recommended
+                    )}`
+                  : '—'}
+              </strong>
+
+              {selectedResourceCalculation.difference !==
+              null ? (
+                <span
+                  className={
+                    styles.inspectorMetricDetail
+                  }
+                >
+                  Difference:{' '}
+                  {selectedResourceCalculation.difference >
+                  0
+                    ? '+'
+                    : ''}
+                  {
+                    selectedResourceCalculation.difference
+                  }
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div
           className={
-            styles.inspectorMetricDetail
+            styles.noSelection
           }
         >
-          {detail}
-        </span>
-      ) : null}
+          Select an activity to inspect its production assumptions.
+        </div>
+      )}
+    </section>
+  )
+
+
+  /* =======================================================
+     FINAL RENDER
+     ======================================================= */
+
+  return (
+    <div
+      className={`${styles.workspace} ${
+        standalone
+          ? styles.workspaceStandalone
+          : ''
+      }`}
+    >
+      {header}
+
+      {standalone
+        ? standaloneLeftRail
+        : dashboardToolbar}
+
+      {standalone
+        ? standaloneRightRail
+        : dashboardVersionBar}
+
+      {planningGrid}
+
+      {inspector}
     </div>
   )
 }
