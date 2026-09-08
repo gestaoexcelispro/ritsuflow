@@ -318,7 +318,10 @@ function durationSignature(
         value,
       ]) => {
         const numeric =
-          Number(value)
+          Number(
+            value
+          )
+
 
         return (
           Number.isFinite(
@@ -563,10 +566,7 @@ function applyVersionSequence(
     )
 
 
-  const ordered =
-    []
-
-
+  const ordered = []
   const used =
     new Set()
 
@@ -641,7 +641,7 @@ function applyVersionSequence(
 
 
 /* =========================================================
-   APPLY SEQUENCE TO ALL HELPERS
+   SHARED PRODUCTION TEMPLATE HELPERS
    ========================================================= */
 
 function getScopeSequenceKey(
@@ -699,6 +699,10 @@ function getProductionGroupKey(
   return `${location}::${division}`
 }
 
+
+/* =========================================================
+   APPLY SEQUENCE TO ALL
+   ========================================================= */
 
 function applySequenceTemplate({
   fullOrder,
@@ -811,14 +815,9 @@ function applySequenceTemplate({
     new Map()
 
 
-  let targetGroups =
-    0
-
-  let changedGroups =
-    0
-
-  let matchedActivities =
-    0
+  let targetGroups = 0
+  let changedGroups = 0
+  let matchedActivities = 0
 
 
   groups.forEach(
@@ -855,10 +854,7 @@ function applySequenceTemplate({
       }
 
 
-      targetGroups +=
-        1
-
-
+      targetGroups += 1
       matchedActivities +=
         matchingEntries.length
 
@@ -978,9 +974,270 @@ function applySequenceTemplate({
       nextActivities,
 
     targetGroups,
-
     changedGroups,
+    matchedActivities,
+  }
+}
 
+
+/* =========================================================
+   APPLY DURATION TO ALL
+   ========================================================= */
+
+function applyDurationTemplate({
+  fullOrder,
+  desiredDurations,
+  sourceLocationId,
+  sourceDivisionId,
+}) {
+  const sourceGroupKey =
+    `${sourceLocationId}::${sourceDivisionId}`
+
+
+  const sourceActivities =
+    fullOrder.filter(
+      (activity) =>
+        getProductionGroupKey(
+          activity
+        ) ===
+        sourceGroupKey
+    )
+
+
+  if (
+    sourceActivities.length ===
+    0
+  ) {
+    return {
+      durations:
+        desiredDurations,
+
+      sourceDurations:
+        0,
+
+      targetGroups:
+        0,
+
+      changedGroups:
+        0,
+
+      matchedActivities:
+        0,
+    }
+  }
+
+
+  /*
+   * Only activities with an explicitly
+   * entered Desired Duration become part
+   * of the template.
+   *
+   * Empty source durations NEVER erase
+   * existing durations in target areas.
+   */
+  const sourceDurationMap =
+    new Map()
+
+
+  sourceActivities.forEach(
+    (activity) => {
+      const duration =
+        Number(
+          desiredDurations?.[
+            activity.id
+          ]
+        )
+
+
+      if (
+        !Number.isFinite(
+          duration
+        ) ||
+        duration <= 0
+      ) {
+        return
+      }
+
+
+      sourceDurationMap.set(
+        getScopeSequenceKey(
+          activity
+        ),
+        duration
+      )
+    }
+  )
+
+
+  if (
+    sourceDurationMap.size ===
+    0
+  ) {
+    return {
+      durations:
+        desiredDurations,
+
+      sourceDurations:
+        0,
+
+      targetGroups:
+        0,
+
+      changedGroups:
+        0,
+
+      matchedActivities:
+        0,
+    }
+  }
+
+
+  const nextDurations = {
+    ...desiredDurations,
+  }
+
+
+  const groups =
+    new Map()
+
+
+  fullOrder.forEach(
+    (activity) => {
+      const groupKey =
+        getProductionGroupKey(
+          activity
+        )
+
+
+      if (
+        !groups.has(
+          groupKey
+        )
+      ) {
+        groups.set(
+          groupKey,
+          []
+        )
+      }
+
+
+      groups
+        .get(
+          groupKey
+        )
+        .push(
+          activity
+        )
+    }
+  )
+
+
+  let targetGroups = 0
+  let changedGroups = 0
+  let matchedActivities = 0
+
+
+  groups.forEach(
+    (
+      groupActivities,
+      groupKey
+    ) => {
+      if (
+        groupKey ===
+        sourceGroupKey
+      ) {
+        return
+      }
+
+
+      const matchingActivities =
+        groupActivities.filter(
+          (activity) =>
+            sourceDurationMap.has(
+              getScopeSequenceKey(
+                activity
+              )
+            )
+        )
+
+
+      if (
+        matchingActivities.length ===
+        0
+      ) {
+        return
+      }
+
+
+      targetGroups +=
+        1
+
+
+      let groupChanged =
+        false
+
+
+      matchingActivities.forEach(
+        (activity) => {
+          const sourceDuration =
+            sourceDurationMap.get(
+              getScopeSequenceKey(
+                activity
+              )
+            )
+
+
+          const currentDuration =
+            Number(
+              nextDurations[
+                activity.id
+              ]
+            )
+
+
+          matchedActivities +=
+            1
+
+
+          if (
+            !Number.isFinite(
+              currentDuration
+            ) ||
+            currentDuration !==
+              sourceDuration
+          ) {
+            nextDurations[
+              activity.id
+            ] =
+              sourceDuration
+
+
+            groupChanged =
+              true
+          }
+        }
+      )
+
+
+      if (
+        groupChanged
+      ) {
+        changedGroups +=
+          1
+      }
+    }
+  )
+
+
+  return {
+    durations:
+      nextDurations,
+
+    sourceDurations:
+      sourceDurationMap.size,
+
+    targetGroups,
+    changedGroups,
     matchedActivities,
   }
 }
@@ -1803,6 +2060,43 @@ export default function PrePlanningWorkspace({
       'all'
 
 
+  const sourceHasDesiredDurations =
+    useMemo(
+      () => {
+        if (
+          !hasExactSourceFilter
+        ) {
+          return false
+        }
+
+
+        return filteredActivities.some(
+          (activity) => {
+            const duration =
+              Number(
+                desiredDurations[
+                  activity.id
+                ]
+              )
+
+
+            return (
+              Number.isFinite(
+                duration
+              ) &&
+              duration > 0
+            )
+          }
+        )
+      },
+      [
+        hasExactSourceFilter,
+        filteredActivities,
+        desiredDurations,
+      ]
+    )
+
+
   /* =========================================================
      TIMELINE
      ========================================================= */
@@ -1847,8 +2141,7 @@ export default function PrePlanningWorkspace({
                 Number.isFinite(
                   duration
                 ) &&
-                duration >
-                  0
+                duration > 0
             )
 
 
@@ -2063,9 +2356,7 @@ export default function PrePlanningWorkspace({
       (current) => ({
         ...current,
 
-        [
-          allocationId
-        ]:
+        [allocationId]:
           numeric,
       })
     )
@@ -2213,6 +2504,142 @@ export default function PrePlanningWorkspace({
         'idle'
       )
     }
+  }
+
+
+  /* =========================================================
+     APPLY DURATION TO ALL
+     ========================================================= */
+
+  function handleApplyDurationToAll() {
+    if (
+      actionState !==
+        'idle' ||
+      !isViewingCurrentVersion
+    ) {
+      return
+    }
+
+
+    if (
+      selectedLocation ===
+        'all' ||
+      selectedDivision ===
+        'all'
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Select one Location and one Division to use as the source duration strategy.',
+      })
+
+
+      return
+    }
+
+
+    const result =
+      applyDurationTemplate({
+        fullOrder:
+          orderedActivities,
+
+        desiredDurations,
+
+        sourceLocationId:
+          selectedLocation,
+
+        sourceDivisionId:
+          selectedDivision,
+      })
+
+
+    if (
+      result.sourceDurations ===
+      0
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'Enter at least one Desired Duration in the selected source area first.',
+      })
+
+
+      return
+    }
+
+
+    if (
+      result.targetGroups ===
+      0
+    ) {
+      setNotice({
+        type:
+          'warning',
+
+        text:
+          'No other Location / Division groups contain matching scope items.',
+      })
+
+
+      return
+    }
+
+
+    const beforeSignature =
+      durationSignature(
+        desiredDurations
+      )
+
+
+    const afterSignature =
+      durationSignature(
+        result.durations
+      )
+
+
+    if (
+      beforeSignature ===
+      afterSignature
+    ) {
+      setNotice({
+        type:
+          'success',
+
+        text:
+          `${result.targetGroups} target ${
+            result.targetGroups ===
+            1
+              ? 'area already follows'
+              : 'areas already follow'
+          } this duration strategy.`,
+      })
+
+
+      return
+    }
+
+
+    setDesiredDurations(
+      result.durations
+    )
+
+
+    setNotice({
+      type:
+        'success',
+
+      text:
+        `Duration strategy applied to ${result.changedGroups} ${
+          result.changedGroups ===
+          1
+            ? 'area'
+            : 'areas'
+        }. Required resources were recalculated automatically. Review and save when ready.`,
+    })
   }
 
 
@@ -2841,8 +3268,7 @@ export default function PrePlanningWorkspace({
 
 
     const versionName =
-      proposedName
-        .trim()
+      proposedName.trim()
 
 
     if (
@@ -2960,6 +3386,16 @@ export default function PrePlanningWorkspace({
     !hasExactSourceFilter ||
     filteredActivities.length ===
       0
+
+
+  const applyDurationDisabled =
+    actionState !==
+      'idle' ||
+    !isViewingCurrentVersion ||
+    !hasExactSourceFilter ||
+    filteredActivities.length ===
+      0 ||
+    !sourceHasDesiredDurations
 
 
   const versionManagementDisabled =
@@ -3384,8 +3820,7 @@ export default function PrePlanningWorkspace({
     Number.isFinite(
       targetTaktNumber
     ) &&
-    targetTaktNumber >
-      0
+    targetTaktNumber > 0
 
 
   const selectedSequenceIndex =
@@ -3902,7 +4337,7 @@ export default function PrePlanningWorkspace({
               }
               disabled={
                 actionState !==
-                'idle'
+                  'idle'
               }
               className={
                 styles.filterSelectActive
@@ -4123,6 +4558,11 @@ export default function PrePlanningWorkspace({
                 onClick={
                   handleApplySequenceToAll
                 }
+                title={
+                  hasExactSourceFilter
+                    ? 'Apply the selected Location / Division sequence to all matching production areas'
+                    : 'Select one Location and one Division first'
+                }
               >
                 Apply Sequence to All
               </button>
@@ -4172,23 +4612,48 @@ export default function PrePlanningWorkspace({
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              className={
-                styles.saveSequenceButton
-              }
-              disabled={
-                durationSaveDisabled
-              }
-              onClick={
-                saveDurationStrategy
-              }
-            >
-              {actionState ===
-              'saving_duration'
-                ? 'Saving...'
-                : 'Save Duration & Resources'}
-            </button>
+            <>
+              <button
+                type="button"
+                className={
+                  styles.createVersionButton
+                }
+                disabled={
+                  applyDurationDisabled
+                }
+                onClick={
+                  handleApplyDurationToAll
+                }
+                title={
+                  !hasExactSourceFilter
+                    ? 'Select one Location and one Division first'
+                    : !sourceHasDesiredDurations
+                      ? 'Enter Desired Durations in the selected source area first'
+                      : 'Apply the selected Location / Division duration strategy to all matching production areas'
+                }
+              >
+                Apply Duration to All
+              </button>
+
+
+              <button
+                type="button"
+                className={
+                  styles.saveSequenceButton
+                }
+                disabled={
+                  durationSaveDisabled
+                }
+                onClick={
+                  saveDurationStrategy
+                }
+              >
+                {actionState ===
+                'saving_duration'
+                  ? 'Saving...'
+                  : 'Save Duration & Resources'}
+              </button>
+            </>
           )}
         </div>
       </div>
