@@ -755,6 +755,7 @@ function buildVersionDurationStrategyMap(
 
 function ProjectSelector({
   projects,
+  baseHref = '/dashboard/planning/pre-planning',
 }) {
   return (
     <section
@@ -814,7 +815,7 @@ function ProjectSelector({
                 key={
                   project.id
                 }
-                href={`/dashboard/planning/pre-planning?projectId=${project.id}`}
+                href={`${baseHref}?projectId=${project.id}`}
                 style={{
                   display: 'block',
                   padding: '18px',
@@ -893,6 +894,8 @@ function ProjectSelector({
 
 export default async function PrePlanningPage({
   searchParams,
+  standalone = false,
+  changeProjectHref = '/dashboard/planning/pre-planning',
 }) {
   const params =
     await searchParams
@@ -989,6 +992,11 @@ export default async function PrePlanningPage({
       <ProjectSelector
         projects={
           projects
+        }
+        baseHref={
+          standalone
+            ? '/planning/pre-planning'
+            : '/dashboard/planning/pre-planning'
         }
       />
     )
@@ -1596,7 +1604,13 @@ export default async function PrePlanningPage({
         versions.length
       }
 
-      changeProjectHref="/dashboard/planning/pre-planning"
+      changeProjectHref={
+        changeProjectHref
+      }
+
+      standalone={
+        standalone
+      }
     />
   )
 }
