@@ -1085,7 +1085,7 @@ function applyDurationTemplate({
 
 
 /* =========================================================
-   RAIL ICON
+   RAIL BUTTON
    ========================================================= */
 
 function RailButton({
@@ -4131,7 +4131,7 @@ export default function PrePlanningWorkspace({
 
 
   /* =======================================================
-     VERSION BAR — DASHBOARD
+     DASHBOARD VERSION BAR
      ======================================================= */
 
   const dashboardVersionBar = (
@@ -5270,6 +5270,13 @@ export default function PrePlanningWorkspace({
                   rowDrag?.activityId ===
                   activity.id
 
+                /*
+                 * Important:
+                 * Resource calculations only belong
+                 * to Duration & Resources mode.
+                 *
+                 * Sequence mode intentionally uses null.
+                 */
                 const resource =
                   activeTab ===
                     'duration'
@@ -5292,10 +5299,17 @@ export default function PrePlanningWorkspace({
                 let resourceClass =
                   styles.ganttBarWaiting
 
+                /*
+                 * NULL GUARD
+                 *
+                 * Do not read resource.difference unless
+                 * a resource calculation actually exists.
+                 */
                 if (
-                  resource?.recommended !==
+                  resource &&
+                  resource.recommended !==
                     null &&
-                  resource?.current !==
+                  resource.current !==
                     null
                 ) {
                   if (
@@ -5377,7 +5391,9 @@ export default function PrePlanningWorkspace({
                           {activeTab ===
                             'duration' &&
                           resource?.recommended !==
-                            null
+                            null &&
+                          resource?.recommended !==
+                            undefined
                             ? ` · ${resource.recommended} ${getResourceUnit(
                                 activity,
                                 resource.recommended
