@@ -327,7 +327,7 @@
 
 
 /* =========================================================
-   TOOLBAR FILTERS
+   FILTERS
    ========================================================= */
 
 .filterGroup {
@@ -427,15 +427,8 @@
 }
 
 
-.clearFiltersButton:hover {
-  border-color: #aab9c4;
-
-  color: var(--navy);
-}
-
-
 /* =========================================================
-   TOOLBAR ZOOM
+   TOOLBAR BUTTONS
    ========================================================= */
 
 .toolbarButton,
@@ -468,17 +461,8 @@
 }
 
 
-.toolbarButton:hover:not(:disabled),
-.toolbarButtonWide:hover:not(:disabled) {
-  border-color: #9eb2c0;
-
-  background: #f8fafc;
-}
-
-
 .toolbarButton:disabled {
   cursor: not-allowed;
-
   opacity: 0.45;
 }
 
@@ -496,7 +480,7 @@
 
 
 /* =========================================================
-   SEQUENCE VERSION BAR
+   VERSION BAR
    ========================================================= */
 
 .versionBar {
@@ -518,114 +502,11 @@
 }
 
 
-.versionIdentity {
-  display: flex;
-
-  min-width: 0;
-
-  align-items: center;
-
-  gap: 9px;
-}
-
-
-.versionEyebrow {
-  flex: 0 0 auto;
-
-  color: #758796;
-
-  font-size: 8px;
-  line-height: 1;
-  font-weight: 900;
-
-  letter-spacing: 0.06em;
-
-  text-transform: uppercase;
-}
-
-
-.versionName {
-  min-width: 0;
-
-  overflow: hidden;
-
-  color: var(--navy);
-
-  font-size: 10px;
-  font-weight: 900;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
-.versionBadge,
-.versionCountBadge,
-.dirtyBadge,
-.savedBadge {
-  display: inline-flex;
-
-  min-height: 22px;
-
-  flex: 0 0 auto;
-
-  align-items: center;
-  justify-content: center;
-
-  padding: 0 7px;
-
-  border-radius: 999px;
-
-  font-size: 7px;
-  line-height: 1;
-  font-weight: 900;
-
-  letter-spacing: 0.05em;
-
-  text-transform: uppercase;
-}
-
-
-.versionBadge {
-  border: 1px solid #b7ddd8;
-
-  background: #edf9f7;
-
-  color: #087f73;
-}
-
-
-.versionCountBadge {
-  border: 1px solid #d8e2e9;
-
-  background: #f7f9fb;
-
-  color: #6c7f8e;
-}
-
-
-.dirtyBadge {
-  border: 1px solid #efd8a3;
-
-  background: #fff8e8;
-
-  color: #956c11;
-}
-
-
-.savedBadge {
-  border: 1px solid #c7e2d8;
-
-  background: #eef9f5;
-
-  color: #2d7c61;
-}
-
-
+.versionIdentity,
 .versionActions {
   display: flex;
 
-  flex: 0 0 auto;
+  min-width: 0;
 
   align-items: center;
 
@@ -633,34 +514,60 @@
 }
 
 
-.versionNotice {
-  max-width: 340px;
-
-  overflow: hidden;
-
-  color: #6c7f8e;
-
-  font-size: 8px;
-  line-height: 1.25;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.versionActions {
+  flex: 0 0 auto;
 }
 
 
-.versionError {
-  max-width: 420px;
+.versionName {
+  color: var(--navy);
 
-  overflow: hidden;
+  font-size: 10px;
+  font-weight: 900;
+}
 
-  color: #b42318;
+
+.versionLabel,
+.versionCount,
+.currentVersionBadge,
+.unsavedBadge,
+.savedBadge {
+  font-size: 8px;
+  font-weight: 900;
+}
+
+
+.currentVersionBadge,
+.savedBadge {
+  color: #087f73;
+}
+
+
+.unsavedBadge {
+  color: #956c11;
+}
+
+
+.actionNotice {
+  max-width: 340px;
 
   font-size: 8px;
-  line-height: 1.25;
-  font-weight: 800;
+  line-height: 1.3;
+}
 
-  text-overflow: ellipsis;
-  white-space: nowrap;
+
+.actionNoticeSuccess {
+  color: #087f73;
+}
+
+
+.actionNoticeWarning {
+  color: #956c11;
+}
+
+
+.actionNoticeError {
+  color: #b42318;
 }
 
 
@@ -696,24 +603,12 @@
 }
 
 
-.saveSequenceButton:hover:not(:disabled) {
-  background: #00877b;
-}
-
-
 .createVersionButton {
   border: 1px solid #cad6df;
 
   background: #ffffff;
 
   color: var(--navy);
-}
-
-
-.createVersionButton:hover:not(:disabled) {
-  border-color: #9eb2c0;
-
-  background: #f8fafc;
 }
 
 
@@ -810,8 +705,6 @@
   line-height: 1;
   font-weight: 900;
 
-  letter-spacing: 0.03em;
-
   text-transform: uppercase;
 }
 
@@ -820,10 +713,6 @@
   justify-content: center;
 
   padding: 0;
-
-  color: #8595a2;
-
-  font-size: 12px;
 }
 
 
@@ -840,12 +729,6 @@
 
   overflow-y: auto;
   overflow-x: hidden;
-
-  scrollbar-width: thin;
-
-  scrollbar-color:
-    #c3ced7
-    transparent;
 }
 
 
@@ -871,11 +754,6 @@
   background: #ffffff;
 
   cursor: pointer;
-
-  transition:
-    background 100ms ease,
-    opacity 100ms ease,
-    box-shadow 100ms ease;
 }
 
 
@@ -901,13 +779,11 @@
   z-index: 10;
 
   opacity: 0.42;
-
-  background: #e3eef3;
 }
 
 
 /* =========================================================
-   VERTICAL SEQUENCE HANDLE
+   SEQUENCE HANDLE
    ========================================================= */
 
 .sequenceHandleCell {
@@ -944,42 +820,18 @@
   cursor: grab;
 
   touch-action: none;
-  user-select: none;
-
-  transition:
-    background 100ms ease,
-    border-color 100ms ease,
-    color 100ms ease;
 }
 
 
-.sequenceHandle:hover {
-  border-color: #badbd7;
+.sequenceHandle:disabled {
+  cursor: default;
 
-  background: #edf9f7;
-
-  color: var(--teal);
-}
-
-
-.sequenceHandle:active {
-  border-color: var(--teal);
-
-  background: #dff3f0;
-
-  color: #087f73;
-
-  cursor: grabbing;
+  opacity: 0.45;
 }
 
 
 .sequenceHandleIcon {
-  display: block;
-
   font-size: 15px;
-  line-height: 1;
-
-  pointer-events: none;
 }
 
 
@@ -995,31 +847,9 @@
 
   transform: translateY(-1px);
 
-  border-radius: 999px;
-
   background: var(--teal);
-
-  box-shadow:
-    0 0 0 1px rgba(0, 153, 139, 0.08);
 
   pointer-events: none;
-}
-
-
-.sequenceDropIndicator::before {
-  position: absolute;
-
-  top: -4px;
-  left: 0;
-
-  width: 9px;
-  height: 9px;
-
-  border-radius: 999px;
-
-  background: var(--teal);
-
-  content: "";
 }
 
 
@@ -1052,8 +882,6 @@
   justify-content: flex-end;
 
   color: #7b8b99;
-
-  font-variant-numeric: tabular-nums;
 }
 
 
@@ -1078,45 +906,38 @@
 }
 
 
-.scopeItemName {
+.scopeItemName,
+.locationName,
+.divisionName {
   overflow: hidden;
-
-  color: var(--navy);
-
-  font-weight: 800;
 
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+
+.scopeItemName {
+  color: var(--navy);
+
+  font-weight: 800;
 }
 
 
 .locationName {
-  overflow: hidden;
-
   color: #425b70;
 
   font-weight: 800;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 
 .divisionName {
-  overflow: hidden;
-
   color: #637789;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 
 .durationCell,
 .missingDurationCell {
   justify-content: flex-end;
-
-  color: #42576a;
 
   font-variant-numeric: tabular-nums;
 }
@@ -1133,77 +954,6 @@
   color: #b42318;
 
   font-weight: 900;
-}
-
-
-.unitText {
-  margin-left: 3px;
-
-  color: #8493a0;
-
-  font-size: 8px;
-}
-
-
-.emptyActivityState {
-  position: absolute;
-
-  inset: 0;
-
-  display: grid;
-
-  min-height: 180px;
-
-  place-content: center;
-
-  gap: 8px;
-
-  padding: 24px;
-
-  color: #728393;
-
-  text-align: center;
-}
-
-
-.emptyActivityState strong {
-  color: var(--navy);
-
-  font-size: 13px;
-}
-
-
-.emptyActivityState span {
-  max-width: 360px;
-
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-
-.emptyClearButton {
-  width: fit-content;
-
-  justify-self: center;
-
-  min-height: 30px;
-
-  margin-top: 4px;
-
-  padding: 0 11px;
-
-  border: 1px solid #b9ddd8;
-  border-radius: 5px;
-
-  background: #edf9f7;
-
-  color: #087f73;
-
-  font-family: inherit;
-  font-size: 9px;
-  font-weight: 900;
-
-  cursor: pointer;
 }
 
 
@@ -1249,8 +999,6 @@
 
   font-size: 9px;
   font-weight: 800;
-
-  font-variant-numeric: tabular-nums;
 }
 
 
@@ -1268,12 +1016,6 @@
   min-height: 0;
 
   overflow: auto;
-
-  scrollbar-width: thin;
-
-  scrollbar-color:
-    #b9c7d1
-    #eef2f5;
 }
 
 
@@ -1304,8 +1046,6 @@
       #edf1f4 var(--row-height)
     );
 
-  background-repeat: repeat;
-
   pointer-events: none;
 }
 
@@ -1324,24 +1064,6 @@
 }
 
 
-.ganttDropIndicator {
-  position: absolute;
-
-  left: 0;
-  right: 0;
-
-  z-index: 40;
-
-  height: 3px;
-
-  transform: translateY(-1px);
-
-  background: var(--teal);
-
-  pointer-events: none;
-}
-
-
 .ganttRow {
   position: absolute;
 
@@ -1350,17 +1072,9 @@
   width: 100%;
   height: var(--row-height);
 
-  padding: 0;
-
-  border: 0;
-
   background: transparent;
 
   cursor: pointer;
-
-  transition:
-    background 100ms ease,
-    opacity 100ms ease;
 }
 
 
@@ -1373,15 +1087,6 @@
   background: rgba(0, 153, 139, 0.08);
 }
 
-
-.ganttRowDragging {
-  opacity: 0.4;
-}
-
-
-/* =========================================================
-   GANTT BAR
-   ========================================================= */
 
 .ganttBar {
   position: absolute;
@@ -1406,33 +1111,7 @@
 }
 
 
-.ganttBarBalanced {
-  background: #159b8f;
-}
-
-
-.ganttBarGap {
-  background: #c94f45;
-}
-
-
-.ganttBarUnderloaded {
-  background: #c5962f;
-}
-
-
-.ganttBarWaiting {
-  background: #718596;
-}
-
-
 .ganttBarLabel {
-  display: flex;
-
-  min-width: 0;
-
-  align-items: center;
-
   overflow: hidden;
 
   padding: 0 7px;
@@ -1457,8 +1136,6 @@
 
   font-size: 9px;
   font-weight: 800;
-
-  white-space: nowrap;
 }
 
 
@@ -1498,10 +1175,7 @@
   color: #7a8b99;
 
   font-size: 8px;
-  line-height: 1;
   font-weight: 900;
-
-  letter-spacing: 0.08em;
 }
 
 
@@ -1516,27 +1190,14 @@
 
   margin-top: 7px;
 
-  overflow: hidden;
-
   color: var(--navy);
 
   font-size: 12px;
-  line-height: 1.2;
   font-weight: 900;
 }
 
 
-.inspectorTitle > span:last-child {
-  overflow: hidden;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
 .inspectorWorkPackage {
-  flex: 0 0 auto;
-
   color: var(--teal);
 }
 
@@ -1544,15 +1205,9 @@
 .inspectorLocation {
   margin-top: 5px;
 
-  overflow: hidden;
-
   color: #647789;
 
   font-size: 9px;
-  line-height: 1.35;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 
@@ -1595,46 +1250,27 @@
 
 
 .inspectorMetricLabel {
-  overflow: hidden;
-
   color: #788a98;
 
   font-size: 7px;
-  line-height: 1;
   font-weight: 900;
 
-  letter-spacing: 0.05em;
-
-  text-overflow: ellipsis;
   text-transform: uppercase;
-  white-space: nowrap;
 }
 
 
 .inspectorMetricValue {
-  overflow: hidden;
-
   color: var(--navy);
 
   font-size: 11px;
-  line-height: 1.1;
   font-weight: 900;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 
 .inspectorMetricDetail {
-  overflow: hidden;
-
   color: #7b8c99;
 
   font-size: 7px;
-  line-height: 1.1;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 
@@ -1678,9 +1314,382 @@
 }
 
 
-.activityBody::-webkit-scrollbar-thumb:hover,
-.ganttBody::-webkit-scrollbar-thumb:hover {
-  background: #9fafbb;
+/* =========================================================
+   STANDALONE PLANNING WORKSPACE
+   ========================================================= */
+
+.workspaceStandalone {
+  grid-template-columns:
+    168px
+    minmax(0, 1fr)
+    190px;
+
+  grid-template-rows:
+    58px
+    minmax(0, 1fr)
+    auto;
+
+  width: 100%;
+  height: calc(100dvh - 16px);
+
+  min-width: 0;
+  min-height: 0;
+
+  overflow: hidden;
+
+  border-radius: 8px;
+}
+
+
+/* =========================================================
+   STANDALONE HEADER
+   ========================================================= */
+
+.workspaceStandalone .workspaceHeader {
+  grid-column: 1 / -1;
+  grid-row: 1;
+
+  min-width: 0;
+  min-height: 58px;
+
+  align-items: center;
+
+  padding: 7px 14px;
+
+  border-bottom:
+    1px solid var(--border);
+
+  background: #ffffff;
+}
+
+
+.workspaceStandalone .projectIdentity {
+  display: flex;
+
+  min-width: 0;
+
+  align-items: center;
+
+  gap: 14px;
+}
+
+
+.workspaceStandalone .eyebrow {
+  flex: 0 0 auto;
+
+  font-size: 9px;
+}
+
+
+.workspaceStandalone .projectTitleRow {
+  min-width: 0;
+
+  margin: 0;
+}
+
+
+.workspaceStandalone .projectTitle {
+  font-size: 14px;
+}
+
+
+.workspaceStandalone .projectDescription {
+  display: none;
+}
+
+
+.workspaceStandalone .headerActions {
+  align-items: center;
+}
+
+
+.workspaceStandalone .summaryMetric {
+  min-width: 72px;
+
+  padding: 5px 8px;
+}
+
+
+.workspaceStandalone .summaryMetricLabel {
+  font-size: 7px;
+}
+
+
+.workspaceStandalone .summaryMetric strong {
+  font-size: 11px;
+}
+
+
+.workspaceStandalone .changeProjectButton {
+  min-height: 30px;
+
+  padding: 0 10px;
+
+  font-size: 9px;
+}
+
+
+/* =========================================================
+   STANDALONE LEFT TOOLBAR
+   ========================================================= */
+
+.workspaceStandalone .toolbar {
+  grid-column: 1;
+  grid-row: 2;
+
+  display: flex;
+
+  min-width: 0;
+  min-height: 0;
+
+  flex-direction: column;
+
+  align-items: stretch;
+  justify-content: flex-start;
+
+  gap: 12px;
+
+  padding: 12px 10px;
+
+  overflow-y: auto;
+
+  border-right:
+    1px solid var(--border);
+  border-bottom: 0;
+
+  background: #f7f9fb;
+}
+
+
+.workspaceStandalone .toolbarLeft {
+  display: flex;
+
+  width: 100%;
+
+  flex-direction: column;
+
+  align-items: stretch;
+
+  gap: 12px;
+}
+
+
+.workspaceStandalone .toolbarGroup {
+  display: flex;
+
+  width: 100%;
+
+  flex-direction: column;
+
+  align-items: stretch;
+
+  gap: 6px;
+}
+
+
+.workspaceStandalone .toolbarGroup > button {
+  width: 100%;
+}
+
+
+.workspaceStandalone .lockedBadge,
+.workspaceStandalone .sequenceHint {
+  width: 100%;
+
+  justify-content: center;
+
+  text-align: center;
+}
+
+
+.workspaceStandalone .filterGroup {
+  display: grid;
+
+  width: 100%;
+
+  gap: 8px;
+}
+
+
+.workspaceStandalone .filterControl {
+  width: 100%;
+}
+
+
+.workspaceStandalone .filterSelect,
+.workspaceStandalone .filterSelectActive {
+  width: 100%;
+  min-width: 0;
+}
+
+
+.workspaceStandalone .clearFiltersButton {
+  width: 100%;
+}
+
+
+.workspaceStandalone .zoomValue {
+  width: 100%;
+  min-width: 0;
+
+  padding: 3px 0;
+}
+
+
+.workspaceStandalone .toolbarButton,
+.workspaceStandalone .toolbarButtonWide {
+  width: 100%;
+}
+
+
+/* =========================================================
+   STANDALONE RIGHT TOOLBAR
+   ========================================================= */
+
+.workspaceStandalone .versionBar {
+  grid-column: 3;
+  grid-row: 2;
+
+  display: flex;
+
+  min-width: 0;
+  min-height: 0;
+
+  flex-direction: column;
+
+  align-items: stretch;
+  justify-content: flex-start;
+
+  gap: 12px;
+
+  padding: 12px 10px;
+
+  overflow-y: auto;
+
+  border-left:
+    1px solid var(--border);
+  border-bottom: 0;
+
+  background: #ffffff;
+}
+
+
+.workspaceStandalone .versionIdentity {
+  display: flex;
+
+  width: 100%;
+
+  flex-direction: column;
+
+  align-items: stretch;
+
+  gap: 7px;
+}
+
+
+.workspaceStandalone .versionIdentity select {
+  width: 100%;
+}
+
+
+.workspaceStandalone .versionActions {
+  display: grid;
+
+  width: 100%;
+
+  gap: 7px;
+}
+
+
+.workspaceStandalone .versionActions button {
+  width: 100%;
+}
+
+
+.workspaceStandalone .actionNotice {
+  width: 100%;
+  max-width: none;
+
+  white-space: normal;
+
+  line-height: 1.35;
+}
+
+
+.workspaceStandalone .saveSequenceButton,
+.workspaceStandalone .createVersionButton {
+  width: 100%;
+
+  min-height: 34px;
+
+  padding: 0 8px;
+
+  font-size: 9px;
+}
+
+
+/* =========================================================
+   STANDALONE CENTRAL WORKSPACE
+   ========================================================= */
+
+.workspaceStandalone .planningGrid {
+  grid-column: 2;
+  grid-row: 2;
+
+  min-width: 0;
+  min-height: 0;
+
+  grid-template-columns:
+    minmax(620px, 48%)
+    minmax(0, 52%);
+
+  overflow: hidden;
+}
+
+
+.workspaceStandalone .activityHeader,
+.workspaceStandalone .activityRowShell {
+  min-width: 620px;
+
+  grid-template-columns:
+    28px
+    48px
+    54px
+    minmax(170px, 1.5fr)
+    minmax(95px, 0.8fr)
+    minmax(95px, 0.85fr)
+    72px;
+}
+
+
+.workspaceStandalone .activityRowsContainer {
+  min-width: 620px;
+}
+
+
+/* =========================================================
+   STANDALONE INSPECTOR
+   ========================================================= */
+
+.workspaceStandalone .inspector {
+  grid-column: 1 / -1;
+  grid-row: 3;
+
+  min-height: 92px;
+
+  padding: 9px 12px;
+
+  grid-template-columns:
+    minmax(200px, 0.7fr)
+    minmax(0, 3.3fr);
+
+  gap: 12px;
+}
+
+
+.workspaceStandalone .inspectorMetric,
+.workspaceStandalone .inspectorMetricEmphasized {
+  padding: 6px 8px;
 }
 
 
@@ -1688,64 +1697,36 @@
    RESPONSIVE
    ========================================================= */
 
-@media (max-width: 1450px) {
-  .toolbarLeft {
-    gap: 8px;
+@media (max-width: 1500px) {
+  .workspaceStandalone {
+    grid-template-columns:
+      150px
+      minmax(0, 1fr)
+      170px;
   }
 
 
-  .filterSelect,
-  .filterSelectActive {
-    min-width: 110px;
-  }
-
-
-  .versionNotice,
-  .versionError {
-    max-width: 240px;
+  .workspaceStandalone .planningGrid {
+    grid-template-columns:
+      minmax(620px, 54%)
+      minmax(0, 46%);
   }
 }
 
 
-@media (max-width: 1250px) {
-  .toolbar {
-    align-items: flex-start;
-
-    flex-wrap: wrap;
-  }
-
-
-  .toolbarLeft {
-    align-items: flex-start;
-
-    flex-wrap: wrap;
-  }
-
-
-  .versionBar {
-    align-items: flex-start;
-
-    flex-wrap: wrap;
-  }
-
-
-  .versionActions {
-    flex-wrap: wrap;
-  }
-
-
-  .planningGrid {
+@media (max-width: 1200px) {
+  .workspaceStandalone {
     grid-template-columns:
-      minmax(690px, 63%)
-      minmax(0, 37%);
+      140px
+      minmax(820px, 1fr)
+      160px;
+
+    overflow-x: auto;
   }
+}
 
 
-  .inspector {
-    grid-template-columns: 1fr;
-  }
-
-
+@media (max-width: 1050px) {
   .inspectorMetrics {
     grid-template-columns:
       repeat(3, minmax(100px, 1fr));
@@ -1753,111 +1734,9 @@
 }
 
 
-@media (max-width: 1050px) {
-  .workspaceHeader {
-    flex-direction: column;
-  }
-
-
-  .headerActions {
-    width: 100%;
-
-    flex-wrap: wrap;
-  }
-
-
-  .filterGroup {
-    flex-wrap: wrap;
-  }
-
-
-  .planningGrid {
-    grid-template-columns:
-      690px
-      420px;
-
-    overflow-x: auto;
-  }
-
-
-  .versionIdentity {
-    flex-wrap: wrap;
-  }
-
-
-  .versionActions {
-    width: 100%;
-
-    justify-content: flex-start;
-  }
-
-
-  .versionNotice,
-  .versionError {
-    max-width: 100%;
-  }
-
-
-  .inspectorMetrics {
-    grid-template-columns:
-      repeat(2, minmax(120px, 1fr));
-  }
-}
-
-
 @media (max-width: 720px) {
-  .headerActions {
-    display: grid;
-
-    grid-template-columns:
-      repeat(2, minmax(0, 1fr));
-  }
-
-
-  .summaryMetric,
-  .changeProjectButton {
-    width: 100%;
-  }
-
-
-  .toolbarLeft,
-  .filterGroup {
-    width: 100%;
-  }
-
-
-  .filterControl {
-    flex: 1 1 140px;
-  }
-
-
-  .filterSelect,
-  .filterSelectActive {
-    width: 100%;
-  }
-
-
-  .versionActions {
-    display: grid;
-
-    grid-template-columns:
-      repeat(2, minmax(0, 1fr));
-  }
-
-
-  .versionNotice,
-  .versionError {
-    grid-column: 1 / -1;
-  }
-
-
-  .saveSequenceButton,
-  .createVersionButton {
-    width: 100%;
-  }
-
-
   .inspectorMetrics {
-    grid-template-columns: 1fr;
+    grid-template-columns:
+      repeat(2, minmax(100px, 1fr));
   }
 }
