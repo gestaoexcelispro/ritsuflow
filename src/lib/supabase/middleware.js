@@ -29,9 +29,13 @@ export async function updateSession(request) {
 
   const { data, error } = await supabase.auth.getClaims()
 
-  const isDashboard = request.nextUrl.pathname.startsWith('/dashboard')
+  const pathname = request.nextUrl.pathname
 
-  if ((error || !data?.claims) && isDashboard) {
+  const isProtectedAppRoute =
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/daily-report')
+
+  if ((error || !data?.claims) && isProtectedAppRoute) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
 
