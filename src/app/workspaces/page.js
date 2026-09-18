@@ -22,12 +22,12 @@ export default function WorkspacesPage(){
   return <main className={styles.page}>
     <div className={styles.glow}/>
     <header className={styles.header}><Image src="/logo-white.png" alt="RitsuFlow" width={220} height={82} priority className={styles.logo}/><div className={styles.platformLabel}>CONSTRUCTION PRODUCTION SYSTEM</div></header>
-    <section className={styles.hero}><div className={styles.kicker}>WELCOME TO RITSUFLOW</div><h1>Choose your workspace</h1><p>Different perspectives. One connected production system.</p></section>
+    <section className={styles.hero}><div className={styles.kicker}>WELCOME TO RITSUFLOW</div><h1>Choose your workspace</h1></section>
     <section className={styles.grid} aria-label="RitsuFlow workspaces">{workspaces.map(workspace=><article key={workspace.key} className={`${styles.card} ${styles[workspace.key]}`}>
       <div className={styles.cardTop}><span className={styles.eyebrow}>{workspace.eyebrow}</span><div className={styles.mark}>{workspace.name.slice(0,1)}</div></div>
       <div className={styles.cardBody}><h2>{workspace.name}</h2><h3>{workspace.subtitle}</h3><p>{workspace.description}</p><div className={styles.rule}/><ul>{workspace.features.map(feature=><li key={feature}><span>✓</span>{feature}</li>)}</ul><div className={styles.visualWrap} aria-hidden="true"><Image src={workspace.visual} alt="" width={1200} height={675} className={styles.workspaceVisual}/></div><Link href={workspace.href} className={styles.enterButton}>{workspace.action}<span aria-hidden="true">→</span></Link></div>
     </article>)}</section>
-    <section className={styles.ecosystem} aria-label="Connected production flow"><div className={styles.flow}><span>PLAN</span><b>→</b><span>EXECUTE</span><b>→</b><span>MEASURE</span></div><p>One connected construction production system.</p></section>
+    <div aria-hidden="true"/>
     <footer className={styles.footer}><span>One Project</span><i/><span>One Team</span><i/><span>One Source of Truth</span><strong>BUILT FOR A HIGHER STANDARD.</strong></footer>
   </main>
 }
