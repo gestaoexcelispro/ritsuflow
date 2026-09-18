@@ -11,7 +11,7 @@ const projects=[
  {name:'West Industrial Facility',code:'PRJ-004',location:'Houston, TX',phase:'Mechanical',workers:'31',capacity:'45',ops:4,progress:38,issues:3,status:'Attention',update:'18 Sep 2026 · 11:20'},
  {name:'Mountain View Villas',code:'PRJ-005',location:'Phoenix, AZ',phase:'Structure',workers:'18',capacity:'30',ops:3,progress:55,issues:1,status:'On Track',update:'18 Sep 2026 · 10:05'}
 ]
-const nav=[['⌂','Portfolio Overview'],['□','Projects'],['♙','Workforce'],['⌖','Operations'],['△','Occurrences'],['▥','Reports'],['⚙','Settings']]
+const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/fieldop/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','#'],['⚙','Settings','#']]
 const activity=[['14:32','♙','Worker check-in','Sunrise Residential | Building A – L2'],['13:15','▤','Daily report submitted','Lakeside Apartments'],['11:48','△','Occurrence reported','West Industrial Facility | Equipment'],['10:05','▣','New photo uploaded','Mountain View Villas'],['08:21','✓','Operation completed','Riverside Commercial | MEP Room 2']]
 
 export default function FieldOpPage(){
@@ -19,7 +19,7 @@ export default function FieldOpPage(){
   <aside className={styles.sidebar}>
    <div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority/><div><b>FieldOp</b><span>Execute. Capture. Measure.</span></div></div>
    <div className={styles.navTitle}>FIELD OPERATIONS</div>
-   <nav>{nav.map(([icon,label],i)=><a key={label} className={i===0?styles.active:''} href="#"><i>{icon}</i>{label}</a>)}</nav>
+   <nav>{nav.map(([icon,label,href],i)=><Link key={label} className={i===0?styles.active:''} href={href}><i>{icon}</i>{label}</Link>)}</nav>
    <Link href="/workspaces" className={styles.workspaceReturn}>← <span>Workspaces</span></Link>
   </aside>
   <section className={styles.main}>
@@ -35,7 +35,7 @@ export default function FieldOpPage(){
     <section className={styles.dashboard}>
      <div className={styles.projectsPanel}><div className={styles.panelHead}><div><h2>Active Projects</h2><p>Live overview of field operations across all your projects.</p></div><div className={styles.filters}>⌕ Search projects... <button>All Statuses⌄</button></div></div>
       <div className={styles.tableWrap}><table><thead><tr><th>Project</th><th>Location</th><th>Phase</th><th>Workers<br/>On Site</th><th>Operations<br/>Underway</th><th>Today’s<br/>Progress</th><th>Open<br/>Issues</th><th>Status</th><th>Last Update</th></tr></thead><tbody>{projects.map(p=><tr key={p.code}><td><b>{p.name}</b><small>{p.code}</small></td><td>⌖ {p.location}</td><td><span className={styles.phase}>{p.phase}</span></td><td><b>{p.workers}</b><small>of {p.capacity}</small></td><td>{p.ops}</td><td><b>{p.progress}%</b><div className={styles.progress}><span style={{width:`${p.progress}%`}}/></div></td><td className={p.issues?styles.issue:''}>{p.issues}</td><td><span className={p.status==='On Track'?styles.ok:styles.attention}>{p.status}</span></td><td>{p.update}</td></tr>)}</tbody></table></div>
-      <Link href="/dashboard/projects" className={styles.viewAll}>View All Projects →</Link>
+      <Link href="/fieldop/projects" className={styles.viewAll}>View All Projects →</Link>
      </div>
      <aside className={styles.rightCol}><div className={styles.statusCard}><h2>Projects by Status</h2><div className={styles.statusBody}><div className={styles.donut}><strong>8</strong><span>Projects</span></div><ul><li><i/>On Track <b>5</b><span>63%</span></li><li><i/>Attention <b>3</b><span>37%</span></li><li><i/>At Risk <b>0</b><span>0%</span></li><li><i/>Completed <b>0</b><span>0%</span></li></ul></div></div>
       <div className={styles.activity}><div className={styles.activityHead}><h2>Field Activity <small>(Last 24 Hours)</small></h2><a href="#">View All →</a></div>{activity.map(([time,icon,title,sub])=><div className={styles.activityRow} key={time}><time>{time}</time><i>{icon}</i><span><b>{title}</b><small>{sub}</small></span></div>)}</div>
