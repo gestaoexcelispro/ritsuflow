@@ -28,16 +28,12 @@ export default function FieldOpProjectsPage(){
 
   <section className={styles.main}>
    <header className={styles.topbar}>
+    <div className={styles.pageTitle}>Projects</div>
     <div className={styles.search}>⌕ <span>Search projects, locations, or people...</span><kbd>Ctrl K</kbd></div>
-    <div className={styles.user}><button>♧<em>3</em></button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div>
+    <div className={styles.user}><button>♧<em>3</em></button><button className={styles.newProject}>＋ New Project</button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div>
    </header>
 
    <div className={styles.content}>
-    <section className={styles.heading}>
-     <div><span>FIELD OPERATIONS</span><h1>Projects</h1><p>Select a project to enter its field operations environment.</p></div>
-     <div className={styles.headingActions}><button>＋ New Project</button></div>
-    </section>
-
     <section className={styles.kpis}>
      <div><span>Active Projects</span><strong>8</strong><small>Across 6 locations</small></div>
      <div><span>On Track</span><strong className={styles.green}>5</strong><small>63% of active projects</small></div>
