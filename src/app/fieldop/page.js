@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '../../lib/supabase'
 import styles from './fieldop.module.css'
 
 const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','#'],['⚙','Settings','#']]
