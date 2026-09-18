@@ -39,7 +39,7 @@ export default function ProjectsPage(){
     <Link href="/precon" className={`${styles.moduleButton} ${styles.preconButton}`}>▣ Go to PreCon</Link>
     <Link href="/fieldop" className={`${styles.moduleButton} ${styles.fieldopButton}`}>⌂ Go to FieldOp</Link>
    </nav>
-   <div className={styles.user}><button className={styles.alert}>♧<em>3</em></button><button className={styles.newProject}>＋ New Project</button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div>
+   <div className={styles.user}><button className={styles.alert}>♧<em>3</em></button><Link href="/projects/new" className={styles.newProject}>＋ New Project</Link><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div>
   </header>
 
   <div className={styles.content}>
