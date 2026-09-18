@@ -20,12 +20,11 @@ export default function FieldOpPage(){
    <div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority/><div><b>FieldOp</b><span>Execute. Capture. Measure.</span></div></div>
    <div className={styles.navTitle}>FIELD OPERATIONS</div>
    <nav>{nav.map(([icon,label],i)=><a key={label} className={i===0?styles.active:''} href="#"><i>{icon}</i>{label}</a>)}</nav>
-   <div className={styles.sideFooter}><span>One Project</span><span>One Team</span><span>One Source of Truth</span><hr/><small>BUILT FOR A HIGHER STANDARD.</small></div>
+   <Link href="/workspaces" className={styles.workspaceReturn}>← <span>Workspaces</span></Link>
   </aside>
   <section className={styles.main}>
    <header className={styles.topbar}><div className={styles.search}>⌕ <span>Search projects, locations, or people...</span><kbd>Ctrl K</kbd></div><div className={styles.user}><button>♧<em>3</em></button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div></header>
    <div className={styles.content}>
-    <section className={styles.hero}><div><h1>Field Operations<br/><strong>Across All Projects</strong></h1><p>Real field data. Real progress. A connected construction production system.</p></div><div className={styles.heroWords}>Plan<br/>the work.<br/>Build<br/>a better tomorrow.</div></section>
     <section className={styles.kpis}>
      <div><i>▥</i><span>Active Projects<strong>8</strong><small>5 on track | 3 attention</small></span></div>
      <div><i>♙</i><span>Workers On Site<strong>248 <em>↑ 12%</em></strong><small>of 320 planned</small></span></div>
