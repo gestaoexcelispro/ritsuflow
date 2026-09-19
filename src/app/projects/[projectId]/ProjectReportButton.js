@@ -8,7 +8,11 @@ const money=(v,c='USD')=>{if(v===null||v===undefined||v==='')return '—';try{re
 const date=v=>{if(!v)return '—';const d=new Date(`${String(v).slice(0,10)}T12:00:00`);return Number.isNaN(d.getTime())?String(v):new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric'}).format(d)}
 const billing={progress_percent_complete:'Progress / Percent Complete',milestone:'Milestone Based',unit_price:'Unit Price',time_materials:'Time & Materials',fixed_schedule:'Fixed Payment Schedule',other:'Other / Custom'}
 const cycle={weekly:'Weekly',biweekly:'Biweekly',monthly:'Monthly',milestone:'By Milestone',custom:'Custom'}
+const roles={manager:'Project Manager',superintendent:'Superintendent',project_engineer:'Project Engineer',planner:'Planner',field_engineer:'Field Engineer',foreman:'Foreman',viewer:'Viewer',field:'Field / Site'}
 const titleCase=v=>String(v||'—').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())
+const roleLabel=v=>roles[v]||titleCase(v)
+const profileLabel=p=>p?.full_name?.trim()||p?.display_name?.trim()||p?.email?.trim()||''
+const generatedAt=v=>new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}).format(v)
 
 export default function ProjectReportButton({project}){
  const[busy,setBusy]=useState(false)
@@ -16,10 +20,22 @@ export default function ProjectReportButton({project}){
   if(!project||busy)return
   setBusy(true)
   try{
-   const{data:team}=await supabase.from('project_members').select('*').eq('project_id',project.id).order('created_at',{ascending:true})
+   const{data:memberRows,error:memberError}=await supabase.from('project_members').select('project_id,user_id,role,joined_at').eq('project_id',project.id).order('joined_at',{ascending:true})
+   if(memberError)throw memberError
+   const rows=memberRows||[]
+   const ids=[...new Set(rows.map(x=>x.user_id).filter(Boolean))]
+   let profiles=[]
+   if(ids.length){
+    const{data,error:profileError}=await supabase.from('user_profiles').select('user_id,email,full_name,display_name,job_title,status').in('user_id',ids)
+    if(profileError)throw profileError
+    profiles=data||[]
+   }
+   const byId=Object.fromEntries(profiles.map(p=>[p.user_id,p]))
+   const team=rows.map(m=>({...m,profile:byId[m.user_id]||null}))
    const imageUrl=project.project_image_path?supabase.storage.from('project-images').getPublicUrl(project.project_image_path).data.publicUrl:null
    const logoUrl=`${window.location.origin}/logo.png`
-   const blob=await pdf(<ProjectReport project={project} team={team||[]} imageUrl={imageUrl} logoUrl={logoUrl}/>).toBlob()
+   const generated=new Date()
+   const blob=await pdf(<ProjectReport project={project} team={team} imageUrl={imageUrl} logoUrl={logoUrl} generated={generated}/>).toBlob()
    const url=URL.createObjectURL(blob),a=document.createElement('a')
    a.href=url;a.download=`${project.project_id||'Project'}_Project_Report.pdf`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)
   }catch(e){console.error(e);window.alert(`Unable to generate report: ${e?.message||e}`)}finally{setBusy(false)}
@@ -27,21 +43,21 @@ export default function ProjectReportButton({project}){
  return <button type="button" onClick={generate} disabled={busy} style={{...button,...(busy?disabled:{})}}>{busy?'Generating...':'▤ Generate Report'}</button>
 }
 
-function ProjectReport({project:p,team,imageUrl,logoUrl}){
+function ProjectReport({project:p,team,imageUrl,logoUrl,generated}){
  const currency=p.currency_code||'USD'
  const address1=[p.address_line,p.address_number].filter(Boolean).join(', ')
  const address2=[p.city,p.state_region,p.postal_code].filter(Boolean).join(', ')
  const country=p.country_code||''
  const status=String(p.status||'Planning').toUpperCase()
  const criteria=String(p.success_criteria||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean)
- const projectManager=team.find(m=>String(m.role||'').toLowerCase().includes('manager'))
- const managerName=projectManager?.member_name||projectManager?.full_name||projectManager?.email||'—'
+ const projectManager=team.find(m=>m.role==='manager')
+ const managerName=projectManager?profileLabel(projectManager.profile)||'Profile unavailable':'—'
  const cutoff=p.billing_cutoff_day?`${p.billing_cutoff_day}${ordinal(Number(p.billing_cutoff_day))} of each month`:'—'
  return <Document title={`${p.project_id||''} ${p.name||'Project'} Report`} author="RitsuFlow">
   <Page size="LETTER" style={s.page} wrap={false}>
    <View style={s.topbar}>
     <View style={s.brandBlock}><Image src={logoUrl} style={s.logoImage}/><Text style={s.tagline}>BUILD SMARTER. DELIVER TOGETHER.</Text></View>
-    <View style={s.reportHead}><Text style={s.reportTitle}>Project Report</Text><Text style={s.generated}>Generated on {new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric'}).format(new Date())}</Text><Text style={s.motto}>PEOPLE   |   PROCESS   |   PROGRESS</Text></View>
+    <View style={s.reportHead}><Text style={s.reportTitle}>Project Report</Text><Text style={s.generated}>Generated on {generatedAt(generated)}</Text><Text style={s.motto}>PEOPLE   |   PROCESS   |   PROGRESS</Text></View>
    </View>
    <View style={s.rule}/>
 
@@ -72,7 +88,7 @@ function ProjectReport({project:p,team,imageUrl,logoUrl}){
 
    <View style={s.twoCol}>
     <Card number="4." title="SUCCESS CRITERIA" style={s.half}>{criteria.length?criteria.slice(0,6).map((x,i)=><View key={i} style={s.checkRow}><Text style={s.check}>✓</Text><Text style={s.checkText}>{x}</Text></View>):<View style={s.empty}><Text>Success criteria not defined.</Text></View>}</Card>
-    <Card number="5." title="PROJECT TEAM" style={s.half}>{team.length?team.slice(0,5).map((m,i)=><View key={m.id||i} style={s.member}><View style={s.memberMark}><Text>{initials(m.member_name||m.full_name||m.email)}</Text></View><View style={s.memberMain}><Text style={s.memberName}>{m.member_name||m.full_name||m.email||'Team member'}</Text><Text style={s.memberRole}>{titleCase(m.role)}</Text></View><Text style={s.memberEmail}>{m.email||''}</Text></View>):<View style={s.empty}><Text>No project team members assigned.</Text></View>}</Card>
+    <Card number="5." title="PROJECT TEAM" style={s.half}>{team.length?team.slice(0,5).map((m,i)=>{const name=profileLabel(m.profile)||'Profile unavailable';return <View key={m.user_id||i} style={s.member}><View style={s.memberMark}><Text>{initials(name)}</Text></View><View style={s.memberMain}><Text style={s.memberName}>{name}</Text><Text style={s.memberRole}>{m.profile?.job_title?`${m.profile.job_title} · ${roleLabel(m.role)}`:roleLabel(m.role)}</Text></View><Text style={s.memberEmail}>{m.profile?.email||''}</Text></View>}):<View style={s.empty}><Text>No project team members assigned.</Text></View>}</Card>
    </View>
 
    <View style={s.about}><View style={s.aboutIcon}><Text>▤</Text></View><View style={s.aboutText}><Text style={s.aboutTitle}>ABOUT THIS REPORT</Text><Text style={s.aboutBody}>This report was generated by RitsuFlow and reflects the current information stored in the project record.</Text><Text style={s.aboutBody}>For the latest updates, please access the project in RitsuFlow.</Text></View><View style={s.aboutBrand}><Image src={logoUrl} style={s.aboutLogoImage}/><Text style={s.aboutTag}>BUILD SMARTER. DELIVER TOGETHER.</Text></View></View>
