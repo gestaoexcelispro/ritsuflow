@@ -15,7 +15,7 @@ export default function ProjectsPage(){
   let active=true
   async function loadProjects(){
    setLoading(true)
-   const {data,error}=await supabase.from('projects').select('*').order('created_at',{ascending:false})
+   const {data,error}=await supabase.from('projects').select('*').order('created_at',{ascending:true})
    if(!active)return
    if(error){setError(error.message);setProjects([])}else{setError('');setProjects(data||[])}
    setLoading(false)
@@ -28,6 +28,7 @@ export default function ProjectsPage(){
  const onTrack=activeProjects.filter(p=>['on track','on_track','active'].includes(String(p.status||'').toLowerCase())).length
  const attention=activeProjects.filter(p=>['attention','at risk','at_risk','delayed'].includes(String(p.status||'').toLowerCase())).length
  const locations=new Set(activeProjects.map(p=>[p.city,p.state_region].filter(Boolean).join(', ')).filter(Boolean)).size
+ const projectId=(index)=>`PRJ-${String(index+1).padStart(4,'0')}`
 
  return <main className={styles.shell}>
   <header className={styles.topbar}>
@@ -56,16 +57,17 @@ export default function ProjectsPage(){
      <div className={styles.filters}><span>⌕ Search projects...</span><button>All Statuses⌄</button><button>All Phases⌄</button></div>
     </div>
     <div className={styles.tableWrap}>
-     <table><thead><tr><th>Project</th><th>Location</th><th>Project Manager</th><th>Phase</th><th>Workers</th><th>Operations</th><th>Today’s Progress</th><th>Open Issues</th><th>Status</th><th>Last Update</th><th></th></tr></thead>
+     <table><thead><tr><th>Project ID</th><th>Project</th><th>Location</th><th>Project Manager</th><th>Phase</th><th>Workers</th><th>Operations</th><th>Today’s Progress</th><th>Open Issues</th><th>Status</th><th>Last Update</th><th></th></tr></thead>
       <tbody>
-       {loading&&<tr><td colSpan="11" style={{textAlign:'center',padding:'48px'}}>Loading projects...</td></tr>}
-       {!loading&&error&&<tr><td colSpan="11" style={{textAlign:'center',padding:'48px'}}>Unable to load projects: {error}</td></tr>}
-       {!loading&&!error&&projects.length===0&&<tr><td colSpan="11" style={{textAlign:'center',padding:'64px 24px'}}><b style={{display:'block',fontSize:'18px',marginBottom:'8px'}}>No projects registered yet.</b><span>Create your first shared RitsuFlow project using + New Project.</span></td></tr>}
-       {!loading&&!error&&projects.map(p=>{
+       {loading&&<tr><td colSpan="12" style={{textAlign:'center',padding:'48px'}}>Loading projects...</td></tr>}
+       {!loading&&error&&<tr><td colSpan="12" style={{textAlign:'center',padding:'48px'}}>Unable to load projects: {error}</td></tr>}
+       {!loading&&!error&&projects.length===0&&<tr><td colSpan="12" style={{textAlign:'center',padding:'64px 24px'}}><b style={{display:'block',fontSize:'18px',marginBottom:'8px'}}>No projects registered yet.</b><span>Create your first shared RitsuFlow project using + New Project.</span></td></tr>}
+       {!loading&&!error&&projects.map((p,index)=>{
         const location=[p.city,p.state_region].filter(Boolean).join(', ')||'—'
         const status=p.status||'—'
         const updated=p.updated_at?new Date(p.updated_at).toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'}):'—'
         return <tr key={p.id}>
+         <td><b>{projectId(index)}</b></td>
          <td><div className={styles.projectName}><i>{(p.name||'P').charAt(0).toUpperCase()}</i><span><b>{p.name||'Untitled Project'}</b><small>{p.code||'—'}</small></span></div></td>
          <td>⌖ {location}</td><td>—</td><td><span className={styles.phase}>—</span></td>
          <td><b>0</b><small> on site</small></td><td><b>0</b> underway</td>
