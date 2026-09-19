@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { pdf, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer'
 import { supabase } from '../../../lib/supabase'
 
-const money=(v,c='USD')=>{if(v===null||v===undefined||v==='')return '—';try{return new Intl.NumberFormat('en-US',{style:'currency',currency:c}).format(Number(v)||0)}catch{return String(v)}}
-const date=v=>{if(!v)return '—';const[y,m,d]=String(v).slice(0,10).split('-');return y&&m&&d?`${m}/${d}/${y}`:String(v)}
+const money=(v,c='USD')=>{if(v===null||v===undefined||v==='')return '—';try{return new Intl.NumberFormat('en-US',{style:'currency',currency:c,maximumFractionDigits:2}).format(Number(v)||0)}catch{return String(v)}}
+const date=v=>{if(!v)return '—';const d=new Date(`${String(v).slice(0,10)}T12:00:00`);return Number.isNaN(d.getTime())?String(v):new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric'}).format(d)}
 const billing={progress_percent_complete:'Progress / Percent Complete',milestone:'Milestone Based',unit_price:'Unit Price',time_materials:'Time & Materials',fixed_schedule:'Fixed Payment Schedule',other:'Other / Custom'}
 const cycle={weekly:'Weekly',biweekly:'Biweekly',monthly:'Monthly',milestone:'By Milestone',custom:'Custom'}
+const titleCase=v=>String(v||'—').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())
 
 export default function ProjectReportButton({project}){
  const[busy,setBusy]=useState(false)
@@ -15,12 +16,9 @@ export default function ProjectReportButton({project}){
   if(!project||busy)return
   setBusy(true)
   try{
-   const [{data:team},{data:notes}]=await Promise.all([
-    supabase.from('project_members').select('*').eq('project_id',project.id).order('created_at',{ascending:true}),
-    supabase.from('project_notes').select('note,author_name,created_at').eq('project_id',project.id).order('created_at',{ascending:false}).limit(5)
-   ])
+   const{data:team}=await supabase.from('project_members').select('*').eq('project_id',project.id).order('created_at',{ascending:true})
    const imageUrl=project.project_image_path?supabase.storage.from('project-images').getPublicUrl(project.project_image_path).data.publicUrl:null
-   const blob=await pdf(<ProjectReport project={project} team={team||[]} notes={notes||[]} imageUrl={imageUrl}/>).toBlob()
+   const blob=await pdf(<ProjectReport project={project} team={team||[]} imageUrl={imageUrl}/>).toBlob()
    const url=URL.createObjectURL(blob),a=document.createElement('a')
    a.href=url;a.download=`${project.project_id||'Project'}_Project_Report.pdf`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)
   }catch(e){console.error(e);window.alert(`Unable to generate report: ${e?.message||e}`)}finally{setBusy(false)}
@@ -28,24 +26,66 @@ export default function ProjectReportButton({project}){
  return <button type="button" onClick={generate} disabled={busy} style={{...button,...(busy?disabled:{})}}>{busy?'Generating...':'▤ Generate Report'}</button>
 }
 
-function ProjectReport({project:p,team,notes,imageUrl}){
+function ProjectReport({project:p,team,imageUrl}){
  const currency=p.currency_code||'USD'
- const location=[p.address_line,p.address_number,p.neighborhood,p.city,p.state_region,p.postal_code,p.country_code].filter(Boolean).join(', ')
+ const address1=[p.address_line,p.address_number].filter(Boolean).join(', ')
+ const address2=[p.city,p.state_region,p.postal_code].filter(Boolean).join(', ')
+ const country=p.country_code||''
+ const status=String(p.status||'Planning').toUpperCase()
+ const criteria=String(p.success_criteria||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean)
+ const projectManager=team.find(m=>String(m.role||'').toLowerCase().includes('manager'))
+ const managerName=projectManager?.member_name||projectManager?.full_name||projectManager?.email||'—'
+ const cutoff=p.billing_cutoff_day?`${p.billing_cutoff_day}${ordinal(Number(p.billing_cutoff_day))} of each month`:'—'
  return <Document title={`${p.project_id||''} ${p.name||'Project'} Report`} author="RitsuFlow">
-  <Page size="LETTER" style={s.page}>
-   <View style={s.header}><View><Text style={s.brand}>RitsuFlow</Text><Text style={s.kicker}>PROJECT REPORT</Text></View><View style={s.headerRight}><Text style={s.projectId}>{p.project_id||'PROJECT'}</Text><Text style={s.generated}>Generated {new Date().toLocaleDateString('en-US')}</Text></View></View>
-   <View style={s.hero}><View style={s.heroText}><Text style={s.title}>{p.name||'Untitled Project'}</Text><Text style={s.client}>{p.client_name||'Client not defined'}</Text><Text style={s.location}>{location||'Location not defined'}</Text><View style={s.status}><Text style={s.statusText}>{String(p.status||'Planning').toUpperCase()}</Text></View></View>{imageUrl?<Image src={imageUrl} style={s.heroImage}/>:<View style={s.imageEmpty}><Text>PROJECT IMAGE</Text></View>}</View>
-   <Section title="PROJECT INFORMATION"><Grid rows={[[['Project ID',p.project_id],['Contract Number',p.contract_number]],[['Client',p.client_name],['Status',p.status]],[['Planned Start',date(p.planned_start_date)],['Planned Finish',date(p.planned_finish_date)]],[['Contractual Term',p.contractual_term_days?`${p.contractual_term_days} days`:'—'],['Currency',currency]]]}/></Section>
-   <Section title="CONTRACT & BILLING"><Grid rows={[[['Contract Value',money(p.contract_value,currency)],['Material Value',p.material_included?money(p.material_value,currency):'Not included']],[['Billing Method',billing[p.billing_method]||p.billing_method||'—'],['Billing Cycle',cycle[p.billing_cycle]||p.billing_cycle||'—']],[['Billing Cutoff',p.billing_cutoff_day?`Day ${p.billing_cutoff_day}`:'—'],['Payment Terms',p.payment_terms_days!==null&&p.payment_terms_days!==undefined?`Net ${p.payment_terms_days}`:'—']],[['Retainage',p.has_retainage?`${p.retainage_percent??'—'}% · ${money(p.retainage_value,currency)}`:'No'],['Retainage Release',p.retainage_release_criteria||'—']]]}/></Section>
-   <Section title="SUCCESS CRITERIA"><Text style={s.paragraph}>{p.success_criteria||'Success criteria not defined.'}</Text></Section>
-   <Section title="PROJECT TEAM">{team.length?<View style={s.table}><View style={s.tableHead}><Text style={s.colA}>NAME</Text><Text style={s.colB}>PROJECT ROLE</Text></View>{team.map((m,i)=><View key={m.id||i} style={s.tableRow}><Text style={s.colA}>{m.member_name||m.full_name||m.email||m.user_id||'Team member'}</Text><Text style={s.colB}>{String(m.role||'—').replaceAll('_',' ')}</Text></View>)}</View>:<Text style={s.muted}>No project team members assigned.</Text>}</Section>
-   {notes.length>0&&<Section title="RECENT PROJECT NOTES">{notes.map((n,i)=><View key={i} style={s.note}><Text style={s.noteMeta}>{n.author_name||'RitsuFlow User'} · {date(n.created_at)}</Text><Text style={s.noteText}>{n.note}</Text></View>)}</Section>}
-   <View style={s.footer} fixed><Text>RitsuFlow™ · Shared Project Record</Text><Text render={({pageNumber,totalPages})=>`Page ${pageNumber} of ${totalPages}`}/></View>
+  <Page size="LETTER" style={s.page} wrap={false}>
+   <View style={s.topbar}>
+    <View><Text style={s.logo}>Ritsu<Text style={s.logoAccent}>Flow</Text></Text><Text style={s.tagline}>BUILD SMARTER. DELIVER TOGETHER.</Text></View>
+    <View style={s.reportHead}><Text style={s.reportTitle}>Project Report</Text><Text style={s.generated}>Generated on {new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric'}).format(new Date())}</Text><Text style={s.motto}>PEOPLE   |   PROCESS   |   PROGRESS</Text></View>
+   </View>
+   <View style={s.rule}/>
+
+   <View style={s.heroRow}>
+    <View style={s.heroLeft}>
+     <Text style={s.projectId}>{p.project_id||'PROJECT'}</Text>
+     <Text style={s.projectName}>{p.name||'Untitled Project'}</Text>
+     <Text style={s.projectSub}>{p.description||p.client_name||'Shared project record'}</Text>
+     <Card number="1." title="PROJECT INFORMATION" style={s.infoCard}>
+      <DataRow label="Project Name" value={p.name}/><DataRow label="Project ID" value={p.project_id}/><DataRow label="Client" value={p.client_name}/><DataRow label="Status" value={titleCase(p.status)}/><DataRow label="Start Date" value={date(p.planned_start_date)}/><DataRow label="Target Completion" value={date(p.planned_finish_date)}/><DataRow label="Project Manager" value={managerName}/><DataRow label="Contract Number" value={p.contract_number||'—'}/>
+     </Card>
+    </View>
+    <View style={s.heroRight}>
+     <View style={s.statusWrap}><Text style={s.status}>{status}</Text></View>
+     {imageUrl?<Image src={imageUrl} style={s.projectImage}/>:<View style={s.imagePlaceholder}><Text>PROJECT IMAGE</Text></View>}
+     <View style={s.locationCard}><View style={s.mapPlaceholder}><Text style={s.pin}>●</Text><Text style={s.mapText}>PROJECT LOCATION</Text></View><View style={s.address}><Text style={s.addressStrong}>{address1||'Address not defined'}</Text><Text>{address2}</Text><Text>{country}</Text>{p.latitude&&p.longitude?<Text style={s.coords}>Lat: {Number(p.latitude).toFixed(4)}   Lng: {Number(p.longitude).toFixed(4)}</Text>:null}</View></View>
+    </View>
+   </View>
+
+   <View style={s.twoCol}>
+    <Card number="2." title="CONTRACT & BILLING" style={s.half}>
+     <DataRow label="Contract Value" value={money(p.contract_value,currency)}/><DataRow label="Material Value" value={p.material_included?money(p.material_value,currency):'Not included'}/><DataRow label="Billing Method" value={billing[p.billing_method]||titleCase(p.billing_method)}/><DataRow label="Billing Cycle" value={cycle[p.billing_cycle]||titleCase(p.billing_cycle)}/><DataRow label="Billing Cutoff Day" value={cutoff}/><DataRow label="Payment Terms" value={p.payment_terms_days!==null&&p.payment_terms_days!==undefined?`Net ${p.payment_terms_days}`:'—'}/><DataRow label="Retainage" value={p.has_retainage?`${p.retainage_percent??'—'}%`:'No'}/><DataRow label="Retainage Release" value={p.retainage_release_criteria||'—'}/><DataRow label="Material Included" value={p.material_included?'Yes':'No'} last/>
+    </Card>
+    <Card number="3." title="SCHEDULE" style={s.half}>
+     <DataRow label="Start Date" value={date(p.planned_start_date)}/><DataRow label="Target Completion" value={date(p.planned_finish_date)}/><DataRow label="Duration" value={p.contractual_term_days?`${p.contractual_term_days} days`:'—'}/><DataRow label="Current Status" value={titleCase(p.status)}/><DataRow label="Billing Cycle" value={cycle[p.billing_cycle]||titleCase(p.billing_cycle)}/><View style={s.scheduleNote}><Text style={s.scheduleNoteTitle}>PROJECT CONTROL</Text><Text style={s.scheduleNoteText}>Planning and field progress are managed from the shared RitsuFlow project record.</Text></View>
+    </Card>
+   </View>
+
+   <View style={s.twoCol}>
+    <Card number="4." title="SUCCESS CRITERIA" style={s.half}>{criteria.length?criteria.slice(0,6).map((x,i)=><View key={i} style={s.checkRow}><Text style={s.check}>✓</Text><Text style={s.checkText}>{x}</Text></View>):<View style={s.empty}><Text>Success criteria not defined.</Text></View>}</Card>
+    <Card number="5." title="PROJECT TEAM" style={s.half}>{team.length?team.slice(0,5).map((m,i)=><View key={m.id||i} style={s.member}><View style={s.memberMark}><Text>{initials(m.member_name||m.full_name||m.email)}</Text></View><View style={s.memberMain}><Text style={s.memberName}>{m.member_name||m.full_name||m.email||'Team member'}</Text><Text style={s.memberRole}>{titleCase(m.role)}</Text></View><Text style={s.memberEmail}>{m.email||''}</Text></View>):<View style={s.empty}><Text>No project team members assigned.</Text></View>}</Card>
+   </View>
+
+   <View style={s.about}><View style={s.aboutIcon}><Text>▤</Text></View><View style={s.aboutText}><Text style={s.aboutTitle}>ABOUT THIS REPORT</Text><Text style={s.aboutBody}>This report was generated by RitsuFlow and reflects the current information stored in the project record.</Text><Text style={s.aboutBody}>For the latest updates, please access the project in RitsuFlow.</Text></View><View style={s.aboutBrand}><Text style={s.aboutLogo}>Ritsu<Text style={s.logoAccent}>Flow</Text></Text><Text style={s.aboutTag}>BUILD SMARTER. DELIVER TOGETHER.</Text></View></View>
+   <View style={s.footer}><Text>{p.project_id||'Project'}  |  {p.name||'Untitled Project'}</Text><Text>Page 1 of 1</Text></View>
   </Page>
  </Document>
 }
-function Section({title,children}){return <View style={s.section} wrap={false}><Text style={s.sectionTitle}>{title}</Text>{children}</View>}
-function Grid({rows}){return <View>{rows.map((r,i)=><View key={i} style={s.gridRow}>{r.map(([label,value],j)=><View key={j} style={s.cell}><Text style={s.label}>{label}</Text><Text style={s.value}>{value===null||value===undefined||value===''?'—':String(value)}</Text></View>)}</View>)}</View>}
+
+function Card({number,title,children,style}){return <View style={[s.card,style]}><View style={s.cardHead}><Text style={s.cardTitle}>{number} {title}</Text></View><View style={s.cardBody}>{children}</View></View>}
+function DataRow({label,value,last}){return <View style={[s.dataRow,last?s.noBorder:null]}><Text style={s.dataLabel}>{label}</Text><Text style={s.dataValue}>{value===null||value===undefined||value===''?'—':String(value)}</Text></View>}
+function ordinal(n){if(n%100>=11&&n%100<=13)return'th';return n%10===1?'st':n%10===2?'nd':n%10===3?'rd':'th'}
+function initials(v=''){const p=String(v).trim().split(/\s+/).filter(Boolean);return(p[0]?.[0]||'')+(p[1]?.[0]||'')||'RF'}
+
 const button={border:'1px solid #b9d0da',background:'#fff',color:'#234f62',borderRadius:8,padding:'10px 14px',fontWeight:800,fontSize:13,whiteSpace:'nowrap',cursor:'pointer'}
 const disabled={opacity:.55,cursor:'not-allowed'}
-const s=StyleSheet.create({page:{paddingTop:34,paddingHorizontal:38,paddingBottom:42,fontFamily:'Helvetica',fontSize:9,color:'#173b4b',backgroundColor:'#fff'},header:{backgroundColor:'#07364a',marginHorizontal:-38,marginTop:-34,paddingHorizontal:38,paddingVertical:20,display:'flex',flexDirection:'row',justifyContent:'space-between',alignItems:'center'},brand:{fontSize:22,fontFamily:'Helvetica-Bold',color:'#fff'},kicker:{fontSize:8,letterSpacing:2,color:'#56d7d2',marginTop:4},headerRight:{alignItems:'flex-end'},projectId:{fontSize:13,fontFamily:'Helvetica-Bold',color:'#fff'},generated:{fontSize:7,color:'#bdd1d9',marginTop:4},hero:{display:'flex',flexDirection:'row',gap:18,paddingVertical:22,borderBottomWidth:1,borderBottomColor:'#d8e5e9'},heroText:{flex:1,justifyContent:'center'},title:{fontSize:24,fontFamily:'Helvetica-Bold',color:'#082f43'},client:{fontSize:11,fontFamily:'Helvetica-Bold',color:'#148f8e',marginTop:7},location:{fontSize:8,color:'#627d89',marginTop:5,lineHeight:1.4},status:{alignSelf:'flex-start',marginTop:10,backgroundColor:'#dff5e9',borderRadius:10,paddingVertical:4,paddingHorizontal:9},statusText:{fontSize:7,fontFamily:'Helvetica-Bold',color:'#137346'},heroImage:{width:170,height:104,objectFit:'cover',borderRadius:5},imageEmpty:{width:170,height:104,backgroundColor:'#eef5f6',alignItems:'center',justifyContent:'center',color:'#78909a',fontSize:8},section:{marginTop:17},sectionTitle:{fontSize:9,fontFamily:'Helvetica-Bold',color:'#079c9a',letterSpacing:1.2,borderBottomWidth:1.5,borderBottomColor:'#079c9a',paddingBottom:5,marginBottom:6},gridRow:{display:'flex',flexDirection:'row'},cell:{width:'50%',paddingVertical:7,paddingRight:10,borderBottomWidth:.6,borderBottomColor:'#e4ecef'},label:{fontSize:7,color:'#78909a',textTransform:'uppercase'},value:{fontSize:9,fontFamily:'Helvetica-Bold',color:'#173b4b',marginTop:3},paragraph:{fontSize:9,lineHeight:1.5,color:'#365967',paddingVertical:5},table:{borderWidth:.7,borderColor:'#dbe7eb',borderRadius:3},tableHead:{display:'flex',flexDirection:'row',backgroundColor:'#eef5f6',padding:6},tableRow:{display:'flex',flexDirection:'row',padding:6,borderTopWidth:.5,borderTopColor:'#e2ebee'},colA:{width:'65%',fontSize:8},colB:{width:'35%',fontSize:8,textTransform:'capitalize'},muted:{fontSize:8,color:'#78909a',paddingVertical:5},note:{paddingVertical:6,borderBottomWidth:.5,borderBottomColor:'#e2ebee'},noteMeta:{fontSize:7,fontFamily:'Helvetica-Bold',color:'#64808b'},noteText:{fontSize:8.5,color:'#365967',marginTop:3,lineHeight:1.4},footer:{position:'absolute',bottom:18,left:38,right:38,borderTopWidth:.7,borderTopColor:'#d8e5e9',paddingTop:7,display:'flex',flexDirection:'row',justifyContent:'space-between',fontSize:7,color:'#78909a'}})
+const navy='#0b3554',blue='#2775bd',ink='#0a2945',line='#d7e0e7',soft='#f5f8fa'
+const s=StyleSheet.create({page:{padding:24,fontFamily:'Helvetica',fontSize:8.2,color:ink,backgroundColor:'#fff'},topbar:{display:'flex',flexDirection:'row',justifyContent:'space-between',alignItems:'flex-start'},logo:{fontFamily:'Helvetica-Bold',fontSize:27,color:navy,letterSpacing:-1.2},logoAccent:{color:blue},tagline:{fontSize:5.7,letterSpacing:.9,color:navy,marginTop:1.5},reportHead:{alignItems:'flex-end'},reportTitle:{fontFamily:'Helvetica-Bold',fontSize:16,color:navy},generated:{fontSize:7,color:'#36536b',marginTop:3},motto:{fontSize:5.8,color:navy,marginTop:7,letterSpacing:.5},rule:{height:1.1,backgroundColor:navy,marginTop:5,marginBottom:9},heroRow:{display:'flex',flexDirection:'row',gap:9},heroLeft:{width:'52%'},heroRight:{width:'48%',paddingTop:1},projectId:{fontFamily:'Helvetica-Bold',fontSize:23,color:navy},projectName:{fontFamily:'Helvetica-Bold',fontSize:15.5,color:ink,marginTop:3},projectSub:{fontSize:8.5,color:'#263f55',marginTop:4,marginBottom:9},statusWrap:{alignItems:'flex-end',marginBottom:4},status:{backgroundColor:'#d8f0dc',color:'#21743a',fontFamily:'Helvetica-Bold',fontSize:7.5,paddingVertical:5,paddingHorizontal:18,borderRadius:4},projectImage:{width:'100%',height:139,objectFit:'cover',borderRadius:5},imagePlaceholder:{width:'100%',height:139,backgroundColor:'#e9eff3',borderRadius:5,alignItems:'center',justifyContent:'center',color:'#7b8f9d'},locationCard:{height:77,marginTop:7,borderWidth:.7,borderColor:line,borderRadius:5,backgroundColor:soft,display:'flex',flexDirection:'row',overflow:'hidden'},mapPlaceholder:{width:'48%',backgroundColor:'#e9eef1',alignItems:'center',justifyContent:'center'},pin:{fontSize:18,color:'#cf3c36'},mapText:{fontSize:5.5,color:'#687d8b',marginTop:3},address:{width:'52%',padding:10,justifyContent:'center',fontSize:7.5,lineHeight:1.35},addressStrong:{fontFamily:'Helvetica-Bold',marginBottom:2},coords:{borderTopWidth:.5,borderTopColor:line,marginTop:7,paddingTop:6,color:'#4f6e86',fontSize:6.5},card:{borderWidth:.7,borderColor:line,borderRadius:5,overflow:'hidden',backgroundColor:'#fbfcfd'},infoCard:{height:210},half:{width:'50%'},cardHead:{backgroundColor:navy,paddingVertical:7,paddingHorizontal:9},cardTitle:{fontFamily:'Helvetica-Bold',fontSize:9.5,color:'#fff'},cardBody:{paddingHorizontal:8,paddingVertical:5},dataRow:{display:'flex',flexDirection:'row',alignItems:'flex-start',paddingVertical:4.1,borderBottomWidth:.45,borderBottomColor:line},noBorder:{borderBottomWidth:0},dataLabel:{width:'39%',fontFamily:'Helvetica-Bold',fontSize:7.3,color:'#17324b'},dataValue:{width:'61%',fontSize:7.4,color:'#102d47',lineHeight:1.25},twoCol:{display:'flex',flexDirection:'row',gap:8,marginTop:8},scheduleNote:{marginTop:9,padding:8,backgroundColor:'#edf3f7',borderRadius:4},scheduleNoteTitle:{fontFamily:'Helvetica-Bold',fontSize:6.5,color:navy,letterSpacing:.5},scheduleNoteText:{fontSize:6.8,color:'#526a7d',marginTop:3,lineHeight:1.35},checkRow:{display:'flex',flexDirection:'row',alignItems:'center',paddingVertical:4.5},check:{width:17,height:17,borderRadius:9,backgroundColor:'#34934a',color:'#fff',fontFamily:'Helvetica-Bold',fontSize:8,textAlign:'center',paddingTop:3},checkText:{flex:1,fontSize:7.3,marginLeft:7},empty:{paddingVertical:12,color:'#718695',fontSize:7.3},member:{display:'flex',flexDirection:'row',alignItems:'center',paddingVertical:4.2,borderBottomWidth:.4,borderBottomColor:line},memberMark:{width:23,height:23,borderRadius:12,backgroundColor:'#dfe8ee',alignItems:'center',justifyContent:'center',fontFamily:'Helvetica-Bold',fontSize:6.5,color:navy},memberMain:{flex:1,marginLeft:6},memberName:{fontFamily:'Helvetica-Bold',fontSize:7.4},memberRole:{fontSize:6.5,marginTop:1.5},memberEmail:{fontSize:6.1,color:'#37556e',maxWidth:100},about:{marginTop:8,minHeight:49,borderWidth:.7,borderColor:line,borderRadius:5,backgroundColor:'#f3f7fa',display:'flex',flexDirection:'row',alignItems:'center',padding:9},aboutIcon:{width:27,fontSize:18,color:navy},aboutText:{flex:1},aboutTitle:{fontFamily:'Helvetica-Bold',fontSize:7.3,color:navy,marginBottom:3},aboutBody:{fontSize:5.9,color:'#405b70',lineHeight:1.3},aboutBrand:{alignItems:'flex-end'},aboutLogo:{fontFamily:'Helvetica-Bold',fontSize:15,color:navy},aboutTag:{fontSize:3.8,color:navy,marginTop:1},footer:{position:'absolute',bottom:10,left:24,right:24,borderTopWidth:.7,borderTopColor:navy,paddingTop:5,display:'flex',flexDirection:'row',justifyContent:'space-between',fontSize:5.8,color:navy}})
