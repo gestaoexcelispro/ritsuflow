@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
@@ -15,10 +15,30 @@ const googleUrl=p=>{const q=hasCoordinates(p)?`${p.latitude},${p.longitude}`:[p.
 
 export default function ProjectDetailPage(){
  const params=useParams(),router=useRouter(),projectId=params?.projectId
- const[project,setProject]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[deleting,setDeleting]=useState(false),[tab,setTab]=useState('Notes')
+ const fileInputRef=useRef(null)
+ const[project,setProject]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[deleting,setDeleting]=useState(false),[uploadingImage,setUploadingImage]=useState(false),[tab,setTab]=useState('Notes')
  useEffect(()=>{if(!projectId)return;let active=true;(async()=>{setLoading(true);setError('');const{data,error:e}=await supabase.from('projects').select('*').eq('id',projectId).maybeSingle();if(!active)return;if(e)setError(e.message||'Unable to load this project.');else if(!data)setError('Project not found or you do not have access to it.');else setProject(data);setLoading(false)})();return()=>{active=false}},[projectId])
  async function deleteProject(){if(!project||deleting)return;if(!window.confirm(`Delete project "${project.project_id||''} ${project.name||''}"?\n\nThis action cannot be undone.`))return;setDeleting(true);setError('');const{error:e}=await supabase.from('projects').delete().eq('id',project.id);if(e){setError(`Unable to delete project: ${e.message}`);setDeleting(false);return}router.replace('/projects');router.refresh()}
+ async function uploadProjectImage(event){
+  const file=event.target.files?.[0]
+  event.target.value=''
+  if(!file||!project||uploadingImage)return
+  const allowed=['image/jpeg','image/png','image/webp']
+  if(!allowed.includes(file.type)){setError('Project image must be a JPG, PNG or WebP file.');return}
+  if(file.size>10*1024*1024){setError('Project image must be 10 MB or smaller.');return}
+  setUploadingImage(true);setError('')
+  const extension=file.name.split('.').pop()?.toLowerCase()||'jpg'
+  const path=`${project.id}/project-${Date.now()}.${extension}`
+  const{error:uploadError}=await supabase.storage.from('project-images').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type})
+  if(uploadError){setError(`Unable to upload project image: ${uploadError.message}`);setUploadingImage(false);return}
+  const oldPath=project.project_image_path
+  const{data:updated,error:updateError}=await supabase.from('projects').update({project_image_path:path}).eq('id',project.id).select('*').single()
+  if(updateError){await supabase.storage.from('project-images').remove([path]);setError(`Image uploaded, but the project could not be updated: ${updateError.message}`);setUploadingImage(false);return}
+  if(oldPath&&oldPath!==path)await supabase.storage.from('project-images').remove([oldPath])
+  setProject(updated);setUploadingImage(false)
+ }
  const mapped=hasCoordinates(project)
+ const imageUrl=project?.project_image_path?supabase.storage.from('project-images').getPublicUrl(project.project_image_path).data.publicUrl:''
  return <main style={shell}>
   <header style={header}>
    <Link href="/workspaces" style={brand}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority/></Link>
@@ -46,7 +66,12 @@ export default function ProjectDetailPage(){
       <section style={tabsPanel}><div style={tabs}>{['Notes','Documents','Team','History'].map(t=><button key={t} onClick={()=>setTab(t)} style={{...tabButton,...(tab===t?activeTab:{})}}>{t}</button>)}</div>{tab==='Notes'?<><div style={noteComposer}><textarea placeholder="Add a note about this project..." style={textarea}/><button style={addNote}>＋ Add Note</button></div><div style={activity}><div style={avatar}>EF</div><div><strong>Eduardo Fernandes</strong><div>Project created.</div></div><div style={activityDate}>19/09/2026 09:14</div></div></>:<div style={emptyTab}>{tab} will be connected to this shared project record.</div>}</section>
      </div>
      <aside style={sideColumn}>
-      <section style={sideCard}><div style={sideTitle}>▰ &nbsp; Project Image</div><div style={imagePlaceholder}><div style={{fontSize:28}}>▥</div><div>Project image</div></div><button style={sideAction}>↥ Add Project Image</button></section>
+      <section style={sideCard}>
+       <div style={sideTitle}>▰ &nbsp; Project Image</div>
+       {imageUrl?<div style={projectImageFrame}><img src={imageUrl} alt={`${project.name||'Project'} image`} style={projectImage}/></div>:<div style={imagePlaceholder}><div style={{fontSize:28}}>▥</div><div>Project image</div></div>}
+       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadProjectImage} style={{display:'none'}}/>
+       <button type="button" onClick={()=>fileInputRef.current?.click()} disabled={uploadingImage} style={{...sideAction,...(uploadingImage?disabledAction:{})}}>{uploadingImage?'Uploading...':imageUrl?'↥ Change Project Image':'↥ Add Project Image'}</button>
+      </section>
       <section style={sideCard}><div style={sideTitle}>♥ &nbsp; Location Map</div>{mapped?<div style={mapContainer}><iframe title={`Map of ${project.name||'project'}`} src={osmUrl(project)} style={mapIframe} loading="lazy" referrerPolicy="no-referrer"/></div>:<div style={mapPlaceholder}><div style={{fontSize:22}}>⌖</div><strong>{project.city||'Project location'}</strong><span>{project.neighborhood||''}</span><span style={coordinatesMessage}>Coordinates not defined</span></div>}<a href={googleUrl(project)} target="_blank" rel="noreferrer" style={mapLink}>● Open in Google Maps ↗</a></section>
      </aside>
     </div>
@@ -84,7 +109,8 @@ const successPanel={...panel,marginTop:9,display:'flex',alignItems:'center',just
 const tabsPanel={...panel,marginTop:9,padding:'0 12px 10px',flex:1,minHeight:0,overflow:'hidden'};const tabs={display:'flex',gap:14,borderBottom:'1px solid #dce7eb'};const tabButton={border:0,background:'transparent',padding:'9px 9px 7px',fontWeight:800,color:'#526f80',fontSize:12,cursor:'pointer',borderBottom:'2px solid transparent'};const activeTab={color:'#079a9a',borderBottomColor:'#079a9a'}
 const noteComposer={display:'flex',gap:8,marginTop:8};const textarea={flex:1,height:36,resize:'none',border:'1px solid #cddde4',borderRadius:7,padding:'9px 10px',fontFamily:'inherit',fontSize:11.5,boxSizing:'border-box'};const addNote={border:0,borderRadius:7,background:'#069b9b',color:'#fff',padding:'0 16px',fontWeight:800,fontSize:12}
 const activity={display:'flex',alignItems:'center',gap:9,marginTop:7,padding:'7px 9px',border:'1px solid #d5e4f5',background:'#f4f9ff',borderRadius:7,fontSize:11};const avatar={width:27,height:27,borderRadius:'50%',background:'#dcedff',color:'#2474c6',display:'grid',placeItems:'center',fontWeight:800};const activityDate={marginLeft:'auto',color:'#607784'};const emptyTab={padding:'18px 3px',color:'#718691',fontSize:12}
-const sideCard={...panel,padding:'10px',minHeight:0,display:'flex',flexDirection:'column'};const sideTitle={fontWeight:800,fontSize:12.5,marginBottom:7};const imagePlaceholder={flex:1,minHeight:80,borderRadius:6,background:'linear-gradient(145deg,#d9edf4,#edf5f1)',display:'flex',flexDirection:'column',gap:4,alignItems:'center',justifyContent:'center',color:'#557987',fontSize:11};const sideAction={width:'100%',marginTop:6,border:'1px solid #c8dff5',background:'#f3f9ff',color:'#1971c7',borderRadius:6,padding:'6px',fontWeight:800,fontSize:11}
+const sideCard={...panel,padding:'10px',minHeight:0,display:'flex',flexDirection:'column'};const sideTitle={fontWeight:800,fontSize:12.5,marginBottom:7};const imagePlaceholder={flex:1,minHeight:80,borderRadius:6,background:'linear-gradient(145deg,#d9edf4,#edf5f1)',display:'flex',flexDirection:'column',gap:4,alignItems:'center',justifyContent:'center',color:'#557987',fontSize:11};const sideAction={width:'100%',marginTop:6,border:'1px solid #c8dff5',background:'#f3f9ff',color:'#1971c7',borderRadius:6,padding:'6px',fontWeight:800,fontSize:11,cursor:'pointer'}
+const projectImageFrame={flex:1,minHeight:80,borderRadius:6,overflow:'hidden',background:'#eaf3f6'};const projectImage={display:'block',width:'100%',height:'100%',minHeight:80,objectFit:'cover'};const disabledAction={opacity:.6,cursor:'wait'}
 const mapContainer={flex:1,minHeight:80,borderRadius:6,overflow:'hidden',border:'1px solid #d7e3e8',background:'#edf3f4'}
 const mapIframe={display:'block',width:'100%',height:'100%',minHeight:80,border:0}
 const mapPlaceholder={flex:1,minHeight:80,borderRadius:6,background:'linear-gradient(45deg,#eef2ed 25%,#f7f7f3 25%,#f7f7f3 50%,#eef2ed 50%,#eef2ed 75%,#f7f7f3 75%)',backgroundSize:'22px 22px',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#607784',gap:3,fontSize:11}
