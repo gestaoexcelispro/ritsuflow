@@ -43,7 +43,6 @@ export default function ProjectsPage(){
   <nav className={styles.workspaceNav} aria-label="Project workspace navigation">
    <Link href="/workspaces">⌂ Overview</Link>
    <Link href="/projects" className={styles.navActive}>▣ Projects</Link>
-   <Link href="/scope-management">⌘ Scope Management</Link>
    <Link href="/project-setup">⚙ Project Setup</Link>
    <Link href="/location-structure">⌖ Location Structure</Link>
    <span className={styles.navDivider}/>
@@ -74,7 +73,7 @@ export default function ProjectsPage(){
          <td>{p.client||p.client_name||'—'}</td><td>⌖ {location}</td><td><span className={styles.phase}>{phase}</span></td>
          <td>{date(p.planned_start_date||p.start_date)}</td><td>{date(p.planned_end_date||p.end_date)}</td><td>{money(p.contract_value)}</td>
          <td><span className={String(status).toLowerCase().includes('hold')?styles.attention:styles.ok}>{status}</span></td>
-         <td>{updated}</td><td><Link className={styles.openProject} href={`/projects/${p.id}`}>◉ Open Project</Link></td>
+         <td>{updated}</td><td><div className={styles.rowActions}><Link className={styles.openProject} href={`/projects/${p.id}`}>◉ Open Project</Link><Link className={styles.scopeProject} href={`/projects/${p.id}/scope`}>▤ Scope Management</Link></div></td>
         </tr>
        })}
       </tbody>
