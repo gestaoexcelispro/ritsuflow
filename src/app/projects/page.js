@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
@@ -24,11 +24,6 @@ export default function ProjectsPage(){
   return()=>{active=false}
  },[])
 
- const activeProjects=useMemo(()=>projects.filter(p=>!['completed','cancelled','archived','on hold','on_hold'].includes(String(p.status||'').toLowerCase())),[projects])
- const onHold=projects.filter(p=>['on hold','on_hold','paused'].includes(String(p.status||'').toLowerCase())).length
- const completed=projects.filter(p=>['completed','complete','closed'].includes(String(p.status||'').toLowerCase())).length
- const contractValue=projects.reduce((sum,p)=>sum+Number(p.contract_value||0),0)
-
  function money(value){return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value||0))}
  function date(value){if(!value)return'—';const d=new Date(`${String(value).slice(0,10)}T12:00:00`);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR')}
 
@@ -37,6 +32,11 @@ export default function ProjectsPage(){
    <Link href="/workspaces" className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority/></Link>
    <div className={styles.titleBlock}><div className={styles.pageTitle}>Projects</div><span>Manage your construction projects and central information.</span></div>
    <div className={styles.search}>⌕ <span>Search projects, clients, or locations...</span><kbd>Ctrl K</kbd></div>
+   <div className={styles.headerActions}>
+    <Link href="/workspaces" className={styles.returnButton}>← Return to Workspaces</Link>
+    <Link href="/precon" className={styles.preconButton}>▣ Go to PreCon</Link>
+    <Link href="/fieldop" className={styles.fieldopButton}>⌂ Go to FieldOp</Link>
+   </div>
    <div className={styles.user}><button className={styles.alert}>♧<em>3</em></button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div>
   </header>
 
@@ -52,14 +52,6 @@ export default function ProjectsPage(){
   </nav>
 
   <div className={styles.content}>
-   <section className={styles.kpis}>
-    <div><span>Total Projects</span><strong>{projects.length}</strong><small>All projects in your workspace</small></div>
-    <div><span>Active Projects</span><strong className={styles.green}>{activeProjects.length}</strong><small>{projects.length?Math.round(activeProjects.length/projects.length*100):0}% of total projects</small></div>
-    <div><span>On Hold</span><strong className={styles.amber}>{onHold}</strong><small>{projects.length?Math.round(onHold/projects.length*100):0}% of total projects</small></div>
-    <div><span>Completed</span><strong>{completed}</strong><small>{projects.length?Math.round(completed/projects.length*100):0}% of total projects</small></div>
-    <div><span>Total Contract Value</span><strong className={styles.value}>{money(contractValue)}</strong><small>Across all projects</small></div>
-   </section>
-
    <section className={styles.projectsPanel}>
     <div className={styles.panelHead}>
      <div><h2>All Projects</h2><p>Centralize and manage your project information, access scope, documents, team and key details.</p></div>
@@ -89,11 +81,6 @@ export default function ProjectsPage(){
      </table>
     </div>
     <footer className={styles.tableFooter}><span>Showing {projects.length} of {projects.length} {projects.length===1?'project':'projects'}</span><span>‹　<b>1</b>　›</span></footer>
-   </section>
-
-   <section className={styles.scopeCta}>
-    <div className={styles.scopeIcon}>▤</div><div><strong>Define what will be built</strong><span>After creating your project, go to Scope Management to register the contracted scope, quantities and activities.</span></div>
-    <Link href="/scope-management">☷　Go to Scope Management →</Link>
    </section>
   </div>
  </main>
