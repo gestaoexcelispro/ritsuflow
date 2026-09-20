@@ -23,7 +23,7 @@ const groups=[
   {icon:'📐',title:'Units & Localization',text:'Units, currency, date format, timezone and language.',href:'/settings/localization'},
   {icon:'🔔',title:'Notifications',text:'Default alerts for constraints, commitments and approvals.',href:'/settings/notifications'}]},
  {title:'Administration',items:[
-  {icon:'💳',title:'License & Subscription',text:'Commercial plan, active-project capacity and workspace entitlements.',href:'/settings/license'},
+  {icon:'💳',title:'Commercial Administration',text:'Contract, active-project capacity and workspace entitlements.',href:'/settings/license'},
   {icon:'🔐',title:'Security',text:'Authentication and company security policies.',href:'/settings/security'},
   {icon:'📋',title:'Audit & Activity',text:'Administrative changes and access activity.',href:'/settings/audit'}]}
 ]
