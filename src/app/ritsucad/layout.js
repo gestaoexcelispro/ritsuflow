@@ -1,9 +1,9 @@
-import Link from 'next/link'
 import { Suspense } from 'react'
 import LocationMappingPanel from './LocationMappingPanel'
 import TakeoffContextPanel from './TakeoffContextPanel'
 import TakeoffPersistenceBridge from './TakeoffPersistenceBridge'
 import RitsuCadProjectLauncher from './RitsuCadProjectLauncher'
+import ReturnToWorkspaceButton from './ReturnToWorkspaceButton'
 
 export const metadata = {
   title: 'RitsuCAD™ | RitsuFlow',
@@ -103,34 +103,9 @@ export default function RitsuCadLayout({ children }) {
         }
       `}</style>
 
-      <Link
-        href="/dashboard"
-        title="Return to Workspace"
-        style={{
-          position: 'fixed',
-          top: 6,
-          left: 10,
-          zIndex: 120,
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 7,
-          height: 32,
-          padding: '0 12px',
-          border: '1px solid #b9cad6',
-          borderRadius: 7,
-          background: '#ffffff',
-          color: '#173f52',
-          fontSize: 11,
-          fontWeight: 900,
-          lineHeight: 1,
-          textDecoration: 'none',
-          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-        }}
-      >
-        <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>←</span>
-        <span>Return to Workspace</span>
-      </Link>
+      <Suspense fallback={null}>
+        <ReturnToWorkspaceButton />
+      </Suspense>
 
       {children}
 
