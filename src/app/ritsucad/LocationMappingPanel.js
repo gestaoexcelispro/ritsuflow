@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 
@@ -38,6 +38,27 @@ function buildLocationRows(locations) {
   return rows
 }
 
+function parseSvgPoints(value) {
+  return String(value || '')
+    .trim()
+    .split(/\s+/)
+    .map(pair => {
+      const [x, y] = pair.split(',').map(Number)
+      return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null
+    })
+    .filter(Boolean)
+}
+
+function polygonSignature(points) {
+  return points.map(point => `${point.x.toFixed(4)},${point.y.toFixed(4)}`).join('|')
+}
+
+function getRenderedCadPolygons() {
+  return Array.from(document.querySelectorAll('svg polygon'))
+    .map(element => parseSvgPoints(element.getAttribute('points')))
+    .filter(points => points.length >= 3)
+}
+
 export default function LocationMappingPanel() {
   const searchParams = useSearchParams()
   const mode = searchParams.get('mode')
@@ -45,7 +66,7 @@ export default function LocationMappingPanel() {
   const documentId = searchParams.get('documentId')
   const enabled = mode === 'location-mapping' && projectId && documentId
 
-  const [document, setDocument] = useState(null)
+  const [documentRecord, setDocumentRecord] = useState(null)
   const [locations, setLocations] = useState([])
   const [drawingType, setDrawingType] = useState('floor_plan')
   const [classificationLabel, setClassificationLabel] = useState('')
@@ -59,6 +80,8 @@ export default function LocationMappingPanel() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
+  const polygonSnapshotRef = useRef(new Set())
+
   const locationRows = useMemo(() => buildLocationRows(locations), [locations])
   const selectedLocation = useMemo(
     () => locations.find(location => location.id === selectedLocationId) || null,
@@ -70,6 +93,7 @@ export default function LocationMappingPanel() {
       setMappedLocationIds(new Set())
       return
     }
+
     const { data, error: geometryError } = await supabase
       .from('project_drawing_location_geometries')
       .select('location_id')
@@ -91,22 +115,27 @@ export default function LocationMappingPanel() {
       const [{ data: doc, error: docError }, { data: locationData, error: locationError }, { data: map, error: mapError }] = await Promise.all([
         supabase.from('project_documents').select('id,project_id,file_name,document_type').eq('id', documentId).eq('project_id', projectId).single(),
         supabase.from('locations').select('id,parent_id,name,location_type,sequence_number').eq('project_id', projectId).order('sequence_number', { ascending: true }),
-        supabase.from('project_drawing_maps').select('id,drawing_type,classification_label,root_location_id').eq('project_id', projectId).eq('document_id', documentId).eq('page_number', 1).maybeSingle(),
+        supabase.from('project_drawing_maps').select('id,drawing_type,classification_label,root_location_id,page_number').eq('project_id', projectId).eq('document_id', documentId).eq('page_number', 1).maybeSingle(),
       ])
 
       if (!active) return
+
       if (docError) setError(docError.message)
-      else setDocument(doc)
+      else setDocumentRecord(doc)
+
       if (locationError) setError(current => current || locationError.message)
       else setLocations(locationData || [])
 
-      if (!mapError && map) {
+      if (mapError) {
+        setError(current => current || mapError.message)
+      } else if (map) {
         setMappingId(map.id)
         setDrawingType(map.drawing_type || 'floor_plan')
         setClassificationLabel(map.classification_label || '')
         setRootLocationId(map.root_location_id || '')
         await loadMappedLocations(map.id)
       }
+
       setLoading(false)
     })()
 
@@ -114,11 +143,23 @@ export default function LocationMappingPanel() {
   }, [enabled, projectId, documentId])
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || !drawingLocation) return
 
-    async function handlePolygonComplete(event) {
-      const detail = event.detail || {}
-      if (!drawingLocation || !mappingId || !selectedLocationId || !Array.isArray(detail.points) || detail.points.length < 3) return
+    let cancelled = false
+
+    async function saveCompletedPolygon() {
+      await new Promise(resolve => window.setTimeout(resolve, 0))
+      if (cancelled) return
+
+      const polygons = getRenderedCadPolygons()
+      const completed = polygons
+        .map(points => ({ points, signature: polygonSignature(points) }))
+        .filter(item => !polygonSnapshotRef.current.has(item.signature))
+        .at(-1)
+
+      if (!completed || completed.points.length < 3) {
+        return
+      }
 
       setSaving(true)
       setError('')
@@ -137,9 +178,12 @@ export default function LocationMappingPanel() {
         drawing_map_id: mappingId,
         document_id: documentId,
         location_id: selectedLocationId,
-        page_number: Number(detail.pageNumber || 1),
+        page_number: 1,
         geometry_type: 'polygon',
-        geometry: { points: detail.points, ritsucad_entity_id: detail.entityId || null },
+        geometry: {
+          points: completed.points,
+          source: 'ritsucad-native-polygon',
+        },
         created_by: user.id,
         updated_at: new Date().toISOString(),
       }
@@ -154,12 +198,28 @@ export default function LocationMappingPanel() {
         setMappedLocationIds(current => new Set([...current, selectedLocationId]))
         setMessage(`${selectedLocation?.name || 'Location'} mapped successfully.`)
       }
+
       setSaving(false)
       setDrawingLocation(false)
     }
 
-    window.addEventListener('ritsuflow:location-polygon-complete', handlePolygonComplete)
-    return () => window.removeEventListener('ritsuflow:location-polygon-complete', handlePolygonComplete)
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setDrawingLocation(false)
+        setMessage('Location mapping cancelled.')
+        return
+      }
+
+      if (event.key === 'Enter') {
+        saveCompletedPolygon()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      cancelled = true
+      window.removeEventListener('keydown', handleKeyDown)
+    }
   }, [enabled, drawingLocation, mappingId, selectedLocationId, selectedLocation, projectId, documentId])
 
   async function saveClassification() {
@@ -204,11 +264,20 @@ export default function LocationMappingPanel() {
       setError('Select a project location first.')
       return
     }
+
+    polygonSnapshotRef.current = new Set(
+      getRenderedCadPolygons().map(points => polygonSignature(points))
+    )
+
     setError('')
-    setMessage(`Trace ${selectedLocation?.name || 'the selected location'} on the drawing. Double-click to finish the polygon.`)
+    setMessage(`Trace ${selectedLocation?.name || 'the selected location'} on the drawing. Press Enter to finish the polygon or Esc to cancel.`)
     setDrawingLocation(true)
-    window.dispatchEvent(new CustomEvent('ritsuflow:start-location-polygon', {
-      detail: { locationId: selectedLocationId, locationName: selectedLocation?.name || '' },
+
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      key: '4',
+      code: 'Digit4',
+      bubbles: true,
+      cancelable: true,
     }))
   }
 
@@ -217,7 +286,10 @@ export default function LocationMappingPanel() {
   return (
     <aside style={panel}>
       <div style={header}>
-        <div><div style={eyebrow}>PROJECT LOCATION MAPPING</div><div style={heading}>Configure Drawing</div></div>
+        <div>
+          <div style={eyebrow}>PROJECT LOCATION MAPPING</div>
+          <div style={heading}>Configure Drawing</div>
+        </div>
         <span style={badge}>Project Data</span>
       </div>
 
@@ -225,24 +297,37 @@ export default function LocationMappingPanel() {
         <div style={body}>
           <section style={section}>
             <div style={label}>Drawing</div>
-            <div style={documentName}>{document?.file_name || 'Project drawing'}</div>
+            <div style={documentName}>{documentRecord?.file_name || 'Project drawing'}</div>
             <div style={helper}>This PDF remains stored in Project Documents. Mapping data is saved against the shared project record.</div>
           </section>
 
           <section style={section}>
             <div style={sectionTitle}>1 · Classify this drawing</div>
+
             <label style={fieldLabel}>Drawing type</label>
-            <select value={drawingType} onChange={e => setDrawingType(e.target.value)} style={control}>
+            <select value={drawingType} onChange={event => setDrawingType(event.target.value)} style={control}>
               {DRAWING_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
+
             <label style={fieldLabel}>Classification label</label>
-            <input value={classificationLabel} onChange={e => setClassificationLabel(e.target.value)} placeholder="Example: Ground Floor" style={control} />
+            <input
+              value={classificationLabel}
+              onChange={event => setClassificationLabel(event.target.value)}
+              placeholder="Example: Ground Floor"
+              style={control}
+            />
+
             <label style={fieldLabel}>Root location</label>
-            <select value={rootLocationId} onChange={e => setRootLocationId(e.target.value)} style={control}>
+            <select value={rootLocationId} onChange={event => setRootLocationId(event.target.value)} style={control}>
               <option value="">Select project location...</option>
-              {locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name} · {location.location_type}</option>)}
+              {locationRows.map(location => (
+                <option key={location.id} value={location.id}>
+                  {'— '.repeat(location.depth)}{location.name} · {location.location_type}
+                </option>
+              ))}
             </select>
             <div style={helper}>The location comes from the project's shared Location Structure. RitsuCAD does not create a parallel location database.</div>
+
             <button type="button" onClick={saveClassification} disabled={saving} style={{ ...primaryButton, opacity: saving ? .6 : 1 }}>
               {saving ? 'Saving...' : mappingId ? 'Update Drawing Setup' : 'Save Drawing Setup'}
             </button>
@@ -250,8 +335,9 @@ export default function LocationMappingPanel() {
 
           <section style={{ ...section, ...nextSection }}>
             <div style={sectionTitle}>2 · Map locations on the drawing</div>
+
             <label style={fieldLabel}>Project location</label>
-            <select value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)} style={control}>
+            <select value={selectedLocationId} onChange={event => setSelectedLocationId(event.target.value)} style={control} disabled={drawingLocation}>
               <option value="">Select location to map...</option>
               {locationRows.map(location => (
                 <option key={location.id} value={location.id}>
@@ -259,10 +345,28 @@ export default function LocationMappingPanel() {
                 </option>
               ))}
             </select>
-            <div style={helper}>Choose the existing project location that this polygon will represent. Calibration is not required because geometry is stored in native PDF coordinates.</div>
-            <button type="button" onClick={startLocationDrawing} disabled={saving || drawingLocation} style={{ ...primaryButton, opacity: saving || drawingLocation ? .6 : 1 }}>
-              {drawingLocation ? 'Drawing Location...' : mappedLocationIds.has(selectedLocationId) ? 'Redraw Location Boundary' : 'Draw Location Boundary'}
+
+            <div style={helper}>Choose the existing project location that this polygon represents. Calibration is not required because the boundary uses RitsuCAD's native PDF coordinates.</div>
+
+            <button
+              type="button"
+              onClick={startLocationDrawing}
+              disabled={saving || drawingLocation}
+              style={{ ...primaryButton, opacity: saving || drawingLocation ? .6 : 1 }}
+            >
+              {drawingLocation
+                ? 'Drawing Location...'
+                : mappedLocationIds.has(selectedLocationId)
+                  ? 'Redraw Location Boundary'
+                  : 'Draw Location Boundary'}
             </button>
+
+            {drawingLocation && (
+              <div style={drawingHint}>
+                Polygon mode is active. Click each boundary point on the PDF, then press <strong>Enter</strong> to save the boundary. Press <strong>Esc</strong> to cancel.
+              </div>
+            )}
+
             <div style={flow}>Location Structure → PDF Geometry → FieldOp / PreCon</div>
           </section>
 
@@ -288,6 +392,7 @@ const fieldLabel={display:'block',marginTop:10,marginBottom:5,fontSize:10.5,font
 const control={width:'100%',boxSizing:'border-box',minHeight:36,border:'1px solid #c9d8df',borderRadius:6,background:'#fff',color:'#173f52',padding:'7px 9px',fontSize:11.5,outline:'none'}
 const helper={marginTop:6,fontSize:10.5,lineHeight:1.45,color:'#728a96'}
 const primaryButton={width:'100%',marginTop:14,border:0,borderRadius:7,background:'#079b9b',color:'#fff',padding:'10px 12px',fontSize:11.5,fontWeight:900,cursor:'pointer'}
+const drawingHint={marginTop:10,padding:'10px 11px',border:'1px solid #8fd5d5',borderRadius:6,background:'#eefafa',color:'#17656b',fontSize:10.5,lineHeight:1.45}
 const nextSection={borderBottom:0,marginBottom:0}
 const flow={marginTop:10,padding:'9px 10px',borderRadius:6,background:'#f1f7f9',color:'#315c6e',fontSize:10.5,fontWeight:800}
 const success={marginTop:10,padding:'9px 10px',border:'1px solid #a9d9c4',borderRadius:6,background:'#f0fbf5',color:'#237a52',fontSize:10.5,fontWeight:800}
