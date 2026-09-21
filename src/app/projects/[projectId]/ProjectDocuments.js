@@ -165,7 +165,7 @@ export default function ProjectDocuments({ project }) {
       documentId: doc.id,
       mode: 'location-mapping',
     })
-    router.push(`/ritsucad?${params.toString()}`)
+    router.push(`/ritsucad/project-document?${params.toString()}`)
   }
 
   async function deleteDocument(doc) {
