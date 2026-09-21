@@ -9,6 +9,7 @@ export default function RitsuCadRibbonBridge() {
   useEffect(() => {
     let cancelled = false
     let attempts = 0
+    let inspectorClosed = false
 
     const initialize = () => {
       if (cancelled) return
@@ -18,21 +19,28 @@ export default function RitsuCadRibbonBridge() {
       const firstSection = toolbar?.querySelector('[class*="toolbarSection"]') || null
       if (firstSection) setFileSection(firstSection)
 
-      // page.js currently initializes the inspector as open. Close only the
-      // initial instance; after that the user's ribbon actions own panel state.
-      const inspector = document.querySelector('[class*="_inspector__"]')
-      if (inspector) {
-        const buttons = Array.from(inspector.querySelectorAll('button'))
-        const close = buttons.find((button) => {
-          const title = (button.getAttribute('title') || '').toLowerCase()
-          const label = (button.getAttribute('aria-label') || '').toLowerCase()
-          const text = (button.textContent || '').trim().toLowerCase()
-          return title.includes('close') || label.includes('close') || text === '×'
-        })
-        close?.click()
+      // page.js initializes Properties as open. The inspector can mount after
+      // the project PDF finishes loading, so keep checking until we actually
+      // close the first automatically-opened instance. After that, user actions
+      // own the panel state.
+      if (!inspectorClosed) {
+        const inspector = document.querySelector('[class*="_inspector__"]')
+        if (inspector) {
+          const buttons = Array.from(inspector.querySelectorAll('button'))
+          const close = buttons.find((button) => {
+            const title = (button.getAttribute('title') || '').toLowerCase()
+            const label = (button.getAttribute('aria-label') || '').toLowerCase()
+            const text = (button.textContent || '').trim().toLowerCase()
+            return title.includes('close') || label.includes('close') || text === '×'
+          })
+          if (close) {
+            close.click()
+            inspectorClosed = true
+          }
+        }
       }
 
-      if (!firstSection && attempts < 80) {
+      if ((!firstSection || !inspectorClosed) && attempts < 120) {
         window.setTimeout(initialize, 50)
       }
     }
