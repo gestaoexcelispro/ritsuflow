@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '../../../lib/supabase/client'
 import styles from './standalone-location-workspace.module.css'
 
@@ -25,6 +26,7 @@ function typeIcon(value) {
 }
 
 export default function StandaloneLocationWorkspace({ projectId, projectName, projectCode, userId, initialLocations = [], scopeItems = [], allocations = [] }) {
+  const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const [locations, setLocations] = useState(initialLocations)
   const [selectedId, setSelectedId] = useState('')
@@ -119,7 +121,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
 
     const existing = form.id ? locationMap.get(form.id) : null
     const payload = { project_id: projectId, parent_id: form.parent_id || null, name, location_type: form.location_type, environment_type: form.environment_type.trim() || null, sequence_number: existing?.sequence_number ?? nextSequence() }
-    let query = form.id
+    const query = form.id
       ? supabase.from('locations').update(payload).eq('id', form.id).eq('project_id', projectId)
       : supabase.from('locations').insert({ ...payload, created_by: userId })
     const { data, error: saveError } = await query.select('id, project_id, parent_id, name, location_type, environment_type, sequence_number, created_at, updated_at').single()
@@ -140,6 +142,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
 
     setLocations((current) => form.id ? current.map((item) => item.id === data.id ? data : item) : [...current, data])
     setSelectedId(data.id); setSaving(false); setModalOpen(false); setForm(emptyForm)
+    router.refresh()
   }
 
   async function removeLocation(item) {
@@ -162,6 +165,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     setLocations((current) => current.filter((location) => !removed.has(location.id)))
     if (removed.has(selectedId)) setSelectedId('')
     setSaving(false)
+    router.refresh()
   }
 
   function toggle(id) { setCollapsed((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next }) }
