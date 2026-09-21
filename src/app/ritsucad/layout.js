@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import LocationMappingPanel from './LocationMappingPanel'
 import TakeoffContextPanel from './TakeoffContextPanel'
+import TakeoffPersistenceBridge from './TakeoffPersistenceBridge'
 
 export const metadata = {
   title: 'RitsuCAD™ | RitsuFlow',
@@ -8,11 +9,7 @@ export const metadata = {
     'RitsuFlow construction CAD, drawing markup, measurement, takeoff, and project location mapping workspace.',
 }
 
-
-export default function RitsuCadLayout({
-  children,
-}) {
-
+export default function RitsuCadLayout({ children }) {
   return (
     <div
       style={{
@@ -30,8 +27,8 @@ export default function RitsuCadLayout({
       <Suspense fallback={null}>
         <LocationMappingPanel />
         <TakeoffContextPanel />
+        <TakeoffPersistenceBridge />
       </Suspense>
     </div>
   )
-
 }
