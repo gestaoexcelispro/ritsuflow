@@ -79,7 +79,7 @@ export default async function LocationBreakdownPage({ params }) {
           <div style={errorBox}>Some Location Breakdown data could not be loaded: {loadError.message}</div>
         ) : null}
 
-        <div style={workspace}>
+        <div id="lbs-workspace" style={workspace}>
           <LocationWorkspace
             projectId={project.id}
             projectName={project.name}
@@ -90,6 +90,12 @@ export default async function LocationBreakdownPage({ params }) {
             allocations={allocationsResult.data || []}
           />
         </div>
+
+        <style>{`
+          #lbs-workspace label:has(input[type="number"]) {
+            display: none !important;
+          }
+        `}</style>
       </section>
     </main>
   )
