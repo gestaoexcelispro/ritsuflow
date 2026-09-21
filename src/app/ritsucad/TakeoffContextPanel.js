@@ -13,10 +13,11 @@ function buildLocationRows(locations) {
 
 export default function TakeoffContextPanel() {
   const router=useRouter(); const searchParams=useSearchParams(); const projectId=searchParams.get('projectId'); const documentId=searchParams.get('documentId'); const mappingMode=searchParams.get('mode')==='location-mapping'
-  const [locations,setLocations]=useState([]); const [services,setServices]=useState([]); const [locationId,setLocationId]=useState(''); const [serviceId,setServiceId]=useState(''); const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [savedMessage,setSavedMessage]=useState(''); const [collapsed,setCollapsed]=useState(false)
+  const [locations,setLocations]=useState([]); const [services,setServices]=useState([]); const [locationId,setLocationId]=useState(''); const [serviceId,setServiceId]=useState(''); const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [savedMessage,setSavedMessage]=useState(''); const [open,setOpen]=useState(false); const [collapsed,setCollapsed]=useState(false)
   const locationRows=useMemo(()=>buildLocationRows(locations),[locations]); const selectedLocation=useMemo(()=>locations.find((item)=>item.id===locationId)||null,[locations,locationId]); const selectedService=useMemo(()=>services.find((item)=>item.id===serviceId)||null,[services,serviceId]); const ready=Boolean(projectId&&documentId&&locationId&&serviceId)
 
-  useEffect(()=>{if(!projectId||mappingMode)return;let active=true;(async()=>{setLoading(true);setError('');const [{data:locationData,error:locationError},{data:serviceData,error:serviceError}]=await Promise.all([supabase.from('locations').select('id,parent_id,name,location_type,sequence_number').eq('project_id',projectId).order('sequence_number',{ascending:true}),supabase.from('project_services').select('id,service_code,service_name,unit,sequence_number,is_active').eq('project_id',projectId).eq('is_active',true).order('sequence_number',{ascending:true})]);if(!active)return;if(locationError)setError(locationError.message);else setLocations(locationData||[]);if(serviceError)setError((current)=>current||serviceError.message);else setServices(serviceData||[]);setLoading(false)})();return()=>{active=false}},[projectId,mappingMode])
+  useEffect(()=>{function onOpen(){setOpen(true);setCollapsed(false)}function onClose(){setOpen(false)}window.addEventListener('ritsucad:open-takeoff-context',onOpen);window.addEventListener('ritsucad:close-takeoff-context',onClose);return()=>{window.removeEventListener('ritsucad:open-takeoff-context',onOpen);window.removeEventListener('ritsucad:close-takeoff-context',onClose)}},[])
+  useEffect(()=>{if(!projectId||mappingMode||!open)return;let active=true;(async()=>{setLoading(true);setError('');const [{data:locationData,error:locationError},{data:serviceData,error:serviceError}]=await Promise.all([supabase.from('locations').select('id,parent_id,name,location_type,sequence_number').eq('project_id',projectId).order('sequence_number',{ascending:true}),supabase.from('project_services').select('id,service_code,service_name,unit,sequence_number,is_active').eq('project_id',projectId).eq('is_active',true).order('sequence_number',{ascending:true})]);if(!active)return;if(locationError)setError(locationError.message);else setLocations(locationData||[]);if(serviceError)setError((current)=>current||serviceError.message);else setServices(serviceData||[]);setLoading(false)})();return()=>{active=false}},[projectId,mappingMode,open])
   useEffect(()=>{if(!projectId||mappingMode)return;const detail={projectId,documentId,locationId:locationId||null,locationName:selectedLocation?.name||null,projectServiceId:serviceId||null,serviceCode:selectedService?.service_code||null,serviceName:selectedService?.service_name||null,serviceUnit:selectedService?.unit||null,ready};window.__RITSUCAD_TAKEOFF_CONTEXT__=detail;window.dispatchEvent(new CustomEvent('ritsucad:takeoff-context',{detail}))},[projectId,documentId,locationId,serviceId,selectedLocation,selectedService,ready,mappingMode])
   useEffect(()=>{function onSaved(event){const detail=event.detail||{};setSavedMessage(`${detail.locationName||'Location'} · ${detail.serviceName||'Scope'} · ${Number(detail.quantity||0).toFixed(2)} ${detail.unit||''} saved`)}window.addEventListener('ritsucad:takeoff-saved',onSaved);return()=>window.removeEventListener('ritsucad:takeoff-saved',onSaved)},[])
 
@@ -27,10 +28,10 @@ export default function TakeoffContextPanel() {
     router.push(`/ritsucad/project-document?${params.toString()}`)
   }
 
-  if(!projectId||mappingMode)return null
+  if(!projectId||mappingMode||!open)return null
 
   return <aside style={collapsed?collapsedPanel:panel}>
-    <div style={header}><div><div style={eyebrow}>PROJECT TAKEOFF</div><div style={title}>Takeoff Context</div></div><div style={{display:'flex',alignItems:'center',gap:7}}><span style={ready?readyBadge:setupBadge}>{ready?'Ready':'Setup'}</span><button type="button" onClick={()=>setCollapsed((v)=>!v)} style={collapseButton} title={collapsed?'Expand Takeoff Context':'Minimize Takeoff Context'}>{collapsed?'‹':'›'}</button></div></div>
+    <div style={header}><div><div style={eyebrow}>PROJECT TAKEOFF</div><div style={title}>Takeoff Context</div></div><div style={{display:'flex',alignItems:'center',gap:7}}><span style={ready?readyBadge:setupBadge}>{ready?'Ready':'Setup'}</span><button type="button" onClick={()=>setCollapsed((v)=>!v)} style={collapseButton} title={collapsed?'Expand Takeoff Context':'Minimize Takeoff Context'}>{collapsed?'‹':'›'}</button><button type="button" onClick={()=>setOpen(false)} style={closeButton} title="Close Takeoff Context">×</button></div></div>
     {!collapsed&&<div style={body}>{loading?<div style={helper}>Loading project locations and scope…</div>:<>
       <button type="button" onClick={openLocationMapping} style={mappingButton}>⌖ Map Locations on Drawing</button>
       <div style={mappingHelper}>Define or update the drawing boundary for an existing LBS location before using it for takeoff.</div>
@@ -50,6 +51,7 @@ const title={marginTop:2,fontSize:16,fontWeight:900}
 const setupBadge={border:'1px solid #d6e0e5',background:'#f5f8f9',color:'#647d89',borderRadius:999,padding:'4px 8px',fontSize:9,fontWeight:900}
 const readyBadge={...setupBadge,border:'1px solid #9ed8d8',background:'#effafa',color:'#087f7f'}
 const collapseButton={display:'grid',placeItems:'center',width:25,height:25,padding:0,border:'1px solid #d4e0e5',borderRadius:6,background:'#fff',color:'#52707e',fontSize:18,fontWeight:900,cursor:'pointer'}
+const closeButton={...collapseButton,fontSize:16,fontWeight:700}
 const body={padding:14}
 const mappingButton={width:'100%',border:'1px solid #8fd5d5',borderRadius:7,background:'#effafa',color:'#087f7f',padding:'9px 10px',fontSize:11,fontWeight:900,cursor:'pointer'}
 const mappingHelper={marginTop:6,marginBottom:10,fontSize:9.5,lineHeight:1.4,color:'#728a96'}
