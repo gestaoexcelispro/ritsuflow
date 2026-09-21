@@ -48,7 +48,7 @@ export default function TakeoffContextPanel() {
       setLoading(true); setError('')
       const [{ data: locationData, error: locationError }, { data: serviceData, error: serviceError }] = await Promise.all([
         supabase.from('locations').select('id,parent_id,name,location_type,sequence_number').eq('project_id', projectId).order('sequence_number', { ascending: true }),
-        supabase.from('project_services').select('id,code,name,unit,status').eq('project_id', projectId).order('code', { ascending: true }),
+        supabase.from('project_services').select('id,service_code,service_name,unit,sequence_number,is_active').eq('project_id', projectId).eq('is_active', true).order('sequence_number', { ascending: true }),
       ])
       if (!active) return
       if (locationError) setError(locationError.message); else setLocations(locationData || [])
@@ -60,7 +60,7 @@ export default function TakeoffContextPanel() {
 
   useEffect(() => {
     if (!projectId || mappingMode) return
-    const detail = { projectId, documentId, locationId: locationId || null, locationName: selectedLocation?.name || null, projectServiceId: serviceId || null, serviceCode: selectedService?.code || null, serviceName: selectedService?.name || null, serviceUnit: selectedService?.unit || null, ready }
+    const detail = { projectId, documentId, locationId: locationId || null, locationName: selectedLocation?.name || null, projectServiceId: serviceId || null, serviceCode: selectedService?.service_code || null, serviceName: selectedService?.service_name || null, serviceUnit: selectedService?.unit || null, ready }
     window.__RITSUCAD_TAKEOFF_CONTEXT__ = detail
     window.dispatchEvent(new CustomEvent('ritsucad:takeoff-context', { detail }))
   }, [projectId, documentId, locationId, serviceId, selectedLocation, selectedService, ready, mappingMode])
@@ -89,9 +89,9 @@ export default function TakeoffContextPanel() {
           <label style={label}>Scope activity</label>
           <select value={serviceId} onChange={(event) => { setServiceId(event.target.value); setSavedMessage('') }} style={control}>
             <option value="">Select scope activity…</option>
-            {services.map((service) => <option key={service.id} value={service.id}>{service.code ? `${service.code} · ` : ''}{service.name}{service.unit ? ` · ${service.unit}` : ''}</option>)}
+            {services.map((service) => <option key={service.id} value={service.id}>{service.service_code ? `${service.service_code} · ` : ''}{service.service_name}{service.unit ? ` · ${service.unit}` : ''}</option>)}
           </select>
-          {ready ? <div style={summary}><strong>{selectedLocation?.name}</strong><span> → </span><strong>{selectedService?.name}</strong><div style={summaryNote}>Choose a RitsuCAD takeoff tool and measure the drawing. The calculated quantity will inherit this context.</div></div> : <div style={helper}>Select where the work occurs and what scope is being quantified before starting a project takeoff.</div>}
+          {ready ? <div style={summary}><strong>{selectedLocation?.name}</strong><span> → </span><strong>{selectedService?.service_name}</strong><div style={summaryNote}>Choose a RitsuCAD takeoff tool and measure the drawing. The calculated quantity will inherit this context.</div></div> : <div style={helper}>Select where the work occurs and what scope is being quantified before starting a project takeoff.</div>}
           {savedMessage && <div style={success}>{savedMessage}</div>}
           {error && <div style={errorBox}>{error}</div>}
         </>}
