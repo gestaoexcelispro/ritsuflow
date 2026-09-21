@@ -36,15 +36,10 @@ export default function NewDailyReportPage() {
   const [userId, setUserId] = useState(null);
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
-
-  const [reportDate, setReportDate] = useState(
-    getLocalDateKey()
-  );
-
+  const [reportDate, setReportDate] = useState(getLocalDateKey());
   const [workStartTime, setWorkStartTime] = useState('');
   const [workEndTime, setWorkEndTime] = useState('');
   const [generalNotes, setGeneralNotes] = useState('');
-
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -54,32 +49,20 @@ export default function NewDailyReportPage() {
       setIsLoading(true);
       setErrorMessage('');
 
-      const queryParameters = new URLSearchParams(
-        window.location.search
-      );
+      const queryParameters = new URLSearchParams(window.location.search);
+      const selectedProjectId = queryParameters.get('projectId');
 
-      const selectedProjectId =
-        queryParameters.get('projectId');
-
-      const {
-        data: userData,
-        error: userError,
-      } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
 
       if (userError || !userData?.user) {
-        setErrorMessage(
-          'Your authenticated session could not be verified.'
-        );
+        setErrorMessage('Your authenticated session could not be verified.');
         setIsLoading(false);
         return;
       }
 
       setUserId(userData.user.id);
 
-      const {
-        data: projectsData,
-        error: projectsError,
-      } = await supabase
+      const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select(`
           id,
@@ -94,15 +77,12 @@ export default function NewDailyReportPage() {
         .order('created_at', { ascending: false });
 
       if (projectsError) {
-        setErrorMessage(
-          getErrorMessage(projectsError)
-        );
+        setErrorMessage(getErrorMessage(projectsError));
         setIsLoading(false);
         return;
       }
 
       const availableProjects = projectsData || [];
-
       setProjects(availableProjects);
 
       if (!selectedProjectId) {
@@ -139,22 +119,14 @@ export default function NewDailyReportPage() {
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (
-      !selectedProject ||
-      !userId ||
-      !reportDate ||
-      isSaving
-    ) {
+    if (!selectedProject || !userId || !reportDate || isSaving) {
       return;
     }
 
     setIsSaving(true);
     setErrorMessage('');
 
-    const {
-      data: existingReport,
-      error: existingReportError,
-    } = await supabase
+    const { data: existingReport, error: existingReportError } = await supabase
       .from('daily_reports')
       .select(`
         id,
@@ -166,65 +138,44 @@ export default function NewDailyReportPage() {
       .maybeSingle();
 
     if (existingReportError) {
-      setErrorMessage(
-        getErrorMessage(existingReportError)
-      );
+      setErrorMessage(getErrorMessage(existingReportError));
       setIsSaving(false);
       return;
     }
 
     if (existingReport) {
-      setErrorMessage(
-        'A Daily Report already exists for this project and date.'
-      );
+      setErrorMessage('A Daily Report already exists for this project and date.');
       setIsSaving(false);
       return;
     }
 
-    const {
-      data: latestReport,
-      error: latestReportError,
-    } = await supabase
+    const { data: latestReport, error: latestReportError } = await supabase
       .from('daily_reports')
-      .select(`
-        report_number
-      `)
+      .select('report_number')
       .eq('project_id', selectedProject.id)
-      .order('report_number', {
-        ascending: false,
-      })
+      .order('report_number', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (latestReportError) {
-      setErrorMessage(
-        getErrorMessage(latestReportError)
-      );
+      setErrorMessage(getErrorMessage(latestReportError));
       setIsSaving(false);
       return;
     }
 
-    const nextReportNumber =
-      Number(latestReport?.report_number || 0) + 1;
+    const nextReportNumber = Number(latestReport?.report_number || 0) + 1;
 
-    const {
-      data: createdReport,
-      error: createError,
-    } = await supabase
+    const { data: createdReport, error: createError } = await supabase
       .from('daily_reports')
       .insert({
-        organization_id:
-          selectedProject.organization_id,
+        organization_id: selectedProject.organization_id,
         project_id: selectedProject.id,
         report_number: nextReportNumber,
         report_date: reportDate,
         status: 'draft',
-        work_start_time:
-          workStartTime || null,
-        work_end_time:
-          workEndTime || null,
-        general_notes:
-          generalNotes.trim() || null,
+        work_start_time: workStartTime || null,
+        work_end_time: workEndTime || null,
+        general_notes: generalNotes.trim() || null,
         created_by: userId,
       })
       .select(`
@@ -236,29 +187,20 @@ export default function NewDailyReportPage() {
       .single();
 
     if (createError) {
-      setErrorMessage(
-        getErrorMessage(createError)
-      );
+      setErrorMessage(getErrorMessage(createError));
       setIsSaving(false);
       return;
     }
 
-    router.push(
-      `/dashboard/projects/daily-reports?projectId=${selectedProject.id}`
-    );
+    router.push(`/daily-report/${createdReport.id}`);
   }
 
   if (isLoading) {
     return (
       <main className={styles.page}>
         <section className={styles.infoCard}>
-          <p className={styles.sectionEyebrow}>
-            DAILY REPORT
-          </p>
-
-          <h1 className={styles.sectionTitle}>
-            Loading...
-          </h1>
+          <p className={styles.sectionEyebrow}>DAILY REPORT</p>
+          <h1 className={styles.sectionTitle}>Loading...</h1>
         </section>
       </main>
     );
@@ -268,36 +210,20 @@ export default function NewDailyReportPage() {
     <main className={styles.page}>
       <section className={styles.pageHeader}>
         <div>
-          <p className={styles.eyebrow}>
-            FIELD MANAGEMENT
-          </p>
-
-          <h1 className={styles.title}>
-            New Daily Report
-          </h1>
-
+          <p className={styles.eyebrow}>FIELD MANAGEMENT</p>
+          <h1 className={styles.title}>New Daily Report</h1>
           <p className={styles.description}>
-            Create the project&apos;s daily field record.
-            The report will start as a Draft and can be
-            completed progressively.
+            Create the project&apos;s daily field record. The report will start as a
+            Draft and can be completed progressively.
           </p>
         </div>
 
         <button
           type="button"
           className={styles.secondaryButton}
-          onClick={() => {
-            const projectQuery =
-              selectedProject?.id
-                ? `?projectId=${selectedProject.id}`
-                : '';
-
-            router.push(
-              `/dashboard/projects/daily-reports${projectQuery}`
-            );
-          }}
+          onClick={() => router.push('/fieldop')}
         >
-          ← Back to Daily Reports
+          ← Back to FieldOp
         </button>
       </section>
 
@@ -319,57 +245,27 @@ export default function NewDailyReportPage() {
       <section className={styles.infoCard}>
         <div className={styles.infoCardHeader}>
           <div>
-            <p className={styles.sectionEyebrow}>
-              REPORT SETUP
-            </p>
-
-            <h2 className={styles.sectionTitle}>
-              General information
-            </h2>
+            <p className={styles.sectionEyebrow}>REPORT SETUP</p>
+            <h2 className={styles.sectionTitle}>General information</h2>
           </div>
-
-          <span className={styles.statusBadge}>
-            Draft
-          </span>
+          <span className={styles.statusBadge}>Draft</span>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            display: 'grid',
-            gap: '20px',
-          }}
-        >
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns:
-                'repeat(2, minmax(0, 1fr))',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
               gap: '16px',
             }}
           >
-            <label
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '7px',
-              }}
-            >
-              <span
-                style={{
-                  color: '#64748b',
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                }}
-              >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              <span style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 800 }}>
                 Project
               </span>
-
               <select
                 value={selectedProject?.id || ''}
-                onChange={(event) =>
-                  changeProject(event.target.value)
-                }
+                onChange={(event) => changeProject(event.target.value)}
                 required
                 style={{
                   minHeight: '42px',
@@ -382,46 +278,24 @@ export default function NewDailyReportPage() {
                   fontWeight: 700,
                 }}
               >
-                <option value="" disabled>
-                  Select a project
-                </option>
-
+                <option value="" disabled>Select a project</option>
                 {projects.map((project) => (
-                  <option
-                    key={project.id}
-                    value={project.id}
-                  >
-                    {project.code || 'Unassigned'} ·{' '}
-                    {project.name}
+                  <option key={project.id} value={project.id}>
+                    {project.code || 'Unassigned'} · {project.name}
                   </option>
                 ))}
               </select>
             </label>
 
-            <label
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '7px',
-              }}
-            >
-              <span
-                style={{
-                  color: '#64748b',
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                }}
-              >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              <span style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 800 }}>
                 Report date
               </span>
-
               <input
                 type="date"
                 required
                 value={reportDate}
-                onChange={(event) =>
-                  setReportDate(event.target.value)
-                }
+                onChange={(event) => setReportDate(event.target.value)}
                 style={{
                   minHeight: '42px',
                   padding: '0 12px',
@@ -435,31 +309,14 @@ export default function NewDailyReportPage() {
               />
             </label>
 
-            <label
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '7px',
-              }}
-            >
-              <span
-                style={{
-                  color: '#64748b',
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                }}
-              >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              <span style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 800 }}>
                 Work start
               </span>
-
               <input
                 type="time"
                 value={workStartTime}
-                onChange={(event) =>
-                  setWorkStartTime(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setWorkStartTime(event.target.value)}
                 style={{
                   minHeight: '42px',
                   padding: '0 12px',
@@ -472,31 +329,14 @@ export default function NewDailyReportPage() {
               />
             </label>
 
-            <label
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '7px',
-              }}
-            >
-              <span
-                style={{
-                  color: '#64748b',
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                }}
-              >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              <span style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 800 }}>
                 Work end
               </span>
-
               <input
                 type="time"
                 value={workEndTime}
-                onChange={(event) =>
-                  setWorkEndTime(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setWorkEndTime(event.target.value)}
                 style={{
                   minHeight: '42px',
                   padding: '0 12px',
@@ -510,29 +350,14 @@ export default function NewDailyReportPage() {
             </label>
           </div>
 
-          <label
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '7px',
-            }}
-          >
-            <span
-              style={{
-                color: '#64748b',
-                fontSize: '0.7rem',
-                fontWeight: 800,
-              }}
-            >
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+            <span style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 800 }}>
               General notes
             </span>
-
             <textarea
               rows={5}
               value={generalNotes}
-              onChange={(event) =>
-                setGeneralNotes(event.target.value)
-              }
+              onChange={(event) => setGeneralNotes(event.target.value)}
               placeholder="Optional initial notes for this Daily Report..."
               style={{
                 width: '100%',
@@ -561,16 +386,7 @@ export default function NewDailyReportPage() {
             <button
               type="button"
               className={styles.secondaryButton}
-              onClick={() => {
-                const projectQuery =
-                  selectedProject?.id
-                    ? `?projectId=${selectedProject.id}`
-                    : '';
-
-                router.push(
-                  `/dashboard/projects/daily-reports${projectQuery}`
-                );
-              }}
+              onClick={() => router.push('/fieldop')}
               disabled={isSaving}
             >
               Cancel
@@ -579,50 +395,30 @@ export default function NewDailyReportPage() {
             <button
               type="submit"
               className={styles.primaryButton}
-              disabled={
-                !selectedProject ||
-                !reportDate ||
-                isSaving
-              }
+              disabled={!selectedProject || !reportDate || isSaving}
             >
-              {isSaving
-                ? 'Creating...'
-                : 'Create Daily Report'}
+              {isSaving ? 'Creating...' : 'Create Daily Report'}
             </button>
           </div>
         </form>
       </section>
 
       <section className={styles.infoCard}>
-        <p className={styles.sectionEyebrow}>
-          WORKFLOW
-        </p>
-
-        <h2 className={styles.sectionTitle}>
-          What happens next
-        </h2>
-
+        <p className={styles.sectionEyebrow}>WORKFLOW</p>
+        <h2 className={styles.sectionTitle}>What happens next</h2>
         <p className={styles.integrationText}>
-          After the Draft is created, the Daily Report workspace
-          will allow field teams to progressively add weather,
-          workforce, production, equipment, materials, issues,
-          notes and supporting evidence before submission and
+          After the Draft is created, the Daily Report workspace will allow field
+          teams to progressively add weather, workforce, production, equipment,
+          materials, issues, notes and supporting evidence before submission and
           approval.
         </p>
-
         <div className={styles.integrationFlow}>
           <span>Draft</span>
-          <span className={styles.flowArrow}>
-            →
-          </span>
+          <span className={styles.flowArrow}>→</span>
           <span>Submitted</span>
-          <span className={styles.flowArrow}>
-            →
-          </span>
+          <span className={styles.flowArrow}>→</span>
           <span>Reviewed</span>
-          <span className={styles.flowArrow}>
-            →
-          </span>
+          <span className={styles.flowArrow}>→</span>
           <span>Approved</span>
         </div>
       </section>
