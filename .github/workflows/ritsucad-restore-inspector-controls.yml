@@ -1,0 +1,100 @@
+name: RitsuCAD restore inspector ribbon controls
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ritsucad-restore-inspector-controls.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Restore Properties and Layers ribbon controls
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/app/ritsucad/page.js')
+          text = path.read_text(encoding='utf-8')
+
+          marker = """          <button
+            type=\"button\"
+            className={
+              styles.toolbarIconButton
+            }
+            onClick={
+              undoCad
+            }"""
+
+          controls = """          <button
+            type=\"button\"
+            className={[
+              styles.toolbarButton,
+              inspectorOpen && inspectorTab === 'properties'
+                ? styles.toolbarButtonActive
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() => {
+              setInspectorTab('properties')
+              setInspectorOpen(true)
+            }}
+            title=\"Properties\"
+          >
+            <Icon type=\"properties\" />
+            <span>Properties</span>
+          </button>
+
+
+          <button
+            type=\"button\"
+            className={[
+              styles.toolbarButton,
+              inspectorOpen && inspectorTab === 'layers'
+                ? styles.toolbarButtonActive
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() => {
+              setInspectorTab('layers')
+              setInspectorOpen(true)
+            }}
+            title=\"Layers\"
+          >
+            <Icon type=\"layers\" />
+            <span>Layers</span>
+          </button>
+
+
+"""
+
+          if 'title="Properties"' in text and 'title="Layers"' in text:
+              print('Inspector ribbon controls already present.')
+          else:
+              count = text.count(marker)
+              if count != 1:
+                  raise SystemExit(f'Expected one Undo marker, found {count}')
+              text = text.replace(marker, controls + marker, 1)
+              path.write_text(text, encoding='utf-8')
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "No change required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/ritsucad/page.js
+          git commit -m "fix(ritsucad): restore properties and layers ribbon controls"
+          git push origin main
