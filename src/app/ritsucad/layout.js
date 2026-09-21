@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import LocationMappingPanel from './LocationMappingPanel'
+import TakeoffContextPanel from './TakeoffContextPanel'
 
 export const metadata = {
   title: 'RitsuCAD™ | RitsuFlow',
@@ -28,6 +29,7 @@ export default function RitsuCadLayout({
 
       <Suspense fallback={null}>
         <LocationMappingPanel />
+        <TakeoffContextPanel />
       </Suspense>
     </div>
   )
