@@ -1,7 +1,10 @@
+import { Suspense } from 'react'
+import LocationMappingPanel from './LocationMappingPanel'
+
 export const metadata = {
   title: 'RitsuCAD™ | RitsuFlow',
   description:
-    'RitsuFlow construction CAD, drawing markup, measurement, and takeoff workspace.',
+    'RitsuFlow construction CAD, drawing markup, measurement, takeoff, and project location mapping workspace.',
 }
 
 
@@ -22,6 +25,10 @@ export default function RitsuCadLayout({
       }}
     >
       {children}
+
+      <Suspense fallback={null}>
+        <LocationMappingPanel />
+      </Suspense>
     </div>
   )
 
