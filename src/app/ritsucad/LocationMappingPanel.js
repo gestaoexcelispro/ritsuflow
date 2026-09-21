@@ -15,16 +15,6 @@ const DRAWING_TYPES = [
   ['other', 'Other'],
 ]
 
-const LOCATION_TYPES = [
-  ['phase', 'Phase'],
-  ['building', 'Building'],
-  ['zone', 'Zone / Sector'],
-  ['floor', 'Floor'],
-  ['area', 'Area'],
-  ['room', 'Room'],
-  ['custom', 'Custom'],
-]
-
 function buildLocationRows(locations) {
   const children = new Map()
   locations.forEach(location => {
@@ -86,30 +76,9 @@ export default function LocationMappingPanel() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  const [newLocationName, setNewLocationName] = useState('')
-  const [newLocationType, setNewLocationType] = useState('room')
-  const [newLocationParentId, setNewLocationParentId] = useState('')
-  const [creatingLocation, setCreatingLocation] = useState(false)
-
   const polygonSnapshotRef = useRef(new Set())
   const locationRows = useMemo(() => buildLocationRows(locations), [locations])
   const selectedLocation = useMemo(() => locations.find(location => location.id === selectedLocationId) || null, [locations, selectedLocationId])
-
-  async function refreshLocations(preferredId = '') {
-    const { data, error: locationError } = await supabase
-      .from('locations')
-      .select('id,parent_id,name,location_type,sequence_number')
-      .eq('project_id', projectId)
-      .order('sequence_number', { ascending: true })
-
-    if (locationError) {
-      setError(locationError.message)
-      return
-    }
-
-    setLocations(data || [])
-    if (preferredId) setSelectedLocationId(preferredId)
-  }
 
   async function loadMappedLocations(mapId) {
     if (!mapId) {
@@ -197,46 +166,6 @@ export default function LocationMappingPanel() {
     return () => { cancelled = true; window.removeEventListener('keydown', handleKeyDown) }
   }, [enabled, drawingLocation, mappingId, selectedLocationId, selectedLocation, projectId, documentId])
 
-  async function createLocation() {
-    const name = newLocationName.trim()
-    if (!name || creatingLocation) return
-    setCreatingLocation(true); setError(''); setMessage('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setError('You must be signed in to create a project location.')
-      setCreatingLocation(false)
-      return
-    }
-
-    const siblings = locations.filter(location => (location.parent_id || '') === (newLocationParentId || ''))
-    const nextSequence = siblings.reduce((max, location) => Math.max(max, Number(location.sequence_number || 0)), -1) + 1
-
-    const { data, error: insertError } = await supabase
-      .from('locations')
-      .insert({
-        project_id: projectId,
-        parent_id: newLocationParentId || null,
-        name,
-        location_type: newLocationType,
-        sequence_number: nextSequence,
-        created_by: user.id,
-      })
-      .select('id,name')
-      .single()
-
-    if (insertError) {
-      setError(insertError.message)
-    } else {
-      await refreshLocations(data.id)
-      if (!rootLocationId && !newLocationParentId) setRootLocationId(data.id)
-      setNewLocationParentId(data.id)
-      setNewLocationName('')
-      setMessage(`${data.name} created in the shared Project Location Structure.`)
-    }
-    setCreatingLocation(false)
-  }
-
   async function saveClassification() {
     if (!enabled || saving) return
     setSaving(true); setError(''); setMessage('')
@@ -251,7 +180,7 @@ export default function LocationMappingPanel() {
 
   function startLocationDrawing() {
     if (!mappingId) { setError('Save the drawing setup before mapping locations.'); return }
-    if (!selectedLocationId) { setError('Select a project location first.'); return }
+    if (!selectedLocationId) { setError('Select an existing LBS location first.'); return }
     polygonSnapshotRef.current = new Set(getRenderedCadPolygons().map(points => polygonSignature(points)))
     setError(''); setMessage(`Trace ${selectedLocation?.name || 'the selected location'} on the drawing. Press Enter to finish the polygon or Esc to cancel.`); setDrawingLocation(true)
     window.dispatchEvent(new KeyboardEvent('keydown', { key: '4', code: 'Digit4', bubbles: true, cancelable: true }))
@@ -261,78 +190,49 @@ export default function LocationMappingPanel() {
 
   return (
     <aside style={panel}>
-      <div style={header}><div><div style={eyebrow}>PROJECT LOCATION MAPPING</div><div style={heading}>Configure Drawing</div></div><span style={badge}>Project Data</span></div>
+      <div style={header}><div><div style={eyebrow}>PROJECT LOCATION MAPPING</div><div style={heading}>Configure Drawing</div></div><span style={badge}>LBS Connected</span></div>
       {loading ? <div style={empty}>Loading project mapping...</div> : (
         <div style={body}>
           <section style={section}>
             <div style={label}>Drawing</div>
             <div style={documentName}>{documentRecord?.file_name || 'Project drawing'}</div>
-            <div style={helper}>This PDF remains stored in Project Documents. Mapping data is saved against the shared project record.</div>
+            <div style={helper}>This PDF remains stored in Project Documents. RitsuCAD reads locations from the project's shared Location Breakdown Structure (LBS).</div>
           </section>
 
           <section style={section}>
-            <div style={sectionTitle}>1 · Classify this drawing</div>
+            <div style={sectionTitle}>1 · Classify Drawing</div>
             <label style={fieldLabel}>Drawing type</label>
             <select value={drawingType} onChange={event => setDrawingType(event.target.value)} style={control}>{DRAWING_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
             <label style={fieldLabel}>Classification label</label>
             <input value={classificationLabel} onChange={event => setClassificationLabel(event.target.value)} placeholder="Example: Ground Floor" style={control} />
-            <label style={fieldLabel}>Root location</label>
+            <label style={fieldLabel}>LBS root location</label>
             <select value={rootLocationId} onChange={event => setRootLocationId(event.target.value)} style={control}>
-              <option value="">Select project location...</option>
+              <option value="">Select LBS location...</option>
               {locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name} · {location.location_type}</option>)}
             </select>
-            <div style={helper}>The location comes from the project's shared Location Structure. You can create that structure directly below without creating a parallel RitsuCAD database.</div>
+            <div style={helper}>Choose the existing LBS location represented by this drawing. Location creation and hierarchy management remain centralized in the project's Location Structure.</div>
             <button type="button" onClick={saveClassification} disabled={saving} style={{ ...primaryButton, opacity: saving ? .6 : 1 }}>{saving ? 'Saving...' : mappingId ? 'Update Drawing Setup' : 'Save Drawing Setup'}</button>
           </section>
 
-          <section style={section}>
-            <div style={sectionTitle}>2 · Build Project Location Structure</div>
-            <div style={helper}>Create locations here while reading the drawing. Every item is written directly to the shared project <strong>locations</strong> data used by PreCon and FieldOp.</div>
-
-            <label style={fieldLabel}>Location name</label>
-            <input value={newLocationName} onChange={event => setNewLocationName(event.target.value)} placeholder="Example: Ground Floor, Sector A, Room 1" style={control} />
-
-            <label style={fieldLabel}>Location type</label>
-            <select value={newLocationType} onChange={event => setNewLocationType(event.target.value)} style={control}>
-              {LOCATION_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-
-            <label style={fieldLabel}>Parent location</label>
-            <select value={newLocationParentId} onChange={event => setNewLocationParentId(event.target.value)} style={control}>
-              <option value="">No parent · top level</option>
-              {locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name}</option>)}
-            </select>
-
-            <button type="button" onClick={createLocation} disabled={creatingLocation || !newLocationName.trim()} style={{ ...secondaryButton, opacity: creatingLocation || !newLocationName.trim() ? .55 : 1 }}>
-              {creatingLocation ? 'Creating...' : '+ Create Project Location'}
-            </button>
-
-            {locationRows.length === 0 ? (
-              <div style={emptyStructure}>No project locations yet. Start with the highest level visible on this drawing, for example <strong>Ground Floor</strong>.</div>
-            ) : (
-              <div style={treeBox}>
-                {locationRows.map(location => (
-                  <button key={location.id} type="button" onClick={() => { setSelectedLocationId(location.id); setNewLocationParentId(location.id) }} style={{ ...treeRow, paddingLeft: 10 + location.depth * 16, background: selectedLocationId === location.id ? '#e9f8f8' : '#fff' }}>
-                    <span>{location.name}</span><span style={treeType}>{location.location_type}{mappedLocationIds.has(location.id) ? ' · ✓ Mapped' : ''}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-
           <section style={{ ...section, ...nextSection }}>
-            <div style={sectionTitle}>3 · Map locations on the drawing</div>
-            <label style={fieldLabel}>Project location</label>
-            <select value={selectedLocationId} onChange={event => setSelectedLocationId(event.target.value)} style={control} disabled={drawingLocation}>
-              <option value="">Select location to map...</option>
-              {locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name}{mappedLocationIds.has(location.id) ? ' ✓ Mapped' : ''}</option>)}
-            </select>
-            <div style={helper}>Choose the shared project location represented by this polygon. Calibration is not required because the boundary uses RitsuCAD's native PDF coordinates.</div>
-            <button type="button" onClick={startLocationDrawing} disabled={saving || drawingLocation || !selectedLocationId} style={{ ...primaryButton, opacity: saving || drawingLocation || !selectedLocationId ? .55 : 1 }}>
-              {drawingLocation ? 'Drawing Location...' : mappedLocationIds.has(selectedLocationId) ? 'Redraw Location Boundary' : 'Draw Location Boundary'}
-            </button>
-            {drawingLocation && <div style={drawingHint}>Polygon mode is active. Click each boundary point on the PDF, then press <strong>Enter</strong> to save the boundary. Press <strong>Esc</strong> to cancel.</div>}
-            <div style={flow}>Project Location → PDF Geometry → Scope → FieldOp / PreCon</div>
+            <div style={sectionTitle}>2 · Map LBS Locations</div>
+            {locationRows.length === 0 ? (
+              <div style={emptyStructure}>No LBS locations are available for this project. Create the Location Breakdown Structure in Project Setup before mapping drawing boundaries in RitsuCAD.</div>
+            ) : (
+              <>
+                <label style={fieldLabel}>Project location</label>
+                <select value={selectedLocationId} onChange={event => setSelectedLocationId(event.target.value)} style={control} disabled={drawingLocation}>
+                  <option value="">Select LBS location to map...</option>
+                  {locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name}{mappedLocationIds.has(location.id) ? ' ✓ Mapped' : ''}</option>)}
+                </select>
+                <div style={helper}>Select an existing LBS location, then trace its boundary on the drawing. RitsuCAD stores only the geometry relationship; it does not create a second location structure.</div>
+                <button type="button" onClick={startLocationDrawing} disabled={saving || drawingLocation || !selectedLocationId} style={{ ...primaryButton, opacity: saving || drawingLocation || !selectedLocationId ? .55 : 1 }}>
+                  {drawingLocation ? 'Drawing Location...' : mappedLocationIds.has(selectedLocationId) ? 'Redraw Location Boundary' : 'Draw Location Boundary'}
+                </button>
+                {drawingLocation && <div style={drawingHint}>Polygon mode is active. Click each boundary point on the PDF, then press <strong>Enter</strong> to save the boundary. Press <strong>Esc</strong> to cancel.</div>}
+              </>
+            )}
+            <div style={flow}>LBS Location → PDF Geometry → Scope → PreCon / FieldOp</div>
           </section>
 
           {message && <div style={success}>{message}</div>}
@@ -357,7 +257,6 @@ const fieldLabel={display:'block',marginTop:10,marginBottom:5,fontSize:10.5,font
 const control={width:'100%',boxSizing:'border-box',minHeight:36,border:'1px solid #c9d8df',borderRadius:6,background:'#fff',color:'#173f52',padding:'7px 9px',fontSize:11.5,outline:'none'}
 const helper={marginTop:6,fontSize:10.5,lineHeight:1.45,color:'#728a96'}
 const primaryButton={width:'100%',marginTop:14,border:0,borderRadius:7,background:'#079b9b',color:'#fff',padding:'10px 12px',fontSize:11.5,fontWeight:900,cursor:'pointer'}
-const secondaryButton={...primaryButton,background:'#123e53'}
 const nextSection={borderBottom:0,marginBottom:0}
 const drawingHint={marginTop:10,padding:'10px 11px',border:'1px solid #8fd5d5',borderRadius:6,background:'#eefafa',color:'#17656b',fontSize:10.5,lineHeight:1.45}
 const flow={marginTop:10,padding:'9px 10px',borderRadius:6,background:'#f1f7f9',color:'#315c6e',fontSize:10.5,fontWeight:800}
@@ -365,6 +264,3 @@ const success={marginTop:10,padding:'9px 10px',border:'1px solid #a9d9c4',border
 const errorBox={marginTop:10,padding:'9px 10px',border:'1px solid #efb0b0',borderRadius:6,background:'#fff3f3',color:'#a61b1b',fontSize:10.5,fontWeight:800}
 const empty={padding:20,color:'#718691',fontSize:11.5}
 const emptyStructure={marginTop:12,padding:'10px 11px',border:'1px dashed #b9cbd3',borderRadius:6,background:'#f8fbfc',color:'#637e8a',fontSize:10.5,lineHeight:1.45}
-const treeBox={marginTop:12,border:'1px solid #d7e3e8',borderRadius:6,overflow:'hidden',maxHeight:180,overflowY:'auto'}
-const treeRow={width:'100%',border:0,borderBottom:'1px solid #e8eef1',minHeight:34,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,textAlign:'left',color:'#173f52',fontSize:10.5,fontWeight:800,cursor:'pointer'}
-const treeType={fontSize:9,color:'#78909c',fontWeight:700,textTransform:'uppercase'}
