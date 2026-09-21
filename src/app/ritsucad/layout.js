@@ -26,13 +26,11 @@ export default function RitsuCadLayout({ children }) {
     >
       <style>{`
         /* =====================================================
-           RITSUCAD WORKSPACE UI v2
-           Canvas first. Controls are compact and contextual.
+           RITSUCAD WORKSPACE UI v3
+           Compact CAD chrome. Drawing surface gets priority.
         ===================================================== */
 
-        [class*="backButton"] {
-          display: none !important;
-        }
+        [class*="backButton"] { display: none !important; }
 
         [class*="headerLeft"] {
           padding-left: 218px !important;
@@ -44,110 +42,89 @@ export default function RitsuCadLayout({ children }) {
         }
 
         /* =====================================================
-           FEATURE-GROUPED RIBBON
+           COMPACT FEATURE RIBBON
+           Existing CAD commands are preserved. We only reshape
+           their presentation so the ribbon behaves like CAD UI.
         ===================================================== */
 
         [class*="cadToolbar"] {
-          height: 76px !important;
-          min-height: 76px !important;
-          padding: 5px 10px 4px !important;
+          height: 62px !important;
+          min-height: 62px !important;
+          padding: 3px 8px 2px !important;
           align-items: stretch !important;
           background: #fbfcfd !important;
           border-bottom: 1px solid #cfdbe4 !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          scrollbar-width: thin;
         }
 
         [class*="toolbarSection"] {
           position: relative !important;
+          flex: 0 0 auto !important;
           align-items: flex-end !important;
-          padding: 17px 5px 1px !important;
-          gap: 2px !important;
+          padding: 13px 4px 1px !important;
+          gap: 1px !important;
         }
 
         [class*="toolbarSection"]::before {
           position: absolute;
           top: 1px;
-          left: 7px;
-          color: #48657d;
-          font-size: 9px;
+          left: 6px;
+          color: #5c7488;
+          font-size: 8px;
           line-height: 1;
           font-weight: 900;
-          letter-spacing: .035em;
+          letter-spacing: .06em;
           white-space: nowrap;
         }
 
-        [class*="toolbarSection"]:nth-of-type(1)::before {
-          content: 'FILE';
-        }
-
-        [class*="toolbarSection"]:nth-of-type(2)::before {
-          content: 'NAVIGATE';
-        }
-
-        [class*="toolbarSection"]:nth-of-type(3)::before {
-          content: 'DRAW';
-        }
-
-        [class*="toolbarSection"]:nth-of-type(4)::before {
-          content: 'MEASURE / TAKEOFF';
-        }
-
-        [class*="toolbarSection"]:nth-of-type(5)::before {
-          content: 'SETUP / HISTORY';
-        }
+        [class*="toolbarSection"]:nth-of-type(1)::before { content: 'FILE'; }
+        [class*="toolbarSection"]:nth-of-type(2)::before { content: 'VIEW'; }
+        [class*="toolbarSection"]:nth-of-type(3)::before { content: 'DRAW'; }
+        [class*="toolbarSection"]:nth-of-type(4)::before { content: 'MEASURE · TAKEOFF'; }
+        [class*="toolbarSection"]:nth-of-type(5)::before { content: 'EDIT · SETUP'; }
 
         [class*="toolbarDivider"] {
-          height: 52px !important;
-          margin: 12px 7px 2px !important;
+          height: 39px !important;
+          margin: 14px 5px 1px !important;
           background: #d5e0e8 !important;
         }
 
-        [class*="toolbarButton"] {
-          height: 48px !important;
-        }
-
-        [class*="toolbarButtonWide"] {
-          height: 48px !important;
-        }
-
-        [class*="toolbarIconButton"] {
-          height: 48px !important;
-        }
-
+        [class*="toolbarButton"],
+        [class*="toolbarButtonWide"],
+        [class*="toolbarIconButton"],
         [class*="importButton"] {
-          height: 48px !important;
+          height: 40px !important;
+          min-height: 40px !important;
+        }
+
+        [class*="toolbarButton"],
+        [class*="toolbarIconButton"] {
+          min-width: 48px !important;
+          padding-left: 6px !important;
+          padding-right: 6px !important;
+        }
+
+        [class*="toolbarButtonWide"],
+        [class*="importButton"] {
+          padding-left: 10px !important;
+          padding-right: 10px !important;
+        }
+
+        /* Disabled tools remain available but recede visually. */
+        [class*="cadToolbar"] button:disabled {
+          opacity: .32 !important;
+          filter: saturate(.45) !important;
         }
 
         /* =====================================================
-           MAXIMIZED CAD + CONTEXTUAL INSPECTOR
-           Important: target the actual CSS-module class only,
-           not inspectorHeader/inspectorBody descendants.
+           CANVAS-FIRST WORKSPACE
         ===================================================== */
 
         [class*="cadArea"] {
           position: relative !important;
-        }
-
-        [class*="_inspector__"] {
-          position: absolute !important;
-          z-index: 64 !important;
-          top: 8px !important;
-          right: 60px !important;
-          bottom: 8px !important;
-          width: 310px !important;
-          min-width: 310px !important;
-          max-width: 310px !important;
-          border: 1px solid #cbd7e1 !important;
-          border-radius: 10px !important;
-          background: #ffffff !important;
-          box-shadow: -8px 8px 28px rgba(15, 23, 42, 0.16) !important;
-          overflow: hidden !important;
-        }
-
-        [class*="_toolRail__"] {
-          flex: 0 0 52px !important;
-          width: 52px !important;
-          min-width: 52px !important;
-          z-index: 66 !important;
+          min-width: 0 !important;
         }
 
         [class*="viewport"] {
@@ -155,31 +132,77 @@ export default function RitsuCadLayout({ children }) {
           width: auto !important;
         }
 
-        /* Welcome card remains centered in the usable CAD surface. */
+        /* Inspector becomes a smaller floating palette instead of
+           permanently stealing a large portion of the CAD surface. */
+        [class*="_inspector__"] {
+          position: absolute !important;
+          z-index: 64 !important;
+          top: 8px !important;
+          right: 58px !important;
+          bottom: auto !important;
+          width: 292px !important;
+          min-width: 292px !important;
+          max-width: 292px !important;
+          max-height: calc(100% - 16px) !important;
+          border: 1px solid #cbd7e1 !important;
+          border-radius: 9px !important;
+          background: #ffffff !important;
+          box-shadow: -5px 7px 22px rgba(15, 23, 42, 0.14) !important;
+          overflow: hidden !important;
+        }
+
+        [class*="_inspectorBody__"] {
+          max-height: calc(100vh - 190px) !important;
+          overflow-y: auto !important;
+        }
+
+        [class*="_toolRail__"] {
+          flex: 0 0 50px !important;
+          width: 50px !important;
+          min-width: 50px !important;
+          z-index: 66 !important;
+        }
+
+        /* =====================================================
+           EMPTY DRAWING STATE
+           Keep it compact and stop external project launcher from
+           visually colliding with the native Import PDF action.
+        ===================================================== */
+
         [class*="emptyViewport"] {
-          max-width: 430px !important;
+          width: 390px !important;
+          max-width: calc(100% - 48px) !important;
+          min-height: 0 !important;
+          padding: 28px 30px 30px !important;
+          overflow: visible !important;
+        }
+
+        [class*="emptyViewport"] h2,
+        [class*="emptyViewport"] h3 {
+          margin-top: 12px !important;
+          margin-bottom: 8px !important;
+        }
+
+        /* RitsuCadProjectLauncher is mounted after the CAD page and uses
+           a fixed/absolute CTA. Give the native empty card extra breathing
+           room so all three entry paths read as separate actions. */
+        [class*="emptyViewport"] [class*="emptyActions"] {
+          gap: 10px !important;
+          padding-bottom: 26px !important;
         }
 
         @media (max-width: 1250px) {
-          [class*="cadToolbar"] {
-            overflow-x: auto !important;
-          }
-
-          [class*="headerLeft"] {
-            padding-left: 205px !important;
-          }
+          [class*="headerLeft"] { padding-left: 205px !important; }
         }
 
         @media (max-width: 1100px) {
-          [class*="headerLeft"] {
-            padding-left: 195px !important;
-          }
+          [class*="headerLeft"] { padding-left: 195px !important; }
 
           [class*="_inspector__"] {
-            right: 56px !important;
-            width: 292px !important;
-            min-width: 292px !important;
-            max-width: 292px !important;
+            right: 54px !important;
+            width: 276px !important;
+            min-width: 276px !important;
+            max-width: 276px !important;
           }
         }
       `}</style>
