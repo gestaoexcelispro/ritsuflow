@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import styles from './fieldop.module.css'
 
 const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','#'],['⚙','Settings','#']]
 
 export default function FieldOpPage(){
+ const router=useRouter()
  const [projects,setProjects]=useState([])
  const [loading,setLoading]=useState(true)
 
@@ -33,6 +35,15 @@ export default function FieldOpPage(){
 
  const onTrack=ongoing.filter(p=>String(p.status||'').toLowerCase().replaceAll('_',' ')==='on track').length
  const attention=ongoing.filter(p=>['attention','need attention','needs attention','at risk'].includes(String(p.status||'').toLowerCase().replaceAll('_',' '))).length
+
+ function createDailyReport(){
+  if(ongoing.length===1){
+   router.push(`/dashboard/projects/daily-reports/new?projectId=${ongoing[0].id}`)
+   return
+  }
+
+  router.push('/dashboard/projects/daily-reports/new')
+ }
 
  return <main className={styles.shell}>
   <aside className={styles.sidebar}>
@@ -61,7 +72,7 @@ export default function FieldOpPage(){
       <div className={styles.activity}><div className={styles.activityHead}><h2>Field Activity <small>(Last 24 Hours)</small></h2></div><div style={{padding:'24px',textAlign:'center'}}>No field activity yet.</div></div>
      </aside>
     </section>
-    <section className={styles.callout}><i>◯</i><div><b>Safer sites. Higher productivity. Stronger projects.</b><span>Field reality connected to planning. That’s RitsuFlow.</span></div><button>▤ &nbsp; Create Daily Report</button></section>
+    <section className={styles.callout}><i>◯</i><div><b>Safer sites. Higher productivity. Stronger projects.</b><span>Field reality connected to planning. That’s RitsuFlow.</span></div><button type="button" onClick={createDailyReport}>▤ &nbsp; Create Daily Report</button></section>
    </div>
   </section>
  </main>
