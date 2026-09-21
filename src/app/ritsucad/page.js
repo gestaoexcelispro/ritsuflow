@@ -3634,7 +3634,7 @@ export default function RitsuCadPage() {
     inspectorOpen,
     setInspectorOpen,
   ] =
-    useState(true)
+    useState(false)
 
   const [
     inspectorTab,
