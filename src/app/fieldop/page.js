@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import styles from './fieldop.module.css'
 
-const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','#'],['⚙','Settings','#']]
+const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','/fieldop/reports/daily'],['⚙','Settings','#']]
 
 export default function FieldOpPage(){
  const router=useRouter()
@@ -38,11 +38,10 @@ export default function FieldOpPage(){
 
  function createDailyReport(){
   if(ongoing.length===1){
-   router.push(`/dashboard/projects/daily-reports/new?projectId=${ongoing[0].id}`)
+   router.push(`/fieldop/reports/daily/new?projectId=${ongoing[0].id}`)
    return
   }
-
-  router.push('/dashboard/projects/daily-reports/new')
+  router.push('/fieldop/reports/daily/new')
  }
 
  return <main className={styles.shell}>
