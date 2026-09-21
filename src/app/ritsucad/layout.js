@@ -3,6 +3,7 @@ import LocationMappingPanel from './LocationMappingPanel'
 import TakeoffContextPanel from './TakeoffContextPanel'
 import TakeoffPersistenceBridge from './TakeoffPersistenceBridge'
 import RitsuCadProjectLauncher from './RitsuCadProjectLauncher'
+import RitsuCadRibbonBridge from './RitsuCadRibbonBridge'
 import ReturnToWorkspaceButton from './ReturnToWorkspaceButton'
 
 export const metadata = {
@@ -26,7 +27,7 @@ export default function RitsuCadLayout({ children }) {
     >
       <style>{`
         /* =====================================================
-           RITSUCAD WORKSPACE UI v5
+           RITSUCAD WORKSPACE UI v6
            Clean canvas. Commands live in the ribbon.
         ===================================================== */
 
@@ -210,8 +211,7 @@ export default function RitsuCadLayout({ children }) {
           font-size: 7px !important;
         }
 
-        /* Empty RitsuCAD means an empty canvas. New Drawing, Import PDF,
-           and Drawings in the ribbon are the only entry points. */
+        /* Empty RitsuCAD means an empty canvas. */
         [class*="emptyViewport"] {
           display: none !important;
         }
@@ -238,31 +238,7 @@ export default function RitsuCadLayout({ children }) {
 
       {children}
 
-      {/* page.js currently initializes Properties as open. Close that
-          default panel once after hydration; the normal ribbon button
-          remains responsible for every subsequent open/close action. */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-            (() => {
-              let attempts = 0;
-              const closeInitialProperties = () => {
-                attempts += 1;
-                const buttons = Array.from(document.querySelectorAll('button'));
-                const properties = buttons.find((button) =>
-                  button.textContent && button.textContent.trim() === 'Properties'
-                );
-                if (properties && properties.className && String(properties.className).includes('railButtonActive')) {
-                  properties.click();
-                  return;
-                }
-                if (attempts < 40) window.setTimeout(closeInitialProperties, 50);
-              };
-              window.setTimeout(closeInitialProperties, 0);
-            })();
-          `,
-        }}
-      />
+      <RitsuCadRibbonBridge />
 
       <Suspense fallback={null}>
         <RitsuCadProjectLauncher />
