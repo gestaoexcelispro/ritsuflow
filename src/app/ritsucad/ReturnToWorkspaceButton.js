@@ -1,24 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 
 export default function ReturnToWorkspaceButton() {
-  const searchParams = useSearchParams()
-  const projectId = searchParams.get('projectId')
-
-  // RitsuCAD can still be opened globally from the Workspace sidebar. In that
-  // case there is no active project to return to, so the Projects workspace is
-  // the safest destination. Project-document and location-mapping sessions keep
-  // projectId in the URL and return directly to that project's record/workspace.
-  const href = projectId
-    ? `/projects/${encodeURIComponent(projectId)}`
-    : '/projects'
-
   return (
     <Link
-      href={href}
-      title={projectId ? 'Return to Project Workspace' : 'Return to Projects'}
+      href="/dashboard"
+      title="Return to Workspace Overview"
       style={{
         position: 'fixed',
         top: 6,
