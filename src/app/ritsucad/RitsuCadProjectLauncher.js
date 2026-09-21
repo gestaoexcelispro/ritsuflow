@@ -20,13 +20,9 @@ export default function RitsuCadProjectLauncher() {
     let active = true
     ;(async () => {
       setLoading(true); setError('')
-      const { data, error: queryError } = await supabase
-        .from('projects')
-        .select('id,project_id,code,name,status')
-        .order('created_at', { ascending: false })
+      const { data, error: queryError } = await supabase.from('projects').select('id,project_id,code,name,status').order('created_at', { ascending: false })
       if (!active) return
-      if (queryError) setError(queryError.message)
-      else setProjects(data || [])
+      if (queryError) setError(queryError.message); else setProjects(data || [])
       setLoading(false)
     })()
     return () => { active = false }
@@ -38,98 +34,37 @@ export default function RitsuCadProjectLauncher() {
     let active = true
     ;(async () => {
       setLoading(true); setError('')
-      const { data, error: queryError } = await supabase
-        .from('project_documents')
-        .select('id,project_id,file_name,mime_type,document_type,created_at')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false })
+      const { data, error: queryError } = await supabase.from('project_documents').select('id,project_id,file_name,mime_type,document_type,created_at').eq('project_id', projectId).order('created_at', { ascending: false })
       if (!active) return
-      if (queryError) setError(queryError.message)
-      else setDocuments((data || []).filter((d) => d.mime_type === 'application/pdf' || d.file_name?.toLowerCase().endsWith('.pdf')))
+      if (queryError) setError(queryError.message); else setDocuments((data || []).filter((d) => d.mime_type === 'application/pdf' || d.file_name?.toLowerCase().endsWith('.pdf')))
       setLoading(false)
     })()
     return () => { active = false }
   }, [projectId])
 
   const selectedProject = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
-
   if (hasProjectContext) return null
 
-  return (
-    <>
-      <button type="button" onClick={() => setOpen(true)} style={launcherButton}>▣&nbsp;&nbsp; Open Project Drawing</button>
-
-      {open && (
-        <div style={backdrop} onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false) }}>
-          <section style={modal} role="dialog" aria-modal="true" aria-label="Open project drawing">
-            <div style={header}>
-              <div>
-                <div style={eyebrow}>RITSUCAD™ · PROJECT DRAWINGS</div>
-                <h2 style={title}>Open Project Drawing</h2>
-                <p style={subtitle}>Choose the project first, then open a PDF already stored in Project Documents.</p>
-              </div>
-              <button type="button" onClick={() => setOpen(false)} style={closeButton}>×</button>
-            </div>
-
-            <div style={body}>
-              <label style={label}>Project</label>
-              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={select}>
-                <option value="">Select project…</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.project_id || project.code || 'Project'} · {project.name}
-                  </option>
-                ))}
-              </select>
-
-              {projectId && (
-                <div style={{marginTop:20}}>
-                  <div style={sectionHeader}>
-                    <div>
-                      <div style={label}>PROJECT DOCUMENTS</div>
-                      <strong style={{fontSize:14,color:'#0d3347'}}>{selectedProject?.name}</strong>
-                    </div>
-                    <span style={countBadge}>{documents.length} PDF{documents.length === 1 ? '' : 's'}</span>
-                  </div>
-
-                  {documents.length ? (
-                    <div style={documentList}>
-                      {documents.map((document) => (
-                        <button
-                          key={document.id}
-                          type="button"
-                          onClick={() => router.push(`/ritsucad/project-document?projectId=${encodeURIComponent(projectId)}&documentId=${encodeURIComponent(document.id)}`)}
-                          style={documentButton}
-                        >
-                          <span style={pdfIcon}>PDF</span>
-                          <span style={{minWidth:0,flex:1,textAlign:'left'}}>
-                            <strong style={documentName}>{document.file_name}</strong>
-                            <small style={documentMeta}>Open in RitsuCAD with project, LBS and scope context</small>
-                          </span>
-                          <span style={openArrow}>→</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : !loading && <div style={empty}>No PDF drawings were found in this project's Project Documents.</div>}
-                </div>
-              )}
-
-              {loading && <div style={helper}>Loading…</div>}
-              {error && <div style={errorBox}>{error}</div>}
-            </div>
-
-            <div style={footer}>
-              <span style={footerNote}>Project Documents remains the source of truth. RitsuCAD does not create a duplicate PDF.</span>
-              <button type="button" onClick={() => setOpen(false)} style={cancelButton}>Cancel</button>
-            </div>
-          </section>
+  return <>
+    <button type="button" onClick={() => setOpen(true)} style={launcherButton}>▣&nbsp;&nbsp; Open Project Drawing</button>
+    {open && <div style={backdrop} onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false) }}>
+      <section style={modal} role="dialog" aria-modal="true" aria-label="Open project drawing">
+        <div style={header}><div><div style={eyebrow}>RITSUCAD™ · PROJECT DRAWINGS</div><h2 style={title}>Open Project Drawing</h2><p style={subtitle}>Choose the project first, then open a PDF already stored in Project Documents.</p></div><button type="button" onClick={() => setOpen(false)} style={closeButton}>×</button></div>
+        <div style={body}>
+          <label style={label}>Project</label>
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={select}><option value="">Select project…</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.project_id || project.code || 'Project'} · {project.name}</option>)}</select>
+          {projectId && <div style={{marginTop:20}}><div style={sectionHeader}><div><div style={label}>PROJECT DOCUMENTS</div><strong style={{fontSize:14,color:'#0d3347'}}>{selectedProject?.name}</strong></div><span style={countBadge}>{documents.length} PDF{documents.length === 1 ? '' : 's'}</span></div>
+            {documents.length ? <div style={documentList}>{documents.map((document) => <button key={document.id} type="button" onClick={() => router.push(`/ritsucad/project-document?projectId=${encodeURIComponent(projectId)}&documentId=${encodeURIComponent(document.id)}`)} style={documentButton}><span style={pdfIcon}>PDF</span><span style={{minWidth:0,flex:1,textAlign:'left'}}><strong style={documentName}>{document.file_name}</strong><small style={documentMeta}>Open in RitsuCAD with project, LBS and scope context</small></span><span style={openArrow}>→</span></button>)}</div> : !loading && <div style={empty}>No PDF drawings were found in this project's Project Documents.</div>}
+          </div>}
+          {loading && <div style={helper}>Loading…</div>}{error && <div style={errorBox}>{error}</div>}
         </div>
-      )}
-    </>
-  )
+        <div style={footer}><span style={footerNote}>Project Documents remains the source of truth. RitsuCAD does not create a duplicate PDF.</span><button type="button" onClick={() => setOpen(false)} style={cancelButton}>Cancel</button></div>
+      </section>
+    </div>}
+  </>
 }
 
-const launcherButton={position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,78px)',zIndex:74,minWidth:250,height:48,border:0,borderRadius:8,background:'#079b9b',color:'#fff',fontSize:13,fontWeight:900,cursor:'pointer',boxShadow:'0 8px 20px rgba(5,75,94,.18)'}
+const launcherButton={position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,155px)',zIndex:74,minWidth:250,height:42,border:'1px solid #087f86',borderRadius:8,background:'#079b9b',color:'#fff',fontSize:12,fontWeight:900,cursor:'pointer',boxShadow:'0 8px 20px rgba(5,75,94,.18)'}
 const backdrop={position:'fixed',inset:0,zIndex:10000,display:'grid',placeItems:'center',padding:24,background:'rgba(7,35,50,.55)',backdropFilter:'blur(2px)'}
 const modal={width:'min(720px,94vw)',maxHeight:'82vh',overflow:'hidden',background:'#fff',borderRadius:14,boxShadow:'0 28px 70px rgba(0,0,0,.28)',color:'#0d3347',fontFamily:'inherit'}
 const header={display:'flex',justifyContent:'space-between',gap:20,padding:'24px 26px 20px',borderBottom:'1px solid #dce6eb'}
