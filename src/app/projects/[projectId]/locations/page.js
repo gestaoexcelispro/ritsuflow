@@ -92,6 +92,16 @@ export default async function LocationBreakdownPage({ params }) {
         </div>
 
         <style>{`
+          html, body {
+            height: 100%;
+            overflow: hidden !important;
+          }
+
+          #lbs-workspace {
+            overscroll-behavior: contain;
+            scrollbar-gutter: stable;
+          }
+
           #lbs-workspace label:has(input[type="number"]) {
             display: none !important;
           }
@@ -101,8 +111,8 @@ export default async function LocationBreakdownPage({ params }) {
   )
 }
 
-const shell={minHeight:'100vh',background:'#f4f8fa',color:'#082f43',fontFamily:'Arial,sans-serif'}
-const header={height:68,boxSizing:'border-box',background:'#063247',display:'flex',alignItems:'center',padding:'0 28px',gap:12,color:'#fff',position:'sticky',top:0,zIndex:1000}
+const shell={height:'100vh',overflow:'hidden',background:'#f4f8fa',color:'#082f43',fontFamily:'Arial,sans-serif',display:'flex',flexDirection:'column'}
+const header={height:68,flex:'0 0 68px',boxSizing:'border-box',background:'#063247',display:'flex',alignItems:'center',padding:'0 28px',gap:12,color:'#fff',zIndex:1000}
 const brand={width:210,height:68,boxSizing:'border-box',display:'flex',alignItems:'center',paddingRight:20,marginRight:4,borderRight:'1px solid rgba(255,255,255,.18)'}
 const titleBlock={minWidth:0,flex:1}
 const title={fontSize:23,fontWeight:800,lineHeight:1}
@@ -112,12 +122,12 @@ const baseButton={height:38,boxSizing:'border-box',display:'flex',alignItems:'ce
 const recordButton={...baseButton,color:'#fff',border:'1px solid rgba(255,255,255,.28)'}
 const scopeButton={...baseButton,color:'#ddecff',border:'1px solid #4d92dd',background:'#1b5f9f'}
 const preconButton={...baseButton,color:'#fff',border:'1px solid #2f86ee',background:'#2f86ee'}
-const body={maxWidth:1800,margin:'0 auto',padding:'18px 24px 30px',boxSizing:'border-box'}
-const intro={display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:24,marginBottom:14}
+const body={width:'100%',maxWidth:1800,margin:'0 auto',padding:'18px 24px 24px',boxSizing:'border-box',flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}
+const intro={display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:24,marginBottom:14,flex:'0 0 auto'}
 const eyebrow={fontSize:10,fontWeight:900,letterSpacing:'1.4px',color:'#079a9a'}
 const heading={margin:'4px 0 5px',fontSize:24,lineHeight:1.1}
 const description={margin:0,maxWidth:820,color:'#607784',fontSize:12.5,lineHeight:1.5}
 const concept={display:'flex',alignItems:'center',gap:8,padding:'10px 13px',border:'1px solid #d7e3e8',borderRadius:8,background:'#fff',fontSize:10.5,color:'#486879',whiteSpace:'nowrap'}
 const arrow={color:'#079a9a',fontWeight:900}
-const workspace={background:'#fff',border:'1px solid #d7e3e8',borderRadius:9,boxShadow:'0 1px 5px rgba(7,47,67,.03)',overflow:'hidden'}
-const errorBox={marginBottom:12,padding:'10px 12px',border:'1px solid #efb0b0',background:'#fff3f3',color:'#a61b1b',borderRadius:7,fontWeight:700,fontSize:12}
+const workspace={background:'#fff',border:'1px solid #d7e3e8',borderRadius:9,boxShadow:'0 1px 5px rgba(7,47,67,.03)',overflowY:'auto',overflowX:'hidden',flex:1,minHeight:0}
+const errorBox={marginBottom:12,padding:'10px 12px',border:'1px solid #efb0b0',background:'#fff3f3',color:'#a61b1b',borderRadius:7,fontWeight:700,fontSize:12,flex:'0 0 auto'}
