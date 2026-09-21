@@ -5369,12 +5369,10 @@ export default function RitsuCadPage() {
       'draw-line'
     )
 
-    setInspectorTab(
-      'properties'
-    )
-
+    // Keep the CAD canvas clean. The inspector is user-controlled
+    // and must open only from an explicit Properties/Layers action.
     setInspectorOpen(
-      true
+      false
     )
   }
 
