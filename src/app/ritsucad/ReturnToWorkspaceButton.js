@@ -5,8 +5,8 @@ import Link from 'next/link'
 export default function ReturnToWorkspaceButton() {
   return (
     <Link
-      href="/dashboard"
-      title="Return to Workspace Overview"
+      href="/workspaces"
+      title="Return to RitsuFlow Workspaces"
       style={{
         position: 'fixed',
         top: 6,
