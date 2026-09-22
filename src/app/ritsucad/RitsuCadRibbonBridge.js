@@ -18,47 +18,55 @@ export default function RitsuCadRibbonBridge() {
 
   useEffect(() => {
     let cancelled = false
+    let observer = null
+
+    const syncRibbonTargets = () => {
+      if (cancelled) return
+      const toolbarElement = document.querySelector('[class*="cadToolbar"]')
+      const firstSection = toolbarElement?.querySelector('[class*="toolbarSection"]') || null
+      setToolbar((current) => current === toolbarElement ? current : toolbarElement)
+      setFileSection((current) => current === firstSection ? current : firstSection)
+    }
+
+    syncRibbonTargets()
+    observer = new MutationObserver(syncRibbonTargets)
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    return () => {
+      cancelled = true
+      observer?.disconnect()
+    }
+  }, [pathname])
+
+  useEffect(() => {
+    let cancelled = false
     let attempts = 0
     let inspectorClosed = false
 
-    const initialize = () => {
-      if (cancelled) return
+    const closeAutomaticInspector = () => {
+      if (cancelled || inspectorClosed) return
       attempts += 1
-
-      const toolbarElement = document.querySelector('[class*="cadToolbar"]')
-      const firstSection = toolbarElement?.querySelector('[class*="toolbarSection"]') || null
-      if (toolbarElement) setToolbar(toolbarElement)
-      if (firstSection) setFileSection(firstSection)
-
-      // Keep the canvas clean on startup. Once the first automatic inspector
-      // is closed, panel state belongs entirely to explicit user actions.
-      if (!inspectorClosed) {
-        const inspector = document.querySelector('[class*="_inspector__"]')
-        if (inspector) {
-          const buttons = Array.from(inspector.querySelectorAll('button'))
-          const close = buttons.find((button) => {
-            const title = (button.getAttribute('title') || '').toLowerCase()
-            const label = (button.getAttribute('aria-label') || '').toLowerCase()
-            const text = (button.textContent || '').trim().toLowerCase()
-            return title.includes('close') || label.includes('close') || text === '×'
-          })
-          if (close) {
-            close.click()
-            inspectorClosed = true
-          }
-        } else if (attempts > 30) {
+      const inspector = document.querySelector('[class*="_inspector__"]')
+      if (inspector) {
+        const buttons = Array.from(inspector.querySelectorAll('button'))
+        const close = buttons.find((button) => {
+          const title = (button.getAttribute('title') || '').toLowerCase()
+          const label = (button.getAttribute('aria-label') || '').toLowerCase()
+          const text = (button.textContent || '').trim().toLowerCase()
+          return title.includes('close') || label.includes('close') || text === '×'
+        })
+        if (close) {
+          close.click()
           inspectorClosed = true
+          return
         }
       }
-
-      if ((!firstSection || !toolbarElement || !inspectorClosed) && attempts < 120) {
-        window.setTimeout(initialize, 50)
-      }
+      if (attempts < 120) window.setTimeout(closeAutomaticInspector, 50)
     }
 
-    initialize()
+    closeAutomaticInspector()
     return () => { cancelled = true }
-  }, [])
+  }, [pathname, documentId])
 
   function openLocationMapping() {
     if (!hasProjectDrawing) return
@@ -95,7 +103,7 @@ export default function RitsuCadRibbonBridge() {
         lineHeight: 1, fontWeight: 900, letterSpacing: '.07em', whiteSpace: 'nowrap',
       }}>PROJECT DATA</span>
       <RibbonButton icon="⌖" label="Locations" active={mappingMode} onClick={openLocationMapping} title="Map existing LBS locations on this drawing" />
-      <RibbonButton icon="▦" label="Takeoff" active={false} onClick={openTakeoffContext} title="Open project takeoff context" />
+      <RibbonButton icon="▦" label="Takeoff" onClick={openTakeoffContext} title="Open project takeoff context" />
     </div>,
     toolbar
   ) : null
