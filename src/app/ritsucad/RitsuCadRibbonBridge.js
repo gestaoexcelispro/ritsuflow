@@ -2,9 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 export default function RitsuCadRibbonBridge() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [fileSection, setFileSection] = useState(null)
+  const [toolbar, setToolbar] = useState(null)
+
+  const projectId = searchParams.get('projectId')
+  const documentId = searchParams.get('documentId')
+  const mappingMode = searchParams.get('mode') === 'location-mapping'
+  const hasProjectDrawing = Boolean(projectId && documentId)
 
   useEffect(() => {
     let cancelled = false
@@ -15,14 +25,13 @@ export default function RitsuCadRibbonBridge() {
       if (cancelled) return
       attempts += 1
 
-      const toolbar = document.querySelector('[class*="cadToolbar"]')
-      const firstSection = toolbar?.querySelector('[class*="toolbarSection"]') || null
+      const toolbarElement = document.querySelector('[class*="cadToolbar"]')
+      const firstSection = toolbarElement?.querySelector('[class*="toolbarSection"]') || null
+      if (toolbarElement) setToolbar(toolbarElement)
       if (firstSection) setFileSection(firstSection)
 
-      // page.js initializes Properties as open. The inspector can mount after
-      // the project PDF finishes loading, so keep checking until we actually
-      // close the first automatically-opened instance. After that, user actions
-      // own the panel state.
+      // Keep the canvas clean on startup. Once the first automatic inspector
+      // is closed, panel state belongs entirely to explicit user actions.
       if (!inspectorClosed) {
         const inspector = document.querySelector('[class*="_inspector__"]')
         if (inspector) {
@@ -37,10 +46,12 @@ export default function RitsuCadRibbonBridge() {
             close.click()
             inspectorClosed = true
           }
+        } else if (attempts > 30) {
+          inspectorClosed = true
         }
       }
 
-      if ((!firstSection || !inspectorClosed) && attempts < 120) {
+      if ((!firstSection || !toolbarElement || !inspectorClosed) && attempts < 120) {
         window.setTimeout(initialize, 50)
       }
     }
@@ -49,22 +60,75 @@ export default function RitsuCadRibbonBridge() {
     return () => { cancelled = true }
   }, [])
 
-  if (!fileSection) return null
+  function openLocationMapping() {
+    if (!hasProjectDrawing) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('mode', 'location-mapping')
+    window.dispatchEvent(new Event('ritsucad:close-takeoff-context'))
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
 
-  return createPortal(
-    <button
-      type="button"
+  function openTakeoffContext() {
+    if (!hasProjectDrawing) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('mode')
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    window.setTimeout(() => window.dispatchEvent(new Event('ritsucad:open-takeoff-context')), 0)
+  }
+
+  const projectDataSection = toolbar && hasProjectDrawing ? createPortal(
+    <div
+      data-ritsucad-project-data="true"
+      style={{
+        position: 'relative',
+        flex: '0 0 auto',
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 2,
+        padding: '15px 5px 1px 12px',
+        marginLeft: 5,
+        borderLeft: '1px solid #d5e0e8',
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 2, left: 12, color: '#496579', fontSize: 8,
+        lineHeight: 1, fontWeight: 900, letterSpacing: '.07em', whiteSpace: 'nowrap',
+      }}>PROJECT DATA</span>
+      <RibbonButton icon="⌖" label="Locations" active={mappingMode} onClick={openLocationMapping} title="Map existing LBS locations on this drawing" />
+      <RibbonButton icon="▦" label="Takeoff" active={false} onClick={openTakeoffContext} title="Open project takeoff context" />
+    </div>,
+    toolbar
+  ) : null
+
+  const projectDrawingButton = fileSection && !hasProjectDrawing ? createPortal(
+    <RibbonButton
+      icon="▣"
+      label="Project Drawing"
       onClick={() => window.dispatchEvent(new Event('ritsucad:open-project-drawing'))}
       title="Open a PDF drawing stored in a RitsuFlow project"
+      wide
+    />,
+    fileSection
+  ) : null
+
+  return <>{projectDrawingButton}{projectDataSection}</>
+}
+
+function RibbonButton({ icon, label, onClick, title, active = false, wide = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
       style={{
-        height: 40,
-        minHeight: 40,
-        minWidth: 86,
-        padding: '0 10px',
-        border: '1px solid #b9cbd5',
+        height: 42,
+        minHeight: 42,
+        minWidth: wide ? 86 : 58,
+        padding: '3px 7px',
+        border: active ? '1px solid #73d1cc' : '1px solid #b9cbd5',
         borderRadius: 6,
-        background: '#ffffff',
-        color: '#173e52',
+        background: active ? '#e8faf8' : '#ffffff',
+        color: active ? '#007f79' : '#173e52',
         display: 'inline-flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -78,9 +142,8 @@ export default function RitsuCadRibbonBridge() {
         whiteSpace: 'nowrap',
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>▣</span>
-      <span>Project Drawing</span>
-    </button>,
-    fileSection
+      <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>{icon}</span>
+      <span>{label}</span>
+    </button>
   )
 }
