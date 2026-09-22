@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 
 const DRAWING_TYPES = [
@@ -26,7 +26,6 @@ function buildLocationRows(locations) {
     Number(a.sequence_number || 0) - Number(b.sequence_number || 0) ||
     String(a.name || '').localeCompare(String(b.name || ''))
   ))
-
   const rows = []
   const walk = (parentId, depth) => {
     ;(children.get(parentId) || []).forEach(location => {
@@ -56,6 +55,8 @@ function getRenderedCadPolygons() {
 }
 
 export default function LocationMappingPanel() {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const mode = searchParams.get('mode')
   const projectId = searchParams.get('projectId')
@@ -80,11 +81,15 @@ export default function LocationMappingPanel() {
   const locationRows = useMemo(() => buildLocationRows(locations), [locations])
   const selectedLocation = useMemo(() => locations.find(location => location.id === selectedLocationId) || null, [locations, selectedLocationId])
 
+  function closePanel() {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('mode')
+    setDrawingLocation(false)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
   async function loadMappedLocations(mapId) {
-    if (!mapId) {
-      setMappedLocationIds(new Set())
-      return
-    }
+    if (!mapId) { setMappedLocationIds(new Set()); return }
     const { data, error: geometryError } = await supabase
       .from('project_drawing_location_geometries')
       .select('location_id')
@@ -96,8 +101,7 @@ export default function LocationMappingPanel() {
     if (!enabled) return
     let active = true
     ;(async () => {
-      setLoading(true)
-      setError('')
+      setLoading(true); setError('')
       const [{ data: doc, error: docError }, { data: locationData, error: locationError }, { data: map, error: mapError }] = await Promise.all([
         supabase.from('project_documents').select('id,project_id,file_name,document_type').eq('id', documentId).eq('project_id', projectId).single(),
         supabase.from('locations').select('id,parent_id,name,location_type,sequence_number').eq('project_id', projectId).order('sequence_number', { ascending: true }),
@@ -122,42 +126,21 @@ export default function LocationMappingPanel() {
   useEffect(() => {
     if (!enabled || !drawingLocation) return
     let cancelled = false
-
     async function saveCompletedPolygon() {
       await new Promise(resolve => window.setTimeout(resolve, 0))
       if (cancelled) return
       const polygons = getRenderedCadPolygons()
       const completed = polygons.map(points => ({ points, signature: polygonSignature(points) })).filter(item => !polygonSnapshotRef.current.has(item.signature)).at(-1)
       if (!completed || completed.points.length < 3) return
-
       setSaving(true); setError(''); setMessage('')
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setError('You must be signed in to save location geometry.')
-        setSaving(false); setDrawingLocation(false); return
-      }
-
-      const payload = {
-        project_id: projectId,
-        drawing_map_id: mappingId,
-        document_id: documentId,
-        location_id: selectedLocationId,
-        page_number: 1,
-        geometry_type: 'polygon',
-        geometry: { points: completed.points, source: 'ritsucad-native-polygon' },
-        created_by: user.id,
-        updated_at: new Date().toISOString(),
-      }
-
+      if (!user) { setError('You must be signed in to save location geometry.'); setSaving(false); setDrawingLocation(false); return }
+      const payload = { project_id: projectId, drawing_map_id: mappingId, document_id: documentId, location_id: selectedLocationId, page_number: 1, geometry_type: 'polygon', geometry: { points: completed.points, source: 'ritsucad-native-polygon' }, created_by: user.id, updated_at: new Date().toISOString() }
       const { error: saveError } = await supabase.from('project_drawing_location_geometries').upsert(payload, { onConflict: 'drawing_map_id,location_id' })
       if (saveError) setError(saveError.message)
-      else {
-        setMappedLocationIds(current => new Set([...current, selectedLocationId]))
-        setMessage(`${selectedLocation?.name || 'Location'} mapped successfully.`)
-      }
+      else { setMappedLocationIds(current => new Set([...current, selectedLocationId])); setMessage(`${selectedLocation?.name || 'Location'} mapped successfully.`) }
       setSaving(false); setDrawingLocation(false)
     }
-
     function handleKeyDown(event) {
       if (event.key === 'Escape') { setDrawingLocation(false); setMessage('Location mapping cancelled.'); return }
       if (event.key === 'Enter') saveCompletedPolygon()
@@ -190,77 +173,60 @@ export default function LocationMappingPanel() {
 
   return (
     <aside style={panel}>
-      <div style={header}><div><div style={eyebrow}>PROJECT LOCATION MAPPING</div><div style={heading}>Configure Drawing</div></div><span style={badge}>LBS Connected</span></div>
+      <div style={header}>
+        <div><div style={eyebrow}>PROJECT LOCATION MAPPING</div><div style={heading}>Location Mapping</div></div>
+        <div style={{display:'flex',alignItems:'center',gap:7}}><span style={badge}>LBS Connected</span><button type="button" onClick={closePanel} style={closeButton} title="Close Location Mapping">×</button></div>
+      </div>
       {loading ? <div style={empty}>Loading project mapping...</div> : (
         <div style={body}>
           <section style={section}>
-            <div style={label}>Drawing</div>
-            <div style={documentName}>{documentRecord?.file_name || 'Project drawing'}</div>
+            <div style={label}>Drawing</div><div style={documentName}>{documentRecord?.file_name || 'Project drawing'}</div>
             <div style={helper}>This PDF remains stored in Project Documents. RitsuCAD reads locations from the project's shared Location Breakdown Structure (LBS).</div>
           </section>
-
           <section style={section}>
             <div style={sectionTitle}>1 · Classify Drawing</div>
-            <label style={fieldLabel}>Drawing type</label>
-            <select value={drawingType} onChange={event => setDrawingType(event.target.value)} style={control}>{DRAWING_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-            <label style={fieldLabel}>Classification label</label>
-            <input value={classificationLabel} onChange={event => setClassificationLabel(event.target.value)} placeholder="Example: Ground Floor" style={control} />
-            <label style={fieldLabel}>LBS root location</label>
-            <select value={rootLocationId} onChange={event => setRootLocationId(event.target.value)} style={control}>
-              <option value="">Select LBS location...</option>
-              {locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name} · {location.location_type}</option>)}
-            </select>
+            <label style={fieldLabel}>Drawing type</label><select value={drawingType} onChange={event => setDrawingType(event.target.value)} style={control}>{DRAWING_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <label style={fieldLabel}>Classification label</label><input value={classificationLabel} onChange={event => setClassificationLabel(event.target.value)} placeholder="Example: Ground Floor" style={control} />
+            <label style={fieldLabel}>LBS root location</label><select value={rootLocationId} onChange={event => setRootLocationId(event.target.value)} style={control}><option value="">Select LBS location...</option>{locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name} · {location.location_type}</option>)}</select>
             <div style={helper}>Choose the existing LBS location represented by this drawing. Location creation and hierarchy management remain centralized in the project's Location Structure.</div>
             <button type="button" onClick={saveClassification} disabled={saving} style={{ ...primaryButton, opacity: saving ? .6 : 1 }}>{saving ? 'Saving...' : mappingId ? 'Update Drawing Setup' : 'Save Drawing Setup'}</button>
           </section>
-
           <section style={{ ...section, ...nextSection }}>
             <div style={sectionTitle}>2 · Map LBS Locations</div>
-            {locationRows.length === 0 ? (
-              <div style={emptyStructure}>No LBS locations are available for this project. Create the Location Breakdown Structure in Project Setup before mapping drawing boundaries in RitsuCAD.</div>
-            ) : (
-              <>
-                <label style={fieldLabel}>Project location</label>
-                <select value={selectedLocationId} onChange={event => setSelectedLocationId(event.target.value)} style={control} disabled={drawingLocation}>
-                  <option value="">Select LBS location to map...</option>
-                  {locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name}{mappedLocationIds.has(location.id) ? ' ✓ Mapped' : ''}</option>)}
-                </select>
-                <div style={helper}>Select an existing LBS location, then trace its boundary on the drawing. RitsuCAD stores only the geometry relationship; it does not create a second location structure.</div>
-                <button type="button" onClick={startLocationDrawing} disabled={saving || drawingLocation || !selectedLocationId} style={{ ...primaryButton, opacity: saving || drawingLocation || !selectedLocationId ? .55 : 1 }}>
-                  {drawingLocation ? 'Drawing Location...' : mappedLocationIds.has(selectedLocationId) ? 'Redraw Location Boundary' : 'Draw Location Boundary'}
-                </button>
-                {drawingLocation && <div style={drawingHint}>Polygon mode is active. Click each boundary point on the PDF, then press <strong>Enter</strong> to save the boundary. Press <strong>Esc</strong> to cancel.</div>}
-              </>
-            )}
+            {locationRows.length === 0 ? <div style={emptyStructure}>No LBS locations are available for this project. Create the Location Breakdown Structure in Project Setup before mapping drawing boundaries in RitsuCAD.</div> : <>
+              <label style={fieldLabel}>Project location</label><select value={selectedLocationId} onChange={event => setSelectedLocationId(event.target.value)} style={control} disabled={drawingLocation}><option value="">Select LBS location to map...</option>{locationRows.map(location => <option key={location.id} value={location.id}>{'— '.repeat(location.depth)}{location.name}{mappedLocationIds.has(location.id) ? ' ✓ Mapped' : ''}</option>)}</select>
+              <div style={helper}>Select an existing LBS location, then trace its boundary on the drawing. RitsuCAD stores only the geometry relationship; it does not create a second location structure.</div>
+              <button type="button" onClick={startLocationDrawing} disabled={saving || drawingLocation || !selectedLocationId} style={{ ...primaryButton, opacity: saving || drawingLocation || !selectedLocationId ? .55 : 1 }}>{drawingLocation ? 'Drawing Location...' : mappedLocationIds.has(selectedLocationId) ? 'Redraw Location Boundary' : 'Draw Location Boundary'}</button>
+              {drawingLocation && <div style={drawingHint}>Polygon mode is active. Click each boundary point on the PDF, then press <strong>Enter</strong> to save the boundary. Press <strong>Esc</strong> to cancel.</div>}
+            </>}
             <div style={flow}>LBS Location → PDF Geometry → Scope → PreCon / FieldOp</div>
           </section>
-
-          {message && <div style={success}>{message}</div>}
-          {error && <div style={errorBox}>{error}</div>}
+          {message && <div style={success}>{message}</div>}{error && <div style={errorBox}>{error}</div>}
         </div>
       )}
     </aside>
   )
 }
 
-const panel={position:'fixed',top:160,right:0,bottom:24,width:392,zIndex:80,display:'flex',flexDirection:'column',background:'#fff',borderLeft:'1px solid #cbd8df',boxShadow:'-8px 0 24px rgba(15,52,70,.10)',fontFamily:'inherit',color:'#0d3347'}
-const header={display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,padding:'16px 18px',borderBottom:'1px solid #dce6eb'}
-const eyebrow={fontSize:10,fontWeight:900,letterSpacing:'1.4px',color:'#008f8f'}
-const heading={marginTop:3,fontSize:19,fontWeight:900}
-const badge={border:'1px solid #9ed8d8',background:'#effafa',color:'#087f7f',borderRadius:999,padding:'5px 8px',fontSize:10,fontWeight:900}
-const body={padding:16,overflowY:'auto'}
-const section={paddingBottom:17,marginBottom:17,borderBottom:'1px solid #e3eaee'}
-const sectionTitle={marginBottom:10,fontSize:13,fontWeight:900,color:'#123e53'}
-const label={fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.7px',color:'#78909c'}
-const documentName={marginTop:4,fontSize:13,fontWeight:900,wordBreak:'break-word'}
-const fieldLabel={display:'block',marginTop:10,marginBottom:5,fontSize:10.5,fontWeight:800,color:'#536f7d'}
-const control={width:'100%',boxSizing:'border-box',minHeight:36,border:'1px solid #c9d8df',borderRadius:6,background:'#fff',color:'#173f52',padding:'7px 9px',fontSize:11.5,outline:'none'}
-const helper={marginTop:6,fontSize:10.5,lineHeight:1.45,color:'#728a96'}
-const primaryButton={width:'100%',marginTop:14,border:0,borderRadius:7,background:'#079b9b',color:'#fff',padding:'10px 12px',fontSize:11.5,fontWeight:900,cursor:'pointer'}
+const panel={position:'fixed',top:126,right:10,bottom:28,width:360,zIndex:80,display:'flex',flexDirection:'column',background:'#fff',border:'1px solid #cbd8df',borderRadius:10,boxShadow:'-8px 8px 24px rgba(15,52,70,.12)',fontFamily:'inherit',color:'#0d3347',overflow:'hidden'}
+const header={display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,padding:'13px 14px',borderBottom:'1px solid #dce6eb'}
+const eyebrow={fontSize:9,fontWeight:900,letterSpacing:'1.3px',color:'#008f8f'}
+const heading={marginTop:2,fontSize:17,fontWeight:900}
+const badge={border:'1px solid #9ed8d8',background:'#effafa',color:'#087f7f',borderRadius:999,padding:'4px 7px',fontSize:9,fontWeight:900}
+const closeButton={display:'grid',placeItems:'center',width:25,height:25,padding:0,border:'1px solid #d4e0e5',borderRadius:6,background:'#fff',color:'#52707e',fontSize:16,cursor:'pointer'}
+const body={padding:14,overflowY:'auto'}
+const section={paddingBottom:15,marginBottom:15,borderBottom:'1px solid #e3eaee'}
+const sectionTitle={marginBottom:9,fontSize:12.5,fontWeight:900,color:'#123e53'}
+const label={fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.7px',color:'#78909c'}
+const documentName={marginTop:4,fontSize:12.5,fontWeight:900,wordBreak:'break-word'}
+const fieldLabel={display:'block',marginTop:9,marginBottom:5,fontSize:10,fontWeight:800,color:'#536f7d'}
+const control={width:'100%',boxSizing:'border-box',minHeight:35,border:'1px solid #c9d8df',borderRadius:6,background:'#fff',color:'#173f52',padding:'7px 9px',fontSize:11,outline:'none'}
+const helper={marginTop:6,fontSize:10,lineHeight:1.4,color:'#728a96'}
+const primaryButton={width:'100%',marginTop:12,border:0,borderRadius:7,background:'#079b9b',color:'#fff',padding:'9px 11px',fontSize:11,fontWeight:900,cursor:'pointer'}
 const nextSection={borderBottom:0,marginBottom:0}
-const drawingHint={marginTop:10,padding:'10px 11px',border:'1px solid #8fd5d5',borderRadius:6,background:'#eefafa',color:'#17656b',fontSize:10.5,lineHeight:1.45}
-const flow={marginTop:10,padding:'9px 10px',borderRadius:6,background:'#f1f7f9',color:'#315c6e',fontSize:10.5,fontWeight:800}
-const success={marginTop:10,padding:'9px 10px',border:'1px solid #a9d9c4',borderRadius:6,background:'#f0fbf5',color:'#237a52',fontSize:10.5,fontWeight:800}
-const errorBox={marginTop:10,padding:'9px 10px',border:'1px solid #efb0b0',borderRadius:6,background:'#fff3f3',color:'#a61b1b',fontSize:10.5,fontWeight:800}
-const empty={padding:20,color:'#718691',fontSize:11.5}
-const emptyStructure={marginTop:12,padding:'10px 11px',border:'1px dashed #b9cbd3',borderRadius:6,background:'#f8fbfc',color:'#637e8a',fontSize:10.5,lineHeight:1.45}
+const drawingHint={marginTop:9,padding:'9px 10px',border:'1px solid #8fd5d5',borderRadius:6,background:'#eefafa',color:'#17656b',fontSize:10,lineHeight:1.4}
+const flow={marginTop:10,padding:'8px 9px',borderRadius:6,background:'#f1f7f9',color:'#315c6e',fontSize:10,fontWeight:800}
+const success={marginTop:9,padding:'8px 9px',border:'1px solid #a9d9c4',borderRadius:6,background:'#f0fbf5',color:'#237a52',fontSize:10,fontWeight:800}
+const errorBox={marginTop:9,padding:'8px 9px',border:'1px solid #efb0b0',borderRadius:6,background:'#fff3f3',color:'#a61b1b',fontSize:10,fontWeight:800}
+const empty={padding:18,color:'#718691',fontSize:11}
+const emptyStructure={marginTop:10,padding:'9px 10px',border:'1px dashed #b9cbd3',borderRadius:6,background:'#f8fbfc',color:'#637e8a',fontSize:10,lineHeight:1.4}
