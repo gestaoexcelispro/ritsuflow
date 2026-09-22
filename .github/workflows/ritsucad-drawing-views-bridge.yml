@@ -15,73 +15,9 @@ jobs:
         with:
           ref: feat/ritsucad-drawing-views
       - name: Install native state bridge
-        shell: bash
-        run: |
-          python <<'PY'
-          from pathlib import Path
-
-          path = Path('src/app/ritsucad/page.js')
-          s = path.read_text(encoding='utf-8')
-
-          if 'ritsucad:drawing-state-request' in s:
-              print('State bridge already installed')
-              raise SystemExit(0)
-
-          anchor = '  const resetDraft = useCallback('
-          pos = s.find(anchor)
-          if pos < 0:
-              raise RuntimeError('Could not locate resetDraft callback')
-
-          bridge = '''  // ==========================================================
-  // DRAWING VIEW STATE BRIDGE
-  // ==========================================================
-
-  useEffect(() => {
-    const onRequest = (event) => {
-      const requestId = event.detail?.requestId
-      window.dispatchEvent(
-        new CustomEvent('ritsucad:drawing-state-response', {
-          detail: {
-            requestId,
-            state: { cadEntities, calibrationsByPage },
-          },
-        })
-      )
-    }
-
-    const onApply = (event) => {
-      const state = event.detail || {}
-      const nextEntities = Array.isArray(state.cadEntities)
-        ? state.cadEntities
-        : []
-      const nextCalibrations =
-        state.calibrationsByPage &&
-        typeof state.calibrationsByPage === 'object'
-          ? state.calibrationsByPage
-          : {}
-
-      resetCadHistory(nextEntities)
-      setCalibrationsByPage(nextCalibrations)
-      setActiveTool('select')
-      setSnapMarker(null)
-      setOrthoTracking(null)
-    }
-
-    window.addEventListener('ritsucad:drawing-state-request', onRequest)
-    window.addEventListener('ritsucad:drawing-state-apply', onApply)
-
-    return () => {
-      window.removeEventListener('ritsucad:drawing-state-request', onRequest)
-      window.removeEventListener('ritsucad:drawing-state-apply', onApply)
-    }
-  }, [cadEntities, calibrationsByPage, resetCadHistory])
-
-'''
-
-          s = s[:pos] + bridge + s[pos:]
-          path.write_text(s, encoding='utf-8')
-          print('Installed RitsuCAD drawing view state bridge')
-          PY
+        env:
+          PATCH_B64: ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnA9UGF0aCgnc3JjL2FwcC9yaXRzdWNhZC9wYWdlLmpzJykKcz1wLnJlYWRfdGV4dChlbmNvZGluZz0ndXRmLTgnKQppZiAncml0c3VjYWQ6ZHJhd2luZy1zdGF0ZS1yZXF1ZXN0JyBpbiBzOgogcHJpbnQoJ2FscmVhZHkgaW5zdGFsbGVkJyk7IHJhaXNlIFN5c3RlbUV4aXQoMCkKYW5jaG9yPScgIGNvbnN0IHJlc2V0RHJhZnQgPSB1c2VDYWxsYmFjaygnCnBvcz1zLmZpbmQoYW5jaG9yKQppZiBwb3M8MDogcmFpc2UgUnVudGltZUVycm9yKCdyZXNldERyYWZ0IGNhbGxiYWNrIG5vdCBmb3VuZCcpCmJyaWRnZT0iIiIgIC8vIERSQVdJTkcgVklFVyBTVEFURSBCUklER0UKICB1c2VFZmZlY3QoKCkgPT4gewogICAgY29uc3Qgb25SZXF1ZXN0ID0gKGV2ZW50KSA9PiB7CiAgICAgIGNvbnN0IHJlcXVlc3RJZCA9IGV2ZW50LmRldGFpbD8ucmVxdWVzdElkCiAgICAgIHdpbmRvdy5kaXNwYXRjaEV2ZW50KG5ldyBDdXN0b21FdmVudCgncml0c3VjYWQ6ZHJhd2luZy1zdGF0ZS1yZXNwb25zZScsIHsKICAgICAgICBkZXRhaWw6IHsgcmVxdWVzdElkLCBzdGF0ZTogeyBjYWRFbnRpdGllcywgY2FsaWJyYXRpb25zQnlQYWdlIH0gfSwKICAgICAgfSkpCiAgICB9CiAgICBjb25zdCBvbkFwcGx5ID0gKGV2ZW50KSA9PiB7CiAgICAgIGNvbnN0IHN0YXRlID0gZXZlbnQuZGV0YWlsIHx8IHt9CiAgICAgIGNvbnN0IG5leHRFbnRpdGllcyA9IEFycmF5LmlzQXJyYXkoc3RhdGUuY2FkRW50aXRpZXMpID8gc3RhdGUuY2FkRW50aXRpZXMgOiBbXQogICAgICBjb25zdCBuZXh0Q2FsaWJyYXRpb25zID0gc3RhdGUuY2FsaWJyYXRpb25zQnlQYWdlICYmIHR5cGVvZiBzdGF0ZS5jYWxpYnJhdGlvbnNCeVBhZ2UgPT09ICdvYmplY3QnCiAgICAgICAgPyBzdGF0ZS5jYWxpYnJhdGlvbnNCeVBhZ2UgOiB7fQogICAgICByZXNldENhZEhpc3RvcnkobmV4dEVudGl0aWVzKQogICAgICBzZXRDYWxpYnJhdGlvbnNCeVBhZ2UobmV4dENhbGlicmF0aW9ucykKICAgICAgc2V0QWN0aXZlVG9vbCgnc2VsZWN0JykKICAgICAgc2V0U25hcE1hcmtlcihudWxsKQogICAgICBzZXRPcnRob1RyYWNraW5nKG51bGwpCiAgICB9CiAgICB3aW5kb3cuYWRkRXZlbnRMaXN0ZW5lcigncml0c3VjYWQ6ZHJhd2luZy1zdGF0ZS1yZXF1ZXN0Jywgb25SZXF1ZXN0KQogICAgd2luZG93LmFkZEV2ZW50TGlzdGVuZXIoJ3JpdHN1Y2FkOmRyYXdpbmctc3RhdGUtYXBwbHknLCBvbkFwcGx5KQogICAgcmV0dXJuICgpID0+IHsKICAgICAgd2luZG93LnJlbW92ZUV2ZW50TGlzdGVuZXIoJ3JpdHN1Y2FkOmRyYXdpbmctc3RhdGUtcmVxdWVzdCcsIG9uUmVxdWVzdCkKICAgICAgd2luZG93LnJlbW92ZUV2ZW50TGlzdGVuZXIoJ3JpdHN1Y2FkOmRyYXdpbmctc3RhdGUtYXBwbHknLCBvbkFwcGx5KQogICAgfQogIH0sIFtjYWRFbnRpdGllcywgY2FsaWJyYXRpb25zQnlQYWdlLCByZXNldENhZEhpc3RvcnldKQoKIiIiCnAud3JpdGVfdGV4dChzWzpwb3NdK2JyaWRnZStzW3BvczpdLGVuY29kaW5nPSd1dGYtOCcpCnByaW50KCdpbnN0YWxsZWQnKQo=
+        run: python -c "import os,base64; exec(base64.b64decode(os.environ['PATCH_B64']))"
       - name: Commit source change
         run: |
           git config user.name "RitsuFlow Automation"
