@@ -15,118 +15,88 @@ jobs:
           ref: main
 
       - name: Patch page.js
-        shell: python
+        shell: bash
         run: |
+          python <<'PY'
           from pathlib import Path
 
-          p = Path('src/app/ritsucad/page.js')
-          s = p.read_text(encoding='utf-8')
+          p = Path("src/app/ritsucad/page.js")
+          s = p.read_text(encoding="utf-8")
 
-          if 'window.__RITSUCAD_GET_DRAWING_STATE__' in s:
-              print('Drawing state bridge already installed.')
+          if "window.__RITSUCAD_GET_DRAWING_STATE__" in s:
+              print("Drawing state bridge already installed.")
               raise SystemExit(0)
 
-          marker = '''
+          marker = """
 
   // ==========================================================
   // DRAFT RESET
   // ==========================================================
-'''
+"""
 
-          bridge = r'''
+          bridge = r"""
 
   // ==========================================================
   // DRAWING VIEW STATE BRIDGE
   // ==========================================================
 
-  useEffect(
-    () => {
-      const getDrawingState =
-        () => ({
-          cadEntities,
-          calibrationsByPage,
-        })
-
-      const applyDrawingState =
-        (state = {}) => {
-          const nextEntities =
-            Array.isArray(
-              state.cadEntities
-            )
-              ? state.cadEntities
-              : []
-
-          const nextCalibrations =
-            state.calibrationsByPage &&
-            typeof state.calibrationsByPage ===
-              'object'
-              ? state.calibrationsByPage
-              : {}
-
-          resetCadHistory(
-            nextEntities
-          )
-
-          setCalibrationsByPage(
-            nextCalibrations
-          )
-
-          setActiveTool(
-            'select'
-          )
-
-          setSnapMarker(
-            null
-          )
-
-          setOrthoTracking(
-            null
-          )
-        }
-
-      window.__RITSUCAD_GET_DRAWING_STATE__ =
-        getDrawingState
-
-      window.__RITSUCAD_APPLY_DRAWING_STATE__ =
-        applyDrawingState
-
-      return () => {
-        if (
-          window.__RITSUCAD_GET_DRAWING_STATE__ ===
-          getDrawingState
-        ) {
-          delete window.__RITSUCAD_GET_DRAWING_STATE__
-        }
-
-        if (
-          window.__RITSUCAD_APPLY_DRAWING_STATE__ ===
-          applyDrawingState
-        ) {
-          delete window.__RITSUCAD_APPLY_DRAWING_STATE__
-        }
-      }
-    },
-    [
+  useEffect(() => {
+    const getDrawingState = () => ({
       cadEntities,
       calibrationsByPage,
-      resetCadHistory,
-    ]
-  )
-'''
+    })
+
+    const applyDrawingState = (state = {}) => {
+      const nextEntities = Array.isArray(state.cadEntities)
+        ? state.cadEntities
+        : []
+
+      const nextCalibrations =
+        state.calibrationsByPage &&
+        typeof state.calibrationsByPage === 'object'
+          ? state.calibrationsByPage
+          : {}
+
+      resetCadHistory(nextEntities)
+      setCalibrationsByPage(nextCalibrations)
+      setActiveTool('select')
+      setSnapMarker(null)
+      setOrthoTracking(null)
+    }
+
+    window.__RITSUCAD_GET_DRAWING_STATE__ = getDrawingState
+    window.__RITSUCAD_APPLY_DRAWING_STATE__ = applyDrawingState
+
+    return () => {
+      if (window.__RITSUCAD_GET_DRAWING_STATE__ === getDrawingState) {
+        delete window.__RITSUCAD_GET_DRAWING_STATE__
+      }
+
+      if (window.__RITSUCAD_APPLY_DRAWING_STATE__ === applyDrawingState) {
+        delete window.__RITSUCAD_APPLY_DRAWING_STATE__
+      }
+    }
+  }, [cadEntities, calibrationsByPage, resetCadHistory])
+"""
 
           count = s.count(marker)
           if count != 1:
-              raise RuntimeError(f'Expected one DRAFT RESET marker, found {count}.')
+              raise RuntimeError(
+                  f"Expected one DRAFT RESET marker, found {count}."
+              )
 
           s = s.replace(marker, bridge + marker, 1)
-          p.write_text(s, encoding='utf-8')
+          p.write_text(s, encoding="utf-8")
+          PY
 
       - name: Commit patch
+        shell: bash
         run: |
           if git diff --quiet; then
             echo "No patch required."
             exit 0
           fi
+
           git config user.name "RitsuFlow Automation"
           git config user.email "actions@users.noreply.github.com"
           git add src/app/ritsucad/page.js
