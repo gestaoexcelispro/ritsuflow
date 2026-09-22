@@ -57,3 +57,109 @@ export function createSmartTakeoffMetadata(typeId, overrides = {}) {
     specification: overrides.specification || '',
   }
 }
+
+// Attach construction meaning to an ordinary RitsuCAD geometry entity without
+// changing the native entity type. This keeps selection, snapping, undo/redo,
+// rendering, and legacy saved drawings backward compatible.
+export function decorateEntityWithSmartTakeoff(entity, context) {
+  if (!entity || !context?.typeId) return entity
+
+  const metadata = createSmartTakeoffMetadata(context.typeId, context)
+  if (!metadata) return entity
+
+  return {
+    ...entity,
+    category: entity.category || 'takeoff',
+    smartTakeoff: metadata,
+  }
+}
+
+export function isSmartTakeoffEntity(entity) {
+  return Boolean(entity?.smartTakeoff?.typeId)
+}
+
+export function getSmartTakeoffEntityLabel(entity) {
+  return entity?.smartTakeoff?.typeLabel || null
+}
+
+// Quantity helpers intentionally receive already-calibrated geometry values.
+// They do not know anything about PDF scale; that remains the native CAD
+// engine's responsibility.
+export function calculateSmartTakeoffQuantity(entity, measured = {}) {
+  const smart = entity?.smartTakeoff
+  if (!smart) return null
+
+  const length = finiteOrNull(measured.length)
+  const area = finiteOrNull(measured.area)
+  const count = finiteOrNull(measured.count)
+  const height = positiveOrNull(smart.properties?.height)
+  const thickness = positiveOrNull(smart.properties?.thickness)
+  const width = positiveOrNull(smart.properties?.width)
+  const depth = positiveOrNull(smart.properties?.depth)
+
+  switch (smart.quantityBasis) {
+    case 'length-height':
+      return length !== null && height !== null
+        ? { primary: length * height, unit: 'area', components: { length, height } }
+        : { primary: null, unit: 'area', components: { length, height } }
+
+    case 'length':
+      return { primary: length, unit: 'length', components: { length } }
+
+    case 'area':
+      return { primary: area, unit: 'area', components: { area } }
+
+    case 'area-thickness':
+      return area !== null && thickness !== null
+        ? { primary: area * thickness, unit: 'volume', components: { area, thickness } }
+        : { primary: null, unit: 'volume', components: { area, thickness } }
+
+    case 'length-section':
+      return length !== null && width !== null && height !== null
+        ? { primary: length * width * height, unit: 'volume', components: { length, width, height } }
+        : { primary: null, unit: smart.unit, components: { length, width, height } }
+
+    case 'count':
+      return { primary: count, unit: 'ea', components: { count } }
+
+    case 'count-section-height':
+      return count !== null && width !== null && depth !== null && height !== null
+        ? { primary: count * width * depth * height, unit: 'volume', components: { count, width, depth, height } }
+        : { primary: null, unit: smart.unit, components: { count, width, depth, height } }
+
+    case 'count-dimensions': {
+      const itemLength = positiveOrNull(smart.properties?.length)
+      return count !== null && width !== null && itemLength !== null && depth !== null
+        ? { primary: count * width * itemLength * depth, unit: 'volume', components: { count, width, length: itemLength, depth } }
+        : { primary: null, unit: smart.unit, components: { count, width, length: itemLength, depth } }
+    }
+
+    default:
+      return null
+  }
+}
+
+export function updateSmartTakeoffProperties(entity, properties = {}) {
+  if (!isSmartTakeoffEntity(entity)) return entity
+
+  return {
+    ...entity,
+    smartTakeoff: {
+      ...entity.smartTakeoff,
+      properties: {
+        ...(entity.smartTakeoff.properties || {}),
+        ...properties,
+      },
+    },
+  }
+}
+
+function finiteOrNull(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function positiveOrNull(value) {
+  const number = finiteOrNull(value)
+  return number !== null && number > 0 ? number : null
+}
