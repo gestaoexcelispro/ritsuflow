@@ -145,16 +145,12 @@ export default function RitsuCadLayout({ children }) {
           background-color: #919eaa !important;
         }
 
-        /* An empty RitsuCAD session is intentionally just canvas.
-           New Drawing / Import PDF remain available in FILE. */
         [class*="emptyViewport"] {
           display: none !important;
         }
 
         /* =====================================================
            FLOATING PANELS
-           Closed state consumes zero canvas width. When the user
-           explicitly opens one, it floats above the canvas.
         ===================================================== */
 
         [class*="_inspector__"] {
@@ -179,8 +175,6 @@ export default function RitsuCadLayout({ children }) {
           overflow-y: auto !important;
         }
 
-        /* Existing Properties / Layers / Drawings / Snap / Ortho / Grid
-           rail is visually promoted into the ribbon. */
         [class*="_toolRail__"] {
           position: absolute !important;
           z-index: 75 !important;
@@ -261,9 +255,8 @@ export default function RitsuCadLayout({ children }) {
 
       {children}
 
-      <RitsuCadRibbonBridge />
-
       <Suspense fallback={null}>
+        <RitsuCadRibbonBridge />
         <RitsuCadProjectLauncher />
         <LocationMappingPanel />
         <TakeoffContextPanel />
