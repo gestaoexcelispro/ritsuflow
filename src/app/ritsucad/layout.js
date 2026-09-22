@@ -27,54 +27,67 @@ export default function RitsuCadLayout({ children }) {
     >
       <style>{`
         /* =====================================================
-           RITSUCAD WORKSPACE UI v6
-           Clean canvas. Commands live in the ribbon.
+           RITSUCAD WORKSPACE UI v7
+           Canvas-first architecture.
+           No sidebar. No empty-state card. No automatic panels.
+           Every command is reached from the ribbon.
         ===================================================== */
 
         [class*="backButton"] { display: none !important; }
+
+        [class*="applicationHeader"] {
+          height: 48px !important;
+          min-height: 48px !important;
+          background: #ffffff !important;
+          border-bottom: 1px solid #d4dee7 !important;
+        }
 
         [class*="headerLeft"] {
           padding-left: 218px !important;
         }
 
-        [class*="applicationHeader"] {
-          height: 48px !important;
-          min-height: 48px !important;
+        [class*="headerDrawingName"] {
+          color: #425a70 !important;
+          font-weight: 900 !important;
         }
 
         /* =====================================================
-           COMPACT FEATURE RIBBON
+           FEATURE RIBBON
         ===================================================== */
 
         [class*="cadToolbar"] {
-          height: 62px !important;
-          min-height: 62px !important;
-          padding: 3px 8px 2px !important;
+          height: 66px !important;
+          min-height: 66px !important;
+          padding: 4px 8px 3px !important;
           align-items: stretch !important;
           background: #fbfcfd !important;
           border-bottom: 1px solid #cfdbe4 !important;
           overflow-x: auto !important;
           overflow-y: hidden !important;
-          scrollbar-width: thin;
+          scrollbar-width: none !important;
+        }
+
+        [class*="cadToolbar"]::-webkit-scrollbar {
+          display: none !important;
         }
 
         [class*="toolbarSection"] {
           position: relative !important;
           flex: 0 0 auto !important;
           align-items: flex-end !important;
-          padding: 13px 4px 1px !important;
+          padding: 15px 4px 1px !important;
           gap: 1px !important;
         }
 
         [class*="toolbarSection"]::before {
           position: absolute;
-          top: 1px;
+          top: 2px;
           left: 6px;
-          color: #5c7488;
+          color: #496579;
           font-size: 8px;
           line-height: 1;
           font-weight: 900;
-          letter-spacing: .06em;
+          letter-spacing: .07em;
           white-space: nowrap;
         }
 
@@ -85,8 +98,8 @@ export default function RitsuCadLayout({ children }) {
         [class*="toolbarSection"]:nth-of-type(5)::before { content: 'EDIT · SETUP'; }
 
         [class*="toolbarDivider"] {
-          height: 39px !important;
-          margin: 14px 5px 1px !important;
+          height: 41px !important;
+          margin: 16px 5px 1px !important;
           background: #d5e0e8 !important;
         }
 
@@ -94,78 +107,93 @@ export default function RitsuCadLayout({ children }) {
         [class*="toolbarButtonWide"],
         [class*="toolbarIconButton"],
         [class*="importButton"] {
-          height: 40px !important;
-          min-height: 40px !important;
+          height: 42px !important;
+          min-height: 42px !important;
         }
 
         [class*="toolbarButton"],
         [class*="toolbarIconButton"] {
-          min-width: 48px !important;
+          min-width: 49px !important;
           padding-left: 6px !important;
           padding-right: 6px !important;
         }
 
         [class*="toolbarButtonWide"],
         [class*="importButton"] {
-          padding-left: 10px !important;
-          padding-right: 10px !important;
+          padding-left: 11px !important;
+          padding-right: 11px !important;
         }
 
         [class*="cadToolbar"] button:disabled {
-          opacity: .32 !important;
-          filter: saturate(.45) !important;
+          opacity: .30 !important;
+          filter: saturate(.4) !important;
         }
 
         /* =====================================================
-           CANVAS-FIRST WORKSPACE
+           CLEAN CANVAS
         ===================================================== */
 
         [class*="cadArea"] {
           position: relative !important;
           min-width: 0 !important;
+          background: #919eaa !important;
         }
 
         [class*="viewport"] {
           min-width: 0 !important;
           width: auto !important;
+          background-color: #919eaa !important;
         }
+
+        /* An empty RitsuCAD session is intentionally just canvas.
+           New Drawing / Import PDF remain available in FILE. */
+        [class*="emptyViewport"] {
+          display: none !important;
+        }
+
+        /* =====================================================
+           FLOATING PANELS
+           Closed state consumes zero canvas width. When the user
+           explicitly opens one, it floats above the canvas.
+        ===================================================== */
 
         [class*="_inspector__"] {
           position: absolute !important;
           z-index: 64 !important;
-          top: 8px !important;
-          right: 8px !important;
+          top: 10px !important;
+          right: 10px !important;
           bottom: auto !important;
-          width: 292px !important;
-          min-width: 292px !important;
-          max-width: 292px !important;
-          max-height: calc(100% - 16px) !important;
+          width: 300px !important;
+          min-width: 300px !important;
+          max-width: 300px !important;
+          max-height: calc(100% - 20px) !important;
           border: 1px solid #cbd7e1 !important;
           border-radius: 9px !important;
           background: #ffffff !important;
-          box-shadow: -5px 7px 22px rgba(15, 23, 42, 0.14) !important;
+          box-shadow: -5px 8px 24px rgba(15, 23, 42, 0.14) !important;
           overflow: hidden !important;
         }
 
         [class*="_inspectorBody__"] {
-          max-height: calc(100vh - 190px) !important;
+          max-height: calc(100vh - 200px) !important;
           overflow-y: auto !important;
         }
 
-        /* Move the existing right-rail controls into the ribbon. */
+        /* Existing Properties / Layers / Drawings / Snap / Ortho / Grid
+           rail is visually promoted into the ribbon. */
         [class*="_toolRail__"] {
           position: absolute !important;
           z-index: 75 !important;
-          top: -62px !important;
+          top: -66px !important;
           right: 8px !important;
-          height: 62px !important;
+          height: 66px !important;
           width: auto !important;
           min-width: 0 !important;
           display: flex !important;
           flex-direction: row !important;
           align-items: flex-end !important;
           gap: 2px !important;
-          padding: 14px 0 2px !important;
+          padding: 16px 0 3px !important;
           border: 0 !important;
           background: transparent !important;
           overflow: visible !important;
@@ -174,13 +202,13 @@ export default function RitsuCadLayout({ children }) {
         [class*="_toolRail__"]::before {
           content: 'PANELS · AIDS';
           position: absolute;
-          top: 2px;
+          top: 3px;
           left: 4px;
-          color: #5c7488;
+          color: #496579;
           font-size: 8px;
           line-height: 1;
           font-weight: 900;
-          letter-spacing: .06em;
+          letter-spacing: .07em;
           white-space: nowrap;
         }
 
@@ -188,32 +216,27 @@ export default function RitsuCadLayout({ children }) {
           content: '';
           position: absolute;
           left: -7px;
-          top: 15px;
+          top: 17px;
           width: 1px;
-          height: 39px;
+          height: 41px;
           background: #d5e0e8;
         }
 
         [class*="_railButton__"],
         [class*="_railButtonActive__"] {
-          width: 48px !important;
-          min-width: 48px !important;
-          height: 40px !important;
-          min-height: 40px !important;
+          width: 49px !important;
+          min-width: 49px !important;
+          height: 42px !important;
+          min-height: 42px !important;
           padding: 3px 4px !important;
           border-radius: 6px !important;
-          flex: 0 0 48px !important;
+          flex: 0 0 49px !important;
         }
 
         [class*="_railButton__"] span,
         [class*="_railButtonActive__"] span {
-          max-width: 44px !important;
+          max-width: 45px !important;
           font-size: 7px !important;
-        }
-
-        /* Empty RitsuCAD means an empty canvas. */
-        [class*="emptyViewport"] {
-          display: none !important;
         }
 
         @media (max-width: 1250px) {
