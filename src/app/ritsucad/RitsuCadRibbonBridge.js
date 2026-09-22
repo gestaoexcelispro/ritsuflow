@@ -10,6 +10,7 @@ export default function RitsuCadRibbonBridge() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [fileSection, setFileSection] = useState(null)
+  const [header, setHeader] = useState(null)
   const [toolbar, setToolbar] = useState(null)
   const [activeSmartTakeoff, setActiveSmartTakeoff] = useState(null)
   const [openGroup, setOpenGroup] = useState(null)
@@ -29,8 +30,10 @@ export default function RitsuCadRibbonBridge() {
       if (cancelled) return
       const t = document.querySelector('[class*="cadToolbar"]')
       const f = t?.querySelector('[class*="toolbarSection"]') || null
+      const h = document.querySelector('[class*="applicationHeader"]')
       setToolbar((current) => (current === t ? current : t))
       setFileSection((current) => (current === f ? current : f))
+      setHeader((current) => (current === h ? current : h))
     }
     sync()
     observer = new MutationObserver(sync)
@@ -95,6 +98,29 @@ export default function RitsuCadRibbonBridge() {
     if (key) document.dispatchEvent(new KeyboardEvent('keydown', { key, code: `Key${key.toUpperCase()}`, bubbles: true }))
   }
 
+  function clickNativeFileAction(match) {
+    if (!fileSection) return
+    const button = Array.from(fileSection.querySelectorAll('button')).find((candidate) => {
+      const haystack = `${candidate.textContent || ''} ${candidate.title || ''} ${candidate.getAttribute('aria-label') || ''}`.toLowerCase()
+      return match(haystack)
+    })
+    button?.click()
+  }
+
+  const headerFileActions = header
+    ? createPortal(
+        <div data-ritsucad-header-file-actions="true">
+          <span className="ritsucad-header-file-label">FILE</span>
+          <button type="button" onClick={() => clickNativeFileAction((text) => text.includes('import pdf'))} title="Import PDF">
+            <span aria-hidden="true">↓</span><span>Import PDF</span>
+          </button>
+          <button type="button" onClick={() => clickNativeFileAction((text) => text.includes('drawing'))} title="Open drawings">
+            <span aria-hidden="true">▤</span><span>Drawings</span>
+          </button>
+          {!hasProjectDrawing ? <button type="button" onClick={() => window.dispatchEvent(new Event('ritsucad:open-project-drawing'))} title="Open a PDF drawing stored in a RitsuFlow project"><span aria-hidden="true">▣</span><span>Project Drawing</span></button> : null}
+        </div>, header)
+    : null
+
   const smartTakeoffSection = toolbar
     ? createPortal(
         <div ref={smartMenuRef} data-ritsucad-smart-takeoff="true" style={{ order: 8, position: 'relative', flex: '0 0 auto', display: 'flex', alignItems: 'flex-end', gap: 3, padding: '15px 7px 1px 12px', marginLeft: 5, borderLeft: '1px solid #d5e0e8' }}>
@@ -130,11 +156,7 @@ export default function RitsuCadRibbonBridge() {
         </div>, toolbar)
     : null
 
-  const projectDrawingButton = fileSection && !hasProjectDrawing
-    ? createPortal(<RibbonButton icon="▣" label="Project Drawing" onClick={() => window.dispatchEvent(new Event('ritsucad:open-project-drawing'))} title="Open a PDF drawing stored in a RitsuFlow project" wide />, fileSection)
-    : null
-
-  return <>{projectDrawingButton}{smartTakeoffSection}{projectDataSection}</>
+  return <>{headerFileActions}{smartTakeoffSection}{projectDataSection}</>
 }
 
 function groupIcon(group) { return { Architectural: '⌂', Structural: '▰', MEP: '⌁', Geometry: '△' }[group] || '•' }
