@@ -83,7 +83,6 @@ export default function RitsuCadLayout({ children }) {
           scrollbar-width:thin !important;
         }
 
-        /* FILE now lives in the header. Keep the native controls mounted but visually remove their section. */
         [class*="cadToolbar"] > [class*="toolbarSection"]:nth-of-type(1) { position:absolute !important; width:1px !important; height:1px !important; padding:0 !important; margin:0 !important; overflow:hidden !important; clip:rect(0 0 0 0) !important; clip-path:inset(50%) !important; white-space:nowrap !important; border:0 !important; }
 
         [class*="toolbarSection"] {
@@ -132,16 +131,59 @@ export default function RitsuCadLayout({ children }) {
 
         [class*="_inspector__"] { position:absolute !important; z-index:64 !important; top:10px !important; right:10px !important; bottom:auto !important; width:300px !important; min-width:300px !important; max-width:300px !important; max-height:calc(100% - 20px) !important; border:1px solid #cbd7e1 !important; border-radius:10px !important; background:#fff !important; box-shadow:-5px 8px 24px rgba(15,23,42,.14) !important; overflow:hidden !important; }
         [class*="_inspectorBody__"] { max-height:calc(100vh - 150px) !important; overflow-y:auto !important; }
-        [class*="_toolRail__"] { position:absolute !important; z-index:75 !important; top:10px !important; right:8px !important; height:auto !important; width:auto !important; min-width:0 !important; display:flex !important; flex-direction:column !important; align-items:center !important; gap:3px !important; padding:0 !important; border:0 !important; background:transparent !important; overflow:visible !important; }
-        [class*="_toolRail__"]::before, [class*="_toolRail__"]::after { display:none !important; }
-        [class*="_railButton__"], [class*="_railButtonActive__"] { width:44px !important; min-width:44px !important; height:44px !important; min-height:44px !important; padding:3px !important; border-radius:7px !important; flex:0 0 44px !important; }
-        [class*="_railButton__"] span, [class*="_railButtonActive__"] span { max-width:40px !important; font-size:7px !important; }
+
+        /* The CAD environment no longer has a floating right-side tool rail.
+           Properties, Layers and Drawings are docked into the footer; SNAP/ORTHO/GRID
+           already have native footer controls, so their duplicate rail buttons are hidden. */
+        [class*="_toolRail__"] {
+          position:fixed !important;
+          z-index:95 !important;
+          right:430px !important;
+          bottom:0 !important;
+          top:auto !important;
+          left:auto !important;
+          width:auto !important;
+          min-width:0 !important;
+          height:28px !important;
+          min-height:28px !important;
+          display:flex !important;
+          flex-direction:row !important;
+          align-items:center !important;
+          gap:2px !important;
+          padding:0 5px !important;
+          border:0 !important;
+          background:#052c49 !important;
+          overflow:visible !important;
+        }
+        [class*="_toolRail__"]::before, [class*="_toolRail__"]::after, [class*="_railDivider__"] { display:none !important; }
+        [class*="_toolRail__"] > button:nth-of-type(4),
+        [class*="_toolRail__"] > button:nth-of-type(5),
+        [class*="_toolRail__"] > button:nth-of-type(6) { display:none !important; }
+        [class*="_railButton__"], [class*="_railButtonActive__"] {
+          width:auto !important;
+          min-width:0 !important;
+          height:22px !important;
+          min-height:22px !important;
+          padding:0 7px !important;
+          border-radius:4px !important;
+          flex:0 0 auto !important;
+          flex-direction:row !important;
+          gap:4px !important;
+          border:1px solid transparent !important;
+          background:transparent !important;
+          color:#b7c7d3 !important;
+        }
+        [class*="_railButtonActive__"] { border-color:#4ad9ca !important; background:rgba(20,184,166,.16) !important; color:#7ff2e7 !important; }
+        [class*="_railButton__"]:hover:not(:disabled) { background:rgba(255,255,255,.08) !important; color:#fff !important; }
+        [class*="_railButton__"] svg, [class*="_railButtonActive__"] svg { width:13px !important; height:13px !important; }
+        [class*="_railButton__"] span, [class*="_railButtonActive__"] span { max-width:none !important; font-size:7px !important; line-height:1 !important; color:inherit !important; }
 
         @media (max-width:1250px) {
           [class*="headerLeft"] { padding-left:210px !important; }
           [data-ritsucad-header-file-actions="true"] { right:248px !important; }
           [class*="cadToolbar"] { width:224px !important; }
           [class*="cadArea"] { margin-left:224px !important; width:calc(100% - 224px) !important; }
+          [class*="_toolRail__"] { right:360px !important; }
         }
         @media (max-width:900px) {
           [data-ritsucad-header-file-actions="true"] { right:210px !important; }
@@ -149,6 +191,7 @@ export default function RitsuCadLayout({ children }) {
           [class*="cadToolbar"] { width:204px !important; }
           [class*="cadArea"] { margin-left:204px !important; width:calc(100% - 204px) !important; }
           [class*="_inspector__"] { right:8px !important; width:276px !important; min-width:276px !important; max-width:276px !important; }
+          [class*="_toolRail__"] { right:300px !important; }
         }
       `}</style>
 
