@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { getSmartTakeoffGroups } from './smartTakeoff'
+import { createSmartTakeoffMetadata, getSmartTakeoffGroups } from './smartTakeoff'
 
 export default function RitsuCadRibbonBridge() {
   const router = useRouter()
@@ -72,6 +72,12 @@ export default function RitsuCadRibbonBridge() {
     return () => { cancelled = true }
   }, [pathname, documentId])
 
+  useEffect(() => {
+    return () => {
+      delete window.__RITSUCAD_ACTIVE_SMART_TAKEOFF__
+    }
+  }, [])
+
   function openLocationMapping() {
     if (!hasProjectDrawing) return
     const params = new URLSearchParams(searchParams.toString())
@@ -90,10 +96,18 @@ export default function RitsuCadRibbonBridge() {
 
   function activateSmartTakeoff(item) {
     if (!hasProjectDrawing) return
+
+    const metadata = createSmartTakeoffMetadata(item.id)
+    window.__RITSUCAD_ACTIVE_SMART_TAKEOFF__ = metadata
+
     setActiveSmartTakeoff(item.id)
     setOpenGroup(null)
+
+    window.dispatchEvent(new CustomEvent('ritsucad:smart-takeoff-selected', {
+      detail: { ...item, metadata },
+    }))
+
     const shortcutByTool = { line: 'l', polyline: 'p', area: 'a', rectangle: 'r', count: 'c' }
-    window.dispatchEvent(new CustomEvent('ritsucad:smart-takeoff-selected', { detail: item }))
     const key = shortcutByTool[item.measurementTool]
     if (key) document.dispatchEvent(new KeyboardEvent('keydown', { key, code: `Key${key.toUpperCase()}`, bubbles: true }))
   }
