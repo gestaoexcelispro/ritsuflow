@@ -17,15 +17,16 @@ jobs:
         with:
           ref: main
       - name: Patch RitsuCAD state bridge
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           from pathlib import Path
           p = Path('src/app/ritsucad/page.js')
           s = p.read_text(encoding='utf-8')
           marker = "\n\n  // ==========================================================\n  // DRAFT RESET\n  // ==========================================================\n"
           if 'window.__RITSUCAD_GET_DRAWING_STATE__' not in s:
               assert s.count(marker) == 1, f'Expected one insertion marker, found {s.count(marker)}'
-              bridge = r'''
+              bridge = '''
 
   // ==========================================================
   // DRAWING VIEW STATE BRIDGE
@@ -33,80 +34,28 @@ jobs:
 
   useEffect(
     () => {
-      const getDrawingState =
-        () => ({
-          cadEntities,
-          calibrationsByPage,
-        })
-
-      const applyDrawingState =
-        (state = {}) => {
-          const nextEntities =
-            Array.isArray(
-              state.cadEntities
-            )
-              ? state.cadEntities
-              : []
-
-          const nextCalibrations =
-            state.calibrationsByPage &&
-            typeof state.calibrationsByPage ===
-              'object'
-              ? state.calibrationsByPage
-              : {}
-
-          resetCadHistory(
-            nextEntities
-          )
-
-          setCalibrationsByPage(
-            nextCalibrations
-          )
-
-          setActiveTool(
-            'select'
-          )
-
-          setSnapMarker(
-            null
-          )
-
-          setOrthoTracking(
-            null
-          )
-        }
-
-      window.__RITSUCAD_GET_DRAWING_STATE__ =
-        getDrawingState
-
-      window.__RITSUCAD_APPLY_DRAWING_STATE__ =
-        applyDrawingState
-
+      const getDrawingState = () => ({ cadEntities, calibrationsByPage })
+      const applyDrawingState = (state = {}) => {
+        const nextEntities = Array.isArray(state.cadEntities) ? state.cadEntities : []
+        const nextCalibrations = state.calibrationsByPage && typeof state.calibrationsByPage === 'object' ? state.calibrationsByPage : {}
+        resetCadHistory(nextEntities)
+        setCalibrationsByPage(nextCalibrations)
+        setActiveTool('select')
+        setSnapMarker(null)
+        setOrthoTracking(null)
+      }
+      window.__RITSUCAD_GET_DRAWING_STATE__ = getDrawingState
+      window.__RITSUCAD_APPLY_DRAWING_STATE__ = applyDrawingState
       return () => {
-        if (
-          window.__RITSUCAD_GET_DRAWING_STATE__ ===
-          getDrawingState
-        ) {
-          delete window.__RITSUCAD_GET_DRAWING_STATE__
-        }
-
-        if (
-          window.__RITSUCAD_APPLY_DRAWING_STATE__ ===
-          applyDrawingState
-        ) {
-          delete window.__RITSUCAD_APPLY_DRAWING_STATE__
-        }
+        if (window.__RITSUCAD_GET_DRAWING_STATE__ === getDrawingState) delete window.__RITSUCAD_GET_DRAWING_STATE__
+        if (window.__RITSUCAD_APPLY_DRAWING_STATE__ === applyDrawingState) delete window.__RITSUCAD_APPLY_DRAWING_STATE__
       }
     },
-    [
-      cadEntities,
-      calibrationsByPage,
-      resetCadHistory,
-    ]
+    [cadEntities, calibrationsByPage, resetCadHistory]
   )
 '''
-              s = s.replace(marker, bridge + marker)
-              p.write_text(s, encoding='utf-8')
+              p.write_text(s.replace(marker, bridge + marker), encoding='utf-8')
+          PY
       - name: Remove one-time workflow
         run: rm .github/workflows/ritsucad-state-bridge-once.yml
       - name: Commit patch
