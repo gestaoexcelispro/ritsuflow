@@ -20,7 +20,7 @@ export default function RitsuCadDesktopRibbon(){
  const [host,setHost]=useState(null),[tab,setTab]=useState('Home')
  const router=useRouter(),pathname=usePathname(),params=useSearchParams()
  const hasProject=Boolean(params.get('projectId')&&params.get('documentId'))
- useEffect(()=>{let cancelled=false;const find=()=>{if(cancelled)return;const h=document.querySelector('[class*="application"]');if(h){setHost(h);return}setTimeout(find,50)};find();return()=>{cancelled=true}},[])
+ useEffect(()=>{let cancelled=false;const find=()=>{if(cancelled)return;const header=document.querySelector('[class*="applicationHeader"]');const h=header?.parentElement;if(h){setHost(h);return}setTimeout(find,50)};find();return()=>{cancelled=true}},[])
  const commands=useMemo(()=>COMMANDS[tab]||[],[tab])
  function run(action){
   if(action==='location'){if(!hasProject)return;const p=new URLSearchParams(params.toString());p.set('mode','location-mapping');router.replace(`${pathname}?${p.toString()}`,{scroll:false});return}
@@ -33,20 +33,19 @@ export default function RitsuCadDesktopRibbon(){
 }
 
 const CSS=`
-/* The native RitsuCAD application is a flex column. Keep that layout and insert
-   the ribbon as a normal full-width row. The previous grid override left the
-   legacy sidebar width reserved by the browser layout. */
 [class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"]){display:flex!important;flex-direction:column!important;width:100%!important;min-width:0!important;overflow:hidden!important}
 [class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"])>[class*="applicationHeader"]{order:0!important;flex:0 0 65px!important;width:100%!important;min-width:0!important}
 [class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"])>[data-ritsucad-desktop-ribbon="true"]{order:1!important;flex:0 0 108px!important;width:100%!important;min-width:0!important}
-[class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"])>[data-ritsucad-approved-shell="true"]{display:none!important;width:0!important;min-width:0!important;flex:0 0 0!important;overflow:hidden!important}
+[class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"])>[data-ritsucad-approved-shell="true"]{display:none!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;flex:0 0 0!important;overflow:hidden!important}
+[class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"])>[class*="cadToolbar"]{display:none!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;flex:0 0 0!important;overflow:hidden!important}
 [class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"])>[class*="cadArea"]{order:2!important;flex:1 1 auto!important;width:100%!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;left:auto!important;right:auto!important}
-[class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"])>[class*="cadArea"]>[class*="viewport"]{width:100%!important;max-width:none!important;min-width:0!important;flex:1 1 100%!important;margin:0!important}
-.rfDesktopRibbon{z-index:84;display:flex;flex-direction:column;box-sizing:border-box;min-width:0;max-width:none;background:#f8fafc;border-bottom:1px solid #cbd8df;box-shadow:0 2px 7px rgba(18,52,70,.07);font-family:inherit;color:#123b50;overflow:hidden}
+[class*="application"]:has(> [data-ritsucad-desktop-ribbon="true"])>[class*="cadArea"]>[class*="viewport"]{width:100%!important;max-width:none!important;min-width:0!important;flex:1 1 auto!important;margin:0!important}
+.rfDesktopRibbon{z-index:84;display:flex;flex-direction:column;box-sizing:border-box;width:100%;min-width:0;max-width:none;background:#f8fafc;border-bottom:1px solid #cbd8df;box-shadow:0 2px 7px rgba(18,52,70,.07);font-family:inherit;color:#123b50;overflow:hidden}
 .rfRibbonTabs{box-sizing:border-box;height:34px;flex:0 0 34px;width:100%;display:flex;align-items:flex-end;gap:2px;padding:0 16px;border-bottom:1px solid #dce5ea;background:#fff;overflow:hidden}
 .rfRibbonTabs button{height:34px;min-width:72px;padding:0 16px;border:0;border-bottom:3px solid transparent;background:transparent;color:#244b60;font:inherit;font-size:11px;font-weight:850;cursor:pointer}
 .rfRibbonTabs button:hover{background:#f2f7f9}.rfRibbonTabs button.active{color:#008f88;border-bottom-color:#00a59d;background:#f5fbfb}
-.rfRibbonCommands{box-sizing:border-box;height:74px;flex:0 0 74px;width:100%;min-width:0;display:flex;align-items:stretch;justify-content:flex-start;gap:2px;padding:5px 14px 6px;overflow:hidden}
+.rfRibbonCommands{box-sizing:border-box;height:74px;flex:0 0 74px;width:100%;min-width:0;display:flex;align-items:stretch;justify-content:flex-start;gap:2px;padding:5px 14px 6px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.rfRibbonCommands::-webkit-scrollbar{display:none}
 .rfRibbonCommands button{position:relative;flex:0 0 auto;min-width:74px;height:62px;padding:5px 9px;border:0;border-right:1px solid #dbe4e9;background:transparent;color:#173f52;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font:inherit;cursor:pointer}
 .rfRibbonCommands button:hover{background:#eaf6f6;border-radius:5px}.rfRibbonCommands button:disabled{opacity:.35;cursor:default}.rfRibbonCommands button>span{height:25px;font-size:22px;line-height:25px;color:#0a5870}.rfRibbonCommands button>strong{font-size:9px;line-height:1.05;white-space:nowrap}
 @media(max-width:1000px){.rfRibbonTabs{padding-left:8px}.rfRibbonTabs button{min-width:58px;padding:0 9px}.rfRibbonCommands{padding-left:8px;padding-right:8px}.rfRibbonCommands button{min-width:60px;padding:5px 5px}}
