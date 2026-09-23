@@ -27,19 +27,115 @@ function createEntityId() {
   return `ritsucad-wall-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-// Wall thickness is a construction property, not an SVG pixel property.
-// Until the semantic Wall renderer consumes the page calibration directly,
-// use a bounded display width only for on-screen legibility. The persisted
-// source of truth remains wallThicknessMm.
 function wallDisplayThicknessPx(wall) {
   const millimeters = Number(wall?.wallThicknessMm ?? wall?.thicknessMm)
   if (Number.isFinite(millimeters) && millimeters > 0) {
     return Math.max(2, Math.min(24, millimeters / 10))
   }
 
-  // Backward compatibility for Walls created before physical thickness.
   const legacyPx = Number(wall?.lineThickness)
   return Math.max(1, Number.isFinite(legacyPx) && legacyPx > 0 ? legacyPx : 2)
+}
+
+function svgUnitsPerScreenPixel(svg) {
+  if (!svg) return 1
+
+  try {
+    const ctm = svg.getScreenCTM?.()
+    if (!ctm) return 1
+
+    const scaleX = Math.hypot(ctm.a, ctm.b)
+    const scaleY = Math.hypot(ctm.c, ctm.d)
+    const scale = (scaleX + scaleY) / 2
+    return scale > 0 ? 1 / scale : 1
+  } catch {
+    return 1
+  }
+}
+
+function buildWallSegmentPolygons(points, thickness) {
+  if (!Array.isArray(points) || points.length < 2 || !Number.isFinite(thickness) || thickness <= 0) {
+    return []
+  }
+
+  const half = thickness / 2
+  const polygons = []
+
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1]
+    const end = points[index]
+    const dx = end.x - start.x
+    const dy = end.y - start.y
+    const length = Math.hypot(dx, dy)
+
+    if (length <= 0.0001) continue
+
+    const nx = (-dy / length) * half
+    const ny = (dx / length) * half
+
+    polygons.push([
+      { x: start.x + nx, y: start.y + ny },
+      { x: end.x + nx, y: end.y + ny },
+      { x: end.x - nx, y: end.y - ny },
+      { x: start.x - nx, y: start.y - ny },
+    ])
+  }
+
+  return polygons
+}
+
+function removeWallBody(svg, entityId) {
+  if (!svg || !entityId) return
+  svg.querySelectorAll(`[data-ritsucad-wall-body-for="${entityId}"]`).forEach((node) => node.remove())
+}
+
+function renderWallBody(svg, polyline, entity) {
+  if (!svg || !polyline || !entity) return
+
+  const points = parsePoints(polyline.getAttribute('points'))
+  if (points.length < 2) return
+
+  const color = entity.lineColor || entity.wall?.lineColor || '#0F766E'
+  const screenThickness = wallDisplayThicknessPx(entity.wall || entity)
+  const thickness = screenThickness * svgUnitsPerScreenPixel(svg)
+  const polygons = buildWallSegmentPolygons(points, thickness)
+
+  removeWallBody(svg, entity.id)
+
+  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  group.dataset.ritsucadWallBodyFor = entity.id || ''
+  group.dataset.ritsucadSemanticEntity = 'wall'
+  group.dataset.ritsucadLayer = entity.layer || ''
+  group.dataset.ritsucadName = entity.name || ''
+  group.dataset.ritsucadWallThicknessMm = entity.wallThicknessMm == null ? '' : String(entity.wallThicknessMm)
+  group.style.pointerEvents = 'none'
+
+  polygons.forEach((polygonPoints) => {
+    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
+    polygon.setAttribute('points', polygonPoints.map((point) => `${point.x},${point.y}`).join(' '))
+    polygon.setAttribute('fill', color)
+    polygon.setAttribute('stroke', color)
+    polygon.setAttribute('stroke-width', '0')
+    polygon.setAttribute('stroke-linejoin', 'miter')
+    group.appendChild(polygon)
+  })
+
+  polyline.parentNode?.insertBefore(group, polyline.nextSibling)
+
+  // Keep the native centerline for selection/editing, but do not use it as the
+  // visible wall representation. This prevents round caps, oversized strokes,
+  // and the diagonal/tapered endpoint seen when the command is completed.
+  polyline.setAttribute('stroke', 'transparent')
+  polyline.setAttribute('stroke-width', '1')
+  polyline.removeAttribute('stroke-dasharray')
+  polyline.dataset.ritsucadSemanticEntity = 'wall'
+  polyline.dataset.ritsucadSemanticEntityId = entity.id || ''
+  polyline.dataset.ritsucadSmartTakeoff = 'true'
+  polyline.dataset.ritsucadSmartType = 'wall'
+  polyline.dataset.ritsucadLayer = entity.layer || ''
+  polyline.dataset.ritsucadName = entity.name || ''
+  polyline.dataset.ritsucadHeight = entity.height == null ? '' : String(entity.height)
+  polyline.dataset.ritsucadWallThicknessMm = entity.wallThicknessMm == null ? '' : String(entity.wallThicknessMm)
 }
 
 export default function WallSettingsBridge() {
@@ -126,37 +222,18 @@ export default function WallSettingsBridge() {
     let frame = 0
     let applying = false
 
-    const styleSemanticWall = (polyline, entity) => {
-      if (!polyline || !entity) return
-
-      const color = entity.lineColor || entity.wall?.lineColor || '#0F766E'
-      const thickness = wallDisplayThicknessPx(entity.wall || entity)
-
-      if (polyline.getAttribute('stroke') !== color) polyline.setAttribute('stroke', color)
-      if (polyline.getAttribute('stroke-width') !== String(thickness)) {
-        polyline.setAttribute('stroke-width', String(thickness))
-      }
-      if (polyline.hasAttribute('stroke-dasharray')) polyline.removeAttribute('stroke-dasharray')
-
-      polyline.dataset.ritsucadSemanticEntity = 'wall'
-      polyline.dataset.ritsucadSemanticEntityId = entity.id || ''
-      polyline.dataset.ritsucadSmartTakeoff = 'true'
-      polyline.dataset.ritsucadSmartType = 'wall'
-      polyline.dataset.ritsucadLayer = entity.layer || ''
-      polyline.dataset.ritsucadName = entity.name || ''
-      polyline.dataset.ritsucadHeight = entity.height == null ? '' : String(entity.height)
-      polyline.dataset.ritsucadWallThicknessMm =
-        entity.wallThicknessMm == null ? '' : String(entity.wallThicknessMm)
+    const styleSemanticWall = (svg, polyline, entity) => {
+      renderWallBody(svg, polyline, entity)
     }
 
-    const persistSemanticWall = (polyline, settings, metadata) => {
+    const persistSemanticWall = (svg, polyline, settings, metadata) => {
       const points = parsePoints(polyline.getAttribute('points'))
       if (points.length < 2) return null
 
       const key = geometryKey(points)
       const existing = semanticWallsRef.current.get(key)
       if (existing) {
-        styleSemanticWall(polyline, existing)
+        styleSemanticWall(svg, polyline, existing)
         return existing
       }
 
@@ -196,7 +273,7 @@ export default function WallSettingsBridge() {
 
       semanticWallsRef.current.set(key, entity)
       completedRef.current.add(key)
-      styleSemanticWall(polyline, entity)
+      styleSemanticWall(svg, polyline, entity)
 
       const walls = Array.from(semanticWallsRef.current.values())
 
@@ -221,14 +298,14 @@ export default function WallSettingsBridge() {
         const svg = document.querySelector('svg[class*="geometryLayer"]')
         if (!svg) return
 
-        const polylines = Array.from(svg.querySelectorAll('polyline'))
+        const polylines = Array.from(svg.querySelectorAll('polyline:not([data-ritsucad-wall-body-for] polyline)'))
 
         polylines.forEach((polyline) => {
           const points = parsePoints(polyline.getAttribute('points'))
           if (points.length < 2) return
           const key = geometryKey(points)
           const entity = semanticWallsRef.current.get(key)
-          if (entity) styleSemanticWall(polyline, entity)
+          if (entity) styleSemanticWall(svg, polyline, entity)
         })
 
         const active = activeWallRef.current
@@ -249,6 +326,8 @@ export default function WallSettingsBridge() {
           if (dash === '7 5' && !semanticWallsRef.current.has(key)) {
             polyline.setAttribute('stroke', color)
             polyline.setAttribute('stroke-width', String(thickness))
+            polyline.setAttribute('stroke-linecap', 'butt')
+            polyline.setAttribute('stroke-linejoin', 'miter')
             polyline.removeAttribute('stroke-dasharray')
             polyline.dataset.ritsucadWallPreview = 'true'
             return
@@ -260,7 +339,7 @@ export default function WallSettingsBridge() {
             !dash &&
             (stroke === '#0f172a' || stroke === '#0f766e' || stroke === color.toLowerCase())
           ) {
-            persistSemanticWall(polyline, settings, metadata)
+            persistSemanticWall(svg, polyline, settings, metadata)
             activeWallRef.current = null
             delete window.__RITSUCAD_SEMANTIC_DRAWING_MODE__
           }
@@ -284,9 +363,17 @@ export default function WallSettingsBridge() {
 
     frame = requestAnimationFrame(applyWallAppearance)
 
+    const redraw = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(applyWallAppearance)
+    }
+
+    window.addEventListener('resize', redraw)
+
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      window.removeEventListener('resize', redraw)
     }
   }, [hasProjectDrawing, projectId, documentId, searchParams, storageKey])
 
