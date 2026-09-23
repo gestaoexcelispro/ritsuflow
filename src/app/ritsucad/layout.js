@@ -23,6 +23,13 @@ export default function RitsuCadLayout({ children }) {
       .ritsucadHeaderFileTitle,.ritsucadHeaderEditTitle{display:none!important}
       [class*="applicationHeader"] [class*="headerMetric"]{display:none!important}
       .ritsucadHeaderEditSlot{display:contents}.ritsucadHeaderEditGroup{display:flex;align-items:center;gap:5px;height:48px;padding:0 8px;margin-right:2px;border-right:1px solid rgba(255,255,255,.22)}.ritsucadHeaderEditButton{height:40px;min-width:48px;max-width:72px;padding:3px 6px;border:1px solid rgba(255,255,255,.28);border-radius:6px;background:rgba(255,255,255,.08);color:#fff;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;font-weight:800;cursor:pointer}.ritsucadHeaderEditButton:hover{background:rgba(255,255,255,.16)}.ritsucadHeaderEditButton:disabled{opacity:.45;cursor:default}.ritsucadHeaderEditButton>span{font-size:14px;line-height:1}.ritsucadHeaderEditButton>small{font-size:7px;line-height:1;white-space:nowrap}
+
+      /* Desktop ribbon owns the workspace. The former approved-shell toolbar must not reserve a left column. */
+      [class*="application"]:has([data-ritsucad-desktop-ribbon="true"]){display:flex!important;flex-direction:column!important;grid-template-columns:none!important;grid-template-rows:none!important}
+      [class*="application"]:has([data-ritsucad-desktop-ribbon="true"]) [data-ritsucad-approved-shell="true"]{display:none!important;position:absolute!important;width:0!important;min-width:0!important;max-width:0!important;height:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important;visibility:hidden!important;pointer-events:none!important}
+      [class*="application"]:has([data-ritsucad-desktop-ribbon="true"]) > [class*="cadArea"]{grid-column:auto!important;grid-row:auto!important;display:flex!important;flex:1 1 0!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;padding:0!important}
+      [class*="application"]:has([data-ritsucad-desktop-ribbon="true"]) > [class*="cadArea"] > [class*="viewport"]{flex:1 1 0!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important}
+
       @media(max-width:1250px){[class*="headerLeft"]{padding-left:205px!important}.ritsucadHeaderEditButton{min-width:42px;padding:3px 4px}.ritsucadHeaderEditButton>small{font-size:6px}}@media(max-width:1100px){[class*="headerLeft"]{padding-left:195px!important}[class*="_inspector__"]{right:8px!important;width:276px!important;min-width:276px!important;max-width:276px!important}}
     `}</style>
     <Suspense fallback={null}><ReturnToWorkspaceButton /></Suspense>
