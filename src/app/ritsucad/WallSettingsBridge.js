@@ -37,6 +37,7 @@ export default function WallSettingsBridge() {
   const baselineRef = useRef(new Set())
   const activeWallRef = useRef(null)
   const completedRef = useRef(new Set())
+  const semanticWallsRef = useRef(new Map())
 
   const projectId = searchParams.get('projectId')
   const documentId = searchParams.get('documentId')
@@ -74,18 +75,72 @@ export default function WallSettingsBridge() {
   }, [hasProjectDrawing])
 
   useEffect(() => {
+    if (!storageKey) return
+
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
+      const walls = Array.isArray(stored) ? stored : []
+
+      semanticWallsRef.current = new Map(
+        walls
+          .filter((entity) => entity?.geometryKey)
+          .map((entity) => [entity.geometryKey, entity])
+      )
+
+      completedRef.current = new Set(semanticWallsRef.current.keys())
+      window.__RITSUCAD_SEMANTIC_ENTITIES__ = walls
+    } catch (error) {
+      console.error('RitsuCAD stored wall metadata could not be restored.', error)
+    }
+  }, [storageKey])
+
+  useEffect(() => {
     if (!hasProjectDrawing) return undefined
 
     let frame = 0
+    let applying = false
+
+    const styleSemanticWall = (polyline, entity) => {
+      if (!polyline || !entity) return
+
+      const color = entity.lineColor || entity.wall?.lineColor || '#0F766E'
+      const thickness = Math.max(
+        1,
+        Number(entity.lineThickness ?? entity.wall?.lineThickness) || 2
+      )
+
+      if (polyline.getAttribute('stroke') !== color) {
+        polyline.setAttribute('stroke', color)
+      }
+
+      if (polyline.getAttribute('stroke-width') !== String(thickness)) {
+        polyline.setAttribute('stroke-width', String(thickness))
+      }
+
+      if (polyline.hasAttribute('stroke-dasharray')) {
+        polyline.removeAttribute('stroke-dasharray')
+      }
+
+      polyline.dataset.ritsucadSemanticEntity = 'wall'
+      polyline.dataset.ritsucadSemanticEntityId = entity.id || ''
+      polyline.dataset.ritsucadSmartTakeoff = 'true'
+      polyline.dataset.ritsucadSmartType = 'wall'
+      polyline.dataset.ritsucadLayer = entity.layer || ''
+      polyline.dataset.ritsucadName = entity.name || ''
+      polyline.dataset.ritsucadHeight =
+        entity.height == null ? '' : String(entity.height)
+    }
 
     const persistSemanticWall = (polyline, settings, metadata) => {
       const points = parsePoints(polyline.getAttribute('points'))
-      if (points.length < 2) return
+      if (points.length < 2) return null
 
       const key = geometryKey(points)
-      if (completedRef.current.has(key)) return
-
-      completedRef.current.add(key)
+      const existing = semanticWallsRef.current.get(key)
+      if (existing) {
+        styleSemanticWall(polyline, existing)
+        return existing
+      }
 
       const entity = {
         id: createEntityId(),
@@ -111,86 +166,94 @@ export default function WallSettingsBridge() {
         createdAt: new Date().toISOString(),
       }
 
-      polyline.dataset.ritsucadSemanticEntity = 'wall'
-      polyline.dataset.ritsucadSemanticEntityId = entity.id
-      polyline.dataset.ritsucadLayer = entity.layer || ''
-      polyline.dataset.ritsucadName = entity.name || ''
-      polyline.dataset.ritsucadHeight = entity.height == null ? '' : String(entity.height)
+      semanticWallsRef.current.set(key, entity)
+      completedRef.current.add(key)
+      styleSemanticWall(polyline, entity)
+
+      const walls = Array.from(semanticWallsRef.current.values())
 
       if (storageKey) {
         try {
-          const previous = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
-          const next = Array.isArray(previous)
-            ? [...previous.filter((item) => item?.geometryKey !== key), entity]
-            : [entity]
-          window.localStorage.setItem(storageKey, JSON.stringify(next))
+          window.localStorage.setItem(storageKey, JSON.stringify(walls))
         } catch (error) {
           console.error('RitsuCAD wall semantic persistence failed.', error)
         }
       }
 
-      window.__RITSUCAD_SEMANTIC_ENTITIES__ = [
-        ...(Array.isArray(window.__RITSUCAD_SEMANTIC_ENTITIES__)
-          ? window.__RITSUCAD_SEMANTIC_ENTITIES__.filter(
-              (item) => item?.geometryKey !== key
-            )
-          : []),
-        entity,
-      ]
+      window.__RITSUCAD_SEMANTIC_ENTITIES__ = walls
 
       window.dispatchEvent(
         new CustomEvent('ritsucad:semantic-entity-created', {
           detail: entity,
         })
       )
+
+      return entity
     }
 
     const applyWallAppearance = () => {
-      const active = activeWallRef.current
-      if (!active) return
+      if (applying) return
+      applying = true
 
-      const { settings, metadata } = active
-      const color = settings.lineColor || '#0F766E'
-      const thickness = Math.max(1, Number(settings.lineThickness) || 2)
-      const svg = document.querySelector('svg[class*="geometryLayer"]')
-      if (!svg) return
+      try {
+        const svg = document.querySelector('svg[class*="geometryLayer"]')
+        if (!svg) return
 
-      const polylines = Array.from(svg.querySelectorAll('polyline'))
+        const polylines = Array.from(svg.querySelectorAll('polyline'))
 
-      polylines.forEach((polyline) => {
-        const points = parsePoints(polyline.getAttribute('points'))
-        if (points.length < 2) return
+        // First restore every already-committed semantic Wall. React may redraw a
+        // native cad-polyline with its default CAD stroke whenever the command,
+        // selection, or viewport state changes. The semantic style must win.
+        polylines.forEach((polyline) => {
+          const points = parsePoints(polyline.getAttribute('points'))
+          if (points.length < 2) return
 
-        const key = geometryKey(points)
-        const stroke = String(polyline.getAttribute('stroke') || '').toLowerCase()
-        const dash = polyline.getAttribute('stroke-dasharray')
+          const key = geometryKey(points)
+          const entity = semanticWallsRef.current.get(key)
+          if (entity) styleSemanticWall(polyline, entity)
+        })
 
-        // Live native-polyline preview for the active Wall command.
-        if (stroke === '#0f766e' && dash === '7 5') {
-          polyline.setAttribute('stroke', color)
-          polyline.setAttribute('stroke-width', String(thickness))
-          polyline.removeAttribute('stroke-dasharray')
-          polyline.dataset.ritsucadWallPreview = 'true'
-          return
-        }
+        const active = activeWallRef.current
+        if (!active) return
 
-        // A newly committed native CAD polyline is the completed Wall. Capture it
-        // once, attach the semantic identity, and keep its configured appearance.
-        if (
-          !baselineRef.current.has(key) &&
-          !completedRef.current.has(key) &&
-          stroke === '#0f172a' &&
-          !dash
-        ) {
-          polyline.setAttribute('stroke', color)
-          polyline.setAttribute('stroke-width', String(thickness))
-          polyline.dataset.ritsucadSmartTakeoff = 'true'
-          polyline.dataset.ritsucadSmartType = 'wall'
-          persistSemanticWall(polyline, settings, metadata)
-          activeWallRef.current = null
-          delete window.__RITSUCAD_SEMANTIC_DRAWING_MODE__
-        }
-      })
+        const { settings, metadata } = active
+        const color = settings.lineColor || '#0F766E'
+        const thickness = Math.max(1, Number(settings.lineThickness) || 2)
+
+        polylines.forEach((polyline) => {
+          const points = parsePoints(polyline.getAttribute('points'))
+          if (points.length < 2) return
+
+          const key = geometryKey(points)
+          const stroke = String(polyline.getAttribute('stroke') || '').toLowerCase()
+          const dash = polyline.getAttribute('stroke-dasharray')
+
+          // Live native-polyline preview for the active Wall command.
+          if (dash === '7 5' && !semanticWallsRef.current.has(key)) {
+            polyline.setAttribute('stroke', color)
+            polyline.setAttribute('stroke-width', String(thickness))
+            polyline.removeAttribute('stroke-dasharray')
+            polyline.dataset.ritsucadWallPreview = 'true'
+            return
+          }
+
+          // The native drawing engine commits a cad-polyline using its default
+          // #0f172a stroke. Capture only geometry that did not exist before the
+          // Wall command, convert it into a semantic Wall, then retain its style.
+          if (
+            !baselineRef.current.has(key) &&
+            !semanticWallsRef.current.has(key) &&
+            !dash &&
+            (stroke === '#0f172a' || stroke === '#0f766e' || stroke === color.toLowerCase())
+          ) {
+            persistSemanticWall(polyline, settings, metadata)
+            activeWallRef.current = null
+            delete window.__RITSUCAD_SEMANTIC_DRAWING_MODE__
+          }
+        })
+      } finally {
+        applying = false
+      }
     }
 
     const observer = new MutationObserver(() => {
@@ -202,29 +265,16 @@ export default function WallSettingsBridge() {
       subtree: true,
       childList: true,
       attributes: true,
+      attributeFilter: ['points', 'stroke', 'stroke-width', 'stroke-dasharray'],
     })
+
+    frame = requestAnimationFrame(applyWallAppearance)
 
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
   }, [hasProjectDrawing, projectId, documentId, searchParams, storageKey])
-
-  useEffect(() => {
-    if (!storageKey) return
-
-    try {
-      const stored = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
-      if (Array.isArray(stored)) {
-        window.__RITSUCAD_SEMANTIC_ENTITIES__ = stored
-        stored.forEach((entity) => {
-          if (entity?.geometryKey) completedRef.current.add(entity.geometryKey)
-        })
-      }
-    } catch (error) {
-      console.error('RitsuCAD stored wall metadata could not be restored.', error)
-    }
-  }, [storageKey])
 
   function cancel() {
     setOpen(false)
