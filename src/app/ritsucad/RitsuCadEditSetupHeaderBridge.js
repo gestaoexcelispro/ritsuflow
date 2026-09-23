@@ -53,7 +53,6 @@ export default function RitsuCadEditSetupHeaderBridge() {
 
   return createPortal(
     <div className="ritsucadHeaderEditGroup">
-      <span className="ritsucadHeaderEditTitle">EDIT · SETUP</span>
       {actions.map(action => (
         <button
           key={action.index}
