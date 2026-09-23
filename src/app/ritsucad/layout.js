@@ -29,6 +29,10 @@ export default function RitsuCadLayout({ children }) {
 
       /* Header command groups: titles are intentionally hidden. */
       .ritsucadHeaderFileTitle,.ritsucadHeaderEditTitle{display:none!important}
+
+      /* Scale and Zoom already remain available in the full-width status bar. */
+      [class*="applicationHeader"] [class*="headerMetric"]{display:none!important}
+
       .ritsucadHeaderEditSlot{display:contents}
       .ritsucadHeaderEditGroup{display:flex;align-items:center;gap:5px;height:48px;padding:0 8px;margin-right:2px;border-right:1px solid rgba(255,255,255,.22)}
       .ritsucadHeaderEditButton{height:40px;min-width:48px;max-width:72px;padding:3px 6px;border:1px solid rgba(255,255,255,.28);border-radius:6px;background:rgba(255,255,255,.08);color:#fff;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;font-weight:800;cursor:pointer}
