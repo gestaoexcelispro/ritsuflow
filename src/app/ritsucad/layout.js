@@ -10,7 +10,6 @@ import RitsuCadDrawingViewsPanel from './RitsuCadDrawingViewsPanel'
 import RitsuCadDrawingViewBridge from './RitsuCadDrawingViewBridge'
 import RitsuCadLogoBridge from './RitsuCadLogoBridge'
 import RitsuCadLegacyShellCleanup from './RitsuCadLegacyShellCleanup'
-import ReturnToWorkspaceButton from './ReturnToWorkspaceButton'
 import WallSettingsBridge from './WallSettingsBridge'
 
 export const metadata = { title:'RitsuCAD™ | RitsuFlow', description:'RitsuFlow construction CAD, drawing markup, measurement, takeoff, and project location mapping workspace.' }
@@ -24,26 +23,14 @@ export default function RitsuCadLayout({ children }) {
       [data-ritsucad-approved-shell="true"] > [class*="toolbarSection"]:nth-of-type(2)::before{content:'VIEW'!important}
       .ritsucadHeaderFileTitle,.ritsucadHeaderEditTitle{display:none!important}
       [class*="applicationHeader"] [class*="headerMetric"]{display:none!important}
-
-      /* Desktop ribbon migration: the application header is now identity only.
-         File and edit/setup actions are visually hosted inside the ribbon. */
       .ritsucadHeaderFileSlot,.ritsucadHeaderEditSlot{display:contents}
       .ritsucadHeaderFileGroup,.ritsucadHeaderEditGroup{position:fixed!important;z-index:99!important;top:111px!important;height:78px!important;display:flex!important;align-items:flex-start!important;gap:2px!important;padding:0 8px 14px!important;margin:0!important;border-right:1px solid #bdcbd3!important;background:transparent!important}
-      .ritsucadHeaderFileGroup{right:12px!important}
-      .ritsucadHeaderEditGroup{right:330px!important}
-      .ritsucadHeaderFileGroup::after,.ritsucadHeaderEditGroup::after{position:absolute!important;left:0!important;right:0!important;bottom:0!important;text-align:center!important;color:#607986!important;font-size:9px!important;line-height:14px!important;font-weight:500!important}
-      .ritsucadHeaderFileGroup::after{content:'File'}
-      .ritsucadHeaderEditGroup::after{content:'Edit'}
+      .ritsucadHeaderFileGroup{right:12px!important}.ritsucadHeaderEditGroup{right:330px!important}
+      .ritsucadHeaderFileGroup::after,.ritsucadHeaderEditGroup::after{position:absolute!important;left:0!important;right:0!important;bottom:0!important;text-align:center!important;color:#607986!important;font-size:9px!important;line-height:14px!important;font-weight:500!important}.ritsucadHeaderFileGroup::after{content:'File'}.ritsucadHeaderEditGroup::after{content:'Edit'}
       .ritsucadHeaderFileButton,.ritsucadHeaderEditButton{height:62px!important;min-width:68px!important;max-width:82px!important;padding:5px 7px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#173f52!important;display:inline-flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:5px!important;font:inherit!important;font-weight:800!important;cursor:pointer!important;box-shadow:none!important}
-      .ritsucadHeaderFileButton:hover,.ritsucadHeaderEditButton:hover{background:#dcebed!important}
-      .ritsucadHeaderFileButton.primary{background:transparent!important;color:#173f52!important;border:0!important}
-      .ritsucadHeaderFileButton:disabled,.ritsucadHeaderEditButton:disabled{opacity:.35!important;cursor:default!important}
-      .ritsucadHeaderFileButton>span,.ritsucadHeaderEditButton>span{font-size:22px!important;line-height:25px!important;color:#075f78!important}
-      .ritsucadHeaderFileButton>small,.ritsucadHeaderEditButton>small{font-size:9px!important;line-height:1!important;font-weight:800!important;white-space:nowrap!important;color:#173f52!important}
-
+      .ritsucadHeaderFileButton:hover,.ritsucadHeaderEditButton:hover{background:#dcebed!important}.ritsucadHeaderFileButton.primary{background:transparent!important;color:#173f52!important;border:0!important}.ritsucadHeaderFileButton:disabled,.ritsucadHeaderEditButton:disabled{opacity:.35!important;cursor:default!important}.ritsucadHeaderFileButton>span,.ritsucadHeaderEditButton>span{font-size:22px!important;line-height:25px!important;color:#075f78!important}.ritsucadHeaderFileButton>small,.ritsucadHeaderEditButton>small{font-size:9px!important;line-height:1!important;font-weight:800!important;white-space:nowrap!important;color:#173f52!important}
       @media(max-width:1250px){[class*="headerLeft"]{padding-left:205px!important}.ritsucadHeaderFileButton,.ritsucadHeaderEditButton{min-width:58px!important;padding:4px!important}.ritsucadHeaderFileButton>small,.ritsucadHeaderEditButton>small{font-size:8px!important}.ritsucadHeaderEditGroup{right:285px!important}}@media(max-width:1100px){[class*="headerLeft"]{padding-left:195px!important}[class*="_inspector__"]{right:8px!important;width:276px!important;min-width:276px!important;max-width:276px!important}.ritsucadHeaderFileGroup,.ritsucadHeaderEditGroup{display:none!important}}
     `}</style>
-    <Suspense fallback={null}><ReturnToWorkspaceButton /></Suspense>
     {children}
     <Suspense fallback={null}>
       <RitsuCadLogoBridge />
