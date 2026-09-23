@@ -27,10 +27,10 @@ export default function RitsuCadLayout({ children }) {
       }
       [data-ritsucad-approved-shell="true"] > [class*="toolbarSection"]:nth-of-type(2)::before{content:'VIEW'!important}
 
-      /* EDIT · SETUP is rendered in the header immediately to the left of FILE. */
+      /* Header command groups: titles are intentionally hidden. */
+      .ritsucadHeaderFileTitle,.ritsucadHeaderEditTitle{display:none!important}
       .ritsucadHeaderEditSlot{display:contents}
       .ritsucadHeaderEditGroup{display:flex;align-items:center;gap:5px;height:48px;padding:0 8px;margin-right:2px;border-right:1px solid rgba(255,255,255,.22)}
-      .ritsucadHeaderEditTitle{font-size:8px;font-weight:900;letter-spacing:.08em;color:#8fb0c0;writing-mode:vertical-rl;transform:rotate(180deg)}
       .ritsucadHeaderEditButton{height:40px;min-width:48px;max-width:72px;padding:3px 6px;border:1px solid rgba(255,255,255,.28);border-radius:6px;background:rgba(255,255,255,.08);color:#fff;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;font-weight:800;cursor:pointer}
       .ritsucadHeaderEditButton:hover{background:rgba(255,255,255,.16)}
       .ritsucadHeaderEditButton:disabled{opacity:.45;cursor:default}
