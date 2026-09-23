@@ -7,6 +7,7 @@ import RitsuCadRibbonBridge from './RitsuCadRibbonBridge'
 import RitsuCadDrawingViewsPanel from './RitsuCadDrawingViewsPanel'
 import RitsuCadDrawingViewBridge from './RitsuCadDrawingViewBridge'
 import ReturnToWorkspaceButton from './ReturnToWorkspaceButton'
+import WallSettingsBridge from './WallSettingsBridge'
 
 export const metadata = { title:'RitsuCAD™ | RitsuFlow', description:'RitsuFlow construction CAD, drawing markup, measurement, takeoff, and project location mapping workspace.' }
 
@@ -19,6 +20,7 @@ export default function RitsuCadLayout({ children }) {
     {children}
     <Suspense fallback={null}>
       <RitsuCadRibbonBridge />
+      <WallSettingsBridge />
       <RitsuCadProjectLauncher />
       <RitsuCadDrawingViewsPanel />
       <RitsuCadDrawingViewBridge />
