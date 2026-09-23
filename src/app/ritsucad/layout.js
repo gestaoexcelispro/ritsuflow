@@ -7,6 +7,7 @@ import RitsuCadRibbonBridge from './RitsuCadRibbonBridge'
 import RitsuCadEditSetupHeaderBridge from './RitsuCadEditSetupHeaderBridge'
 import RitsuCadDrawingViewsPanel from './RitsuCadDrawingViewsPanel'
 import RitsuCadDrawingViewBridge from './RitsuCadDrawingViewBridge'
+import RitsuCadLogoBridge from './RitsuCadLogoBridge'
 import ReturnToWorkspaceButton from './ReturnToWorkspaceButton'
 import WallSettingsBridge from './WallSettingsBridge'
 
@@ -47,6 +48,7 @@ export default function RitsuCadLayout({ children }) {
     <Suspense fallback={null}><ReturnToWorkspaceButton /></Suspense>
     {children}
     <Suspense fallback={null}>
+      <RitsuCadLogoBridge />
       <RitsuCadRibbonBridge />
       <RitsuCadEditSetupHeaderBridge />
       <WallSettingsBridge />
