@@ -133,6 +133,8 @@ export default function RitsuCadDesktopRibbon(){
 
 const CSS=`
 [data-ritsucad-approved-shell="true"],[class*="cadToolbar"]{display:none!important}
+/* Legacy bridge controls remain mounted so the new ribbon can invoke their native actions, but they must never render visually. */
+.ritsucadHeaderEditSlot,.ritsucadHeaderEditGroup,.ritsucadHeaderFileSlot,.ritsucadHeaderFileGroup{display:none!important}
 [class*="application"]:has([data-ritsucad-desktop-ribbon="true"]){position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;background:#919eaa!important}
 [class*="application"]:has([data-ritsucad-desktop-ribbon="true"])>[class*="applicationHeader"]{position:fixed!important;z-index:100!important;top:0!important;left:0!important;right:0!important;width:100vw!important;height:72px!important;min-height:72px!important;margin:0!important}
 [class*="application"]:has([data-ritsucad-desktop-ribbon="true"])>[class*="cadArea"]{position:fixed!important;z-index:1!important;top:232px!important;left:0!important;right:0!important;bottom:76px!important;width:100vw!important;height:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;display:block!important;background:#919eaa!important;overflow:hidden!important}
