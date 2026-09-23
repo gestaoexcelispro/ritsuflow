@@ -9,6 +9,7 @@ import RitsuCadEditSetupHeaderBridge from './RitsuCadEditSetupHeaderBridge'
 import RitsuCadDrawingViewsPanel from './RitsuCadDrawingViewsPanel'
 import RitsuCadDrawingViewBridge from './RitsuCadDrawingViewBridge'
 import RitsuCadLogoBridge from './RitsuCadLogoBridge'
+import RitsuCadLegacyShellCleanup from './RitsuCadLegacyShellCleanup'
 import ReturnToWorkspaceButton from './ReturnToWorkspaceButton'
 import WallSettingsBridge from './WallSettingsBridge'
 
@@ -56,6 +57,7 @@ export default function RitsuCadLayout({ children }) {
       <LocationMappingPanel />
       <TakeoffContextPanel />
       <TakeoffPersistenceBridge />
+      <RitsuCadLegacyShellCleanup />
     </Suspense>
   </div>
 }
