@@ -74,6 +74,31 @@ export default function WallSettingsBridge() {
     return () => document.removeEventListener('click', interceptWall, true)
   }, [hasProjectDrawing])
 
+  // A double-click finishes the native polyline. Without this guard, the second
+  // pointerdown of that double-click is also consumed by the native polyline tool
+  // and becomes one more geometry vertex. Even a tiny mouse movement between the
+  // two clicks therefore creates the short diagonal/tapered segment seen at the
+  // end of a completed Wall. Keep the first click as the intended endpoint and
+  // let the following dblclick event finish the command normally.
+  useEffect(() => {
+    if (!hasProjectDrawing) return undefined
+
+    const suppressWallDoubleClickVertex = (event) => {
+      if (!activeWallRef.current) return
+      if (event.button !== 0) return
+      if (event.detail < 2) return
+
+      event.stopPropagation()
+      event.stopImmediatePropagation?.()
+    }
+
+    document.addEventListener('pointerdown', suppressWallDoubleClickVertex, true)
+
+    return () => {
+      document.removeEventListener('pointerdown', suppressWallDoubleClickVertex, true)
+    }
+  }, [hasProjectDrawing])
+
   useEffect(() => {
     if (!storageKey) return
 
@@ -201,9 +226,6 @@ export default function WallSettingsBridge() {
 
         const polylines = Array.from(svg.querySelectorAll('polyline'))
 
-        // First restore every already-committed semantic Wall. React may redraw a
-        // native cad-polyline with its default CAD stroke whenever the command,
-        // selection, or viewport state changes. The semantic style must win.
         polylines.forEach((polyline) => {
           const points = parsePoints(polyline.getAttribute('points'))
           if (points.length < 2) return
@@ -228,7 +250,6 @@ export default function WallSettingsBridge() {
           const stroke = String(polyline.getAttribute('stroke') || '').toLowerCase()
           const dash = polyline.getAttribute('stroke-dasharray')
 
-          // Live native-polyline preview for the active Wall command.
           if (dash === '7 5' && !semanticWallsRef.current.has(key)) {
             polyline.setAttribute('stroke', color)
             polyline.setAttribute('stroke-width', String(thickness))
@@ -237,9 +258,6 @@ export default function WallSettingsBridge() {
             return
           }
 
-          // The native drawing engine commits a cad-polyline using its default
-          // #0f172a stroke. Capture only geometry that did not exist before the
-          // Wall command, convert it into a semantic Wall, then retain its style.
           if (
             !baselineRef.current.has(key) &&
             !semanticWallsRef.current.has(key) &&
