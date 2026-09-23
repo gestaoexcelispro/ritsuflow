@@ -34,7 +34,9 @@ const APPROVED_SHELL_CSS=`
 .ritsucadBridgeButton>span{font-size:15px;line-height:1}.ritsucadBridgeButton>small{max-width:100%;font-size:8px;line-height:1.05;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ritsucadBridgeButton.active{border-color:#73d1cc;background:#e8faf8;color:#007f79}.ritsucadBridgeButton:disabled{opacity:.45;cursor:default}
 .ritsucadSmartMenu{position:absolute;z-index:1000;top:50px;left:0;min-width:190px;padding:5px;border:1px solid #bfd0da;border-radius:7px;background:#fff;box-shadow:0 8px 24px rgba(15,54,75,.18)}
 .ritsucadSmartMenu button{width:100%;display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:6px;padding:7px 9px;border:0;border-radius:5px;background:#fff;color:#173e52;font:inherit;text-align:left;cursor:pointer}.ritsucadSmartMenu button.active{background:#e8faf8;color:#007f79}.ritsucadSmartMenu button strong{font-size:11px}.ritsucadSmartMenu button small{font-size:9px;color:#78909c}
-[class*="application"]:has([data-ritsucad-approved-shell="true"]) [class*="statusBar"]{background:#063c56!important;color:#fff!important}
+[class*="application"]:has([data-ritsucad-approved-shell="true"]) [class*="statusBar"]{position:fixed!important;left:0!important;right:0!important;bottom:0!important;width:100vw!important;z-index:90!important;justify-content:flex-end!important;background:#063c56!important;color:#fff!important}
+[class*="application"]:has([data-ritsucad-approved-shell="true"]) [class*="statusBar"]>[class*="statusLeft"]{margin-left:auto!important}
+[class*="application"]:has([data-ritsucad-approved-shell="true"]) [class*="statusBar"]>[class*="statusRight"]{margin-left:10px!important}
 @media(max-width:1200px){[class*="application"]:has([data-ritsucad-approved-shell="true"]){grid-template-columns:290px minmax(0,1fr)!important}[data-ritsucad-approved-shell="true"]{width:290px!important}.ritsucadHeaderFileButton{min-width:42px;padding:3px 4px}.ritsucadHeaderFileButton>small{font-size:6px}}
 `
 
