@@ -21,25 +21,11 @@ function createEntityId() {
   return `ritsucad-wall-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-function wallDisplayThicknessPx(wall) {
+function wallDisplayThicknessDrawingUnits(wall) {
   const millimeters = Number(wall?.wallThicknessMm ?? wall?.thicknessMm)
   if (Number.isFinite(millimeters) && millimeters > 0) return Math.max(2, Math.min(24, millimeters / 10))
   const legacyPx = Number(wall?.lineThickness)
   return Math.max(1, Number.isFinite(legacyPx) && legacyPx > 0 ? legacyPx : 2)
-}
-
-function svgUnitsPerScreenPixel(svg) {
-  if (!svg) return 1
-  try {
-    const ctm = svg.getScreenCTM?.()
-    if (!ctm) return 1
-    const scaleX = Math.hypot(ctm.a, ctm.b)
-    const scaleY = Math.hypot(ctm.c, ctm.d)
-    const scale = (scaleX + scaleY) / 2
-    return scale > 0 ? 1 / scale : 1
-  } catch {
-    return 1
-  }
 }
 
 function buildWallSegmentPolygons(points, thickness) {
@@ -75,7 +61,12 @@ function renderWallBody(svg, polyline, entity) {
   const points = parsePoints(polyline.getAttribute('points'))
   if (points.length < 2) return
   const color = entity.lineColor || entity.wall?.lineColor || '#0F766E'
-  const thickness = wallDisplayThicknessPx(entity.wall || entity) * svgUnitsPerScreenPixel(svg)
+
+  // IMPORTANT: wall thickness lives in drawing/SVG coordinates. It must not be
+  // divided by the current screen CTM/zoom. The geometry layer already scales
+  // together with the PDF, so a wall body created in drawing coordinates stays
+  // registered to the drawing at every zoom level.
+  const thickness = wallDisplayThicknessDrawingUnits(entity.wall || entity)
   const polygons = buildWallSegmentPolygons(points, thickness)
   removeWallBody(svg, entity.id)
 
@@ -212,7 +203,6 @@ export default function WallSettingsBridge() {
         const polylines = Array.from(svg.querySelectorAll('polyline'))
           .filter((polyline) => !polyline.closest('[data-ritsucad-wall-body-for]'))
 
-        // Restore already-completed semantic walls.
         polylines.forEach((polyline) => {
           if (polyline.dataset.ritsucadWallPreview === 'true') return
           const points = parsePoints(polyline.getAttribute('points'))
@@ -225,7 +215,7 @@ export default function WallSettingsBridge() {
         if (!active) return
         const { settings, metadata } = active
         const color = settings.lineColor || '#0F766E'
-        const thickness = wallDisplayThicknessPx(settings)
+        const thickness = wallDisplayThicknessDrawingUnits(settings)
 
         polylines.forEach((polyline) => {
           const points = parsePoints(polyline.getAttribute('points'))
@@ -233,8 +223,6 @@ export default function WallSettingsBridge() {
           const key = geometryKey(points)
           const dash = polyline.getAttribute('stroke-dasharray')
 
-          // IMPORTANT: a dashed polyline is React's live drawing preview. Style it,
-          // but keep it dashed and marked as preview. Never persist it as a Wall.
           if (dash === '7 5' && !semanticWallsRef.current.has(key)) {
             polyline.setAttribute('stroke', color)
             polyline.setAttribute('stroke-width', String(thickness))
@@ -244,9 +232,6 @@ export default function WallSettingsBridge() {
             return
           }
 
-          // Only React's completed native cad-polyline is eligible for persistence.
-          // Preview nodes are explicitly excluded, preventing the first click/mouse
-          // movement from prematurely completing the semantic Wall command.
           if (polyline.dataset.ritsucadWallPreview === 'true') return
           const stroke = String(polyline.getAttribute('stroke') || '').toLowerCase()
           if (
