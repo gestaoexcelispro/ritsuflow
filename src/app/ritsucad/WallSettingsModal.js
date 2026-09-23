@@ -7,7 +7,13 @@ const DEFAULT_WALL = {
   name: '',
   height: '',
   lineColor: '#0f766e',
-  lineThickness: '2',
+  wallThicknessMm: '100',
+}
+
+function previewThicknessPx(value) {
+  const millimeters = Number(value)
+  if (!Number.isFinite(millimeters) || millimeters <= 0) return 2
+  return Math.max(2, Math.min(24, millimeters / 10))
 }
 
 export default function WallSettingsModal({ open, initialValue, onCancel, onSave }) {
@@ -16,7 +22,18 @@ export default function WallSettingsModal({ open, initialValue, onCancel, onSave
 
   useEffect(() => {
     if (!open) return
-    setForm({ ...DEFAULT_WALL, ...(initialValue || {}) })
+
+    const normalizedInitialValue = initialValue
+      ? {
+          ...initialValue,
+          wallThicknessMm:
+            initialValue.wallThicknessMm ??
+            initialValue.thicknessMm ??
+            DEFAULT_WALL.wallThicknessMm,
+        }
+      : {}
+
+    setForm({ ...DEFAULT_WALL, ...normalizedInitialValue })
     setErrors({})
   }, [open, initialValue])
 
@@ -39,10 +56,16 @@ export default function WallSettingsModal({ open, initialValue, onCancel, onSave
   function submit(event) {
     event.preventDefault()
     const nextErrors = {}
+
     if (!form.layer.trim()) nextErrors.layer = 'Layer is required.'
     if (!form.name.trim()) nextErrors.name = 'Wall name is required.'
-    if (!Number.isFinite(Number(form.height)) || Number(form.height) <= 0) nextErrors.height = 'Enter a height greater than 0.'
-    if (!Number.isFinite(Number(form.lineThickness)) || Number(form.lineThickness) <= 0) nextErrors.lineThickness = 'Enter a thickness greater than 0.'
+    if (!Number.isFinite(Number(form.height)) || Number(form.height) <= 0) {
+      nextErrors.height = 'Enter a height greater than 0.'
+    }
+    if (!Number.isFinite(Number(form.wallThicknessMm)) || Number(form.wallThicknessMm) <= 0) {
+      nextErrors.wallThicknessMm = 'Enter a wall thickness greater than 0 mm.'
+    }
+
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors)
       return
@@ -53,9 +76,12 @@ export default function WallSettingsModal({ open, initialValue, onCancel, onSave
       name: form.name.trim(),
       height: Number(form.height),
       lineColor: form.lineColor,
-      lineThickness: Number(form.lineThickness),
+      wallThicknessMm: Number(form.wallThicknessMm),
+      thicknessUnit: 'mm',
     })
   }
+
+  const previewPx = previewThicknessPx(form.wallThicknessMm)
 
   return (
     <div className="ritsucadWallModalBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel?.()}>
@@ -86,10 +112,10 @@ export default function WallSettingsModal({ open, initialValue, onCancel, onSave
             </div>
           </Field>
 
-          <Field label="Line Thickness" error={errors.lineThickness}>
+          <Field label="Wall Thickness" error={errors.wallThicknessMm}>
             <div className="ritsucadWallInputWithUnit">
-              <input type="number" min="0.1" step="0.1" value={form.lineThickness} onChange={(e) => update('lineThickness', e.target.value)} />
-              <span>px</span>
+              <input type="number" min="1" step="1" value={form.wallThicknessMm} onChange={(e) => update('wallThicknessMm', e.target.value)} placeholder="100" />
+              <span>mm</span>
             </div>
           </Field>
 
@@ -102,8 +128,8 @@ export default function WallSettingsModal({ open, initialValue, onCancel, onSave
         </div>
 
         <div className="ritsucadWallPreview">
-          <span>Preview</span>
-          <div style={{ borderTop: `${form.lineThickness || 1}px solid ${form.lineColor || '#0f766e'}` }} />
+          <span>Preview · {form.wallThicknessMm || 0} mm</span>
+          <div style={{ borderTop: `${previewPx}px solid ${form.lineColor || '#0f766e'}` }} />
         </div>
 
         <div className="ritsucadWallModalActions">
