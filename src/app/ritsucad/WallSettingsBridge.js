@@ -17,17 +17,29 @@ function parsePoints(value) {
 }
 
 function geometryKey(points) {
-  return points
-    .map((point) => `${point.x.toFixed(4)},${point.y.toFixed(4)}`)
-    .join('|')
+  return points.map((point) => `${point.x.toFixed(4)},${point.y.toFixed(4)}`).join('|')
 }
 
 function createEntityId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
   }
-
   return `ritsucad-wall-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+// Wall thickness is a construction property, not an SVG pixel property.
+// Until the semantic Wall renderer consumes the page calibration directly,
+// use a bounded display width only for on-screen legibility. The persisted
+// source of truth remains wallThicknessMm.
+function wallDisplayThicknessPx(wall) {
+  const millimeters = Number(wall?.wallThicknessMm ?? wall?.thicknessMm)
+  if (Number.isFinite(millimeters) && millimeters > 0) {
+    return Math.max(2, Math.min(24, millimeters / 10))
+  }
+
+  // Backward compatibility for Walls created before physical thickness.
+  const legacyPx = Number(wall?.lineThickness)
+  return Math.max(1, Number.isFinite(legacyPx) && legacyPx > 0 ? legacyPx : 2)
 }
 
 export default function WallSettingsBridge() {
@@ -74,12 +86,6 @@ export default function WallSettingsBridge() {
     return () => document.removeEventListener('click', interceptWall, true)
   }, [hasProjectDrawing])
 
-  // A double-click finishes the native polyline. Without this guard, the second
-  // pointerdown of that double-click is also consumed by the native polyline tool
-  // and becomes one more geometry vertex. Even a tiny mouse movement between the
-  // two clicks therefore creates the short diagonal/tapered segment seen at the
-  // end of a completed Wall. Keep the first click as the intended endpoint and
-  // let the following dblclick event finish the command normally.
   useEffect(() => {
     if (!hasProjectDrawing) return undefined
 
@@ -93,10 +99,7 @@ export default function WallSettingsBridge() {
     }
 
     document.addEventListener('pointerdown', suppressWallDoubleClickVertex, true)
-
-    return () => {
-      document.removeEventListener('pointerdown', suppressWallDoubleClickVertex, true)
-    }
+    return () => document.removeEventListener('pointerdown', suppressWallDoubleClickVertex, true)
   }, [hasProjectDrawing])
 
   useEffect(() => {
@@ -107,9 +110,7 @@ export default function WallSettingsBridge() {
       const walls = Array.isArray(stored) ? stored : []
 
       semanticWallsRef.current = new Map(
-        walls
-          .filter((entity) => entity?.geometryKey)
-          .map((entity) => [entity.geometryKey, entity])
+        walls.filter((entity) => entity?.geometryKey).map((entity) => [entity.geometryKey, entity])
       )
 
       completedRef.current = new Set(semanticWallsRef.current.keys())
@@ -129,22 +130,13 @@ export default function WallSettingsBridge() {
       if (!polyline || !entity) return
 
       const color = entity.lineColor || entity.wall?.lineColor || '#0F766E'
-      const thickness = Math.max(
-        1,
-        Number(entity.lineThickness ?? entity.wall?.lineThickness) || 2
-      )
+      const thickness = wallDisplayThicknessPx(entity.wall || entity)
 
-      if (polyline.getAttribute('stroke') !== color) {
-        polyline.setAttribute('stroke', color)
-      }
-
+      if (polyline.getAttribute('stroke') !== color) polyline.setAttribute('stroke', color)
       if (polyline.getAttribute('stroke-width') !== String(thickness)) {
         polyline.setAttribute('stroke-width', String(thickness))
       }
-
-      if (polyline.hasAttribute('stroke-dasharray')) {
-        polyline.removeAttribute('stroke-dasharray')
-      }
+      if (polyline.hasAttribute('stroke-dasharray')) polyline.removeAttribute('stroke-dasharray')
 
       polyline.dataset.ritsucadSemanticEntity = 'wall'
       polyline.dataset.ritsucadSemanticEntityId = entity.id || ''
@@ -152,8 +144,9 @@ export default function WallSettingsBridge() {
       polyline.dataset.ritsucadSmartType = 'wall'
       polyline.dataset.ritsucadLayer = entity.layer || ''
       polyline.dataset.ritsucadName = entity.name || ''
-      polyline.dataset.ritsucadHeight =
-        entity.height == null ? '' : String(entity.height)
+      polyline.dataset.ritsucadHeight = entity.height == null ? '' : String(entity.height)
+      polyline.dataset.ritsucadWallThicknessMm =
+        entity.wallThicknessMm == null ? '' : String(entity.wallThicknessMm)
     }
 
     const persistSemanticWall = (polyline, settings, metadata) => {
@@ -165,6 +158,13 @@ export default function WallSettingsBridge() {
       if (existing) {
         styleSemanticWall(polyline, existing)
         return existing
+      }
+
+      const wallThicknessMm = Math.max(1, Number(settings.wallThicknessMm) || 100)
+      const normalizedSettings = {
+        ...settings,
+        wallThicknessMm,
+        thicknessUnit: 'mm',
       }
 
       const entity = {
@@ -180,12 +180,15 @@ export default function WallSettingsBridge() {
         name: settings.name || 'Wall',
         height: settings.height ?? null,
         lineColor: settings.lineColor || '#0F766E',
-        lineThickness: Math.max(1, Number(settings.lineThickness) || 2),
-        wall: { ...settings },
+        wallThicknessMm,
+        thicknessUnit: 'mm',
+        wall: normalizedSettings,
         metadata: {
           ...metadata,
           entityType: 'wall',
-          wall: { ...settings },
+          wallThicknessMm,
+          thicknessUnit: 'mm',
+          wall: normalizedSettings,
         },
         geometryKey: key,
         createdAt: new Date().toISOString(),
@@ -206,13 +209,7 @@ export default function WallSettingsBridge() {
       }
 
       window.__RITSUCAD_SEMANTIC_ENTITIES__ = walls
-
-      window.dispatchEvent(
-        new CustomEvent('ritsucad:semantic-entity-created', {
-          detail: entity,
-        })
-      )
-
+      window.dispatchEvent(new CustomEvent('ritsucad:semantic-entity-created', { detail: entity }))
       return entity
     }
 
@@ -229,7 +226,6 @@ export default function WallSettingsBridge() {
         polylines.forEach((polyline) => {
           const points = parsePoints(polyline.getAttribute('points'))
           if (points.length < 2) return
-
           const key = geometryKey(points)
           const entity = semanticWallsRef.current.get(key)
           if (entity) styleSemanticWall(polyline, entity)
@@ -240,7 +236,7 @@ export default function WallSettingsBridge() {
 
         const { settings, metadata } = active
         const color = settings.lineColor || '#0F766E'
-        const thickness = Math.max(1, Number(settings.lineThickness) || 2)
+        const thickness = wallDisplayThicknessPx(settings)
 
         polylines.forEach((polyline) => {
           const points = parsePoints(polyline.getAttribute('points'))
@@ -301,6 +297,13 @@ export default function WallSettingsBridge() {
   function saveAndDraw(settings) {
     if (!wallItem) return
 
+    const wallThicknessMm = Math.max(1, Number(settings.wallThicknessMm) || 100)
+    const normalizedSettings = {
+      ...settings,
+      wallThicknessMm,
+      thicknessUnit: 'mm',
+    }
+
     const baseMetadata = createSmartTakeoffMetadata('wall')
     const metadata = {
       ...baseMetadata,
@@ -309,8 +312,9 @@ export default function WallSettingsBridge() {
       name: settings.name,
       height: settings.height,
       lineColor: settings.lineColor,
-      lineThickness: settings.lineThickness,
-      wall: { ...settings },
+      wallThicknessMm,
+      thicknessUnit: 'mm',
+      wall: normalizedSettings,
       properties: {
         ...(baseMetadata?.properties || {}),
         entityType: 'wall',
@@ -318,7 +322,8 @@ export default function WallSettingsBridge() {
         name: settings.name,
         height: settings.height,
         lineColor: settings.lineColor,
-        lineThickness: settings.lineThickness,
+        wallThicknessMm,
+        thicknessUnit: 'mm',
       },
     }
 
@@ -330,36 +335,29 @@ export default function WallSettingsBridge() {
         .map(geometryKey)
     )
 
-    activeWallRef.current = {
-      settings: { ...settings },
-      metadata,
-    }
+    activeWallRef.current = { settings: normalizedSettings, metadata }
 
     window.__RITSUCAD_ACTIVE_SMART_TAKEOFF__ = metadata
-    window.__RITSUCAD_ACTIVE_WALL_SETTINGS__ = { ...settings }
+    window.__RITSUCAD_ACTIVE_WALL_SETTINGS__ = normalizedSettings
     window.__RITSUCAD_SEMANTIC_DRAWING_MODE__ = 'wall'
-    setLastWall(settings)
+    setLastWall(normalizedSettings)
     setOpen(false)
 
     window.dispatchEvent(
       new CustomEvent('ritsucad:smart-takeoff-selected', {
-        detail: { ...wallItem, metadata, wallSettings: settings },
+        detail: { ...wallItem, metadata, wallSettings: normalizedSettings },
       })
     )
 
     window.dispatchEvent(
       new CustomEvent('ritsucad:wall-settings-saved', {
-        detail: { ...settings, metadata, drawingMode: 'wall' },
+        detail: { ...normalizedSettings, metadata, drawingMode: 'wall' },
       })
     )
 
     window.setTimeout(() => {
       document.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: '2',
-          code: 'Digit2',
-          bubbles: true,
-        })
+        new KeyboardEvent('keydown', { key: '2', code: 'Digit2', bubbles: true })
       )
     }, 0)
   }
