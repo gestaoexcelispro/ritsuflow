@@ -11,24 +11,36 @@ function pointsFromGeometry(geometry) {
   if (!geometry) return []
   if (Array.isArray(geometry.points)) return geometry.points
   if (Array.isArray(geometry.coordinates?.[0])) {
-    return geometry.coordinates[0].map((point) => Array.isArray(point) ? { x: Number(point[0]), y: Number(point[1]) } : point)
+    return geometry.coordinates[0].map((point) =>
+      Array.isArray(point)
+        ? { x: Number(point[0]), y: Number(point[1]) }
+        : point
+    )
   }
   return []
 }
 
 function centroid(points) {
   if (!points.length) return { x: 0, y: 0 }
-  return points.reduce((sum, point) => ({ x: sum.x + Number(point.x || 0), y: sum.y + Number(point.y || 0) }), { x: 0, y: 0 })
-    |> ((sum) => ({ x: sum.x / points.length, y: sum.y / points.length }))
+  const sum = points.reduce(
+    (total, point) => ({
+      x: total.x + Number(point.x || 0),
+      y: total.y + Number(point.y || 0),
+    }),
+    { x: 0, y: 0 }
+  )
+  return { x: sum.x / points.length, y: sum.y / points.length }
 }
 
 function findDrawingSvg() {
   const svgs = [...document.querySelectorAll('svg')]
-  return svgs.find((svg) => {
-    const viewBox = svg.getAttribute('viewBox')
-    const rect = svg.getBoundingClientRect()
-    return viewBox && rect.width > 300 && rect.height > 250
-  }) || null
+  return (
+    svgs.find((svg) => {
+      const viewBox = svg.getAttribute('viewBox')
+      const rect = svg.getBoundingClientRect()
+      return viewBox && rect.width > 300 && rect.height > 250
+    }) || null
+  )
 }
 
 export default function SavedLocationGeometryBridge() {
@@ -51,13 +63,23 @@ export default function SavedLocationGeometryBridge() {
     group.style.pointerEvents = 'none'
 
     rowsRef.current.forEach((row) => {
-      const points = pointsFromGeometry(row.geometry).filter((point) => Number.isFinite(Number(point?.x)) && Number.isFinite(Number(point?.y)))
+      const points = pointsFromGeometry(row.geometry).filter(
+        (point) =>
+          Number.isFinite(Number(point?.x)) &&
+          Number.isFinite(Number(point?.y))
+      )
       if (points.length < 3) return
 
       const active = selectedRef.current === row.location_id
       const polygon = document.createElementNS(NS, 'polygon')
-      polygon.setAttribute('points', points.map((point) => `${point.x},${point.y}`).join(' '))
-      polygon.setAttribute('fill', active ? 'rgba(14,165,164,.22)' : 'rgba(14,165,164,.10)')
+      polygon.setAttribute(
+        'points',
+        points.map((point) => `${point.x},${point.y}`).join(' ')
+      )
+      polygon.setAttribute(
+        'fill',
+        active ? 'rgba(14,165,164,.22)' : 'rgba(14,165,164,.10)'
+      )
       polygon.setAttribute('stroke', active ? '#067c86' : '#0ea5a4')
       polygon.setAttribute('stroke-width', active ? '4' : '2')
       polygon.setAttribute('vector-effect', 'non-scaling-stroke')
@@ -120,30 +142,29 @@ export default function SavedLocationGeometryBridge() {
 
   useEffect(() => {
     load()
+
     const observer = new MutationObserver(() => {
-      if (rowsRef.current.length && !document.getElementById(GROUP_ID)) render()
+      if (rowsRef.current.length && !document.getElementById(GROUP_ID)) {
+        render()
+      }
     })
     observer.observe(document.body, { childList: true, subtree: true })
 
     const saved = () => load()
-    const find = (event) => {
-      selectedRef.current = event?.detail?.locationId || ''
-      render()
-    }
-    const selected = (event) => {
+    const selectLocation = (event) => {
       selectedRef.current = event?.detail?.locationId || ''
       render()
     }
 
     window.addEventListener('ritsucad:location-boundary-saved', saved)
-    window.addEventListener('ritsucad:location-find', find)
-    window.addEventListener('ritsucad:location-selected', selected)
+    window.addEventListener('ritsucad:location-find', selectLocation)
+    window.addEventListener('ritsucad:location-selected', selectLocation)
 
     return () => {
       observer.disconnect()
       window.removeEventListener('ritsucad:location-boundary-saved', saved)
-      window.removeEventListener('ritsucad:location-find', find)
-      window.removeEventListener('ritsucad:location-selected', selected)
+      window.removeEventListener('ritsucad:location-find', selectLocation)
+      window.removeEventListener('ritsucad:location-selected', selectLocation)
       document.getElementById(GROUP_ID)?.remove()
     }
   }, [load, render])
