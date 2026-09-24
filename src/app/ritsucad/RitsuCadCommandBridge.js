@@ -35,6 +35,31 @@ function dispatchKey(key, options = {}) {
 
 export default function RitsuCadCommandBridge() {
   useEffect(() => {
+    const startLocationBoundary = (event) => {
+      const detail = event?.detail || {}
+
+      window.__ritsucadLocationBoundarySession = {
+        locationId: detail.locationId || null,
+        locationName: detail.locationName || '',
+        mappingType: detail.mappingType || 'macro',
+        drawingMapId: detail.drawingMapId || null,
+        startedAt: new Date().toISOString(),
+      }
+
+      // Native RitsuCAD polygon tool shortcut. Keeping the bridge event-based
+      // avoids duplicating geometry logic inside the LBS workflow panel.
+      dispatchKey('4', { code: 'Digit4' })
+
+      window.dispatchEvent(new CustomEvent('ritsucad:location-boundary-started', {
+        detail: window.__ritsucadLocationBoundarySession,
+      }))
+    }
+
+    const cancelLocationBoundary = () => {
+      window.__ritsucadLocationBoundarySession = null
+      dispatchKey('Escape', { code: 'Escape' })
+    }
+
     const handlers = {
       'ritsucad:undo': () => dispatchKey('z', { ctrlKey: true }),
       'ritsucad:redo': () => dispatchKey('y', { ctrlKey: true }),
@@ -50,6 +75,8 @@ export default function RitsuCadCommandBridge() {
       },
       'ritsucad:open-drawings': () => clickNative({ title: 'Drawings' }),
       'ritsucad:delete-selection': () => dispatchKey('Delete', { code: 'Delete' }),
+      'ritsucad:start-location-boundary': startLocationBoundary,
+      'ritsucad:cancel-location-boundary': cancelLocationBoundary,
     }
 
     const listeners = Object.entries(handlers).map(([name, handler]) => {
@@ -59,6 +86,7 @@ export default function RitsuCadCommandBridge() {
 
     return () => {
       listeners.forEach(([name, handler]) => window.removeEventListener(name, handler))
+      window.__ritsucadLocationBoundarySession = null
     }
   }, [])
 
