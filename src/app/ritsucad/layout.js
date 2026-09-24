@@ -8,6 +8,7 @@ import RitsuCadProjectContext from './RitsuCadProjectContext'
 import RitsuCadRibbonBridge from './RitsuCadRibbonBridge'
 import RitsuCadDesktopRibbon from './RitsuCadDesktopRibbon'
 import RitsuCadCommandBridge from './RitsuCadCommandBridge'
+import RitsuCadCalibrationModalBridge from './RitsuCadCalibrationModalBridge'
 import RitsuCadEditSetupHeaderBridge from './RitsuCadEditSetupHeaderBridge'
 import RitsuCadDrawingViewsPanel from './RitsuCadDrawingViewsPanel'
 import RitsuCadDrawingViewBridge from './RitsuCadDrawingViewBridge'
@@ -27,6 +28,7 @@ export default function RitsuCadLayout({children}){
    <RitsuCadDesktopRibbon />
    <RitsuCadProjectContext />
    <RitsuCadCommandBridge />
+   <RitsuCadCalibrationModalBridge />
    <RitsuCadEditSetupHeaderBridge />
    <WallSettingsBridge />
    <RitsuCadProjectLauncher />
