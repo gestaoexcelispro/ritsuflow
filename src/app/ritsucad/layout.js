@@ -14,6 +14,7 @@ import RitsuCadDrawingViewBridge from './RitsuCadDrawingViewBridge'
 import RitsuCadLogoBridge from './RitsuCadLogoBridge'
 import RitsuCadLegacyShellCleanup from './RitsuCadLegacyShellCleanup'
 import WallSettingsBridge from './WallSettingsBridge'
+import SmartTakeoffController from './SmartTakeoffController'
 
 export const metadata = { title:'RitsuCAD™ | RitsuFlow', description:'RitsuFlow construction CAD, drawing markup, measurement, takeoff, and project location mapping workspace.' }
 
@@ -41,6 +42,7 @@ export default function RitsuCadLayout({ children }) {
       <RitsuCadDesktopRibbon />
       <RitsuCadCommandBridge />
       <RitsuCadEditSetupHeaderBridge />
+      <SmartTakeoffController />
       <WallSettingsBridge />
       <RitsuCadProjectLauncher />
       <RitsuCadDrawingViewsPanel />
