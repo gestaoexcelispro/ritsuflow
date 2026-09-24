@@ -16,11 +16,36 @@ const RIBBON = {
   Manage:[{name:'Setup',items:[['⌇','Calibrate','event:ritsucad:calibrate'],['⌗','Snapping','event:ritsucad:toggle-snap']]},{name:'Drawing',items:[['▱','Layers','event:ritsucad:open-layers'],['▤','Properties','event:ritsucad:open-properties']]},{name:'Views',items:[['▦','Drawing Views','event:ritsucad:open-drawing-views-command'],['✓','Save View','event:ritsucad:save-drawing-view']]}]
 }
 
+function findApplicationHost(){
+  const header=document.querySelector('[class*="applicationHeader"]')
+  let node=header?.parentElement||document.querySelector('[class*="cadArea"]')?.parentElement||null
+  while(node){
+    try{if(node.querySelector(':scope > [class*="cadArea"]'))return node}catch{}
+    node=node.parentElement
+  }
+  return null
+}
+
 export default function RitsuCadDesktopRibbon(){
   const [host,setHost]=useState(null),[tab,setTab]=useState('Home'),[command,setCommand]=useState(''),[appMenuOpen,setAppMenuOpen]=useState(false)
   const router=useRouter(),pathname=usePathname(),params=useSearchParams()
   const hasProject=Boolean(params.get('projectId')&&params.get('documentId'))
-  useEffect(()=>{let cancelled=false;const find=()=>{if(cancelled)return;const header=document.querySelector('[class*="applicationHeader"]');let node=header?.parentElement||document.querySelector('[class*="cadArea"]')?.parentElement||null,root=null;while(node){try{if(node.querySelector(':scope > [class*="cadArea"]')){root=node;break}}catch{}node=node.parentElement}if(root){setHost(root);return}setTimeout(find,50)};find();return()=>{cancelled=true}},[])
+  useEffect(()=>{
+    let cancelled=false
+    let frame=0
+    const syncHost=()=>{
+      if(cancelled)return
+      const nextHost=findApplicationHost()
+      setHost(current=>current===nextHost&&current?.isConnected?current:nextHost)
+    }
+    const scheduleSync=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(syncHost)}
+    syncHost()
+    const observer=new MutationObserver(scheduleSync)
+    observer.observe(document.body,{childList:true,subtree:true})
+    window.addEventListener('ritsucad:document-loaded',scheduleSync)
+    window.addEventListener('ritsucad:drawing-loaded',scheduleSync)
+    return()=>{cancelled=true;cancelAnimationFrame(frame);observer.disconnect();window.removeEventListener('ritsucad:document-loaded',scheduleSync);window.removeEventListener('ritsucad:drawing-loaded',scheduleSync)}
+  },[])
   useEffect(()=>{if(!appMenuOpen)return;const close=e=>{if(!e.target.closest('[data-ritsucad-app-menu]'))setAppMenuOpen(false)};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[appMenuOpen])
   const groups=useMemo(()=>RIBBON[tab]||[],[tab])
   function run(action,label){setCommand(label?.toUpperCase()||'');if(action==='location'){if(!hasProject)return;const p=new URLSearchParams(params.toString());p.set('mode','location-mapping');router.replace(`${pathname}?${p.toString()}`,{scroll:false});return}if(action.startsWith('header:')){const wanted=action.slice(7).trim().toLowerCase();const header=document.querySelector('[class*="applicationHeader"]');const buttons=[...(header?.querySelectorAll('button')||[])];const target=buttons.find(button=>{const text=(button.innerText||button.textContent||'').replace(/\s+/g,' ').trim().toLowerCase(),title=(button.getAttribute('title')||'').trim().toLowerCase(),aria=(button.getAttribute('aria-label')||'').trim().toLowerCase();return text===wanted||text.includes(wanted)||title===wanted||title.includes(wanted)||aria===wanted||aria.includes(wanted)});if(target){target.click();return}console.warn(`[RitsuCAD] Header action not found: ${action.slice(7)}`);return}if(action.startsWith('key:')){const key=action.slice(4);document.dispatchEvent(new KeyboardEvent('keydown',{key,code:key.length===1?`Key${key.toUpperCase()}`:key,bubbles:true}));return}if(action.startsWith('event:')){window.dispatchEvent(new Event(action.slice(6)));return}if(action.startsWith('smart:'))window.dispatchEvent(new CustomEvent('ritsucad:open-smart-group',{detail:{group:action.slice(6)}}))}
