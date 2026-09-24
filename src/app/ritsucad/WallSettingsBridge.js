@@ -61,11 +61,6 @@ function renderWallBody(svg, polyline, entity) {
   const points = parsePoints(polyline.getAttribute('points'))
   if (points.length < 2) return
   const color = entity.lineColor || entity.wall?.lineColor || '#0F766E'
-
-  // IMPORTANT: wall thickness lives in drawing/SVG coordinates. It must not be
-  // divided by the current screen CTM/zoom. The geometry layer already scales
-  // together with the PDF, so a wall body created in drawing coordinates stays
-  // registered to the drawing at every zoom level.
   const thickness = wallDisplayThicknessDrawingUnits(entity.wall || entity)
   const polygons = buildWallSegmentPolygons(points, thickness)
   removeWallBody(svg, entity.id)
@@ -116,6 +111,13 @@ export default function WallSettingsBridge() {
 
   const wallItem = useMemo(() => getSmartTakeoffGroups().flatMap((group) => group.items || []).find((item) => item.id === 'wall') || null, [])
   const storageKey = useMemo(() => projectId && documentId ? `ritsucad:semantic-walls:${projectId}:${documentId}` : null, [projectId, documentId])
+
+  useEffect(() => {
+    if (!hasProjectDrawing) return undefined
+    const requestWallSettings = () => setOpen(true)
+    window.addEventListener('ritsucad:request-wall-settings', requestWallSettings)
+    return () => window.removeEventListener('ritsucad:request-wall-settings', requestWallSettings)
+  }, [hasProjectDrawing])
 
   useEffect(() => {
     if (!hasProjectDrawing) return undefined
@@ -200,8 +202,7 @@ export default function WallSettingsBridge() {
       try {
         const svg = document.querySelector('svg[class*="geometryLayer"]')
         if (!svg) return
-        const polylines = Array.from(svg.querySelectorAll('polyline'))
-          .filter((polyline) => !polyline.closest('[data-ritsucad-wall-body-for]'))
+        const polylines = Array.from(svg.querySelectorAll('polyline')).filter((polyline) => !polyline.closest('[data-ritsucad-wall-body-for]'))
 
         polylines.forEach((polyline) => {
           if (polyline.dataset.ritsucadWallPreview === 'true') return
@@ -234,12 +235,7 @@ export default function WallSettingsBridge() {
 
           if (polyline.dataset.ritsucadWallPreview === 'true') return
           const stroke = String(polyline.getAttribute('stroke') || '').toLowerCase()
-          if (
-            !baselineRef.current.has(key) &&
-            !semanticWallsRef.current.has(key) &&
-            !dash &&
-            (stroke === '#0f172a' || stroke === '#0f766e')
-          ) {
+          if (!baselineRef.current.has(key) && !semanticWallsRef.current.has(key) && !dash && (stroke === '#0f172a' || stroke === '#0f766e')) {
             persistSemanticWall(svg, polyline, settings, metadata)
             activeWallRef.current = null
             delete window.__RITSUCAD_SEMANTIC_DRAWING_MODE__
