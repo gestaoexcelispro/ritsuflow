@@ -34,14 +34,12 @@ function activateNativeTool(measurementTool) {
 
 export default function SmartTakeoffController() {
   const searchParams = useSearchParams()
-  const projectId = searchParams.get('projectId')
-  const documentId = searchParams.get('documentId')
   const mappingMode = searchParams.get('mode') === 'location-mapping'
   const groups = useMemo(() => getSmartTakeoffGroups(), [])
   const [openGroup, setOpenGroup] = useState(null)
 
   useEffect(() => {
-    if (!projectId || !documentId || mappingMode) return undefined
+    if (mappingMode) return undefined
 
     function openSmartGroup(event) {
       const requested = event.detail?.group || event.detail?.discipline || event.detail?.id
@@ -52,13 +50,11 @@ export default function SmartTakeoffController() {
 
     window.addEventListener('ritsucad:open-smart-group', openSmartGroup)
     return () => window.removeEventListener('ritsucad:open-smart-group', openSmartGroup)
-  }, [projectId, documentId, mappingMode, groups])
+  }, [mappingMode, groups])
 
   if (!openGroup) return null
 
   function selectItem(item) {
-    // Wall owns a richer settings workflow. Dispatch the normal selection event;
-    // WallSettingsBridge intercepts the Wall command and opens its settings modal.
     if (item.id === 'wall') {
       setOpenGroup(null)
       window.dispatchEvent(new CustomEvent('ritsucad:request-wall-settings', { detail: { item } }))
