@@ -1,5 +1,7 @@
 import { Suspense } from 'react'
 import LocationMappingPanel from './LocationMappingPanel'
+import LocationBoundaryBridge from './LocationBoundaryBridge'
+import SavedLocationGeometryBridge from './SavedLocationGeometryBridge'
 import TakeoffContextPanel from './TakeoffContextPanel'
 import TakeoffPersistenceBridge from './TakeoffPersistenceBridge'
 import RitsuCadProjectLauncher from './RitsuCadProjectLauncher'
@@ -43,6 +45,8 @@ export default function RitsuCadLayout({ children }) {
       <RitsuCadProjectLauncher />
       <RitsuCadDrawingViewsPanel />
       <RitsuCadDrawingViewBridge />
+      <LocationBoundaryBridge />
+      <SavedLocationGeometryBridge />
       <LocationMappingPanel />
       <TakeoffContextPanel />
       <TakeoffPersistenceBridge />

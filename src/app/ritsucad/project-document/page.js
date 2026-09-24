@@ -7,23 +7,36 @@ import { supabase } from '../../../lib/supabase'
 
 function ProjectDocumentLoader() {
   const searchParams = useSearchParams()
-  const attemptedRef = useRef(false)
+  const attemptedKeyRef = useRef('')
   const [status, setStatus] = useState('loading')
   const [message, setMessage] = useState('Preparing project drawing...')
   const [timings, setTimings] = useState(null)
 
+  const projectId = searchParams.get('projectId')
+  const documentId = searchParams.get('documentId')
+  const contextKey = `${projectId || ''}:${documentId || ''}`
+
   useEffect(() => {
-    if (attemptedRef.current) return
-    attemptedRef.current = true
-
-    const projectId = searchParams.get('projectId')
-    const documentId = searchParams.get('documentId')
-
     if (!projectId || !documentId) {
       setStatus('error')
-      setMessage('Project or document context is missing.')
+      setMessage('Project or document context is missing. Reopen the drawing from the RitsuCAD project launcher.')
       return
     }
+
+    // Keep a recoverable copy of the active project/drawing context. The CAD
+    // shell can change UI query parameters (mode, locationStep, etc.), but it
+    // must never silently lose the project and drawing identity.
+    try {
+      window.sessionStorage.setItem(
+        'ritsucad:active-project-document',
+        JSON.stringify({ projectId, documentId })
+      )
+    } catch (error) {
+      console.warn('RitsuCAD could not cache the active project context.', error)
+    }
+
+    if (attemptedKeyRef.current === contextKey) return
+    attemptedKeyRef.current = contextKey
 
     let cancelled = false
 
@@ -37,6 +50,7 @@ function ProjectDocumentLoader() {
       }
 
       try {
+        setStatus('loading')
         setMessage('Reading project drawing record...')
         const { data: documentRecord, error: documentError } = await supabase
           .from('project_documents')
@@ -121,14 +135,17 @@ function ProjectDocumentLoader() {
             ...marks,
             fileName: documentRecord.file_name,
             fileSizeMB: Number((blob.size / 1024 / 1024).toFixed(2)),
+            projectId,
+            documentId,
           }
           setTimings(result)
           window.__RITSUCAD_PROJECT_PDF_TIMINGS__ = result
+          window.__RITSUCAD_ACTIVE_PROJECT_CONTEXT__ = { projectId, documentId }
+          window.dispatchEvent(new CustomEvent('ritsucad:project-context-ready', {
+            detail: { projectId, documentId, fileName: documentRecord.file_name },
+          }))
           window.dispatchEvent(new CustomEvent('ritsucad:project-pdf-timings', { detail: result }))
 
-          // The existing importer owns PDF parsing/rendering after this point.
-          // Keep the progress indicator briefly so users do not see the old
-          // empty-state card immediately after selecting a project drawing.
           window.setTimeout(() => {
             if (cancelled) return
             setStatus('ready')
@@ -150,7 +167,7 @@ function ProjectDocumentLoader() {
     return () => {
       cancelled = true
     }
-  }, [searchParams])
+  }, [contextKey, projectId, documentId])
 
   return (
     <>
