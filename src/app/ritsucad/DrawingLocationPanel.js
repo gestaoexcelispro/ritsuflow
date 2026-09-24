@@ -1,0 +1,28 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { supabase } from '../../lib/supabase'
+
+function makeTree(rows){
+ const map=new Map()
+ rows.forEach(row=>{const key=row.parent_id||'root';if(!map.has(key))map.set(key,[]);map.get(key).push(row)})
+ return map
+}
+
+export default function DrawingLocationPanel(){
+ const params=useSearchParams()
+ const projectId=params.get('projectId'),documentId=params.get('documentId')
+ const enabled=params.get('mode')==='location-mapping'&&params.get('locationStep')==='drawing'&&projectId&&documentId
+ const [locations,setLocations]=useState([]),[selected,setSelected]=useState(new Set()),[expanded,setExpanded]=useState(new Set()),[fileName,setFileName]=useState('Current Drawing'),[status,setStatus]=useState(''),[saving,setSaving]=useState(false)
+ const tree=useMemo(()=>makeTree(locations),[locations])
+ useEffect(()=>{if(!enabled)return;let live=true;(async()=>{setStatus('Loading…');const [{data:locs},{data:doc},{data:links}]=await Promise.all([supabase.from('locations').select('id,parent_id,name,location_type,sequence_number').eq('project_id',projectId).order('sequence_number'),supabase.from('project_documents').select('file_name').eq('id',documentId).eq('project_id',projectId).maybeSingle(),supabase.from('drawing_location_associations').select('location_id').eq('project_id',projectId).eq('document_id',documentId)]);if(!live)return;setLocations(locs||[]);setFileName(doc?.file_name||'Current Drawing');setSelected(new Set((links||[]).map(x=>x.location_id)));setExpanded(new Set((locs||[]).filter(x=>!x.parent_id).map(x=>x.id)));setStatus('')})();return()=>{live=false}},[enabled,projectId,documentId])
+ function choose(id){setSelected(current=>{const next=new Set(current);next.has(id)?next.delete(id):next.add(id);return next})}
+ function expand(id){setExpanded(current=>{const next=new Set(current);next.has(id)?next.delete(id):next.add(id);return next})}
+ async function save(){setSaving(true);setStatus('');const del=await supabase.from('drawing_location_associations').delete().eq('project_id',projectId).eq('document_id',documentId);if(del.error){setStatus(del.error.message);setSaving(false);return}if(selected.size){const add=await supabase.from('drawing_location_associations').insert([...selected].map(location_id=>({project_id:projectId,document_id:documentId,location_id})));if(add.error){setStatus(add.error.message);setSaving(false);return}}setStatus('Association saved.');setSaving(false)}
+ function branch(parent='root',depth=0){return(tree.get(parent)||[]).map(item=>{const kids=tree.get(item.id)||[],open=expanded.has(item.id);return <div key={item.id}><div className={selected.has(item.id)?'dlRow on':'dlRow'} style={{paddingLeft:10+depth*17}}><button onClick={()=>kids.length&&expand(item.id)}>{kids.length?(open?'▾':'▸'):'◇'}</button><label><input type="checkbox" checked={selected.has(item.id)} onChange={()=>choose(item.id)}/><span><b>{item.name}</b><small>{item.location_type||'Location'}</small></span></label></div>{kids.length&&open&&branch(item.id,depth+1)}</div>})}
+ if(!enabled)return null
+ return <aside className="drawingLocationPanel"><style>{css}</style><header><div><small>DRAWING LOCATION</small><b>{fileName}</b></div><span>{selected.size} selected</span></header><p>Associate this drawing with the project locations it represents. Spatial boundaries are mapped separately.</p><main>{status==='Loading…'?<div className="dlEmpty">Loading project locations…</div>:branch()}</main>{status&&status!=='Loading…'&&<div className="dlStatus">{status}</div>}<footer><button onClick={save} disabled={saving}>{saving?'Saving…':'Save Association'}</button><small>A drawing may represent more than one LBS location.</small></footer></aside>
+}
+
+const css=`.drawingLocationPanel{position:fixed;z-index:83;top:156px;right:28px;bottom:88px;width:430px;display:flex;flex-direction:column;background:#fff;border:1px solid #aebfc8;border-radius:8px;box-shadow:0 10px 30px rgba(15,52,70,.24);color:#0d3347;overflow:hidden}.drawingLocationPanel header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#083f59;color:#fff}.drawingLocationPanel header div{display:flex;flex-direction:column;gap:3px}.drawingLocationPanel header small{font-size:8px;color:#8fc0d0;letter-spacing:.12em}.drawingLocationPanel header b{font-size:13px}.drawingLocationPanel header>span{font-size:8px}.drawingLocationPanel>p{margin:0;padding:12px 14px;border-bottom:1px solid #dce6eb;background:#f7fbfc;color:#567583;font-size:9.5px;line-height:1.5}.drawingLocationPanel main{flex:1;overflow:auto}.dlRow{min-height:44px;display:flex;align-items:center;border-bottom:1px solid #edf2f4}.dlRow.on{background:#e9f7f7;box-shadow:inset 3px 0 0 #0aa3a0}.dlRow>button{width:22px;border:0;background:transparent;color:#2e657b}.dlRow label{flex:1;display:flex;align-items:center;gap:8px;cursor:pointer}.dlRow input{accent-color:#00a59d}.dlRow label span{display:flex;flex-direction:column}.dlRow b{font-size:10px}.dlRow small{font-size:8px;color:#8297a1}.dlStatus,.dlEmpty{margin:8px 12px;padding:9px;background:#eef8f8;color:#17627c;font-size:9px}.drawingLocationPanel footer{padding:11px 12px;border-top:1px solid #dce6eb;background:#f8fafb;display:flex;flex-direction:column;gap:7px}.drawingLocationPanel footer button{height:36px;border:0;border-radius:4px;background:#056b88;color:#fff;font-size:10px;font-weight:900}.drawingLocationPanel footer small{text-align:center;color:#718995;font-size:8px}`
