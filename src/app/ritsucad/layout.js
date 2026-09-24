@@ -5,6 +5,7 @@ import TakeoffPersistenceBridge from './TakeoffPersistenceBridge'
 import RitsuCadProjectLauncher from './RitsuCadProjectLauncher'
 import RitsuCadRibbonBridge from './RitsuCadRibbonBridge'
 import RitsuCadDesktopRibbon from './RitsuCadDesktopRibbon'
+import RitsuCadCommandBridge from './RitsuCadCommandBridge'
 import RitsuCadEditSetupHeaderBridge from './RitsuCadEditSetupHeaderBridge'
 import RitsuCadDrawingViewsPanel from './RitsuCadDrawingViewsPanel'
 import RitsuCadDrawingViewBridge from './RitsuCadDrawingViewBridge'
@@ -36,6 +37,7 @@ export default function RitsuCadLayout({ children }) {
       <RitsuCadLogoBridge />
       <RitsuCadRibbonBridge />
       <RitsuCadDesktopRibbon />
+      <RitsuCadCommandBridge />
       <RitsuCadEditSetupHeaderBridge />
       <WallSettingsBridge />
       <RitsuCadProjectLauncher />
