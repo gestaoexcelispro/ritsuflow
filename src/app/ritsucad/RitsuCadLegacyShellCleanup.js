@@ -20,6 +20,13 @@ export default function RitsuCadLegacyShellCleanup() {
         overflow: hidden !important;
       }
 
+      /* The CAD viewport must remain a clean drafting surface when no drawing
+         is loaded. Drawing creation/import commands belong in the ribbon, so
+         the legacy centered empty-state card is intentionally suppressed. */
+      [class*="emptyViewport"] {
+        display: none !important;
+      }
+
       /* RitsuCadRibbonBridge previously converted the application into a
          290px + canvas grid. Force the desktop workspace back to one column. */
       [class*="application"]:has([data-ritsucad-approved-shell="true"]) {
