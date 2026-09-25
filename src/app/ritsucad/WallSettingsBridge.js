@@ -236,9 +236,8 @@ export default function WallSettingsBridge() {
           if (polyline.dataset.ritsucadWallPreview === 'true') return
           const stroke = String(polyline.getAttribute('stroke') || '').toLowerCase()
           if (!baselineRef.current.has(key) && !semanticWallsRef.current.has(key) && !dash && (stroke === '#0f172a' || stroke === '#0f766e')) {
-            persistSemanticWall(svg, polyline, settings, metadata)
-            activeWallRef.current = null
-            delete window.__RITSUCAD_SEMANTIC_DRAWING_MODE__
+            const entity = persistSemanticWall(svg, polyline, settings, metadata)
+            if (entity) baselineRef.current.add(key)
           }
         })
       } finally {
