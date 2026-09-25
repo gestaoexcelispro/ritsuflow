@@ -39,32 +39,42 @@ export default function FieldOpProjectSetupPage() {
     if (!projectId) return
     setActivitiesLoading(true)
     setActivityError('')
-    const { data, error } = await supabase
-      .from('fieldop_project_activities')
-      .select('id,project_id,source,scope_item_id,activity_name,unit,quantity,notes,is_active,created_at,scope_item:project_scopes(id,scope_code,scope_name,item_type,unit,quantity,notes)')
-      .eq('project_id', projectId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
-    if (error) { setActivityError(error.message); setActivities([]) }
-    else setActivities(data || [])
-    setActivitiesLoading(false)
+    try {
+      const { data, error } = await supabase
+        .from('fieldop_project_activities')
+        .select('id,project_id,source,scope_item_id,activity_name,unit,quantity,notes,is_active,created_at,scope_item:project_scopes(id,scope_code,scope_name,item_type,unit,quantity,notes)')
+        .eq('project_id', projectId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      setActivities(data || [])
+    } catch (error) {
+      setActivityError(error?.message || String(error))
+      setActivities([])
+    } finally {
+      setActivitiesLoading(false)
+    }
   }
 
   useEffect(() => { if (projectId) loadActivities() }, [projectId])
 
   async function openScopeImporter() {
     setActivityError('')
-    const { data, error } = await supabase
-      .from('project_scopes')
-      .select('id,scope_code,scope_name,item_type,quantity,unit,notes')
-      .eq('project_id', projectId)
-      .eq('item_type', 'item')
-      .order('scope_code', { ascending: true })
-    if (error) { setActivityError(error.message); return }
-    const imported = new Set(activities.filter((a) => a.source === 'scope').map((a) => a.scope_item_id))
-    setScopeItems(data || [])
-    setSelectedScopeIds((data || []).filter((item) => imported.has(item.id)).map((item) => item.id))
-    setScopeOpen(true)
+    try {
+      const { data, error } = await supabase
+        .from('project_scopes')
+        .select('id,scope_code,scope_name,item_type,quantity,unit,notes')
+        .eq('project_id', projectId)
+        .eq('item_type', 'item')
+        .order('scope_code', { ascending: true })
+      if (error) throw error
+      const imported = new Set(activities.filter((a) => a.source === 'scope').map((a) => a.scope_item_id))
+      setScopeItems(data || [])
+      setSelectedScopeIds((data || []).filter((item) => imported.has(item.id)).map((item) => item.id))
+      setScopeOpen(true)
+    } catch (error) {
+      setActivityError(error?.message || String(error))
+    }
   }
 
   function toggleScope(id) {
@@ -72,42 +82,72 @@ export default function FieldOpProjectSetupPage() {
   }
 
   async function saveScopeSelection() {
-    setSaving(true); setActivityError('')
-    const currentScope = activities.filter((a) => a.source === 'scope')
-    const currentIds = new Set(currentScope.map((a) => a.scope_item_id))
-    const selected = new Set(selectedScopeIds)
-    const toAdd = selectedScopeIds.filter((id) => !currentIds.has(id))
-    const toRemove = currentScope.filter((a) => !selected.has(a.scope_item_id)).map((a) => a.id)
-    let error = null
-    if (toAdd.length) {
-      const result = await supabase.from('fieldop_project_activities').insert(toAdd.map((scope_item_id) => ({ project_id: projectId, source: 'scope', scope_item_id })))
-      error = result.error
+    if (saving) return
+    setSaving(true)
+    setActivityError('')
+    try {
+      const { data: currentRows, error: currentError } = await supabase
+        .from('fieldop_project_activities')
+        .select('id,scope_item_id')
+        .eq('project_id', projectId)
+        .eq('source', 'scope')
+      if (currentError) throw currentError
+
+      const currentIds = new Set((currentRows || []).map((row) => row.scope_item_id))
+      const selected = new Set(selectedScopeIds)
+      const toAdd = selectedScopeIds.filter((id) => !currentIds.has(id))
+      const toRemove = (currentRows || []).filter((row) => !selected.has(row.scope_item_id)).map((row) => row.id)
+
+      for (const scope_item_id of toAdd) {
+        const { error } = await supabase
+          .from('fieldop_project_activities')
+          .insert({ project_id: projectId, source: 'scope', scope_item_id })
+        if (error) throw error
+      }
+
+      if (toRemove.length) {
+        const { error } = await supabase.from('fieldop_project_activities').delete().in('id', toRemove)
+        if (error) throw error
+      }
+
+      setScopeOpen(false)
+      await loadActivities()
+    } catch (error) {
+      setActivityError(error?.message || String(error))
+    } finally {
+      setSaving(false)
     }
-    if (!error && toRemove.length) {
-      const result = await supabase.from('fieldop_project_activities').delete().in('id', toRemove)
-      error = result.error
-    }
-    if (error) setActivityError(error.message)
-    else { setScopeOpen(false); await loadActivities() }
-    setSaving(false)
   }
 
   async function addManualActivity(e) {
     e.preventDefault()
-    if (!manual.activity_name.trim()) return
-    setSaving(true); setActivityError('')
-    const payload = { project_id: projectId, source: 'manual', activity_name: manual.activity_name.trim(), unit: manual.unit.trim() || null, quantity: manual.quantity === '' ? null : Number(manual.quantity), notes: manual.notes.trim() || null }
-    const { error } = await supabase.from('fieldop_project_activities').insert(payload)
-    if (error) setActivityError(error.message)
-    else { setManual({ activity_name: '', unit: '', quantity: '', notes: '' }); setManualOpen(false); await loadActivities() }
-    setSaving(false)
+    if (!manual.activity_name.trim() || saving) return
+    setSaving(true)
+    setActivityError('')
+    try {
+      const payload = { project_id: projectId, source: 'manual', activity_name: manual.activity_name.trim(), unit: manual.unit.trim() || null, quantity: manual.quantity === '' ? null : Number(manual.quantity), notes: manual.notes.trim() || null }
+      const { error } = await supabase.from('fieldop_project_activities').insert(payload)
+      if (error) throw error
+      setManual({ activity_name: '', unit: '', quantity: '', notes: '' })
+      setManualOpen(false)
+      await loadActivities()
+    } catch (error) {
+      setActivityError(error?.message || String(error))
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function removeActivity(id) {
     if (!window.confirm('Remove this item from FieldOp? The canonical Project Scope item will not be deleted.')) return
-    const { error } = await supabase.from('fieldop_project_activities').delete().eq('id', id)
-    if (error) setActivityError(error.message)
-    else await loadActivities()
+    setActivityError('')
+    try {
+      const { error } = await supabase.from('fieldop_project_activities').delete().eq('id', id)
+      if (error) throw error
+      await loadActivities()
+    } catch (error) {
+      setActivityError(error?.message || String(error))
+    }
   }
 
   const activityRows = useMemo(() => activities.map((item) => ({
