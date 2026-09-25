@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import styles from './fieldop.module.css'
 
-const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','/fieldop/reports/daily'],['⚙','Settings','#']]
+const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/fieldop/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','/fieldop/reports/daily'],['⚙','Settings','#']]
 
 export default function FieldOpPage(){
  const router=useRouter()
@@ -65,7 +65,7 @@ export default function FieldOpPage(){
      <div className={styles.projectsPanel}><div className={styles.panelHead}><div><h2>Ongoing Projects</h2><p>Live field operations for projects currently in progress.</p></div><div className={styles.filters}>⌕ Search projects...</div></div>
       <div className={styles.tableWrap}><table><thead><tr><th>Project</th><th>Location</th><th>Status</th><th>Last Update</th></tr></thead><tbody>{ongoing.map(p=><tr key={p.id}><td><b>{p.name||p.project_name||'Untitled Project'}</b><small>{p.code||p.project_code||''}</small></td><td>{p.location||p.city||'—'}</td><td><span className={styles.ok}>{p.status||'Ongoing'}</span></td><td>{p.updated_at?new Date(p.updated_at).toLocaleString():'—'}</td></tr>)}</tbody></table></div>
       {!loading&&ongoing.length===0&&<div style={{display:'grid',placeItems:'center',minHeight:220,textAlign:'center'}}><div><h2>No ongoing projects.</h2><p>Create a project in the shared Projects workspace. When it becomes active, it will appear here.</p></div></div>}
-      <Link href="/projects" className={styles.viewAll}>View Projects →</Link>
+      <Link href="/fieldop/projects" className={styles.viewAll}>View Projects →</Link>
      </div>
      <aside className={styles.rightCol}><div className={styles.statusCard}><h2>Ongoing Projects by Status</h2><div className={styles.statusBody}><div className={styles.donut}><strong>{ongoing.length}</strong><span>Projects</span></div><ul><li><i/>On Track <b>{onTrack}</b></li><li><i/>Attention <b>{attention}</b></li></ul></div></div>
       <div className={styles.activity}><div className={styles.activityHead}><h2>Field Activity <small>(Last 24 Hours)</small></h2></div><div style={{padding:'24px',textAlign:'center'}}>No field activity yet.</div></div>
