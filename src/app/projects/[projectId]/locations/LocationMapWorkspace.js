@@ -7,8 +7,8 @@ import styles from './location-map-workspace.module.css'
 const COLORS = ['#008F84','#2F80ED','#8E5BEF','#E58A1F','#D94F70','#2E8B57','#6B7280']
 const SNAP_RADIUS_PX = 20
 const CLOSE_RADIUS_PX = 16
-const MIN_ZOOM = .35
-const MAX_ZOOM = 4
+const MIN_ZOOM = .20
+const MAX_ZOOM = 6
 const isPdf = (doc) => doc?.mime_type === 'application/pdf' || doc?.document_type === 'PDF' || doc?.file_name?.toLowerCase().endsWith('.pdf')
 const pointsOf = (geometry) => Array.isArray(geometry?.points) ? geometry.points : []
 const colorOf = (geometry) => geometry?.display?.color || '#008F84'
@@ -34,7 +34,7 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
   const [color,setColor] = useState(COLORS[0])
   const [snapEnabled,setSnapEnabled] = useState(true)
   const [snapPoint,setSnapPoint] = useState(null)
-  const [zoom,setZoom] = useState(1)
+  const [viewport,setViewport] = useState({x:0,y:0,zoom:1})
   const [baseSize,setBaseSize] = useState({width:0,height:0})
   const [panning,setPanning] = useState(false)
   const [loading,setLoading] = useState(false)
@@ -72,9 +72,8 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
       setPageCount(pdfRef.current.numPages)
       const safePage=Math.min(Math.max(1,pageNumber),pdfRef.current.numPages)
       if(safePage!==pageNumber){setPageNumber(safePage);setLoading(false);return}
-      await renderPage(safePage)
-      setZoom(1)
-      requestAnimationFrame(()=>fitDrawing())
+      const size=await renderPage(safePage)
+      requestAnimationFrame(()=>fitDrawing(size))
       const {data:dm,error:me}=await supabase.from('project_drawing_maps').select('id').eq('project_id',projectId).eq('document_id',documentId).eq('page_number',safePage).maybeSingle()
       if(me)throw me
       setMapId(dm?.id||'')
@@ -87,17 +86,18 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
   }
 
   async function renderPage(pageNo){
-    const canvas=canvasRef.current;if(!canvas||!pdfRef.current)return
+    const canvas=canvasRef.current;if(!canvas||!pdfRef.current)return null
     const page=await pdfRef.current.getPage(pageNo)
     const base=page.getViewport({scale:1})
     const renderWidth=Math.max(900,Math.min(1500,base.width*1.7))
     const scale=renderWidth/base.width
-    const viewport=page.getViewport({scale}); const dpr=Math.min(window.devicePixelRatio||1,2)
-    canvas.width=Math.round(viewport.width*dpr);canvas.height=Math.round(viewport.height*dpr);canvas.style.width=`${viewport.width}px`;canvas.style.height=`${viewport.height}px`
-    setBaseSize({width:viewport.width,height:viewport.height})
+    const pageViewport=page.getViewport({scale}); const dpr=Math.min(window.devicePixelRatio||1,2)
+    canvas.width=Math.round(pageViewport.width*dpr);canvas.height=Math.round(pageViewport.height*dpr);canvas.style.width=`${pageViewport.width}px`;canvas.style.height=`${pageViewport.height}px`
+    const size={width:pageViewport.width,height:pageViewport.height};setBaseSize(size)
     renderTaskRef.current?.cancel?.()
-    const task=page.render({canvasContext:canvas.getContext('2d'),viewport,transform:dpr===1?null:[dpr,0,0,dpr,0,0]});renderTaskRef.current=task
+    const task=page.render({canvasContext:canvas.getContext('2d'),viewport:pageViewport,transform:dpr===1?null:[dpr,0,0,dpr,0,0]});renderTaskRef.current=task
     try{await task.promise}catch(e){if(e?.name!=='RenderingCancelledException')throw e}
+    return size
   }
 
   async function ensureMap(){
@@ -151,20 +151,19 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
 
   function handlePointerMove(event){
     if(panRef.current){
-      const shell=stageRef.current;if(!shell)return
-      shell.scrollLeft=panRef.current.scrollLeft-(event.clientX-panRef.current.x)
-      shell.scrollTop=panRef.current.scrollTop-(event.clientY-panRef.current.y)
+      const dx=event.clientX-panRef.current.x,dy=event.clientY-panRef.current.y
+      setViewport(v=>({...v,x:panRef.current.originX+dx,y:panRef.current.originY+dy}))
       return
     }
     if(!drawing){if(snapPoint)setSnapPoint(null);return}
-    const snap=findDrawingSnap(event);setSnapPoint({...snap.point,type:snap.type})
+    if(event.target.closest?.(`.${styles.drawingStage}`)){const snap=findDrawingSnap(event);setSnapPoint({...snap.point,type:snap.type})}
   }
   function handlePointerLeave(){if(drawing&&!panRef.current)setSnapPoint(null)}
   function beginPan(event){
     const middle=event.button===1;const leftPan=event.button===0&&!drawing
     if(!middle&&!leftPan)return
-    event.preventDefault();const shell=stageRef.current;if(!shell)return
-    panRef.current={x:event.clientX,y:event.clientY,scrollLeft:shell.scrollLeft,scrollTop:shell.scrollTop};setPanning(true)
+    event.preventDefault();event.stopPropagation()
+    panRef.current={x:event.clientX,y:event.clientY,originX:viewport.x,originY:viewport.y};setPanning(true)
     event.currentTarget.setPointerCapture?.(event.pointerId)
   }
   function endPan(event){if(!panRef.current)return;panRef.current=null;setPanning(false);event.currentTarget.releasePointerCapture?.(event.pointerId)}
@@ -177,21 +176,22 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
 
   function applyZoom(nextZoom,clientX,clientY){
     const shell=stageRef.current;if(!shell)return
-    const oldZoom=zoom;const next=clamp(nextZoom,MIN_ZOOM,MAX_ZOOM);if(Math.abs(next-oldZoom)<.001)return
-    const rect=shell.getBoundingClientRect();const x=(clientX??(rect.left+rect.width/2))-rect.left;const y=(clientY??(rect.top+rect.height/2))-rect.top
-    const contentX=(shell.scrollLeft+x)/oldZoom;const contentY=(shell.scrollTop+y)/oldZoom
-    setZoom(next)
-    requestAnimationFrame(()=>{shell.scrollLeft=contentX*next-x;shell.scrollTop=contentY*next-y})
+    const next=clamp(nextZoom,MIN_ZOOM,MAX_ZOOM);if(Math.abs(next-viewport.zoom)<.001)return
+    const rect=shell.getBoundingClientRect();const px=(clientX??(rect.left+rect.width/2))-rect.left;const py=(clientY??(rect.top+rect.height/2))-rect.top
+    const worldX=(px-viewport.x)/viewport.zoom,worldY=(py-viewport.y)/viewport.zoom
+    setViewport({zoom:next,x:px-worldX*next,y:py-worldY*next})
   }
   function handleWheel(event){
     if(!documentId)return
-    if(event.ctrlKey||event.metaKey){event.preventDefault();applyZoom(zoom*(event.deltaY<0?1.12:.89),event.clientX,event.clientY)}
+    event.preventDefault();event.stopPropagation()
+    const factor=Math.exp(-event.deltaY*0.0015)
+    applyZoom(viewport.zoom*factor,event.clientX,event.clientY)
   }
-  function fitDrawing(){
-    const shell=stageRef.current;if(!shell||!baseSize.width||!baseSize.height)return
-    const availableW=Math.max(100,shell.clientWidth-36),availableH=Math.max(100,shell.clientHeight-36)
-    const next=clamp(Math.min(availableW/baseSize.width,availableH/baseSize.height),MIN_ZOOM,1.5)
-    setZoom(next);requestAnimationFrame(()=>{shell.scrollLeft=Math.max(0,(baseSize.width*next-shell.clientWidth)/2);shell.scrollTop=Math.max(0,(baseSize.height*next-shell.clientHeight)/2)})
+  function fitDrawing(sizeOverride){
+    const shell=stageRef.current;const size=sizeOverride||baseSize;if(!shell||!size?.width||!size?.height)return
+    const pad=36,availableW=Math.max(100,shell.clientWidth-pad*2),availableH=Math.max(100,shell.clientHeight-pad*2)
+    const next=clamp(Math.min(availableW/size.width,availableH/size.height),MIN_ZOOM,1.5)
+    setViewport({zoom:next,x:(shell.clientWidth-size.width*next)/2,y:(shell.clientHeight-size.height*next)/2})
   }
 
   function closePolygon(){if(draft.length<3){setMessage('Add at least three points before closing the polygon.');return}setDrawing(false);setSnapPoint(null);setMessage('Polygon ready. Save the mapping to keep it.')}
@@ -226,8 +226,7 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
 
   const displayRows=geometries.filter(g=>pointsOf(g.geometry).length>=3)
   const activePoints=draft.length?draft:pointsOf(mapped.get(selectedId)?.geometry)
-  const worldStyle=baseSize.width?{width:baseSize.width*zoom,height:baseSize.height*zoom}:undefined
-  const drawingStyle=baseSize.width?{width:baseSize.width,height:baseSize.height,transform:`scale(${zoom})`}:undefined
+  const drawingStyle=baseSize.width?{width:baseSize.width,height:baseSize.height,transform:`translate3d(${viewport.x}px,${viewport.y}px,0) scale(${viewport.zoom})`}:undefined
 
   return <section className={styles.workspace}>
     <aside className={styles.sidebar}>
@@ -240,26 +239,24 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
         <label className={styles.uploadButton}>＋ {uploading?'Uploading…':'Upload PDF'}<input type="file" accept="application/pdf,.pdf" onChange={uploadPdf} disabled={uploading}/></label>
         <button type="button" disabled={!documentId||pageNumber<=1} onClick={()=>setPageNumber(p=>p-1)}>‹</button><span className={styles.pageLabel}>Page {pageNumber} / {pageCount}</span><button type="button" disabled={!documentId||pageNumber>=pageCount} onClick={()=>setPageNumber(p=>p+1)}>›</button>
         <div className={styles.spacer}/>
-        <div className={styles.zoomGroup}><button type="button" disabled={!documentId} onClick={()=>applyZoom(zoom/1.2)}>−</button><span>{Math.round(zoom*100)}%</span><button type="button" disabled={!documentId} onClick={()=>applyZoom(zoom*1.2)}>＋</button><button type="button" disabled={!documentId} onClick={fitDrawing}>Fit</button></div>
+        <div className={styles.zoomGroup}><button type="button" disabled={!documentId} onClick={()=>applyZoom(viewport.zoom/1.2)}>−</button><span>{Math.round(viewport.zoom*100)}%</span><button type="button" disabled={!documentId} onClick={()=>applyZoom(viewport.zoom*1.2)}>＋</button><button type="button" disabled={!documentId} onClick={()=>fitDrawing()}>Fit</button></div>
         <button type="button" className={snapEnabled?styles.snapOn:styles.snapOff} onClick={()=>{setSnapEnabled(v=>!v);setSnapPoint(null)}}>Snap {snapEnabled?'ON':'OFF'}</button>
         <button type="button" className={styles.drawButton} disabled={!documentId||!selectedId} onClick={startPolygon}>Draw Polygon</button>
         <button type="button" disabled={!drawing||!draft.length} onClick={undoPoint}>Undo Point</button>
         <button type="button" disabled={!drawing||draft.length<3} onClick={closePolygon}>Close Polygon</button>
       </div>
-      <div className={styles.actionBar}><div><strong>{selected?.name||'Select a location'}</strong><span>{drawing?`Drawing polygon · Snap ${snapEnabled?'ON':'OFF'} · middle-drag to pan`:mapped.has(selectedId)?'Mapped on this page · drag drawing to pan':'Not mapped on this page · drag drawing to pan'}</span></div><div className={styles.colors}>{COLORS.map(c=><button key={c} type="button" aria-label={`Use ${c}`} className={color===c?styles.colorActive:''} style={{background:c}} onClick={()=>setColor(c)}/>)}</div><button type="button" className={styles.deleteButton} disabled={!mapped.has(selectedId)} onClick={removeMapping}>Remove</button><button type="button" className={styles.saveButton} disabled={saving||(!draft.length&&!mapped.has(selectedId))} onClick={saveMapping}>{saving?'Saving…':'Save Mapping'}</button></div>
+      <div className={styles.actionBar}><div><strong>{selected?.name||'Select a location'}</strong><span>{drawing?`Drawing polygon · Snap ${snapEnabled?'ON':'OFF'} · middle-drag to pan`:mapped.has(selectedId)?'Mapped on this page · drag anywhere to pan':'Not mapped on this page · drag anywhere to pan'}</span></div><div className={styles.colors}>{COLORS.map(c=><button key={c} type="button" aria-label={`Use ${c}`} className={color===c?styles.colorActive:''} style={{background:c}} onClick={()=>setColor(c)}/>)}</div><button type="button" className={styles.deleteButton} disabled={!mapped.has(selectedId)} onClick={removeMapping}>Remove</button><button type="button" className={styles.saveButton} disabled={saving||(!draft.length&&!mapped.has(selectedId))} onClick={saveMapping}>{saving?'Saving…':'Save Mapping'}</button></div>
       {error?<div className={styles.error}>{error}</div>:message?<div className={styles.message}>{message}</div>:null}
-      <div className={`${styles.stageShell} ${panning?styles.panning:''}`} ref={stageRef} onWheel={handleWheel}>
-        {!documentId?<div className={styles.empty}><strong>Select or upload a project PDF</strong><span>The drawing stays untouched. Location polygons are stored as a separate spatial overlay.</span></div>:<div className={styles.drawingWorld} style={worldStyle}>
-          <div ref={drawingRef} style={drawingStyle} className={`${styles.drawingStage} ${drawing?styles.drawingMode:styles.panMode}`} onClick={addPoint} onPointerDown={beginPan} onPointerMove={handlePointerMove} onPointerUp={endPan} onPointerCancel={endPan} onPointerLeave={handlePointerLeave} onAuxClick={e=>e.preventDefault()}>
-            <canvas ref={canvasRef}/>
-            <svg className={styles.overlay} viewBox="0 0 1 1" preserveAspectRatio="none">
-              {displayRows.filter(g=>g.location_id!==selectedId).map(g=><polygon key={g.id} points={pointsOf(g.geometry).map(p=>`${p.x},${p.y}`).join(' ')} fill={colorOf(g.geometry)} fillOpacity=".10" stroke="#6B7F8A" strokeOpacity=".55" strokeWidth=".002" vectorEffect="non-scaling-stroke"/>) }
-              {activePoints.length>=2?<polyline points={activePoints.map(p=>`${p.x},${p.y}`).join(' ')} fill={activePoints.length>=3&&!drawing?color:'none'} fillOpacity=".30" stroke={color} strokeWidth=".003" vectorEffect="non-scaling-stroke"/>:null}
-              {draft.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r=".006" fill="#fff" stroke={color} strokeWidth=".002" vectorEffect="non-scaling-stroke"/>)}
-              {drawing&&snapPoint?<g className={styles.snapMarker}><circle cx={snapPoint.x} cy={snapPoint.y} r={snapPoint.type==='close'?'.011':'.008'} fill="none" stroke={snapPoint.type==='free'?'#8798A3':'#FF7A00'} strokeWidth=".0025" vectorEffect="non-scaling-stroke"/><line x1={snapPoint.x-.012} y1={snapPoint.y} x2={snapPoint.x+.012} y2={snapPoint.y} stroke={snapPoint.type==='free'?'#8798A3':'#FF7A00'} strokeWidth=".0015" vectorEffect="non-scaling-stroke"/><line x1={snapPoint.x} y1={snapPoint.y-.012} x2={snapPoint.x} y2={snapPoint.y+.012} stroke={snapPoint.type==='free'?'#8798A3':'#FF7A00'} strokeWidth=".0015" vectorEffect="non-scaling-stroke"/></g>:null}
-            </svg>
-            {loading?<div className={styles.loading}>Loading drawing…</div>:null}
-          </div>
+      <div className={`${styles.stageShell} ${panning?styles.panning:''}`} ref={stageRef} onWheel={handleWheel} onPointerDown={beginPan} onPointerMove={handlePointerMove} onPointerUp={endPan} onPointerCancel={endPan} onPointerLeave={handlePointerLeave} onAuxClick={e=>e.preventDefault()}>
+        {!documentId?<div className={styles.empty}><strong>Select or upload a project PDF</strong><span>The drawing stays untouched. Location polygons are stored as a separate spatial overlay.</span></div>:<div ref={drawingRef} style={drawingStyle} className={`${styles.drawingStage} ${drawing?styles.drawingMode:styles.panMode}`} onClick={addPoint}>
+          <canvas ref={canvasRef}/>
+          <svg className={styles.overlay} viewBox="0 0 1 1" preserveAspectRatio="none">
+            {displayRows.filter(g=>g.location_id!==selectedId).map(g=><polygon key={g.id} points={pointsOf(g.geometry).map(p=>`${p.x},${p.y}`).join(' ')} fill={colorOf(g.geometry)} fillOpacity=".10" stroke="#6B7F8A" strokeOpacity=".55" strokeWidth=".002" vectorEffect="non-scaling-stroke"/>) }
+            {activePoints.length>=2?<polyline points={activePoints.map(p=>`${p.x},${p.y}`).join(' ')} fill={activePoints.length>=3&&!drawing?color:'none'} fillOpacity=".30" stroke={color} strokeWidth=".003" vectorEffect="non-scaling-stroke"/>:null}
+            {draft.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r=".006" fill="#fff" stroke={color} strokeWidth=".002" vectorEffect="non-scaling-stroke"/>)}
+            {drawing&&snapPoint?<g className={styles.snapMarker}><circle cx={snapPoint.x} cy={snapPoint.y} r={snapPoint.type==='close'?'.011':'.008'} fill="none" stroke={snapPoint.type==='free'?'#8798A3':'#FF7A00'} strokeWidth=".0025" vectorEffect="non-scaling-stroke"/><line x1={snapPoint.x-.012} y1={snapPoint.y} x2={snapPoint.x+.012} y2={snapPoint.y} stroke={snapPoint.type==='free'?'#8798A3':'#FF7A00'} strokeWidth=".0015" vectorEffect="non-scaling-stroke"/><line x1={snapPoint.x} y1={snapPoint.y-.012} x2={snapPoint.x} y2={snapPoint.y+.012} stroke={snapPoint.type==='free'?'#8798A3':'#FF7A00'} strokeWidth=".0015" vectorEffect="non-scaling-stroke"/></g>:null}
+          </svg>
+          {loading?<div className={styles.loading}>Loading drawing…</div>:null}
         </div>}
       </div>
     </div>
