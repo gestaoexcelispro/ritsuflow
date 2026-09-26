@@ -54,8 +54,8 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
       if(se||!signed?.signedUrl)throw new Error(se?.message||'Unable to access this PDF.')
       const response=await fetch(signed.signedUrl); if(!response.ok)throw new Error(`Unable to download PDF (${response.status}).`)
       const bytes=await response.arrayBuffer()
-      const pdfjs=await import('pdfjs-dist')
-      if(!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+      const pdfjs=await import('pdfjs-dist/build/pdf.mjs')
+      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
       if(pdfRef.current?.destroy) await pdfRef.current.destroy().catch(()=>{})
       pdfRef.current=await pdfjs.getDocument({data:bytes}).promise
       setPageCount(pdfRef.current.numPages)
