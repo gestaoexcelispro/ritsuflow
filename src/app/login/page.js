@@ -8,6 +8,12 @@ import styles from './login.module.css'
 
 const supabase = createClient()
 
+function safeNextPath(value) {
+  if (!value || typeof value !== 'string') return '/workspaces'
+  if (!value.startsWith('/') || value.startsWith('//')) return '/workspaces'
+  return value
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -29,7 +35,11 @@ export default function LoginPage() {
       return
     }
 
-    router.replace('/workspaces')
+    const nextPath = typeof window !== 'undefined'
+      ? safeNextPath(new URLSearchParams(window.location.search).get('next'))
+      : '/workspaces'
+
+    router.replace(nextPath)
     router.refresh()
   }
 

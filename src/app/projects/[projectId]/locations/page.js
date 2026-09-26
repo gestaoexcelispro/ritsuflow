@@ -22,7 +22,7 @@ export default async function LocationBreakdownPage({ params }) {
       .maybeSingle(),
     supabase
       .from('locations')
-      .select('id, project_id, parent_id, name, location_type, environment_type, sequence_number, created_at, updated_at')
+      .select('id, project_id, parent_id, name, location_type, environment_type, sequence_number, qr_token, created_at, updated_at')
       .eq('project_id', projectId)
       .order('sequence_number', { ascending: true }),
     supabase
