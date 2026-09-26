@@ -97,6 +97,11 @@ export default function LocationPrintCard({ location, locationMap, projectName, 
   const breadcrumb = locationBreadcrumb(location, locationMap, '').replace(/^\s*\/\s*/, '')
   const locationId = humanLocationId(projectCode, location, locationMap)
   const environment = location.environment_type || '—'
+  const locationColor = mapData?.geometry?.display?.color || '#008F84'
+  const identityStyle = mapData ? {
+    backgroundColor: hexToRgba(locationColor, .28),
+    borderColor: locationColor,
+  } : undefined
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="A4 location card preview">
@@ -115,7 +120,7 @@ export default function LocationPrintCard({ location, locationMap, projectName, 
         <img className={styles.background} src="/location-a4-picture.png" alt="" aria-hidden="true" />
 
         <div className={styles.projectValue}>{projectCode || 'PROJECT'} - {projectName || ''}</div>
-        <div className={styles.locationName}>{location.name}</div>
+        <div className={styles.locationName} style={identityStyle}>{location.name}</div>
         <div className={styles.environment}>{environment}</div>
         <div className={styles.hierarchy}>{breadcrumb}</div>
 
