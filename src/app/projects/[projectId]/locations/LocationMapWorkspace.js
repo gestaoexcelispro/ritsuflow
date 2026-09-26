@@ -50,6 +50,19 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
   useEffect(() => { loadDocuments() }, [projectId])
   useEffect(() => { if(documentId) loadPdfAndMap(); else { pdfRef.current=null; setGeometries([]); setMapId('') } }, [documentId,pageNumber])
   useEffect(() => { const row=mapped.get(selectedId); setColor(colorOf(row?.geometry)); setDraft([]); setDrawing(false); setSnapPoint(null) }, [selectedId,geometries])
+  useEffect(() => {
+    const shell=stageRef.current
+    if(!shell)return
+    const onWheel=(event)=>{
+      if(!documentId)return
+      event.preventDefault()
+      event.stopPropagation()
+      const factor=Math.exp(-event.deltaY*0.0015)
+      applyZoom(viewport.zoom*factor,event.clientX,event.clientY)
+    }
+    shell.addEventListener('wheel',onWheel,{passive:false})
+    return ()=>shell.removeEventListener('wheel',onWheel)
+  },[documentId,viewport])
 
   async function loadDocuments(){
     const {data,error:e}=await supabase.from('project_documents').select('id,file_name,storage_path,mime_type,document_type,created_at').eq('project_id',projectId).order('created_at',{ascending:false})
@@ -150,9 +163,11 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
   }
 
   function handlePointerMove(event){
-    if(panRef.current){
-      const dx=event.clientX-panRef.current.x,dy=event.clientY-panRef.current.y
-      setViewport(v=>({...v,x:panRef.current.originX+dx,y:panRef.current.originY+dy}))
+    const pan=panRef.current
+    if(pan){
+      const dx=event.clientX-pan.x,dy=event.clientY-pan.y
+      const nextX=pan.originX+dx,nextY=pan.originY+dy
+      setViewport(v=>({...v,x:nextX,y:nextY}))
       return
     }
     if(!drawing){if(snapPoint)setSnapPoint(null);return}
@@ -180,12 +195,6 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
     const rect=shell.getBoundingClientRect();const px=(clientX??(rect.left+rect.width/2))-rect.left;const py=(clientY??(rect.top+rect.height/2))-rect.top
     const worldX=(px-viewport.x)/viewport.zoom,worldY=(py-viewport.y)/viewport.zoom
     setViewport({zoom:next,x:px-worldX*next,y:py-worldY*next})
-  }
-  function handleWheel(event){
-    if(!documentId)return
-    event.preventDefault();event.stopPropagation()
-    const factor=Math.exp(-event.deltaY*0.0015)
-    applyZoom(viewport.zoom*factor,event.clientX,event.clientY)
   }
   function fitDrawing(sizeOverride){
     const shell=stageRef.current;const size=sizeOverride||baseSize;if(!shell||!size?.width||!size?.height)return
@@ -247,7 +256,7 @@ export default function LocationMapWorkspace({ projectId, userId, locations = []
       </div>
       <div className={styles.actionBar}><div><strong>{selected?.name||'Select a location'}</strong><span>{drawing?`Drawing polygon · Snap ${snapEnabled?'ON':'OFF'} · middle-drag to pan`:mapped.has(selectedId)?'Mapped on this page · drag anywhere to pan':'Not mapped on this page · drag anywhere to pan'}</span></div><div className={styles.colors}>{COLORS.map(c=><button key={c} type="button" aria-label={`Use ${c}`} className={color===c?styles.colorActive:''} style={{background:c}} onClick={()=>setColor(c)}/>)}</div><button type="button" className={styles.deleteButton} disabled={!mapped.has(selectedId)} onClick={removeMapping}>Remove</button><button type="button" className={styles.saveButton} disabled={saving||(!draft.length&&!mapped.has(selectedId))} onClick={saveMapping}>{saving?'Saving…':'Save Mapping'}</button></div>
       {error?<div className={styles.error}>{error}</div>:message?<div className={styles.message}>{message}</div>:null}
-      <div className={`${styles.stageShell} ${panning?styles.panning:''}`} ref={stageRef} onWheel={handleWheel} onPointerDown={beginPan} onPointerMove={handlePointerMove} onPointerUp={endPan} onPointerCancel={endPan} onPointerLeave={handlePointerLeave} onAuxClick={e=>e.preventDefault()}>
+      <div className={`${styles.stageShell} ${panning?styles.panning:''}`} ref={stageRef} onPointerDown={beginPan} onPointerMove={handlePointerMove} onPointerUp={endPan} onPointerCancel={endPan} onPointerLeave={handlePointerLeave} onAuxClick={e=>e.preventDefault()}>
         {!documentId?<div className={styles.empty}><strong>Select or upload a project PDF</strong><span>The drawing stays untouched. Location polygons are stored as a separate spatial overlay.</span></div>:<div ref={drawingRef} style={drawingStyle} className={`${styles.drawingStage} ${drawing?styles.drawingMode:styles.panMode}`} onClick={addPoint}>
           <canvas ref={canvasRef}/>
           <svg className={styles.overlay} viewBox="0 0 1 1" preserveAspectRatio="none">
