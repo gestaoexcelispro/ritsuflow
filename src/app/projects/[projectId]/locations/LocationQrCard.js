@@ -1,19 +1,18 @@
 'use client'
 
+import { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { locationBreadcrumb, locationQrPath } from './locationQr'
+import LocationPrintCard from './LocationPrintCard'
 import styles from './location-qr-card.module.css'
 
 export default function LocationQrCard({ location, locationMap, projectName, projectCode }) {
+  const [showPrintCard, setShowPrintCard] = useState(false)
   if (!location?.qr_token) return null
 
   const path = locationQrPath(location.qr_token)
   const scanUrl = typeof window === 'undefined' ? path : `${window.location.origin}${path}`
   const breadcrumb = locationBreadcrumb(location, locationMap, projectName)
-
-  function printQr() {
-    window.print()
-  }
 
   function downloadQr() {
     const svg = document.getElementById(`location-qr-${location.id}`)
@@ -30,31 +29,43 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
   }
 
   return (
-    <section className={styles.card}>
-      <div className={styles.heading}>
-        <div>
-          <span>FIELDOP LOCATION QR</span>
-          <strong>Physical location identity</strong>
+    <>
+      <section className={styles.card}>
+        <div className={styles.heading}>
+          <div>
+            <span>FIELDOP LOCATION QR</span>
+            <strong>Physical location identity</strong>
+          </div>
+          <span className={styles.status}>Active</span>
         </div>
-        <span className={styles.status}>Active</span>
-      </div>
 
-      <div className={styles.content}>
-        <div className={styles.qrWrap}>
-          <QRCodeSVG id={`location-qr-${location.id}`} value={scanUrl} size={176} level="M" marginSize={2} />
+        <div className={styles.content}>
+          <div className={styles.qrWrap}>
+            <QRCodeSVG id={`location-qr-${location.id}`} value={scanUrl} size={176} level="M" marginSize={2} />
+          </div>
+          <div className={styles.identity}>
+            <small>{projectCode || 'PROJECT'}</small>
+            <h3>{location.name}</h3>
+            <p>{breadcrumb}</p>
+            <span>Scan to open FieldOp at this location.</span>
+          </div>
         </div>
-        <div className={styles.identity}>
-          <small>{projectCode || 'PROJECT'}</small>
-          <h3>{location.name}</h3>
-          <p>{breadcrumb}</p>
-          <span>Scan to open FieldOp at this location.</span>
-        </div>
-      </div>
 
-      <div className={styles.actions}>
-        <button type="button" onClick={printQr}>Print QR</button>
-        <button type="button" onClick={downloadQr}>Download SVG</button>
-      </div>
-    </section>
+        <div className={styles.actions}>
+          <button type="button" onClick={() => setShowPrintCard(true)}>Print Location Card</button>
+          <button type="button" onClick={downloadQr}>Download SVG</button>
+        </div>
+      </section>
+
+      {showPrintCard && (
+        <LocationPrintCard
+          location={location}
+          locationMap={locationMap}
+          projectName={projectName}
+          projectCode={projectCode}
+          onClose={() => setShowPrintCard(false)}
+        />
+      )}
+    </>
   )
 }
