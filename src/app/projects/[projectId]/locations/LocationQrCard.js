@@ -33,6 +33,13 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
         if (geometryError) throw geometryError
         if (!geometryRow) return
 
+        const { data: drawingMap, error: drawingMapError } = await supabase
+          .from('project_drawing_maps')
+          .select('id,print_view')
+          .eq('id', geometryRow.drawing_map_id)
+          .maybeSingle()
+        if (drawingMapError) throw drawingMapError
+
         const { data: documentRow, error: documentError } = await supabase
           .from('project_documents')
           .select('id,file_name,storage_path,mime_type,document_type')
@@ -48,6 +55,7 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
 
         if (!cancelled) setPrintMap({
           geometry: geometryRow.geometry,
+          printView: drawingMap?.print_view || null,
           pageNumber: geometryRow.page_number || 1,
           document: documentRow,
           signedUrl: signed.signedUrl,
