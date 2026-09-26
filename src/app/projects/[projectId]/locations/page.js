@@ -14,7 +14,7 @@ export default async function LocationBreakdownPage({ params }) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [projectResult, locationsResult, servicesResult, allocationsResult] = await Promise.all([
+  const [projectResult, locationsResult, activitiesResult, allocationsResult] = await Promise.all([
     supabase
       .from('projects')
       .select('id, project_id, code, name')
@@ -26,10 +26,11 @@ export default async function LocationBreakdownPage({ params }) {
       .eq('project_id', projectId)
       .order('sequence_number', { ascending: true }),
     supabase
-      .from('project_services')
-      .select('id, project_id, project_work_package_id, service_code, service_name, unit, scope_quantity, unit_cost, sequence_number, is_active')
+      .from('fieldop_project_activities')
+      .select('id, project_id, source, scope_item_id, activity_name, unit, quantity, notes, is_active, created_at, scope_item:project_scopes(id, scope_code, scope_name, item_type, unit, quantity, notes)')
       .eq('project_id', projectId)
-      .order('sequence_number', { ascending: true }),
+      .eq('is_active', true)
+      .order('created_at', { ascending: true }),
     supabase
       .from('location_service_quantities')
       .select('id, project_id, location_id, service_id, quantity, source_scope_item_id, created_at, updated_at')
@@ -39,8 +40,31 @@ export default async function LocationBreakdownPage({ params }) {
   const project = projectResult.data
   if (!project) redirect('/projects')
 
-  const loadError = projectResult.error || locationsResult.error || servicesResult.error || allocationsResult.error
-  const services = (servicesResult.data || []).filter((item) => item.is_active !== false)
+  // FieldOp Activities is the canonical executable scope for field operations.
+  // Location Allocation consumes that same configured set instead of creating
+  // or reading a parallel activity list.
+  const scopeItems = (activitiesResult.data || []).map((activity, index) => {
+    const scope = activity.scope_item || null
+    const fromProjectScope = activity.source === 'scope'
+
+    return {
+      id: activity.id,
+      project_id: projectId,
+      project_work_package_id: activity.scope_item_id || null,
+      service_code: fromProjectScope ? (scope?.scope_code || '') : '',
+      service_name: fromProjectScope ? (scope?.scope_name || activity.activity_name || '') : (activity.activity_name || ''),
+      unit: fromProjectScope ? (scope?.unit || activity.unit || '') : (activity.unit || ''),
+      scope_quantity: fromProjectScope ? (scope?.quantity ?? activity.quantity) : activity.quantity,
+      sequence_number: index + 1,
+      is_active: activity.is_active !== false,
+      source_scope_item_id: activity.scope_item_id || null,
+      scope_name: fromProjectScope ? (scope?.scope_name || '') : '',
+      source: activity.source,
+      notes: activity.notes || null,
+    }
+  })
+
+  const loadError = projectResult.error || locationsResult.error || activitiesResult.error || allocationsResult.error
 
   return (
     <main style={shell}>
@@ -71,7 +95,7 @@ export default async function LocationBreakdownPage({ params }) {
             projectCode={project.project_id || project.code || ''}
             userId={user.id}
             initialLocations={locationsResult.data || []}
-            scopeItems={services}
+            scopeItems={scopeItems}
             allocations={allocationsResult.data || []}
           />
         </div>
