@@ -26,6 +26,21 @@ function hexToRgba(hex, opacity) {
   return `rgba(${(parsed >> 16) & 255},${(parsed >> 8) & 255},${parsed & 255},${opacity})`
 }
 
+function validPrintView(value) {
+  if (!value) return null
+  const x = Number(value.x)
+  const y = Number(value.y)
+  const width = Number(value.width)
+  const height = Number(value.height)
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null
+  return {
+    x: Math.max(0, Math.min(1, x)),
+    y: Math.max(0, Math.min(1, y)),
+    width: Math.max(0, Math.min(1 - x, width)),
+    height: Math.max(0, Math.min(1 - y, height)),
+  }
+}
+
 function LocationPlan({ mapData, loading, error }) {
   const canvasRef = useRef(null)
   const [renderError, setRenderError] = useState('')
@@ -46,34 +61,51 @@ function LocationPlan({ mapData, loading, error }) {
         pdf = await pdfjs.getDocument({ data: bytes }).promise
         const page = await pdf.getPage(Math.min(Math.max(1, Number(mapData.pageNumber) || 1), pdf.numPages))
         const base = page.getViewport({ scale: 1 })
-        const targetWidth = 1800
+        const targetWidth = 2400
         const viewport = page.getViewport({ scale: targetWidth / base.width })
-        const canvas = canvasRef.current
-        if (!canvas || cancelled) return
-        canvas.width = Math.round(viewport.width)
-        canvas.height = Math.round(viewport.height)
-        const ctx = canvas.getContext('2d')
-        await page.render({ canvasContext: ctx, viewport }).promise
+
+        const source = document.createElement('canvas')
+        source.width = Math.round(viewport.width)
+        source.height = Math.round(viewport.height)
+        const sourceCtx = source.getContext('2d')
+        await page.render({ canvasContext: sourceCtx, viewport }).promise
         if (cancelled) return
 
         const points = mapData.geometry.points
         const color = mapData.geometry?.display?.color || '#008F84'
         const opacity = Number.isFinite(Number(mapData.geometry?.display?.fill_opacity)) ? Number(mapData.geometry.display.fill_opacity) : .35
-        ctx.save()
-        ctx.beginPath()
+        sourceCtx.save()
+        sourceCtx.beginPath()
         points.forEach((point, index) => {
-          const x = Number(point.x) * canvas.width
-          const y = Number(point.y) * canvas.height
-          if (index === 0) ctx.moveTo(x, y)
-          else ctx.lineTo(x, y)
+          const px = Number(point.x) * source.width
+          const py = Number(point.y) * source.height
+          if (index === 0) sourceCtx.moveTo(px, py)
+          else sourceCtx.lineTo(px, py)
         })
-        ctx.closePath()
-        ctx.fillStyle = hexToRgba(color, Math.min(.65, Math.max(.20, opacity)))
-        ctx.fill()
-        ctx.strokeStyle = color
-        ctx.lineWidth = Math.max(5, canvas.width * .003)
-        ctx.stroke()
-        ctx.restore()
+        sourceCtx.closePath()
+        sourceCtx.fillStyle = hexToRgba(color, Math.min(.65, Math.max(.20, opacity)))
+        sourceCtx.fill()
+        sourceCtx.strokeStyle = color
+        sourceCtx.lineWidth = Math.max(5, source.width * .003)
+        sourceCtx.stroke()
+        sourceCtx.restore()
+
+        const printView = validPrintView(mapData.printView) || { x: 0, y: 0, width: 1, height: 1 }
+        const sx = Math.round(printView.x * source.width)
+        const sy = Math.round(printView.y * source.height)
+        const sw = Math.max(1, Math.round(printView.width * source.width))
+        const sh = Math.max(1, Math.round(printView.height * source.height))
+
+        const canvas = canvasRef.current
+        if (!canvas || cancelled) return
+        const outputWidth = 1800
+        const outputHeight = Math.max(1, Math.round(outputWidth * sh / sw))
+        canvas.width = outputWidth
+        canvas.height = outputHeight
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
       } catch (e) {
         if (!cancelled) setRenderError(e?.message || 'Unable to render the location plan.')
       }
