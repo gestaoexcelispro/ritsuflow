@@ -28,7 +28,7 @@ function typeIcon(value) {
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0 }
 function formatQuantity(value) { return number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }) }
 
-export default function StandaloneLocationWorkspace({ projectId, projectName, projectCode, userId, initialLocations = [], scopeItems = [], allocations = [] }) {
+export default function StandaloneLocationWorkspace({ projectId, projectName, userId, initialLocations = [], scopeItems = [], allocations = [] }) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const [locations, setLocations] = useState(initialLocations)
@@ -67,9 +67,6 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
 
   const selected = selectedId ? locationMap.get(selectedId) : null
   const normalizedSearch = searchTerm.trim().toLowerCase()
-  const divisions = locations.filter((item) => item.location_type === 'floor').length
-  const zones = locations.filter((item) => item.location_type === 'zone').length
-  const production = locations.filter((item) => !nonProductionTypes.has(item.location_type)).length
   const roots = childrenMap.get('root') || []
 
   const selectedScope = useMemo(() => {
@@ -252,11 +249,6 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
   }
 
   return <div className={styles.workspace}>
-    <section className={styles.projectSummary}>
-      <div className={styles.projectIdentity}><div className={styles.projectMark}>▦</div><div><span>{projectCode || 'Project'}</span><strong>{projectName}</strong></div></div>
-      <Metric icon="⌖" value={locations.length} label="Total Locations" /><Metric icon="▤" value={divisions} label="Divisions" /><Metric icon="▦" value={zones} label="Zones" /><Metric icon="◇" value={production} label="Production locations" />
-    </section>
-
     <section className={styles.toolbar}>
       <div className={styles.tabs}>
         <button type="button" className={`${styles.tab} ${activeTab === 'locations' ? styles.tabActive : ''}`} onClick={() => { setActiveTab('locations'); setError('') }}>☷ <span>Location Breakdown</span></button>
@@ -319,5 +311,3 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     </form></div> : null}
   </div>
 }
-
-function Metric({ icon, value, label }) { return <div className={styles.metric}><span className={styles.metricIcon}>{icon}</span><div><strong>{value}</strong><span>{label}</span></div></div> }
