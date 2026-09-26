@@ -4,16 +4,15 @@ import { redirect } from 'next/navigation'
 
 import { createClient } from '../../../../lib/supabase/server'
 import StandaloneLocationWorkspace from './StandaloneLocationWorkspace'
-import LocationMapWorkspace from './LocationMapWorkspace'
 
 export const dynamic = 'force-dynamic'
 
 export default async function LocationBreakdownPage({ params, searchParams }) {
   const { projectId } = await params
   const query = await searchParams
-  const activeView = query?.view === 'map' ? 'map' : 'breakdown'
-  const supabase = await createClient()
+  if (query?.view === 'map') redirect(`/projects/${projectId}/location-map`)
 
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -56,7 +55,7 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
         <Link href="/workspaces" style={brand}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority /></Link>
         <div style={titleBlock}>
           <div style={subtitle}>{project.project_id || project.code || 'Project'} · {project.name}</div>
-          <div style={title}>{activeView === 'map' ? 'Location Map' : 'Location Breakdown'}</div>
+          <div style={title}>Location Breakdown</div>
         </div>
         <div style={headerActions}>
           <Link href={`/projects/${projectId}`} style={recordButton}>← Project Record</Link>
@@ -67,28 +66,21 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
 
       <section style={body}>
         {loadError ? <div style={errorBox}>Some Location Breakdown data could not be loaded: {loadError.message}</div> : null}
-
         <nav style={viewTabs} aria-label="Location workspace views">
-          <Link href={`/projects/${projectId}/locations`} style={activeView === 'breakdown' ? activeTab : viewTab}>☷ Location Breakdown</Link>
-          <Link href={`/projects/${projectId}/locations?view=map`} style={activeView === 'map' ? activeTab : viewTab}>⌑ Location Map</Link>
+          <Link href={`/projects/${projectId}/locations`} style={activeTab}>☷ Location Breakdown</Link>
+          <Link href={`/projects/${projectId}/location-map`} style={viewTab}>⌑ Location Map</Link>
         </nav>
-
         <div id="lbs-workspace" style={workspace}>
-          {activeView === 'map' ? (
-            <LocationMapWorkspace projectId={project.id} userId={user.id} locations={locations} />
-          ) : (
-            <StandaloneLocationWorkspace
-              projectId={project.id}
-              projectName={project.name}
-              projectCode={project.project_id || project.code || ''}
-              userId={user.id}
-              initialLocations={locations}
-              scopeItems={scopeItems}
-              allocations={allocationsResult.data || []}
-            />
-          )}
+          <StandaloneLocationWorkspace
+            projectId={project.id}
+            projectName={project.name}
+            projectCode={project.project_id || project.code || ''}
+            userId={user.id}
+            initialLocations={locations}
+            scopeItems={scopeItems}
+            allocations={allocationsResult.data || []}
+          />
         </div>
-
         <style>{`
           html, body { height: 100%; overflow: hidden !important; }
           #lbs-workspace { overscroll-behavior: contain; }
