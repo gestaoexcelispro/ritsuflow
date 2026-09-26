@@ -2,11 +2,17 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '../../lib/supabase/client'
 import styles from './login.module.css'
 
 const supabase = createClient()
+
+function safeNextPath(value) {
+  if (!value || typeof value !== 'string') return '/workspaces'
+  if (!value.startsWith('/') || value.startsWith('//')) return '/workspaces'
+  return value
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -15,6 +21,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   async function handleLogin(event) {
     event.preventDefault()
@@ -29,7 +36,7 @@ export default function LoginPage() {
       return
     }
 
-    router.replace('/workspaces')
+    router.replace(safeNextPath(searchParams.get('next')))
     router.refresh()
   }
 
