@@ -41,6 +41,16 @@ function validPrintView(value) {
   }
 }
 
+function withPrintBleed(view, ratio = .05) {
+  const padX = view.width * ratio
+  const padY = view.height * ratio
+  const left = Math.max(0, view.x - padX)
+  const top = Math.max(0, view.y - padY)
+  const right = Math.min(1, view.x + view.width + padX)
+  const bottom = Math.min(1, view.y + view.height + padY)
+  return { x: left, y: top, width: right - left, height: bottom - top }
+}
+
 function LocationPlan({ mapData, loading, error }) {
   const canvasRef = useRef(null)
   const [renderError, setRenderError] = useState('')
@@ -90,7 +100,8 @@ function LocationPlan({ mapData, loading, error }) {
         sourceCtx.stroke()
         sourceCtx.restore()
 
-        const printView = validPrintView(mapData.printView) || { x: 0, y: 0, width: 1, height: 1 }
+        const savedView = validPrintView(mapData.printView)
+        const printView = savedView ? withPrintBleed(savedView) : { x: 0, y: 0, width: 1, height: 1 }
         const sx = Math.round(printView.x * source.width)
         const sy = Math.round(printView.y * source.height)
         const sw = Math.max(1, Math.round(printView.width * source.width))
