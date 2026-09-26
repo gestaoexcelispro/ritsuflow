@@ -3,51 +3,26 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import { createClient } from '../../../../lib/supabase/server'
-import StandaloneLocationWorkspace from './StandaloneLocationWorkspace'
+import LocationMapWorkspace from '../locations/LocationMapWorkspace'
 
 export const dynamic = 'force-dynamic'
 
-export default async function LocationBreakdownPage({ params, searchParams }) {
+export default async function LocationMapPage({ params }) {
   const { projectId } = await params
-  const query = await searchParams
-  if (query?.view === 'map') redirect(`/projects/${projectId}/location-map`)
-
   const supabase = await createClient()
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [projectResult, locationsResult, activitiesResult, allocationsResult] = await Promise.all([
+  const [projectResult, locationsResult] = await Promise.all([
     supabase.from('projects').select('id, project_id, code, name').eq('id', projectId).maybeSingle(),
     supabase.from('locations').select('id, project_id, parent_id, name, location_type, environment_type, sequence_number, qr_token, created_at, updated_at').eq('project_id', projectId).order('sequence_number', { ascending: true }),
-    supabase.from('fieldop_project_activities').select('id, project_id, source, scope_item_id, activity_name, unit, quantity, notes, is_active, created_at, scope_item:project_scopes(id, scope_code, scope_name, item_type, unit, quantity, notes)').eq('project_id', projectId).eq('is_active', true).order('created_at', { ascending: true }),
-    supabase.from('location_service_quantities').select('id, project_id, location_id, service_id, quantity, source_scope_item_id, created_at, updated_at').eq('project_id', projectId),
   ])
 
   const project = projectResult.data
   if (!project) redirect('/projects')
-
-  const scopeItems = (activitiesResult.data || []).map((activity, index) => {
-    const scope = activity.scope_item || null
-    const fromProjectScope = activity.source === 'scope'
-    return {
-      id: activity.id,
-      project_id: projectId,
-      project_work_package_id: activity.scope_item_id || null,
-      service_code: fromProjectScope ? (scope?.scope_code || '') : '',
-      service_name: fromProjectScope ? (scope?.scope_name || activity.activity_name || '') : (activity.activity_name || ''),
-      unit: fromProjectScope ? (scope?.unit || activity.unit || '') : (activity.unit || ''),
-      scope_quantity: fromProjectScope ? (scope?.quantity ?? activity.quantity) : activity.quantity,
-      sequence_number: index + 1,
-      is_active: activity.is_active !== false,
-      source_scope_item_id: activity.scope_item_id || null,
-      scope_name: fromProjectScope ? (scope?.scope_name || '') : '',
-      source: activity.source,
-      notes: activity.notes || null,
-    }
-  })
-
-  const loadError = projectResult.error || locationsResult.error || activitiesResult.error || allocationsResult.error
   const locations = locationsResult.data || []
+  const loadError = projectResult.error || locationsResult.error
 
   return (
     <main style={shell}>
@@ -55,7 +30,7 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
         <Link href="/workspaces" style={brand}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority /></Link>
         <div style={titleBlock}>
           <div style={subtitle}>{project.project_id || project.code || 'Project'} · {project.name}</div>
-          <div style={title}>Location Breakdown</div>
+          <div style={title}>Location Map</div>
         </div>
         <div style={headerActions}>
           <Link href={`/projects/${projectId}`} style={recordButton}>← Project Record</Link>
@@ -65,25 +40,17 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
       </header>
 
       <section style={body}>
-        {loadError ? <div style={errorBox}>Some Location Breakdown data could not be loaded: {loadError.message}</div> : null}
+        {loadError ? <div style={errorBox}>Some Location Map data could not be loaded: {loadError.message}</div> : null}
         <nav style={viewTabs} aria-label="Location workspace views">
-          <Link href={`/projects/${projectId}/locations`} style={activeTab}>☷ Location Breakdown</Link>
-          <Link href={`/projects/${projectId}/location-map`} style={viewTab}>⌑ Location Map</Link>
+          <Link href={`/projects/${projectId}/locations`} style={viewTab}>☷ Location Breakdown</Link>
+          <Link href={`/projects/${projectId}/location-map`} style={activeTab}>⌑ Location Map</Link>
         </nav>
-        <div id="lbs-workspace" style={workspace}>
-          <StandaloneLocationWorkspace
-            projectId={project.id}
-            projectName={project.name}
-            projectCode={project.project_id || project.code || ''}
-            userId={user.id}
-            initialLocations={locations}
-            scopeItems={scopeItems}
-            allocations={allocationsResult.data || []}
-          />
+        <div id="location-map-workspace" style={workspace}>
+          <LocationMapWorkspace projectId={project.id} userId={user.id} locations={locations} />
         </div>
         <style>{`
           html, body { height: 100%; overflow: hidden !important; }
-          #lbs-workspace { overscroll-behavior: contain; }
+          #location-map-workspace { overscroll-behavior: contain; }
         `}</style>
       </section>
     </main>
