@@ -1,7 +1,8 @@
-import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 
 import { createClient } from '../../../../../lib/supabase/server'
+
+export const runtime = 'nodejs'
 
 export async function POST(request, { params }) {
   const { locationId } = await params
@@ -36,7 +37,7 @@ export async function POST(request, { params }) {
 
   if (location.qr_token) return NextResponse.json({ qr_token: location.qr_token, created: false })
 
-  const qrToken = randomUUID()
+  const qrToken = crypto.randomUUID()
   const { data: updated, error: updateError } = await supabase
     .from('locations')
     .update({ qr_token: qrToken })
