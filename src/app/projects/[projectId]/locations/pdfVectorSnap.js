@@ -52,11 +52,14 @@ export async function extractPdfVectorSnap(page,viewport,pdfjs){
   return{endpoints:[...endpointMap.values()],segments:normalizedSegments,segmentCount:normalizedSegments.length,hasRasterImage,truncated,status:normalizedSegments.length?'vector':hasRasterImage?'raster':'empty'}
 }
 
-export function nearestVectorSnap(raw,geometry,rect,radiusPx){
-  if(!geometry||!rect)return null
-  const px=p=>({x:p.x*rect.width,y:p.y*rect.height}),cursor=px(raw);let best=null,bestDistance=radiusPx+1
-  for(const p of geometry.endpoints||[]){const q=px(p),d=Math.hypot(cursor.x-q.x,cursor.y-q.y);if(d<bestDistance){bestDistance=d;best={point:p,type:'endpoint'}}}
+// raw and all geometry are normalized drawing coordinates. screenSize is used only
+// to express the snap tolerance in CSS pixels, independent of pan/zoom DOM transforms.
+export function nearestVectorSnap(raw,geometry,screenSize,radiusPx){
+  if(!geometry||!screenSize?.width||!screenSize?.height)return null
+  const px=p=>({x:p.x*screenSize.width,y:p.y*screenSize.height}),cursor=px(raw)
+  let best=null,bestDistance=radiusPx+1
+  for(const p of geometry.endpoints||[]){const q=px(p),d=Math.hypot(cursor.x-q.x,cursor.y-q.y);if(d<bestDistance){bestDistance=d;best={point:p,type:'endpoint',distancePx:d}}}
   if(best)return best
-  for(const segment of geometry.segments||[]){const a=px(segment.a),b=px(segment.b),dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;if(len2<1e-9)continue;const t=Math.max(0,Math.min(1,((cursor.x-a.x)*dx+(cursor.y-a.y)*dy)/len2)),q={x:a.x+t*dx,y:a.y+t*dy},d=Math.hypot(cursor.x-q.x,cursor.y-q.y);if(d<bestDistance){bestDistance=d;best={point:{x:segment.a.x+t*(segment.b.x-segment.a.x),y:segment.a.y+t*(segment.b.y-segment.a.y)},type:'edge'}}}
+  for(const segment of geometry.segments||[]){const a=px(segment.a),b=px(segment.b),dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;if(len2<1e-9)continue;const t=Math.max(0,Math.min(1,((cursor.x-a.x)*dx+(cursor.y-a.y)*dy)/len2)),q={x:a.x+t*dx,y:a.y+t*dy},d=Math.hypot(cursor.x-q.x,cursor.y-q.y);if(d<bestDistance){bestDistance=d;best={point:{x:segment.a.x+t*(segment.b.x-segment.a.x),y:segment.a.y+t*(segment.b.y-segment.a.y)},type:'edge',distancePx:d}}}
   return best
 }
