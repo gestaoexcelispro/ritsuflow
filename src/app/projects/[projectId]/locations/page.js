@@ -14,7 +14,7 @@ export default async function LocationBreakdownPage({ params }) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [projectResult, locationsResult, servicesResult, allocationsResult] = await Promise.all([
+  const [projectResult, locationsResult, scopesResult, activitiesResult, allocationsResult] = await Promise.all([
     supabase
       .from('projects')
       .select('id, project_id, code, name')
@@ -26,10 +26,13 @@ export default async function LocationBreakdownPage({ params }) {
       .eq('project_id', projectId)
       .order('sequence_number', { ascending: true }),
     supabase
-      .from('project_services')
-      .select('id, project_id, project_work_package_id, service_code, service_name, unit, scope_quantity, unit_cost, sequence_number, is_active')
-      .eq('project_id', projectId)
-      .order('sequence_number', { ascending: true }),
+      .from('project_scopes')
+      .select('id, project_id, parent_scope_id, scope_code, scope_name, item_type, unit, quantity, status')
+      .eq('project_id', projectId),
+    supabase
+      .from('scope_activities')
+      .select('id, scope_id, activity_name, wall_side, quantity, unit, notes, sequence')
+      .order('sequence', { ascending: true }),
     supabase
       .from('location_service_quantities')
       .select('id, project_id, location_id, service_id, quantity, source_scope_item_id, created_at, updated_at')
@@ -39,8 +42,34 @@ export default async function LocationBreakdownPage({ params }) {
   const project = projectResult.data
   if (!project) redirect('/projects')
 
-  const loadError = projectResult.error || locationsResult.error || servicesResult.error || allocationsResult.error
-  const services = (servicesResult.data || []).filter((item) => item.is_active !== false)
+  const projectScopes = scopesResult.data || []
+  const projectScopeIds = new Set(projectScopes.map((item) => item.id))
+  const scopeById = new Map(projectScopes.map((item) => [item.id, item]))
+
+  // Scope Management is the canonical source. Scope Allocation consumes its
+  // production activities directly instead of maintaining a parallel service list.
+  const scopeItems = (activitiesResult.data || [])
+    .filter((activity) => projectScopeIds.has(activity.scope_id))
+    .map((activity) => {
+      const scope = scopeById.get(activity.scope_id)
+      return {
+        id: activity.id,
+        project_id: projectId,
+        project_work_package_id: activity.scope_id,
+        service_code: scope?.scope_code || '',
+        service_name: activity.activity_name,
+        unit: activity.unit || scope?.unit || '',
+        scope_quantity: activity.quantity,
+        sequence_number: activity.sequence || 0,
+        is_active: scope?.status !== 'cancelled',
+        source_scope_item_id: activity.id,
+        scope_name: scope?.scope_name || '',
+        wall_side: activity.wall_side || null,
+      }
+    })
+    .filter((item) => item.is_active !== false)
+
+  const loadError = projectResult.error || locationsResult.error || scopesResult.error || activitiesResult.error || allocationsResult.error
 
   return (
     <main style={shell}>
@@ -71,7 +100,7 @@ export default async function LocationBreakdownPage({ params }) {
             projectCode={project.project_id || project.code || ''}
             userId={user.id}
             initialLocations={locationsResult.data || []}
-            scopeItems={services}
+            scopeItems={scopeItems}
             allocations={allocationsResult.data || []}
           />
         </div>
