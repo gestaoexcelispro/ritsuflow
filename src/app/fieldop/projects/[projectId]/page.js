@@ -59,23 +59,22 @@ export default function FieldOpProjectSetupPage() {
 
   useEffect(() => {
     let alive = true
-    async function loadLocationCount() {
+    async function loadReadiness() {
       if (!projectId) return
-      const { count, error } = await supabase.from('fieldop_project_locations').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('is_active', true)
-      if (alive && !error) setLocationCount(count || 0)
+      const [locationsResult, assignmentsResult, manualWorkersResult, settingsResult] = await Promise.all([
+        supabase.from('fieldop_project_locations').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('is_active', true),
+        supabase.from('field_project_assignments').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('status', 'active'),
+        supabase.from('fieldop_manual_workers').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('status', 'active'),
+        supabase.from('fieldop_daily_report_settings').select('id').eq('project_id', projectId).maybeSingle(),
+      ])
+      if (!alive) return
+      if (!locationsResult.error) setLocationCount(locationsResult.count || 0)
+      const registeredCount = assignmentsResult.error ? 0 : assignmentsResult.count || 0
+      const manualCount = manualWorkersResult.error ? 0 : manualWorkersResult.count || 0
+      setWorkforceCount(registeredCount + manualCount)
+      setDailyReportConfigured(!settingsResult.error && Boolean(settingsResult.data))
     }
-    loadLocationCount()
-    return () => { alive = false }
-  }, [projectId])
-
-  useEffect(() => {
-    let alive = true
-    async function loadWorkforceCount() {
-      if (!projectId) return
-      const { count, error } = await supabase.from('field_project_assignments').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('status', 'active')
-      if (alive && !error) setWorkforceCount(count || 0)
-    }
-    loadWorkforceCount()
+    loadReadiness()
     return () => { alive = false }
   }, [projectId])
 
@@ -142,11 +141,12 @@ export default function FieldOpProjectSetupPage() {
   const activityRows = useMemo(() => activities.map((item) => ({ ...item, displayCode: item.source === 'scope' ? item.scope_item?.scope_code : null, displayName: item.source === 'scope' ? item.scope_item?.scope_name : item.activity_name, displayUnit: item.source === 'scope' ? item.scope_item?.unit : item.unit, displayQuantity: item.source === 'scope' ? item.scope_item?.quantity : item.quantity, displayNotes: item.notes || '' })), [activities])
   const location = project ? [project.city, project.state_region].filter(Boolean).join(', ') || project.location || '—' : '—'
   const projectName = project?.name || project?.project_name || 'Project'
+  const fieldOpReady = activities.length > 0 && locationCount > 0 && workforceCount > 0 && dailyReportConfigured
 
   return <main className={styles.shell}>
     <aside className={styles.sidebar}><Link href="/fieldop" className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={150} height={55} priority /></Link><div className={styles.navTitle}>FIELD OPERATIONS</div><nav><Link href="/fieldop"><i>⌂</i>Portfolio Overview</Link><Link href="/fieldop/projects" className={styles.active}><i>▣</i>Projects</Link><Link href="/dashboard/field-management/workforce"><i>♙</i>Workforce</Link><Link href="/dashboard/projects/operations"><i>⌖</i>Operations</Link><Link href="/dashboard/projects/constraints"><i>△</i>Occurrences</Link><Link href="/fieldop/reports/daily"><i>▤</i>Reports</Link><Link href="/settings"><i>⚙</i>Settings</Link></nav><Link href="/workspaces" className={styles.workspaceReturn}>← <span>Workspaces</span></Link></aside>
     <section className={styles.main}><header className={styles.topbar}><div><div className={styles.crumb}><Link href="/fieldop/projects">Projects</Link><span>/</span>{loading ? 'Loading...' : projectName}</div><strong>Daily Report Setup</strong></div><div className={styles.search}>⌕ <span>Search project setup...</span><kbd>Ctrl K</kbd></div><div className={styles.user}><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div></div></header>
-      <div className={styles.content}><section className={styles.projectHeader}><div className={styles.projectIcon}>{projectName.charAt(0).toUpperCase()}</div><div><h1>{projectName}</h1><p>{project?.project_id || '—'} · {project?.client || project?.client_name || '—'} · {location}</p></div><span className={styles.status}>○ FieldOp setup in progress</span></section><div className={styles.tabs}>{tabs.map(tab => <button key={tab} className={activeTab === tab ? styles.tabActive : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>
+      <div className={styles.content}><section className={styles.projectHeader}><div className={styles.projectIcon}>{projectName.charAt(0).toUpperCase()}</div><div><h1>{projectName}</h1><p>{project?.project_id || '—'} · {project?.client || project?.client_name || '—'} · {location}</p></div><span className={styles.status}>{fieldOpReady ? '✓ FieldOp ready' : '○ FieldOp setup in progress'}</span></section><div className={styles.tabs}>{tabs.map(tab => <button key={tab} className={activeTab === tab ? styles.tabActive : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>
         {activeTab === 'Overview' && <section className={styles.grid}><article className={styles.card}><div className={styles.cardHead}><div><h2>Project Information</h2><p>Read-only information from the canonical RitsuFlow project.</p></div><span>RITSUFLOW</span></div><dl><div><dt>Project ID</dt><dd>{project?.project_id || '—'}</dd></div><div><dt>Client</dt><dd>{project?.client || project?.client_name || '—'}</dd></div><div><dt>Location</dt><dd>{location}</dd></div><div><dt>Phase</dt><dd>{project?.phase || project?.status || '—'}</dd></div></dl></article><article className={styles.card}><div className={styles.cardHead}><div><h2>Daily Report Readiness</h2><p>Configure the information FieldOp will use to structure daily reporting.</p></div></div><div className={styles.steps}><button onClick={() => setActiveTab('Activities')}><b>1</b><span><strong>Activities</strong><small>Bring contracted Scope Items into FieldOp or add field-specific activities manually.</small></span><em>{activities.length ? `${activities.length} configured →` : 'Configure →'}</em></button><button onClick={() => setActiveTab('Locations')}><b>2</b><span><strong>Locations</strong><small>Use the project Location Structure for field reporting.</small></span><em>{locationCount ? `${locationCount} configured →` : 'Configure →'}</em></button><button onClick={() => setActiveTab('Workforce')}><b>3</b><span><strong>Workforce</strong><small>Define the people and crews available to the project.</small></span><em>{workforceCount ? `${workforceCount} active →` : 'Configure →'}</em></button><button onClick={() => setActiveTab('Daily Report Settings')}><b>4</b><span><strong>Daily Report Settings</strong><small>Define report behavior and project-specific requirements.</small></span><em>{dailyReportConfigured ? 'Configured →' : 'Configure →'}</em></button></div></article></section>}
         {activeTab === 'Activities' && <section className={styles.workspace}><div><h2>Activities</h2><p>Choose which contracted Scope Items are available for field execution and Daily Reports.</p></div><div className={styles.actions}><Link href={`/projects/${projectId}/scope`}>View Project Scope</Link><button onClick={() => setManualOpen(true)}>+ Add Manual Activity</button><button className={styles.primary} onClick={openScopeImporter}>Import from Project Scope</button></div>{activityError && <div className={styles.error}>{activityError}</div>}{activitiesLoading ? <div className={styles.empty}><b>Loading FieldOp activities...</b></div> : activityRows.length === 0 ? <div className={styles.empty}><b>No FieldOp activities configured yet.</b><span>Import contracted items from RitsuFlow Scope Management or add a field-specific activity manually.</span></div> : <div className={styles.activityTable}><table><thead><tr><th>ID</th><th>Activity</th><th>Source</th><th>Quantity</th><th>Unit</th><th>FieldOp Notes</th><th></th></tr></thead><tbody>{activityRows.map((item) => <tr key={item.id}><td>{item.displayCode || '—'}</td><td><strong>{item.displayName || '—'}</strong></td><td><span className={item.source === 'scope' ? styles.scopeBadge : styles.manualBadge}>{item.source === 'scope' ? 'Project Scope' : 'Manual'}</span></td><td>{item.displayQuantity ?? '—'}</td><td>{item.displayUnit || '—'}</td><td>{editingNoteId === item.id ? <div style={{display:'flex',gap:6,alignItems:'center'}}><input autoFocus value={noteDraft} onChange={(e)=>setNoteDraft(e.target.value)} style={{minWidth:180,padding:'6px 8px',border:'1px solid #cad7dd',borderRadius:6}}/><button onClick={()=>saveNote(item.id)} disabled={saving}>Save</button><button onClick={()=>{setEditingNoteId(null);setNoteDraft('')}}>Cancel</button></div> : <button onClick={()=>beginNoteEdit(item)} style={{border:0,background:'transparent',padding:0,color:item.displayNotes?'#17384a':'#7b8b94',cursor:'pointer',textAlign:'left'}}>{item.displayNotes || '+ Add note'}</button>}</td><td><button className={styles.removeButton} onClick={() => removeActivity(item.id)}>Remove</button></td></tr>)}</tbody></table></div>}</section>}
         {activeTab === 'Locations' && <FieldOpLocationsSetup projectId={projectId} onCountChange={setLocationCount} />}
