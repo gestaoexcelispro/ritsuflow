@@ -6,7 +6,7 @@ import { extractPdfVectorSnap, nearestVectorSnap } from './pdfVectorSnap'
 import styles from './location-map-workspace.module.css'
 
 const COLORS=['#008F84','#2F80ED','#8E5BEF','#E58A1F','#D94F70','#2E8B57','#6B7280']
-const SNAP_RADIUS_PX=20,CLOSE_RADIUS_PX=16,MIN_ZOOM=.20,MAX_ZOOM=6
+const SNAP_RADIUS_PX=20,CLOSE_RADIUS_PX=16,MIN_ZOOM=.20,MAX_ZOOM=8,MAX_RENDER_PIXELS=28000000,RENDER_DEBOUNCE_MS=180
 const isPdf=d=>d?.mime_type==='application/pdf'||d?.document_type==='PDF'||d?.file_name?.toLowerCase().endsWith('.pdf')
 const pointsOf=g=>Array.isArray(g?.points)?g.points:[]
 const colorOf=g=>g?.display?.color||'#008F84'
@@ -14,12 +14,12 @@ const clamp=(v,min,max)=>Math.min(max,Math.max(min,v))
 
 export default function LocationMapWorkspace({projectId,userId,locations=[]}){
   const supabase=useMemo(()=>createClient(),[])
-  const canvasRef=useRef(null),stageRef=useRef(null),pdfRef=useRef(null),renderTaskRef=useRef(null),panRef=useRef(null)
+  const canvasRef=useRef(null),stageRef=useRef(null),pdfRef=useRef(null),renderTaskRef=useRef(null),panRef=useRef(null),renderTimerRef=useRef(null),basePdfScaleRef=useRef(1),renderGenerationRef=useRef(0)
   const [documents,setDocuments]=useState([]),[documentId,setDocumentId]=useState(''),[pageNumber,setPageNumber]=useState(1),[pageCount,setPageCount]=useState(1)
   const [mapId,setMapId]=useState(''),[geometries,setGeometries]=useState([]),[selectedId,setSelectedId]=useState(locations[0]?.id||'')
   const [draft,setDraft]=useState([]),[drawing,setDrawing]=useState(false),[tool,setTool]=useState('polygon'),[anchor,setAnchor]=useState(null),[previewPoint,setPreviewPoint]=useState(null),[color,setColor]=useState(COLORS[0])
   const [snapEnabled,setSnapEnabled]=useState(true),[snapPoint,setSnapPoint]=useState(null),[vectorSnap,setVectorSnap]=useState(null),[snapStatus,setSnapStatus]=useState('loading')
-  const [viewport,setViewport]=useState({x:0,y:0,zoom:1}),[baseSize,setBaseSize]=useState({width:0,height:0}),[panning,setPanning]=useState(false)
+  const [viewport,setViewport]=useState({x:0,y:0,zoom:1}),[baseSize,setBaseSize]=useState({width:0,height:0}),[panning,setPanning]=useState(false),[renderQuality,setRenderQuality]=useState(1)
   const [loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[uploading,setUploading]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('')
   const locationMap=useMemo(()=>new Map(locations.map(x=>[x.id,x])),[locations]),mapped=useMemo(()=>new Map(geometries.map(x=>[x.location_id,x])),[geometries]),selected=locationMap.get(selectedId)||null
 
@@ -27,12 +27,18 @@ export default function LocationMapWorkspace({projectId,userId,locations=[]}){
   useEffect(()=>{if(documentId)loadPdfAndMap();else{pdfRef.current=null;setGeometries([]);setMapId('');setVectorSnap(null);setSnapStatus('unavailable')}},[documentId,pageNumber])
   useEffect(()=>{const row=mapped.get(selectedId);setColor(colorOf(row?.geometry));resetDrawing()},[selectedId,geometries])
   useEffect(()=>{const shell=stageRef.current;if(!shell)return;const onWheel=e=>{if(!documentId)return;e.preventDefault();e.stopPropagation();const factor=Math.exp(-e.deltaY*.0015);applyZoom(viewport.zoom*factor,e.clientX,e.clientY)};shell.addEventListener('wheel',onWheel,{passive:false});return()=>shell.removeEventListener('wheel',onWheel)},[documentId,viewport])
+  useEffect(()=>{
+    if(!documentId||!pdfRef.current||!baseSize.width)return
+    clearTimeout(renderTimerRef.current)
+    renderTimerRef.current=setTimeout(()=>rerenderForZoom(viewport.zoom),RENDER_DEBOUNCE_MS)
+    return()=>clearTimeout(renderTimerRef.current)
+  },[viewport.zoom,documentId,pageNumber,baseSize.width])
 
   function resetDrawing(){setDraft([]);setDrawing(false);setAnchor(null);setPreviewPoint(null);setSnapPoint(null)}
   async function loadDocuments(){const {data,error:e}=await supabase.from('project_documents').select('id,file_name,storage_path,mime_type,document_type,created_at').eq('project_id',projectId).order('created_at',{ascending:false});if(e){setError(e.message);return}const pdfs=(data||[]).filter(isPdf);setDocuments(pdfs);setDocumentId(v=>v||pdfs[0]?.id||'')}
   async function loadPdfAndMap(){
     const doc=documents.find(x=>x.id===documentId);if(!doc)return
-    setLoading(true);setError('');setMessage('');setSnapPoint(null);setVectorSnap(null);setSnapStatus('loading')
+    setLoading(true);setError('');setMessage('');setSnapPoint(null);setVectorSnap(null);setSnapStatus('loading');setRenderQuality(1)
     try{
       const {data:signed,error:se}=await supabase.storage.from('project-documents').createSignedUrl(doc.storage_path,120);if(se||!signed?.signedUrl)throw new Error(se?.message||'Unable to access this PDF.')
       const response=await fetch(signed.signedUrl);if(!response.ok)throw new Error(`Unable to download PDF (${response.status}).`)
@@ -47,11 +53,32 @@ export default function LocationMapWorkspace({projectId,userId,locations=[]}){
   async function renderPage(pageNo,pdfjs){
     const canvas=canvasRef.current;if(!canvas||!pdfRef.current)return null
     const page=await pdfRef.current.getPage(pageNo),base=page.getViewport({scale:1}),renderWidth=Math.max(900,Math.min(1500,base.width*1.7)),scale=renderWidth/base.width,pageViewport=page.getViewport({scale}),dpr=Math.min(window.devicePixelRatio||1,2)
+    basePdfScaleRef.current=scale
     canvas.width=Math.round(pageViewport.width*dpr);canvas.height=Math.round(pageViewport.height*dpr);canvas.style.width=`${pageViewport.width}px`;canvas.style.height=`${pageViewport.height}px`
     const size={width:pageViewport.width,height:pageViewport.height};setBaseSize(size);renderTaskRef.current?.cancel?.();const task=page.render({canvasContext:canvas.getContext('2d'),viewport:pageViewport,transform:dpr===1?null:[dpr,0,0,dpr,0,0]});renderTaskRef.current=task
     try{await task.promise}catch(e){if(e?.name!=='RenderingCancelledException')throw e}
     try{const geometry=await extractPdfVectorSnap(page,pageViewport,pdfjs);setVectorSnap(geometry);setSnapStatus(geometry.endpoints.length||geometry.segments.length?'vector':'unavailable')}catch{setVectorSnap(null);setSnapStatus('unavailable')}
     return size
+  }
+  async function rerenderForZoom(zoom){
+    const canvas=canvasRef.current,pdf=pdfRef.current;if(!canvas||!pdf||!baseSize.width||!baseSize.height)return
+    const generation=++renderGenerationRef.current
+    try{
+      const page=await pdf.getPage(pageNumber)
+      if(generation!==renderGenerationRef.current)return
+      const desiredQuality=clamp(Math.max(1,zoom),1,8),dpr=Math.min(window.devicePixelRatio||1,2)
+      let quality=desiredQuality
+      const desiredPixels=baseSize.width*baseSize.height*quality*quality*dpr*dpr
+      if(desiredPixels>MAX_RENDER_PIXELS)quality*=Math.sqrt(MAX_RENDER_PIXELS/desiredPixels)
+      quality=Math.max(1,quality)
+      if(Math.abs(quality-renderQuality)<.12)return
+      const renderViewport=page.getViewport({scale:basePdfScaleRef.current*quality})
+      const pixelDpr=Math.min(dpr,Math.sqrt(MAX_RENDER_PIXELS/Math.max(1,renderViewport.width*renderViewport.height)))
+      renderTaskRef.current?.cancel?.()
+      canvas.width=Math.max(1,Math.round(renderViewport.width*pixelDpr));canvas.height=Math.max(1,Math.round(renderViewport.height*pixelDpr));canvas.style.width=`${baseSize.width}px`;canvas.style.height=`${baseSize.height}px`
+      const task=page.render({canvasContext:canvas.getContext('2d'),viewport:renderViewport,transform:pixelDpr===1?null:[pixelDpr,0,0,pixelDpr,0,0]});renderTaskRef.current=task
+      try{await task.promise;if(generation===renderGenerationRef.current)setRenderQuality(quality)}catch(e){if(e?.name!=='RenderingCancelledException')throw e}
+    }catch(e){console.error('Location Map high-resolution PDF render failed.',e)}
   }
   async function ensureMap(){if(mapId)return mapId;const {data,error:e}=await supabase.from('project_drawing_maps').insert({project_id:projectId,document_id:documentId,page_number:pageNumber,drawing_type:'floor_plan',created_by:userId}).select('id').single();if(e){if(e.code==='23505'){const {data:existing,error:ee}=await supabase.from('project_drawing_maps').select('id').eq('document_id',documentId).eq('page_number',pageNumber).single();if(ee)throw ee;setMapId(existing.id);return existing.id}throw e}setMapId(data.id);return data.id}
 
@@ -95,7 +122,7 @@ export default function LocationMapWorkspace({projectId,userId,locations=[]}){
         <select value={documentId} onChange={e=>{setDocumentId(e.target.value);setPageNumber(1)}}><option value="">Select PDF drawing…</option>{documents.map(doc=><option key={doc.id} value={doc.id}>{doc.file_name}</option>)}</select>
         <label className={styles.uploadButton}>＋ {uploading?'Uploading…':'Upload PDF'}<input type="file" accept="application/pdf,.pdf" onChange={uploadPdf} disabled={uploading}/></label>
         <button type="button" disabled={!documentId||pageNumber<=1} onClick={()=>setPageNumber(p=>p-1)}>‹</button><span className={styles.pageLabel}>Page {pageNumber} / {pageCount}</span><button type="button" disabled={!documentId||pageNumber>=pageCount} onClick={()=>setPageNumber(p=>p+1)}>›</button><div className={styles.spacer}/>
-        <div className={styles.zoomGroup}><button type="button" disabled={!documentId} onClick={()=>applyZoom(viewport.zoom/1.2)}>−</button><span>{Math.round(viewport.zoom*100)}%</span><button type="button" disabled={!documentId} onClick={()=>applyZoom(viewport.zoom*1.2)}>＋</button><button type="button" disabled={!documentId} onClick={()=>fitDrawing()}>Fit</button></div>
+        <div className={styles.zoomGroup}><button type="button" disabled={!documentId} onClick={()=>applyZoom(viewport.zoom/1.2)}>−</button><span title={`PDF render quality ${renderQuality.toFixed(1)}×`}>{Math.round(viewport.zoom*100)}%</span><button type="button" disabled={!documentId} onClick={()=>applyZoom(viewport.zoom*1.2)}>＋</button><button type="button" disabled={!documentId} onClick={()=>fitDrawing()}>Fit</button></div>
         <button type="button" title={snapStatus==='unavailable'?'This PDF page has no usable vector paths. Free Draw remains available.':snapDetail||'Snap to PDF vector geometry.'} className={snapEnabled&&snapStatus==='vector'?styles.snapOn:styles.snapOff} onClick={()=>{setSnapEnabled(v=>!v);setSnapPoint(null)}}>{snapLabel}</button>
         <button type="button" className={tool==='line'&&drawing?styles.drawButton:''} disabled={!documentId||!selectedId} onClick={()=>startTool('line')}>Line</button>
         <button type="button" className={tool==='rectangle'&&drawing?styles.drawButton:''} disabled={!documentId||!selectedId} onClick={()=>startTool('rectangle')}>Rectangle</button>
