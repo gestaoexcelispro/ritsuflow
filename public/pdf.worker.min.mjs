@@ -1,1 +1,1 @@
-// Placeholder worker asset is intentionally replaced at build time by the project PDF.js worker copy step.
+import 'https://unpkg.com/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs'
