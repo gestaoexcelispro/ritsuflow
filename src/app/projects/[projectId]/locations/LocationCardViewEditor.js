@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '../../../lib/supabase/client'
 
-const ASPECT = 3.32
+const ASPECT = 1
 const clamp=(v,min,max)=>Math.min(max,Math.max(min,v))
 const isPdf=d=>d?.mime_type==='application/pdf'||d?.document_type==='PDF'||d?.file_name?.toLowerCase().endsWith('.pdf')
 
@@ -25,8 +25,8 @@ export default function LocationCardViewEditor({ project, locations, userId }) {
       const {data:dm,error:me}=await supabase.from('project_drawing_maps').select('id,print_view').eq('project_id',project.id).eq('document_id',documentId).eq('page_number',safe).maybeSingle();if(me)throw me;setMapId(dm?.id||'');setSavedView(dm?.print_view?.mode==='card_view'?dm.print_view:null);if(dm?.id){const {data:g,error:ge}=await supabase.from('project_drawing_location_geometries').select('location_id,geometry').eq('drawing_map_id',dm.id).eq('page_number',safe);if(ge)throw ge;setGeometries(g||[])}else setGeometries([]);requestAnimationFrame(()=>applySavedOrFit(size,dm?.print_view));
     }catch(e){setError(e?.message||'Unable to load drawing.')}finally{setLoading(false)}}
 
-  function frameSize(){const el=frameRef.current;return{width:Math.max(1,el?.clientWidth||900),height:Math.max(1,el?.clientHeight||270)}}
-  function applySavedOrFit(size,saved){const frame=frameSize();if(saved?.mode==='card_view'&&saved.width>0&&saved.height>0){const zoom=frame.width/(saved.width*size.width);setView({zoom,x:-saved.x*size.width*zoom,y:-saved.y*size.height*zoom});return}const zoom=Math.min(frame.width/size.width,frame.height/size.height)*.92;setView({zoom,x:(frame.width-size.width*zoom)/2,y:(frame.height-size.height*zoom)/2})}
+  function frameSize(){const el=frameRef.current;return{width:Math.max(1,el?.clientWidth||900),height:Math.max(1,el?.clientHeight||900)}}
+  function applySavedOrFit(size,saved){const frame=frameSize();if(saved?.mode==='card_view'&&saved.width>0&&saved.height>0){const zoom=Math.min(frame.width/(saved.width*size.width),frame.height/(saved.height*size.height));setView({zoom,x:-saved.x*size.width*zoom,y:-saved.y*size.height*zoom});return}const zoom=Math.min(frame.width/size.width,frame.height/size.height)*.92;setView({zoom,x:(frame.width-size.width*zoom)/2,y:(frame.height-size.height*zoom)/2})}
   function zoomAt(next){const frame=frameSize(),cx=frame.width/2,cy=frame.height/2,n=clamp(next,.15,8),wx=(cx-view.x)/view.zoom,wy=(cy-view.y)/view.zoom;setView({zoom:n,x:cx-wx*n,y:cy-wy*n})}
   function pointerDown(e){if(e.button!==0)return;e.preventDefault();dragRef.current={x:e.clientX,y:e.clientY,ox:view.x,oy:view.y};e.currentTarget.setPointerCapture?.(e.pointerId)}
   function pointerMove(e){if(!dragRef.current)return;setView(v=>({...v,x:dragRef.current.ox+e.clientX-dragRef.current.x,y:dragRef.current.oy+e.clientY-dragRef.current.y}))}
@@ -50,8 +50,8 @@ export default function LocationCardViewEditor({ project, locations, userId }) {
           <div style={{fontSize:12,fontWeight:900,letterSpacing:'.08em',marginBottom:10}}>LIVE LOCATION REPORT</div>
           <div style={{position:'relative',width:'100%',aspectRatio:'210 / 297',background:'#fff',overflow:'hidden',boxShadow:'0 12px 35px rgba(5,42,60,.18)'}}>
             <img src="/location-a4-picture.png" alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%'}}/>
-            <div style={{position:'absolute',left:'46.1%',top:'32.55%',width:'48%',height:'27.75%',overflow:'hidden',background:'#fff'}}>
-              {drawingUrl&&previewDrawingStyle?<div style={previewDrawingStyle}><img src={drawingUrl} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%'}}/><svg viewBox="0 0 1 1" preserveAspectRatio="none" style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none'}}>{points.length>=3?<polygon points={points.map(p=>`${p.x},${p.y}`).join(' ')} fill={color} fillOpacity={clamp(opacity,.2,.65)} stroke={color} strokeWidth=".004" vectorEffect="non-scaling-stroke"/>:null}</svg></div>:null}
+            <div style={{position:'absolute',left:'46.1%',top:'32.55%',width:'48%',height:'27.75%',overflow:'hidden',background:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              {drawingUrl&&previewDrawingStyle?<div style={{...previewDrawingStyle,aspectRatio:'1 / 1'}}><img src={drawingUrl} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%'}}/><svg viewBox="0 0 1 1" preserveAspectRatio="none" style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none'}}>{points.length>=3?<polygon points={points.map(p=>`${p.x},${p.y}`).join(' ')} fill={color} fillOpacity={clamp(opacity,.2,.65)} stroke={color} strokeWidth=".004" vectorEffect="non-scaling-stroke"/>:null}</svg></div>:null}
             </div>
           </div>
           <p style={{fontSize:12,color:'#56727f',margin:'10px 0 0'}}>This is the actual A4 template. Location On Plan updates while you drag or zoom the drawing.</p>
