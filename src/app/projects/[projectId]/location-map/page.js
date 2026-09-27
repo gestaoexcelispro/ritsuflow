@@ -34,6 +34,7 @@ export default async function LocationMapPage({ params }) {
         </div>
         <div style={headerActions}>
           <Link href={`/projects/${projectId}`} style={recordButton}>← Project Record</Link>
+          <Link href={`/projects/${projectId}/location-map/card-view`} style={cardViewButton}>Set Card View</Link>
           <Link href={`/projects/${projectId}/scope`} style={scopeButton}>Scope Management</Link>
           <Link href={`/planning/pre-planning?projectId=${projectId}`} style={preconButton}>Continue to PreCon →</Link>
         </div>
@@ -66,6 +67,7 @@ const subtitle={fontSize:11,opacity:.82}
 const headerActions={display:'flex',alignItems:'center',gap:9}
 const baseButton={height:44,boxSizing:'border-box',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:9,padding:'0 16px',fontWeight:800,fontSize:12,textDecoration:'none',whiteSpace:'nowrap'}
 const recordButton={...baseButton,color:'#fff',border:'1px solid rgba(255,255,255,.28)'}
+const cardViewButton={...baseButton,color:'#063247',border:'1px solid #5fd0c7',background:'#dff8f5'}
 const scopeButton={...baseButton,color:'#fff',border:'1px solid #4d92dd',background:'#1b5f9f'}
 const preconButton={...baseButton,color:'#fff',border:'1px solid #2f86ee',background:'#2f86ee'}
 const body={width:'100%',maxWidth:1800,margin:'0 auto',padding:'12px 24px 22px',boxSizing:'border-box',flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}
