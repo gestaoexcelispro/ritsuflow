@@ -1,13 +1,76 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
+import { createClient } from '../../../lib/supabase/client'
 import { locationBreadcrumb, locationQrPath } from './locationQr'
 import LocationPrintCard from './LocationPrintCard'
 import styles from './location-qr-card.module.css'
 
 export default function LocationQrCard({ location, locationMap, projectName, projectCode }) {
+  const supabase = useMemo(() => createClient(), [])
   const [showPrintCard, setShowPrintCard] = useState(false)
+  const [printMap, setPrintMap] = useState(null)
+  const [printMapLoading, setPrintMapLoading] = useState(false)
+  const [printMapError, setPrintMapError] = useState('')
+
+  useEffect(() => {
+    if (!showPrintCard || !location?.id) return
+    let cancelled = false
+
+    async function loadPrintMap() {
+      setPrintMapLoading(true)
+      setPrintMapError('')
+      setPrintMap(null)
+      try {
+        const { data: geometryRow, error: geometryError } = await supabase
+          .from('project_drawing_location_geometries')
+          .select('id,geometry,page_number,document_id,drawing_map_id')
+          .eq('location_id', location.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (geometryError) throw geometryError
+        if (!geometryRow) return
+
+        const { data: drawingMap, error: drawingMapError } = await supabase
+          .from('project_drawing_maps')
+          .select('id,print_view')
+          .eq('id', geometryRow.drawing_map_id)
+          .maybeSingle()
+        if (drawingMapError) throw drawingMapError
+
+        const { data: documentRow, error: documentError } = await supabase
+          .from('project_documents')
+          .select('id,file_name,storage_path,mime_type,document_type')
+          .eq('id', geometryRow.document_id)
+          .maybeSingle()
+        if (documentError) throw documentError
+        if (!documentRow?.storage_path) return
+
+        const { data: signed, error: signedError } = await supabase.storage
+          .from('project-documents')
+          .createSignedUrl(documentRow.storage_path, 300)
+        if (signedError || !signed?.signedUrl) throw signedError || new Error('Unable to access the mapped drawing.')
+
+        if (!cancelled) setPrintMap({
+          geometry: geometryRow.geometry,
+          printView: drawingMap?.print_view || null,
+          pageNumber: geometryRow.page_number || 1,
+          document: documentRow,
+          signedUrl: signed.signedUrl,
+        })
+      } catch (error) {
+        if (!cancelled) setPrintMapError(error?.message || 'Unable to load the mapped location drawing.')
+      } finally {
+        if (!cancelled) setPrintMapLoading(false)
+      }
+    }
+
+    loadPrintMap()
+    return () => { cancelled = true }
+  }, [showPrintCard, location?.id, supabase])
+
   if (!location?.qr_token) return null
 
   const path = locationQrPath(location.qr_token)
@@ -63,6 +126,9 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
           locationMap={locationMap}
           projectName={projectName}
           projectCode={projectCode}
+          mapData={printMap}
+          mapLoading={printMapLoading}
+          mapError={printMapError}
           onClose={() => setShowPrintCard(false)}
         />
       )}
