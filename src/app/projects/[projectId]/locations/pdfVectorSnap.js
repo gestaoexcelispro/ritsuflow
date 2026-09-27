@@ -73,14 +73,34 @@ export async function extractPdfVectorSnap(page,viewport,pdfjs){
   return{endpoints:[...endpointMap.values()],intersections,segments:normalizedSegments,segmentCount:normalizedSegments.length,endpointCount:endpointMap.size,intersectionCount:intersections.length,hasRasterImage,truncated,status:normalizedSegments.length?'vector':hasRasterImage?'raster':'empty'}
 }
 
-// raw and all geometry are normalized drawing coordinates. screenSize is the visible
-// drawing size after camera zoom and is used only to express tolerance in CSS pixels.
-export function nearestVectorSnap(raw,geometry,screenSize,radiusPx){
+// CAD-style object snap. All geometry uses normalized drawing coordinates.
+// options.modes controls which candidates participate. options.fromPoint enables
+// a true perpendicular projection from the previous drawing/calibration point.
+export function nearestVectorSnap(raw,geometry,screenSize,radiusPx,options={}){
   if(!geometry||!screenSize?.width||!screenSize?.height)return null
+  const modes={corner:true,intersection:true,perpendicular:true,...(options.modes||{})}
   const px=p=>({x:p.x*screenSize.width,y:p.y*screenSize.height}),cursor=px(raw)
   const nearestPoint=(points,type)=>{let best=null,bestDistance=radiusPx+1;for(const p of points||[]){const q=px(p),d=Math.hypot(cursor.x-q.x,cursor.y-q.y);if(d<bestDistance){bestDistance=d;best={point:p,type,distancePx:d}}}return best}
-  const intersection=nearestPoint(geometry.intersections,'intersection');if(intersection)return intersection
-  const endpoint=nearestPoint(geometry.endpoints,'endpoint');if(endpoint)return endpoint
+
+  // Priority intentionally mirrors CAD drafting: exact vertices first, then
+  // intersections, then a perpendicular foot from the previous point.
+  if(modes.corner){const corner=nearestPoint(geometry.endpoints,'corner');if(corner)return corner}
+  if(modes.intersection){const intersection=nearestPoint(geometry.intersections,'intersection');if(intersection)return intersection}
+
+  if(modes.perpendicular&&options.fromPoint){
+    const origin=px(options.fromPoint);let best=null,bestDistance=radiusPx+1
+    for(const segment of geometry.segments||[]){
+      const a=px(segment.a),b=px(segment.b),dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;if(len2<1e-9)continue
+      const t=((origin.x-a.x)*dx+(origin.y-a.y)*dy)/len2;if(t<0||t>1)continue
+      const q={x:a.x+t*dx,y:a.y+t*dy},d=Math.hypot(cursor.x-q.x,cursor.y-q.y)
+      if(d<bestDistance){bestDistance=d;best={point:{x:segment.a.x+t*(segment.b.x-segment.a.x),y:segment.a.y+t*(segment.b.y-segment.a.y)},type:'perpendicular',distancePx:d}}
+    }
+    if(best)return best
+  }
+
+  // Preserve the legacy nearest-edge snap for callers that have not yet moved
+  // to explicit CAD snap settings. It is deliberately lower priority.
+  if(options.allowEdge===false)return null
   let best=null,bestDistance=radiusPx+1
   for(const segment of geometry.segments||[]){const a=px(segment.a),b=px(segment.b),dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;if(len2<1e-9)continue;const t=Math.max(0,Math.min(1,((cursor.x-a.x)*dx+(cursor.y-a.y)*dy)/len2)),q={x:a.x+t*dx,y:a.y+t*dy},d=Math.hypot(cursor.x-q.x,cursor.y-q.y);if(d<bestDistance){bestDistance=d;best={point:{x:segment.a.x+t*(segment.b.x-segment.a.x),y:segment.a.y+t*(segment.b.y-segment.a.y)},type:'edge',distancePx:d}}}
   return best
