@@ -33,22 +33,14 @@ function validPrintView(value) {
   const width = Number(value.width)
   const height = Number(value.height)
   if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null
+  const safeX = Math.max(0, Math.min(1, x))
+  const safeY = Math.max(0, Math.min(1, y))
   return {
-    x: Math.max(0, Math.min(1, x)),
-    y: Math.max(0, Math.min(1, y)),
-    width: Math.max(0, Math.min(1 - x, width)),
-    height: Math.max(0, Math.min(1 - y, height)),
+    x: safeX,
+    y: safeY,
+    width: Math.max(0, Math.min(1 - safeX, width)),
+    height: Math.max(0, Math.min(1 - safeY, height)),
   }
-}
-
-function withPrintBleed(view, ratio = .08) {
-  const padX = view.width * ratio
-  const padY = view.height * ratio
-  const left = Math.max(0, view.x - padX)
-  const top = Math.max(0, view.y - padY)
-  const right = Math.min(1, view.x + view.width + padX)
-  const bottom = Math.min(1, view.y + view.height + padY)
-  return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
 function LocationPlan({ mapData, loading, error }) {
@@ -100,8 +92,9 @@ function LocationPlan({ mapData, loading, error }) {
         sourceCtx.stroke()
         sourceCtx.restore()
 
-        const savedView = validPrintView(mapData.printView)
-        const printView = savedView ? withPrintBleed(savedView) : { x: 0, y: 0, width: 1, height: 1 }
+        // The saved Print Area is the exact content requested by the user.
+        // Do not depend on extra PDF content outside that selection for margins.
+        const printView = validPrintView(mapData.printView) || { x: 0, y: 0, width: 1, height: 1 }
         const sx = Math.round(printView.x * source.width)
         const sy = Math.round(printView.y * source.height)
         const sw = Math.max(1, Math.round(printView.width * source.width))
@@ -109,14 +102,22 @@ function LocationPlan({ mapData, loading, error }) {
 
         const canvas = canvasRef.current
         if (!canvas || cancelled) return
-        const outputWidth = 1800
-        const outputHeight = Math.max(1, Math.round(outputWidth * sh / sw))
-        canvas.width = outputWidth
-        canvas.height = outputHeight
+
+        // Create a guaranteed white safe margin around the selected PDF content.
+        // 8% on each side means the crop can never touch the output edge, even
+        // when the user's Print Area reaches the original PDF page boundary.
+        const safeMarginRatio = .08
+        const contentWidth = 1800
+        const contentHeight = Math.max(1, Math.round(contentWidth * sh / sw))
+        const marginX = Math.round(contentWidth * safeMarginRatio)
+        const marginY = Math.round(contentHeight * safeMarginRatio)
+
+        canvas.width = contentWidth + (marginX * 2)
+        canvas.height = contentHeight + (marginY * 2)
         const ctx = canvas.getContext('2d')
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+        ctx.drawImage(source, sx, sy, sw, sh, marginX, marginY, contentWidth, contentHeight)
       } catch (e) {
         if (!cancelled) setRenderError(e?.message || 'Unable to render the location plan.')
       }
