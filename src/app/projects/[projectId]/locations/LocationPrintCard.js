@@ -6,189 +6,29 @@ import { locationBreadcrumb, locationQrPath } from './locationQr'
 import styles from './location-print-card.module.css'
 
 function humanLocationId(projectCode, location, locationMap) {
-  const parts = []
-  const visited = new Set()
-  let current = location
-  while (current && !visited.has(current.id)) {
-    visited.add(current.id)
-    parts.unshift(current.name)
-    current = current.parent_id ? locationMap.get(current.parent_id) : null
-  }
-  const slug = (value) => String(value || '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const parts = [], visited = new Set(); let current = location
+  while (current && !visited.has(current.id)) { visited.add(current.id); parts.unshift(current.name); current = current.parent_id ? locationMap.get(current.parent_id) : null }
+  const slug = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '')
   return [slug(projectCode || 'PROJECT'), ...parts.map(slug)].filter(Boolean).join('-')
 }
-
-function hexToRgba(hex, opacity) {
-  const clean = String(hex || '#008F84').replace('#', '')
-  const value = clean.length === 3 ? clean.split('').map((x) => x + x).join('') : clean
-  const parsed = Number.parseInt(value, 16)
-  if (!Number.isFinite(parsed)) return `rgba(0,143,132,${opacity})`
-  return `rgba(${(parsed >> 16) & 255},${(parsed >> 8) & 255},${parsed & 255},${opacity})`
-}
-
-function validPrintView(value) {
-  if (!value) return null
-  const x = Number(value.x)
-  const y = Number(value.y)
-  const width = Number(value.width)
-  const height = Number(value.height)
-  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null
-  const safeX = Math.max(0, Math.min(1, x))
-  const safeY = Math.max(0, Math.min(1, y))
-  return {
-    x: safeX,
-    y: safeY,
-    width: Math.max(0, Math.min(1 - safeX, width)),
-    height: Math.max(0, Math.min(1 - safeY, height)),
-  }
-}
-
-function expandSourceView(view, ratio = .10) {
-  const padX = view.width * ratio
-  const padY = view.height * ratio
-  const left = Math.max(0, view.x - padX)
-  const top = Math.max(0, view.y - padY)
-  const right = Math.min(1, view.x + view.width + padX)
-  const bottom = Math.min(1, view.y + view.height + padY)
-  return { x: left, y: top, width: right - left, height: bottom - top }
-}
+function hexToRgba(hex, opacity) { const clean=String(hex||'#008F84').replace('#',''),value=clean.length===3?clean.split('').map(x=>x+x).join(''):clean,parsed=Number.parseInt(value,16);return Number.isFinite(parsed)?`rgba(${(parsed>>16)&255},${(parsed>>8)&255},${parsed&255},${opacity})`:`rgba(0,143,132,${opacity})` }
+function validView(value) { if(!value)return null;const x=Number(value.x),y=Number(value.y),width=Number(value.width),height=Number(value.height);if(![x,y,width,height].every(Number.isFinite)||width<=0||height<=0)return null;const sx=Math.max(0,Math.min(1,x)),sy=Math.max(0,Math.min(1,y));return{x:sx,y:sy,width:Math.max(0,Math.min(1-sx,width)),height:Math.max(0,Math.min(1-sy,height))} }
 
 function LocationPlan({ mapData, loading, error }) {
-  const canvasRef = useRef(null)
-  const [renderError, setRenderError] = useState('')
-
-  useEffect(() => {
-    if (!mapData?.signedUrl || !mapData?.geometry?.points?.length) return
-    let cancelled = false
-    let pdf = null
-
-    async function render() {
-      setRenderError('')
-      try {
-        const response = await fetch(mapData.signedUrl)
-        if (!response.ok) throw new Error(`Drawing download failed (${response.status}).`)
-        const bytes = await response.arrayBuffer()
-        const pdfjs = await import('pdfjs-dist/build/pdf.mjs')
-        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
-        pdf = await pdfjs.getDocument({ data: bytes }).promise
-        const page = await pdf.getPage(Math.min(Math.max(1, Number(mapData.pageNumber) || 1), pdf.numPages))
-        const base = page.getViewport({ scale: 1 })
-        const targetWidth = 2400
-        const viewport = page.getViewport({ scale: targetWidth / base.width })
-
-        const source = document.createElement('canvas')
-        source.width = Math.round(viewport.width)
-        source.height = Math.round(viewport.height)
-        const sourceCtx = source.getContext('2d')
-        await page.render({ canvasContext: sourceCtx, viewport }).promise
-        if (cancelled) return
-
-        const points = mapData.geometry.points
-        const color = mapData.geometry?.display?.color || '#008F84'
-        const opacity = Number.isFinite(Number(mapData.geometry?.display?.fill_opacity)) ? Number(mapData.geometry.display.fill_opacity) : .35
-        sourceCtx.save()
-        sourceCtx.beginPath()
-        points.forEach((point, index) => {
-          const px = Number(point.x) * source.width
-          const py = Number(point.y) * source.height
-          if (index === 0) sourceCtx.moveTo(px, py)
-          else sourceCtx.lineTo(px, py)
-        })
-        sourceCtx.closePath()
-        sourceCtx.fillStyle = hexToRgba(color, Math.min(.65, Math.max(.20, opacity)))
-        sourceCtx.fill()
-        sourceCtx.strokeStyle = color
-        sourceCtx.lineWidth = Math.max(5, source.width * .003)
-        sourceCtx.stroke()
-        sourceCtx.restore()
-
-        // The user's rectangle identifies the desired content. Expand the source
-        // crop first so nearby dimensions, walls and drawing context are not cut.
-        const selectedView = validPrintView(mapData.printView) || { x: 0, y: 0, width: 1, height: 1 }
-        const sourceView = expandSourceView(selectedView, .10)
-        const sx = Math.round(sourceView.x * source.width)
-        const sy = Math.round(sourceView.y * source.height)
-        const sw = Math.max(1, Math.round(sourceView.width * source.width))
-        const sh = Math.max(1, Math.round(sourceView.height * source.height))
-
-        const canvas = canvasRef.current
-        if (!canvas || cancelled) return
-
-        // After restoring real PDF context, add a separate guaranteed white border.
-        // These are intentionally two different jobs: source context prevents
-        // drawing geometry from being cut; the output border provides print safety.
-        const outputMarginRatio = .06
-        const contentWidth = 1800
-        const contentHeight = Math.max(1, Math.round(contentWidth * sh / sw))
-        const marginX = Math.round(contentWidth * outputMarginRatio)
-        const marginY = Math.round(contentHeight * outputMarginRatio)
-
-        canvas.width = contentWidth + (marginX * 2)
-        canvas.height = contentHeight + (marginY * 2)
-        const ctx = canvas.getContext('2d')
-        ctx.fillStyle = '#ffffff'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.drawImage(source, sx, sy, sw, sh, marginX, marginY, contentWidth, contentHeight)
-      } catch (e) {
-        if (!cancelled) setRenderError(e?.message || 'Unable to render the location plan.')
-      }
-    }
-
-    render()
-    return () => { cancelled = true; pdf?.destroy?.().catch(() => {}) }
-  }, [mapData])
-
-  if (loading) return <div className={styles.planStatus}>Loading mapped location…</div>
-  if (error || renderError) return <div className={styles.planStatus}>Location plan unavailable</div>
-  if (!mapData) return <div className={styles.planStatus}>No Location Map assigned</div>
+  const canvasRef=useRef(null),[renderError,setRenderError]=useState('')
+  useEffect(()=>{if(!mapData?.signedUrl||!mapData?.geometry?.points?.length)return;let cancelled=false,pdf=null
+    async function render(){setRenderError('');try{const response=await fetch(mapData.signedUrl);if(!response.ok)throw new Error(`Drawing download failed (${response.status}).`);const bytes=await response.arrayBuffer(),pdfjs=await import('pdfjs-dist/build/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/pdf.worker.min.mjs';pdf=await pdfjs.getDocument({data:bytes}).promise;const page=await pdf.getPage(Math.min(Math.max(1,Number(mapData.pageNumber)||1),pdf.numPages)),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:3000/base.width}),source=document.createElement('canvas');source.width=Math.round(viewport.width);source.height=Math.round(viewport.height);const sctx=source.getContext('2d');await page.render({canvasContext:sctx,viewport}).promise;if(cancelled)return
+      const points=mapData.geometry.points,color=mapData.geometry?.display?.color||'#008F84',opacity=Number.isFinite(Number(mapData.geometry?.display?.fill_opacity))?Number(mapData.geometry.display.fill_opacity):.35;sctx.save();sctx.beginPath();points.forEach((p,i)=>{const px=Number(p.x)*source.width,py=Number(p.y)*source.height;i?sctx.lineTo(px,py):sctx.moveTo(px,py)});sctx.closePath();sctx.fillStyle=hexToRgba(color,Math.min(.65,Math.max(.20,opacity)));sctx.fill();sctx.strokeStyle=color;sctx.lineWidth=Math.max(5,source.width*.003);sctx.stroke();sctx.restore()
+      const cardView=validView(mapData.printView)||{x:0,y:0,width:1,height:1},sx=Math.round(cardView.x*source.width),sy=Math.round(cardView.y*source.height),sw=Math.max(1,Math.round(cardView.width*source.width)),sh=Math.max(1,Math.round(cardView.height*source.height)),canvas=canvasRef.current;if(!canvas||cancelled)return;canvas.width=1800;canvas.height=Math.max(1,Math.round(1800*sh/sw));const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(source,sx,sy,sw,sh,0,0,canvas.width,canvas.height)
+    }catch(e){if(!cancelled)setRenderError(e?.message||'Unable to render the location plan.')}}render();return()=>{cancelled=true;pdf?.destroy?.().catch(()=>{})}},[mapData])
+  if(loading)return <div className={styles.planStatus}>Loading mapped location…</div>
+  if(error||renderError)return <div className={styles.planStatus}>Location plan unavailable</div>
+  if(!mapData)return <div className={styles.planStatus}>No Location Map assigned</div>
   return <canvas ref={canvasRef} className={styles.planCanvas} aria-label="Mapped location on project plan" />
 }
 
 export default function LocationPrintCard({ location, locationMap, projectName, projectCode, mapData, mapLoading, mapError, onClose }) {
-  if (!location?.qr_token) return null
-
-  const qrPath = locationQrPath(location.qr_token)
-  const scanUrl = typeof window === 'undefined' ? qrPath : `${window.location.origin}${qrPath}`
-  const breadcrumb = locationBreadcrumb(location, locationMap, '').replace(/^\s*\/\s*/, '')
-  const locationId = humanLocationId(projectCode, location, locationMap)
-  const environment = location.environment_type || '—'
-  const locationColor = mapData?.geometry?.display?.color || '#008F84'
-  const identityStyle = mapData ? {
-    backgroundColor: hexToRgba(locationColor, .28),
-    borderColor: locationColor,
-  } : undefined
-
-  return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="A4 location card preview">
-      <div className={styles.toolbar}>
-        <div>
-          <strong>A4 Location Card</strong>
-          <span>{location.name}</span>
-        </div>
-        <div className={styles.toolbarActions}>
-          <button type="button" onClick={() => window.print()}>Print / Save PDF</button>
-          <button type="button" className={styles.secondary} onClick={onClose}>Close</button>
-        </div>
-      </div>
-
-      <main className={styles.sheet}>
-        <img className={styles.background} src="/location-a4-picture.png" alt="" aria-hidden="true" />
-
-        <div className={styles.projectValue}>{projectCode || 'PROJECT'} - {projectName || ''}</div>
-        <div className={styles.locationName} style={identityStyle}>{location.name}</div>
-        <div className={styles.environment}>{environment}</div>
-        <div className={styles.hierarchy}>{breadcrumb}</div>
-
-        <div className={styles.locationPlan}>
-          <LocationPlan mapData={mapData} loading={mapLoading} error={mapError} />
-        </div>
-
-        <div className={styles.qr}>
-          <QRCodeSVG value={scanUrl} size="100%" level="M" marginSize={3} bgColor="#ffffff" fgColor="#000000" />
-        </div>
-
-        <div className={styles.locationId}>{locationId}</div>
-      </main>
-    </div>
-  )
+  if(!location?.qr_token)return null
+  const qrPath=locationQrPath(location.qr_token),scanUrl=typeof window==='undefined'?qrPath:`${window.location.origin}${qrPath}`,breadcrumb=locationBreadcrumb(location,locationMap,'').replace(/^\s*\/\s*/,''),locationId=humanLocationId(projectCode,location,locationMap),environment=location.environment_type||'—',locationColor=mapData?.geometry?.display?.color||'#008F84',identityStyle=mapData?{backgroundColor:hexToRgba(locationColor,.28),borderColor:locationColor}:undefined
+  return <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="A4 location card preview"><div className={styles.toolbar}><div><strong>A4 Location Card</strong><span>{location.name}</span></div><div className={styles.toolbarActions}><button type="button" onClick={()=>window.print()}>Print / Save PDF</button><button type="button" className={styles.secondary} onClick={onClose}>Close</button></div></div><main className={styles.sheet}><img className={styles.background} src="/location-a4-picture.png" alt="" aria-hidden="true"/><div className={styles.projectValue}>{projectCode||'PROJECT'} - {projectName||''}</div><div className={styles.locationName} style={identityStyle}>{location.name}</div><div className={styles.environment}>{environment}</div><div className={styles.hierarchy}>{breadcrumb}</div><div className={styles.locationPlan}><LocationPlan mapData={mapData} loading={mapLoading} error={mapError}/></div><div className={styles.qr}><QRCodeSVG value={scanUrl} size="100%" level="M" marginSize={3} bgColor="#ffffff" fgColor="#000000"/></div><div className={styles.locationId}>{locationId}</div></main></div>
 }
