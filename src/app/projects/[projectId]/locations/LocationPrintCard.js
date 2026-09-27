@@ -43,6 +43,16 @@ function validPrintView(value) {
   }
 }
 
+function expandSourceView(view, ratio = .10) {
+  const padX = view.width * ratio
+  const padY = view.height * ratio
+  const left = Math.max(0, view.x - padX)
+  const top = Math.max(0, view.y - padY)
+  const right = Math.min(1, view.x + view.width + padX)
+  const bottom = Math.min(1, view.y + view.height + padY)
+  return { x: left, y: top, width: right - left, height: bottom - top }
+}
+
 function LocationPlan({ mapData, loading, error }) {
   const canvasRef = useRef(null)
   const [renderError, setRenderError] = useState('')
@@ -92,25 +102,26 @@ function LocationPlan({ mapData, loading, error }) {
         sourceCtx.stroke()
         sourceCtx.restore()
 
-        // The saved Print Area is the exact content requested by the user.
-        // Do not depend on extra PDF content outside that selection for margins.
-        const printView = validPrintView(mapData.printView) || { x: 0, y: 0, width: 1, height: 1 }
-        const sx = Math.round(printView.x * source.width)
-        const sy = Math.round(printView.y * source.height)
-        const sw = Math.max(1, Math.round(printView.width * source.width))
-        const sh = Math.max(1, Math.round(printView.height * source.height))
+        // The user's rectangle identifies the desired content. Expand the source
+        // crop first so nearby dimensions, walls and drawing context are not cut.
+        const selectedView = validPrintView(mapData.printView) || { x: 0, y: 0, width: 1, height: 1 }
+        const sourceView = expandSourceView(selectedView, .10)
+        const sx = Math.round(sourceView.x * source.width)
+        const sy = Math.round(sourceView.y * source.height)
+        const sw = Math.max(1, Math.round(sourceView.width * source.width))
+        const sh = Math.max(1, Math.round(sourceView.height * source.height))
 
         const canvas = canvasRef.current
         if (!canvas || cancelled) return
 
-        // Create a guaranteed white safe margin around the selected PDF content.
-        // 8% on each side means the crop can never touch the output edge, even
-        // when the user's Print Area reaches the original PDF page boundary.
-        const safeMarginRatio = .08
+        // After restoring real PDF context, add a separate guaranteed white border.
+        // These are intentionally two different jobs: source context prevents
+        // drawing geometry from being cut; the output border provides print safety.
+        const outputMarginRatio = .06
         const contentWidth = 1800
         const contentHeight = Math.max(1, Math.round(contentWidth * sh / sw))
-        const marginX = Math.round(contentWidth * safeMarginRatio)
-        const marginY = Math.round(contentHeight * safeMarginRatio)
+        const marginX = Math.round(contentWidth * outputMarginRatio)
+        const marginY = Math.round(contentHeight * outputMarginRatio)
 
         canvas.width = contentWidth + (marginX * 2)
         canvas.height = contentHeight + (marginY * 2)
