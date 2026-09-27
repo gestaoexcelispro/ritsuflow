@@ -41,7 +41,7 @@ function validPrintView(value) {
   }
 }
 
-function withPrintBleed(view, ratio = .05) {
+function withPrintBleed(view, ratio = .08) {
   const padX = view.width * ratio
   const padY = view.height * ratio
   const left = Math.max(0, view.x - padX)
