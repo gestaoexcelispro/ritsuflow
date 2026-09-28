@@ -112,6 +112,23 @@ export async function cancelWeeklyPlan(supabase, rpcPayload) {
 }
 
 /**
+ * Verified against the current Weekly Planning close workflow.
+ * Production payload currently uses:
+ * { target_weekly_plan_id: weeklyPlan.id }
+ *
+ * The database operation remains authoritative for finalizing PPC and moving
+ * the committed Weekly Plan into its historical closed state.
+ */
+export async function closeWeeklyPlan(supabase, rpcPayload) {
+  return executeRpc(
+    supabase,
+    "close_weekly_plan",
+    rpcPayload,
+    "Close Weekly Plan"
+  );
+}
+
+/**
  * Pure evaluation entry point shared by UI code and future workflow nodes.
  */
 export function getMakeReadyState(input) {
