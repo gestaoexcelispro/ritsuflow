@@ -34,6 +34,22 @@ export async function workflowCheckIn(supabase, { assignmentId, latitude, longit
   return Array.isArray(data) ? data[0] : data;
 }
 
+export async function workflowCheckOut(supabase, { sessionId, latitude, longitude, accuracy, locationMessage }) {
+  if (!sessionId) throw new Error('Attendance session is required for check-out.');
+
+  const { data, error } = await supabase.rpc('field_worker_check_out', {
+    p_session_id: sessionId,
+    p_method: 'supervisor',
+    p_latitude: latitude ?? null,
+    p_longitude: longitude ?? null,
+    p_gps_accuracy_m: accuracy ?? null,
+    p_notes: locationMessage || null,
+  });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
+
 export function buildWorkflowAttendanceContext(session) {
   if (!session) return {};
   return { attendance_session_id: session.id, checked_in_at: session.check_in_at };
