@@ -13,82 +13,50 @@
   margin-bottom: 18px;
 }
 
-.header h1 {
-  margin: 4px 0 6px;
-  font-size: 30px;
-}
+.header h1 { margin: 4px 0 6px; font-size: 30px; }
+.header p { margin: 0; max-width: 720px; color: #596574; }
+.eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #5f6b78; }
+.status { flex: 0 0 auto; padding: 9px 12px; border: 1px solid #d9dee5; border-radius: 999px; background: #fff; font-size: 13px; font-weight: 700; }
 
-.header p {
-  margin: 0;
-  max-width: 720px;
-  color: #596574;
-}
-
-.eyebrow {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #5f6b78;
-}
-
-.status {
-  flex: 0 0 auto;
-  padding: 9px 12px;
-  border: 1px solid #d9dee5;
-  border-radius: 999px;
-  background: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+.contextPanel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: 12px;
   margin-bottom: 14px;
-}
-
-.legend strong,
-.legend span {
-  padding: 7px 10px;
+  padding: 14px;
   border: 1px solid #d9dee5;
-  border-radius: 8px;
-  background: #ffffff;
-  font-size: 12px;
+  border-radius: 12px;
+  background: #fff;
 }
 
-.canvasShell {
-  height: calc(100vh - 190px);
-  min-height: 620px;
-  overflow: hidden;
-  border: 1px solid #d7dde5;
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 12px 34px rgba(24, 32, 42, 0.08);
-}
+.contextField { display: flex; flex-direction: column; gap: 6px; }
+.contextField label { font-size: 12px; font-weight: 800; color: #4e5a67; }
+.contextField select { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid #cfd6df; border-radius: 8px; background: #fff; color: #18202a; }
+.contextField select:disabled { background: #f1f3f5; color: #8a949f; }
+.contextSummary { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 8px 12px; border-left: 3px solid #cfd6df; }
+.contextSummary span { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #7a8591; }
+.contextSummary strong { font-size: 13px; }
+.dataError { margin-bottom: 12px; padding: 10px 12px; border: 1px solid #e1b7b7; border-radius: 8px; background: #fff; font-size: 13px; }
 
-.canvas {
-  width: 100%;
-  height: 100%;
-  background-image:
-    linear-gradient(rgba(26, 35, 46, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(26, 35, 46, 0.045) 1px, transparent 1px);
-  background-size: 24px 24px;
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.legend strong, .legend span { padding: 7px 10px; border: 1px solid #d9dee5; border-radius: 8px; background: #fff; font-size: 12px; }
+
+.contextCode { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 12px; color: #596574; }
+.contextCode span { font-weight: 800; }
+.contextCode code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 5px 8px; border-radius: 6px; background: #e9edf1; color: #303b47; }
+
+.canvasShell { height: calc(100vh - 330px); min-height: 560px; overflow: hidden; border: 1px solid #d7dde5; border-radius: 14px; background: #fff; box-shadow: 0 12px 34px rgba(24, 32, 42, 0.08); }
+.canvas { width: 100%; height: 100%; background-image: linear-gradient(rgba(26,35,46,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(26,35,46,.045) 1px, transparent 1px); background-size: 24px 24px; }
+
+@media (max-width: 900px) {
+  .contextPanel { grid-template-columns: 1fr; }
+  .contextSummary { border-left: 0; border-top: 3px solid #cfd6df; }
 }
 
 @media (max-width: 760px) {
-  .page {
-    padding: 16px;
-  }
-
-  .header {
-    flex-direction: column;
-  }
-
-  .canvasShell {
-    height: calc(100vh - 260px);
-    min-height: 540px;
-  }
+  .page { padding: 16px; }
+  .header { flex-direction: column; }
+  .contextCode { align-items: flex-start; flex-direction: column; }
+  .contextCode code { max-width: 100%; }
+  .canvasShell { height: calc(100vh - 430px); min-height: 520px; }
 }
