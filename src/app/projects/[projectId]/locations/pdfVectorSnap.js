@@ -16,8 +16,6 @@ function segmentIntersection(s1,s2){const x1=s1.a.x,y1=s1.a.y,x2=s1.b.x,y2=s1.b.
 function nearestOnSegment(p,s){const dx=s.b.x-s.a.x,dy=s.b.y-s.a.y,len2=dx*dx+dy*dy;if(len2<1e-12)return null;const t=Math.max(0,Math.min(1,((p.x-s.a.x)*dx+(p.y-s.a.y)*dy)/len2)),point={x:s.a.x+t*dx,y:s.a.y+t*dy};return{point,distance:distance(p,point),t}}
 function perpendicularFrom(origin,s){const dx=s.b.x-s.a.x,dy=s.b.y-s.a.y,len2=dx*dx+dy*dy;if(len2<1e-12)return null;const t=((origin.x-s.a.x)*dx+(origin.y-s.a.y)*dy)/len2;if(t<0||t>1)return null;return{x:s.a.x+t*dx,y:s.a.y+t*dy}}
 
-// Canonical geometry is stored in native PDF page coordinates. Rendering,
-// fit, pan, zoom and high-DPI rerendering never mutate this geometry.
 export async function extractPdfVectorSnap(page,viewport,pdfjs){
   const operatorList=await page.getOperatorList(),OPS=pdfjs.OPS,segments=[],segmentKeys=new Set(),stack=[]
   let ctm=[...IDENTITY],currentSegments=[],current=null,start=null,hasRasterImage=false,truncated=false
@@ -39,10 +37,6 @@ export async function extractPdfVectorSnap(page,viewport,pdfjs){
 export function normalizedToPdf(point,geometry){if(!point||!geometry?.viewportTransform?.length)return null;const vx=point.x*geometry.viewportWidth,vy=point.y*geometry.viewportHeight;const m=geometry.viewportTransform,det=m[0]*m[3]-m[1]*m[2];if(Math.abs(det)<1e-12)return null;const x=(m[3]*(vx-m[4])-m[2]*(vy-m[5]))/det,y=(-m[1]*(vx-m[4])+m[0]*(vy-m[5]))/det;return{x,y}}
 export function pdfToNormalized(point,geometry){if(!point||!geometry?.viewportTransform?.length)return null;const m=geometry.viewportTransform,vx=m[0]*point.x+m[2]*point.y+m[4],vy=m[1]*point.x+m[3]*point.y+m[5];return{x:vx/geometry.viewportWidth,y:vy/geometry.viewportHeight}}
 
-// Cursor enters in the existing normalized Location Map format only at the
-// boundary. It is immediately converted to canonical PDF coordinates. Snap
-// resolution stays in PDF coordinates until a winner is projected back to the
-// existing normalized persistence/UI format.
 export function nearestVectorSnap(rawNormalized,geometry,screenSize,radiusPx,options={}){
   if(!geometry?.viewportWidth||!geometry?.viewportHeight||!screenSize?.width||!screenSize?.height)return null
   const cursor=normalizedToPdf(rawNormalized,geometry);if(!cursor)return null
@@ -50,9 +44,15 @@ export function nearestVectorSnap(rawNormalized,geometry,screenSize,radiusPx,opt
   const sx=screenSize.width/geometry.viewportWidth,sy=screenSize.height/geometry.viewportHeight,viewScale=Math.max(Math.min(sx,sy),.01)
   const basePdfScale=Math.max(Math.hypot(geometry.viewportTransform[0],geometry.viewportTransform[1]),Math.hypot(geometry.viewportTransform[2],geometry.viewportTransform[3]),.0001)
   const effectiveScale=basePdfScale*viewScale
-  const tolerance=(Number.isFinite(radiusPx)&&radiusPx>0?radiusPx:SNAP_SCREEN_TOLERANCE)/effectiveScale
+  // Keep acquisition CAD-like and predictable. LocationMapWorkspace historically
+  // passed a 20px radius; that made a valid object snap stay selected while the
+  // cursor had already moved noticeably away, which looked like a lazy/lagging
+  // marker. The engine now owns its acquisition aperture and caps it at 12px.
+  const requested=Number.isFinite(radiusPx)&&radiusPx>0?radiusPx:SNAP_SCREEN_TOLERANCE
+  const screenTolerance=Math.min(requested,SNAP_SCREEN_TOLERANCE)
+  const tolerance=screenTolerance/effectiveScale
   const finish=(point,type)=>({point:pdfToNormalized(point,geometry),nativePoint:point,type,distancePx:distance(cursor,point)*effectiveScale})
-  const nearby=(geometry.segments||[]).filter(segment=>pointInBox(cursor,segmentBox(segment,tolerance*1.25)))
+  const nearby=(geometry.segments||[]).filter(segment=>pointInBox(cursor,segmentBox(segment,tolerance*1.15)))
 
   if(modes.corner){let best=null,bestDistance=tolerance;const seen=new Set();for(const segment of nearby){for(const point of [segment.a,segment.b]){const key=pointKey(point);if(seen.has(key))continue;seen.add(key);const d=distance(cursor,point);if(d<=bestDistance){bestDistance=d;best=point}}}if(best)return finish(best,'corner')}
   if(modes.intersection&&nearby.length>1){let best=null,bestDistance=tolerance;const seen=new Set();for(let i=0;i<nearby.length;i++)for(let j=i+1;j<nearby.length;j++){const point=segmentIntersection(nearby[i],nearby[j]);if(!point)continue;const key=pointKey(point);if(seen.has(key))continue;seen.add(key);const d=distance(cursor,point);if(d<=bestDistance){bestDistance=d;best=point}}if(best)return finish(best,'intersection')}
