@@ -1,0 +1,171 @@
+name: Patch Lookahead planning service boundary manual
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/planning-domain-services
+
+      - name: Patch Lookahead page
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          p = Path('src/app/dashboard/planning/lookahead/page.js')
+          s = p.read_text(encoding='utf-8')
+
+          import_anchor = "import { supabase } from '../../../../lib/supabase';\n"
+          service_import = "import { saveGroupedReadinessAssessment } from '../../../../lib/planning/readiness-assessment-service';\n"
+          if service_import not in s:
+              if s.count(import_anchor) != 1:
+                  raise RuntimeError('Supabase import anchor mismatch')
+              s = s.replace(import_anchor, import_anchor + service_import, 1)
+
+          start_marker = "      let assessmentSaved =\n        false;\n\n\n      try {\n"
+          end_marker = "\n      } catch (error) {\n\n        console.error(\n          'Grouped Koskela readiness:',"
+          start = s.find(start_marker)
+          end = s.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise RuntimeError('Grouped readiness handler markers not found')
+
+          replacement = '''      let assessmentSaved =
+        false;
+
+
+      try {
+
+        const {
+          assessment:
+            savedAssessment,
+          linkedConstraint:
+            linkedConstraintData,
+          constraintSyncError,
+        } =
+          await saveGroupedReadinessAssessment(
+            supabase,
+            {
+              sheetRowId:
+                row.id,
+              category,
+              status:
+                nextStatus,
+            }
+          );
+
+
+        assessmentSaved =
+          true;
+
+
+        setReadiness(
+          (
+            current
+          ) => ({
+
+            ...current,
+
+            [readinessKey]: {
+
+              id:
+                savedAssessment.id,
+
+              sheet_row_id:
+                savedAssessment.sheet_row_id,
+
+              category:
+                savedAssessment.category,
+
+              status:
+                savedAssessment.status,
+
+              readiness_source:
+                savedAssessment.readiness_source ||
+                null,
+            },
+          })
+        );
+
+
+        if (
+          constraintSyncError
+        ) {
+
+          console.error(
+            'Koskela -> Constraint Log synchronization:',
+            constraintSyncError
+          );
+
+
+          setErrorMessage(
+            `The Koskela assessment was saved, but the Constraint Log could not be synchronized. ${
+              constraintSyncError.message ||
+              'Please try again.'
+            }`
+          );
+
+
+          return;
+        }
+
+
+        if (
+          linkedConstraintData &&
+          savedAssessment.id
+        ) {
+
+          setConstraintsByAssessment(
+            (current) => ({
+              ...current,
+              [savedAssessment.id]:
+                linkedConstraintData,
+            })
+          );
+
+        }
+'''
+
+          s = s[:start] + replacement + s[end:]
+
+          if s.count(service_import) != 1:
+              raise RuntimeError('Service import verification failed')
+
+          handler_start = s.find('  const handleGroupedReadinessChange =')
+          handler_end = s.find('  // ==========================================================\n  // GROUPED CONSTRAINTS', handler_start)
+          handler = s[handler_start:handler_end]
+          if 'ensure_koskela_constraint' in handler:
+              raise RuntimeError('Legacy direct constraint RPC remains in grouped readiness handler')
+          if 'lookahead_sheet_readiness_assessments' in handler:
+              raise RuntimeError('Legacy direct assessment persistence remains in grouped readiness handler')
+          if 'saveGroupedReadinessAssessment' not in handler:
+              raise RuntimeError('Service call missing from grouped readiness handler')
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Build
+        shell: bash
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit migration
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No migration required.'
+            exit 0
+          fi
+          git config user.name 'RitsuFlow Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/app/dashboard/planning/lookahead/page.js
+          git commit -m 'refactor(planning): route Lookahead readiness through service'
+          git push origin feat/planning-domain-services
