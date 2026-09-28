@@ -81,6 +81,23 @@ export async function reopenConstraint(supabase, rpcPayload) {
 }
 
 /**
+ * Verified against Weekly Planning's current plan-creation workflow.
+ * Production payload currently uses:
+ * { target_project_id: selectedProject.id }
+ *
+ * The RPC remains authoritative for selecting the project's active Lookahead
+ * Plan before a Weekly Plan is created.
+ */
+export async function getActiveLookaheadPlan(supabase, rpcPayload) {
+  return executeRpc(
+    supabase,
+    "get_active_lookahead_plan",
+    rpcPayload,
+    "Get active Lookahead Plan"
+  );
+}
+
+/**
  * Verified against the current Weekly Planning commit workflow.
  * Production payload currently uses:
  * { target_weekly_plan_id: weeklyPlan.id }
