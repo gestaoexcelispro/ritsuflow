@@ -1,6 +1,6 @@
 // RitsuFlow™ planning service boundary.
-// Milestone 12: adapters around existing canonical Supabase RPCs.
-// This module intentionally does not duplicate database business logic.
+// Milestone 12: adapters are added only after their production operation is verified.
+// This module intentionally does not invent or duplicate database business logic.
 
 import { evaluateMakeReady, weeklyPlanningEligibility } from "./make-ready-domain";
 import { constraintReleaseEffect } from "./constraint-domain";
@@ -21,35 +21,14 @@ function unwrapRpc(result, operation) {
 }
 
 /**
- * Preserve the existing canonical database behavior that ensures a Koskela
- * readiness constraint exists. The caller supplies the RPC payload because
- * the production function signature remains authoritative.
+ * Verified against the current Lookahead implementation.
+ * Production payload currently uses:
+ * { target_readiness_assessment_id: savedAssessment.id }
  */
 export async function ensureKoskelaConstraint(supabase, rpcPayload) {
   requireSupabase(supabase);
   const result = await supabase.rpc("ensure_koskela_constraint", rpcPayload);
   return unwrapRpc(result, "Ensure Koskela constraint");
-}
-
-/**
- * Preserve the existing Verify & Release operation. Resolution alone does not
- * make work ready; the canonical RPC performs the verified clear transition
- * and history behavior.
- */
-export async function verifyAndReleaseConstraint(supabase, rpcPayload) {
-  requireSupabase(supabase);
-  const result = await supabase.rpc("verify_and_clear_constraint_with_history", rpcPayload);
-  return unwrapRpc(result, "Verify and release constraint");
-}
-
-/**
- * Preserve the existing Weekly Plan commitment gate. The canonical RPC must
- * revalidate Make Ready before the PPC commitment baseline is frozen.
- */
-export async function commitWeeklyPlan(supabase, rpcPayload) {
-  requireSupabase(supabase);
-  const result = await supabase.rpc("commit_weekly_plan_with_make_ready", rpcPayload);
-  return unwrapRpc(result, "Commit Weekly Plan");
 }
 
 /**
@@ -60,16 +39,17 @@ export function getMakeReadyState(input) {
 }
 
 /**
- * Pure Weekly Planning eligibility entry point. This is an early/pre-draft
- * gate; commitWeeklyPlan remains the authoritative final commitment gate.
+ * Pure Weekly Planning eligibility entry point.
+ * Persistence/commit adapters will be added only after the current production
+ * operation and exact contract are verified from the source implementation.
  */
 export function getWeeklyPlanningEligibility(input) {
   return weeklyPlanningEligibility(input);
 }
 
 /**
- * Expose the expected domain effect of Verify & Release for callers that need
- * to render or validate the transition without executing persistence.
+ * Domain-only representation of the expected release transition.
+ * This does not execute persistence.
  */
 export function getConstraintReleaseEffect(status) {
   return constraintReleaseEffect(status);
