@@ -2,6 +2,11 @@ name: Patch Lookahead planning service boundary manual
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/planning-domain-services
+    paths:
+      - .github/lookahead-service-migration.trigger
 
 permissions:
   contents: write
