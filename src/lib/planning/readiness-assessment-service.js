@@ -26,6 +26,12 @@ function normalizeSavedStatus(value) {
  * - constrained => ensure one central Constraint exists
  * - clear does NOT clear an existing central Constraint
  * - once a Constraint exists, Constraint Management remains authoritative
+ *
+ * Partial-save behavior is intentional: if the assessment saves successfully
+ * but central Constraint synchronization fails, the saved assessment is
+ * returned together with constraintSyncError. This mirrors the existing
+ * Lookahead behavior and prevents the UI from pretending the assessment write
+ * was rolled back when it was not.
  */
 export async function saveGroupedReadinessAssessment(
   supabase,
@@ -62,35 +68,42 @@ export async function saveGroupedReadinessAssessment(
     throw assessmentError;
   }
 
-  const normalizedStatus = normalizeSavedStatus(savedAssessment?.status);
+  const assessment = {
+    ...savedAssessment,
+    status: normalizeSavedStatus(savedAssessment?.status),
+    readiness_source: savedAssessment?.readiness_source || null,
+  };
+
   let linkedConstraint = null;
+  let constraintSyncError = null;
 
-  if (normalizedStatus === "constrained" && savedAssessment?.id) {
-    await ensureKoskelaConstraint(supabase, {
-      target_readiness_assessment_id: savedAssessment.id,
-    });
+  if (assessment.status === "constrained" && assessment.id) {
+    try {
+      await ensureKoskelaConstraint(supabase, {
+        target_readiness_assessment_id: assessment.id,
+      });
 
-    const { data, error } = await supabase
-      .from("constraints")
-      .select(
-        "id, project_id, status, category, title, sheet_readiness_assessment_id"
-      )
-      .eq("sheet_readiness_assessment_id", savedAssessment.id)
-      .maybeSingle();
+      const { data, error } = await supabase
+        .from("constraints")
+        .select(
+          "id, project_id, status, category, title, sheet_readiness_assessment_id"
+        )
+        .eq("sheet_readiness_assessment_id", assessment.id)
+        .maybeSingle();
 
-    if (error) {
-      throw error;
+      if (error) {
+        throw error;
+      }
+
+      linkedConstraint = data || null;
+    } catch (error) {
+      constraintSyncError = error;
     }
-
-    linkedConstraint = data || null;
   }
 
   return {
-    assessment: {
-      ...savedAssessment,
-      status: normalizedStatus,
-      readiness_source: savedAssessment?.readiness_source || null,
-    },
+    assessment,
     linkedConstraint,
+    constraintSyncError,
   };
 }
