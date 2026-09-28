@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { ClassicPreset, NodeEditor } from 'rete';
 import { AreaExtensions, AreaPlugin } from 'rete-area-plugin';
 import { ConnectionPlugin, Presets as ConnectionPresets } from 'rete-connection-plugin';
@@ -19,6 +20,7 @@ import {
   loadWorkflowLocations,
   loadWorkflowProjects,
 } from '../../lib/workflow/fieldop-workflow-data';
+import { createLocationQrPayload } from '../../lib/workflow/location-qr';
 
 import styles from './workflow.module.css';
 
@@ -27,20 +29,10 @@ const socket = new ClassicPreset.Socket('fieldop-flow');
 function makeNode(type) {
   const definition = FIELDOP_NODE_DEFINITIONS[type];
   const node = new ClassicPreset.Node(definition?.label || type);
+  node.meta = { type, kind: definition?.kind || 'context' };
 
-  node.meta = {
-    type,
-    kind: definition?.kind || 'context',
-  };
-
-  if (type !== FIELDOP_NODE_TYPES.PROJECT) {
-    node.addInput('in', new ClassicPreset.Input(socket, 'Flow'));
-  }
-
-  if (type !== FIELDOP_NODE_TYPES.DAILY_REPORT) {
-    node.addOutput('out', new ClassicPreset.Output(socket, 'Flow'));
-  }
-
+  if (type !== FIELDOP_NODE_TYPES.PROJECT) node.addInput('in', new ClassicPreset.Input(socket, 'Flow'));
+  if (type !== FIELDOP_NODE_TYPES.DAILY_REPORT) node.addOutput('out', new ClassicPreset.Output(socket, 'Flow'));
   return node;
 }
 
@@ -52,33 +44,21 @@ async function createFieldOpEditor(container) {
 
   render.addPreset(Presets.classic.setup());
   connection.addPreset(ConnectionPresets.classic.setup());
-
   editor.use(area);
   area.use(connection);
   area.use(render);
 
   const nodes = FIELDOP_V1_FLOW.map(makeNode);
-
-  for (const node of nodes) {
-    await editor.addNode(node);
-  }
-
+  for (const node of nodes) await editor.addNode(node);
   for (let index = 0; index < nodes.length - 1; index += 1) {
-    await editor.addConnection(
-      new ClassicPreset.Connection(nodes[index], 'out', nodes[index + 1], 'in')
-    );
+    await editor.addConnection(new ClassicPreset.Connection(nodes[index], 'out', nodes[index + 1], 'in'));
   }
 
   const columns = 3;
-  const xGap = 330;
-  const yGap = 210;
-
   for (let index = 0; index < nodes.length; index += 1) {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
     await area.translate(nodes[index].id, {
-      x: 80 + column * xGap,
-      y: 70 + row * yGap,
+      x: 80 + (index % columns) * 330,
+      y: 70 + Math.floor(index / columns) * 210,
     });
   }
 
@@ -86,9 +66,7 @@ async function createFieldOpEditor(container) {
     accumulating: AreaExtensions.accumulateOnCtrl(),
   });
   AreaExtensions.simpleNodesOrder(area);
-
   setTimeout(() => AreaExtensions.zoomAt(area, editor.getNodes()), 50);
-
   return () => area.destroy();
 }
 
@@ -106,16 +84,12 @@ export default function WorkflowPage() {
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
-
     let dispose;
     let cancelled = false;
 
     createFieldOpEditor(containerRef.current)
       .then((cleanup) => {
-        if (cancelled) {
-          cleanup();
-          return;
-        }
+        if (cancelled) return cleanup();
         dispose = cleanup;
         setStatus('FieldOp workflow prototype');
       })
@@ -132,7 +106,6 @@ export default function WorkflowPage() {
 
   useEffect(() => {
     let active = true;
-
     loadWorkflowProjects(supabaseRef.current)
       .then((rows) => {
         if (!active) return;
@@ -143,16 +116,12 @@ export default function WorkflowPage() {
         console.error('Workflow projects could not be loaded:', error);
         if (active) setDataError('Projects could not be loaded.');
       });
-
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
     let active = true;
     setSelectedLocationId('');
-
     if (!selectedProjectId) {
       setLocations([]);
       return undefined;
@@ -171,10 +140,7 @@ export default function WorkflowPage() {
           setDataError('Locations could not be loaded.');
         }
       });
-
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [selectedProjectId]);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
@@ -183,6 +149,9 @@ export default function WorkflowPage() {
     ...buildWorkflowProjectContext(selectedProject),
     ...buildWorkflowLocationContext(selectedLocation),
   };
+  const locationQrPayload = selectedProjectId && selectedLocationId
+    ? createLocationQrPayload({ projectId: selectedProjectId, locationId: selectedLocationId })
+    : '';
 
   return (
     <main className={styles.page}>
@@ -198,33 +167,20 @@ export default function WorkflowPage() {
       <section className={styles.contextPanel}>
         <div className={styles.contextField}>
           <label htmlFor="workflow-project">Project</label>
-          <select
-            id="workflow-project"
-            value={selectedProjectId}
-            onChange={(event) => setSelectedProjectId(event.target.value)}
-          >
+          <select id="workflow-project" value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)}>
             <option value="">Select a project</option>
             {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.code ? `${project.code} · ` : ''}{project.name}
-              </option>
+              <option key={project.id} value={project.id}>{project.code ? `${project.code} · ` : ''}{project.name}</option>
             ))}
           </select>
         </div>
 
         <div className={styles.contextField}>
           <label htmlFor="workflow-location">Location</label>
-          <select
-            id="workflow-location"
-            value={selectedLocationId}
-            disabled={!selectedProjectId}
-            onChange={(event) => setSelectedLocationId(event.target.value)}
-          >
+          <select id="workflow-location" value={selectedLocationId} disabled={!selectedProjectId} onChange={(event) => setSelectedLocationId(event.target.value)}>
             <option value="">{selectedProjectId ? 'Select a location' : 'Select a project first'}</option>
             {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.code ? `${location.code} · ` : ''}{location.name}
-              </option>
+              <option key={location.id} value={location.id}>{location.code ? `${location.code} · ` : ''}{location.name}</option>
             ))}
           </select>
         </div>
@@ -237,6 +193,20 @@ export default function WorkflowPage() {
       </section>
 
       {dataError ? <div className={styles.dataError}>{dataError}</div> : null}
+
+      {locationQrPayload ? (
+        <section className={styles.qrPanel}>
+          <div className={styles.qrGraphic}>
+            <QRCodeSVG value={locationQrPayload} size={132} level="M" marginSize={2} />
+          </div>
+          <div className={styles.qrCopy}>
+            <span>Location QR · v1</span>
+            <h2>{selectedLocation?.name}</h2>
+            <p>{selectedProject?.name}</p>
+            <small>Scanning identifies this Project + Location. Worker identity and attendance remain separate FieldOp operations.</small>
+          </div>
+        </section>
+      ) : null}
 
       <section className={styles.legend}>
         <strong>v1 flow</strong>
