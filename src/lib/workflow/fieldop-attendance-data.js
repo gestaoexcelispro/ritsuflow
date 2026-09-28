@@ -18,28 +18,23 @@ export async function loadWorkflowOpenAttendanceSession(supabase, { projectId, w
   return data || null;
 }
 
-export async function workflowCheckIn(supabase, { projectId, workerId, latitude, longitude, accuracy }) {
-  if (!projectId || !workerId) {
-    throw new Error('Project and Worker are required for check-in.');
-  }
+export async function workflowCheckIn(supabase, { assignmentId, latitude, longitude, accuracy, locationMessage }) {
+  if (!assignmentId) throw new Error('Project assignment is required for check-in.');
 
   const { data, error } = await supabase.rpc('field_worker_check_in', {
-    p_project_id: projectId,
-    p_worker_id: workerId,
+    p_assignment_id: assignmentId,
+    p_method: 'supervisor',
     p_latitude: latitude ?? null,
     p_longitude: longitude ?? null,
-    p_accuracy_m: accuracy ?? null,
+    p_gps_accuracy_m: accuracy ?? null,
+    p_notes: locationMessage || null,
   });
 
   if (error) throw error;
-  return data;
+  return Array.isArray(data) ? data[0] : data;
 }
 
 export function buildWorkflowAttendanceContext(session) {
   if (!session) return {};
-
-  return {
-    attendance_session_id: session.id,
-    checked_in_at: session.check_in_at,
-  };
+  return { attendance_session_id: session.id, checked_in_at: session.check_in_at };
 }
