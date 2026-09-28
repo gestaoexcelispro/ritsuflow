@@ -36,6 +36,7 @@ function LocationPlan({ mapData, loading, error, locationName, onAreaComputed })
 
 export default function LocationPrintCard({ location, locationMap, projectName, projectCode, mapData, mapLoading, mapError, onClose }) {
   const [calculatedArea,setCalculatedArea]=useState(null)
+  const [templateVersion,setTemplateVersion]=useState(()=>Date.now())
   if(!location?.qr_token)return null
   const qrPath=locationQrPath(location.qr_token),scanUrl=typeof window==='undefined'?qrPath:`${window.location.origin}${qrPath}`
   const locationId=humanLocationId(projectCode,location,locationMap)
@@ -45,11 +46,12 @@ export default function LocationPrintCard({ location, locationMap, projectName, 
   const locationColor=mapData?.geometry?.display?.color||'#008F84'
   const projectDisplay=[projectName,projectCode?`(${projectCode})`:null].filter(Boolean).join(' ')
   const areaDisplay=Number.isFinite(calculatedArea)?`${calculatedArea.toFixed(2)} m²`:'—'
+  const refreshTemplate=()=>setTemplateVersion(Date.now())
 
   return <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="A4 location card preview">
-    <div className={styles.toolbar}><div><strong>FieldOp Location Report</strong><span>{location.name}</span></div><div className={styles.toolbarActions}><button type="button" onClick={()=>window.print()}>Print / Save PDF</button><button type="button" className={styles.secondary} onClick={onClose}>Close</button></div></div>
+    <div className={styles.toolbar}><div><strong>FieldOp Location Report</strong><span>{location.name}</span></div><div className={styles.toolbarActions}><button type="button" className={styles.secondary} onClick={refreshTemplate} title="Reload the latest A4 report template">Refresh Template</button><button type="button" onClick={()=>window.print()}>Print / Save PDF</button><button type="button" className={styles.secondary} onClick={onClose}>Close</button></div></div>
     <main className={styles.sheet}>
-      <img className={styles.background} src="/location-a4-picture.png" alt="" aria-hidden="true"/>
+      <img key={templateVersion} className={styles.background} src={`/location-a4-picture.png?v=${templateVersion}`} alt="" aria-hidden="true"/>
       <div className={`${styles.dynamicText} ${styles.locationCode}`}>{locationId}</div>
       <div className={`${styles.dynamicText} ${styles.locationName}`}>{location.name}</div>
       <div className={`${styles.dynamicText} ${styles.heroProject}`}>{projectDisplay||'—'}</div>
