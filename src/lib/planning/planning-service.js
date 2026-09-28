@@ -81,6 +81,37 @@ export async function reopenConstraint(supabase, rpcPayload) {
 }
 
 /**
+ * Verified against the current Weekly Planning commit workflow.
+ * Production payload currently uses:
+ * { target_weekly_plan_id: weeklyPlan.id }
+ *
+ * The database RPC remains authoritative: it revalidates Make Ready and freezes
+ * the commitment baseline used for PPC before the plan becomes committed.
+ */
+export async function commitWeeklyPlanWithMakeReady(supabase, rpcPayload) {
+  return executeRpc(
+    supabase,
+    "commit_weekly_plan_with_make_ready",
+    rpcPayload,
+    "Commit Weekly Plan with Make Ready"
+  );
+}
+
+/**
+ * Verified against the current Weekly Planning cancellation workflow.
+ * Only the draft-week cancellation operation is represented here; committed
+ * work is intentionally outside this adapter's contract.
+ */
+export async function cancelWeeklyPlan(supabase, rpcPayload) {
+  return executeRpc(
+    supabase,
+    "cancel_weekly_plan",
+    rpcPayload,
+    "Cancel Weekly Plan"
+  );
+}
+
+/**
  * Pure evaluation entry point shared by UI code and future workflow nodes.
  */
 export function getMakeReadyState(input) {
@@ -89,8 +120,6 @@ export function getMakeReadyState(input) {
 
 /**
  * Pure Weekly Planning eligibility entry point.
- * Persistence/commit adapters will be added only after the current production
- * operation and exact contract are verified from the source implementation.
  */
 export function getWeeklyPlanningEligibility(input) {
   return weeklyPlanningEligibility(input);
