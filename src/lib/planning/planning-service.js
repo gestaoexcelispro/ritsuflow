@@ -20,15 +20,64 @@ function unwrapRpc(result, operation) {
   return result?.data;
 }
 
+async function executeRpc(supabase, functionName, rpcPayload, operation) {
+  requireSupabase(supabase);
+  const result = await supabase.rpc(functionName, rpcPayload);
+  return unwrapRpc(result, operation);
+}
+
 /**
  * Verified against the current Lookahead implementation.
  * Production payload currently uses:
  * { target_readiness_assessment_id: savedAssessment.id }
  */
 export async function ensureKoskelaConstraint(supabase, rpcPayload) {
-  requireSupabase(supabase);
-  const result = await supabase.rpc("ensure_koskela_constraint", rpcPayload);
-  return unwrapRpc(result, "Ensure Koskela constraint");
+  return executeRpc(
+    supabase,
+    "ensure_koskela_constraint",
+    rpcPayload,
+    "Ensure Koskela constraint"
+  );
+}
+
+/**
+ * Verified against Constraint Management's current lifecycle implementation.
+ * Open, In Progress or Waiting -> Resolved. Resolution does not release work.
+ */
+export async function resolveConstraint(supabase, rpcPayload) {
+  return executeRpc(
+    supabase,
+    "resolve_constraint_directly_with_history",
+    rpcPayload,
+    "Resolve constraint"
+  );
+}
+
+/**
+ * Verified against Constraint Management's current lifecycle implementation.
+ * Resolved -> Cleared after explicit verification. For Koskela-linked
+ * constraints, the database operation remains authoritative for releasing the
+ * readiness condition and recording history.
+ */
+export async function verifyAndReleaseConstraint(supabase, rpcPayload) {
+  return executeRpc(
+    supabase,
+    "verify_and_clear_constraint_with_history",
+    rpcPayload,
+    "Verify and release constraint"
+  );
+}
+
+/**
+ * Verified against the current Constraint Management reopen workflow.
+ */
+export async function reopenConstraint(supabase, rpcPayload) {
+  return executeRpc(
+    supabase,
+    "reopen_constraint_with_history",
+    rpcPayload,
+    "Reopen constraint"
+  );
 }
 
 /**
