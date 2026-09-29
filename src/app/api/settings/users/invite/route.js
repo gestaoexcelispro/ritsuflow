@@ -34,12 +34,6 @@ async function findAuthUserByEmail(admin, email) {
   return null
 }
 
-async function isActivePlatformOwner(caller) {
-  const { data, error } = await caller.rpc('is_platform_owner')
-  if (error) throw error
-  return data === true
-}
-
 export async function POST(request) {
   try {
     const authorization = request.headers.get('authorization') || ''
@@ -70,13 +64,13 @@ export async function POST(request) {
     const { data: { user: callerUser }, error: callerError } = await caller.auth.getUser()
     if (callerError || !callerUser) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
 
-    const admin = adminClient()
-    const platformOwner = await isActivePlatformOwner(caller)
+    const { data: canManage, error: permissionError } = await caller.rpc('can_manage_organization_users', {
+      target_organization_id: organizationId,
+    })
+    if (permissionError) throw permissionError
+    if (!canManage) return NextResponse.json({ error: 'You do not have permission to manage users for this organization.' }, { status: 403 })
 
-    if (!platformOwner) {
-      const { data: canManage, error: permissionError } = await caller.rpc('can_manage_organization_users', { target_organization_id: organizationId })
-      if (permissionError || !canManage) return NextResponse.json({ error: 'You do not have permission to manage users for this organization.' }, { status: 403 })
-    }
+    const admin = adminClient()
 
     if (projectIds.length) {
       const { data: validProjects, error: projectError } = await admin.from('projects').select('id').eq('organization_id', organizationId).in('id', projectIds)
@@ -97,9 +91,7 @@ export async function POST(request) {
         .eq('user_id', authUser.id)
         .maybeSingle()
       if (membershipReadError) throw membershipReadError
-      if (existingMembership) {
-        return NextResponse.json({ error: 'This RitsuFlow account already belongs to this organization.' }, { status: 409 })
-      }
+      if (existingMembership) return NextResponse.json({ error: 'This RitsuFlow account already belongs to this organization.' }, { status: 409 })
     } else {
       const redirectTo = `${origin}/auth/invite`
       const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
@@ -139,28 +131,14 @@ export async function POST(request) {
     const dbAccessMode = selectedMode ? 'selected_projects' : 'all_projects'
     const membershipStatus = authUser.email_confirmed_at ? 'active' : 'invited'
 
-    let accessError = null
-    if (platformOwner) {
-      const { error } = await admin.rpc('set_organization_member_access', {
-        target_organization_id: organizationId,
-        target_user_id: authUser.id,
-        target_role: dbRole,
-        target_project_access_mode: dbAccessMode,
-        target_status: membershipStatus,
-        target_project_ids: selectedMode ? projectIds : [],
-      })
-      accessError = error
-    } else {
-      const { error } = await caller.rpc('set_organization_member_access', {
-        target_organization_id: organizationId,
-        target_user_id: authUser.id,
-        target_role: dbRole,
-        target_project_access_mode: dbAccessMode,
-        target_status: membershipStatus,
-        target_project_ids: selectedMode ? projectIds : [],
-      })
-      accessError = error
-    }
+    const { error: accessError } = await caller.rpc('set_organization_member_access', {
+      target_organization_id: organizationId,
+      target_user_id: authUser.id,
+      target_role: dbRole,
+      target_project_access_mode: dbAccessMode,
+      target_status: membershipStatus,
+      target_project_ids: selectedMode ? projectIds : [],
+    })
     if (accessError) throw accessError
 
     if (!identityWasCreated && !authUser.email_confirmed_at) {
@@ -180,18 +158,7 @@ export async function POST(request) {
       ok: true,
       identityWasCreated,
       deliveryMode,
-      user: {
-        id: authUser.id,
-        email,
-        fullName,
-        jobTitle,
-        role,
-        status: membershipStatus,
-        projectAccessMode,
-        projectIds,
-        workspaceAccess,
-        avatarPath,
-      },
+      user: { id: authUser.id, email, fullName, jobTitle, role, status: membershipStatus, projectAccessMode, projectIds, workspaceAccess, avatarPath },
       avatarUpload,
     })
   } catch (error) {
