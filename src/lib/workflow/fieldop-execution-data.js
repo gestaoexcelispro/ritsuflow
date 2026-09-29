@@ -1,6 +1,8 @@
 // FieldOp execution-event adapter for the visual workflow.
 // field_execution_events is the source of truth for actual production events.
 
+import { syncWorkflowProductionToDailyReport } from './fieldop-daily-report-data';
+
 const EXECUTION_SELECT = `
   id,
   project_id,
@@ -18,6 +20,41 @@ const EXECUTION_SELECT = `
   finished_at,
   notes
 `;
+
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+async function syncCompletedExecutionToExistingDailyReport(supabase, execution) {
+  if (!execution?.project_id) return null;
+
+  const reportDate = getLocalDateKey();
+
+  const { data: report, error: reportError } = await supabase
+    .from('daily_reports')
+    .select('id, project_id, report_date, status')
+    .eq('project_id', execution.project_id)
+    .eq('report_date', reportDate)
+    .eq('status', 'draft')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (reportError) throw reportError;
+  if (!report) return null;
+
+  const { data: userData } = await supabase.auth.getUser();
+
+  return syncWorkflowProductionToDailyReport(supabase, {
+    reportId: report.id,
+    projectId: report.project_id,
+    reportDate: report.report_date,
+    createdBy: userData?.user?.id || null,
+  });
+}
 
 export async function loadWorkflowOpenExecution(
   supabase,
@@ -145,6 +182,19 @@ export async function finishWorkflowExecution(
     .single();
 
   if (error) throw error;
+
+  // Daily Report synchronization is intentionally best-effort. The completed
+  // execution event remains the source of truth even when today's report does
+  // not exist yet or a report synchronization error occurs.
+  try {
+    await syncCompletedExecutionToExistingDailyReport(supabase, data);
+  } catch (syncError) {
+    console.warn(
+      'FieldOp execution completed, but Daily Report synchronization was deferred:',
+      syncError
+    );
+  }
+
   return data;
 }
 
