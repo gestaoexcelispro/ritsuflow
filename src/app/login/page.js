@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../lib/supabase/client'
 import styles from './login.module.css'
@@ -93,10 +94,18 @@ export default function LoginPage() {
                 </div>
               </label>
 
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px' }}>
+                <Link href="/forgot-password" style={{ color: '#11c7b2', fontSize: '.9rem', fontWeight: 700, textDecoration: 'none' }}>Forgot password?</Link>
+              </div>
+
               <button type="submit" disabled={loading} className={styles.submitButton}>{loading ? 'Signing in...' : 'Sign in'}{!loading && <span aria-hidden="true">→</span>}</button>
             </form>
 
-            <div className={styles.privateAccess}><div className={styles.lockIcon}>🔒</div><div><strong>Private development access</strong><p>RitsuFlow™ is currently in private development.</p></div></div>
+            <div style={{ marginTop: 20, textAlign: 'center', color: '#b6c3d1', fontSize: '.92rem' }}>
+              New to RitsuFlow? <Link href="/register" style={{ color: '#11c7b2', fontWeight: 700, textDecoration: 'none' }}>Create an account</Link>
+            </div>
+
+            <div className={styles.privateAccess}><div className={styles.lockIcon}>🔒</div><div><strong>Private development access</strong><p>Registration creates an account only. Organization and project access require authorization.</p></div></div>
           </div>
 
           <div className={styles.support}><span>Need help?</span><span>Contact your system administrator.</span></div>
