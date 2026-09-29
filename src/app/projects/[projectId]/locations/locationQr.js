@@ -1,10 +1,13 @@
 export function isProductionLocation(location) {
-  return Boolean(location) && !new Set(['building', 'floor', 'zone']).has(location.location_type)
+  return Boolean(location)
 }
 
 export function isQrEligibleLocation(location, childrenMap) {
-  if (!isProductionLocation(location)) return false
-  return (childrenMap.get(location.id) || []).length === 0
+  // Every canonical location in the Location Breakdown Structure can represent
+  // a physical FieldOp identity, regardless of hierarchy level or whether it
+  // contains child locations. This keeps QR behavior consistent for buildings,
+  // floors/divisions, zones/areas, rooms and custom locations.
+  return Boolean(location?.id)
 }
 
 export function locationBreadcrumb(location, locationMap, projectName) {
