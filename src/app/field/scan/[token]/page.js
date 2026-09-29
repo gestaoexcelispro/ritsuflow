@@ -20,8 +20,9 @@ function buildBreadcrumb(location, locations, projectName) {
   return [projectName, ...names].filter(Boolean).join(' / ')
 }
 
-export default async function FieldLocationScanPage({ params }) {
+export default async function FieldLocationScanPage({ params, searchParams }) {
   const { token } = await params
+  const query = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -48,7 +49,28 @@ export default async function FieldLocationScanPage({ params }) {
     )
   }
 
-  const [projectResult, hierarchyResult, activitiesResult, allocationsResult] = await Promise.all([
+  async function checkIn() {
+    'use server'
+
+    const actionSupabase = await createClient()
+    const { data: { user: actionUser } } = await actionSupabase.auth.getUser()
+
+    if (!actionUser) {
+      redirect(`/login?next=${encodeURIComponent(`/field/scan/${token}`)}`)
+    }
+
+    const { error } = await actionSupabase.rpc('fieldop_worker_check_in', {
+      p_project_id: location.project_id,
+    })
+
+    if (error) {
+      redirect(`/field/scan/${token}?attendance=error`)
+    }
+
+    redirect(`/field/scan/${token}?attendance=checked-in`)
+  }
+
+  const [projectResult, hierarchyResult, activitiesResult, allocationsResult, attendanceResult] = await Promise.all([
     supabase.from('projects').select('id, project_id, code, name').eq('id', location.project_id).maybeSingle(),
     supabase.from('locations').select('id, parent_id, name').eq('project_id', location.project_id),
     supabase
@@ -61,10 +83,18 @@ export default async function FieldLocationScanPage({ params }) {
       .select('id, service_id, quantity')
       .eq('project_id', location.project_id)
       .eq('location_id', location.id),
+    supabase.rpc('fieldop_worker_attendance_status', {
+      p_project_id: location.project_id,
+    }),
   ])
 
   const project = projectResult.data
   if (!project) redirect('/workspaces')
+
+  const attendanceRows = Array.isArray(attendanceResult.data) ? attendanceResult.data : []
+  const attendance = attendanceRows[0] || null
+  const isCheckedIn = Boolean(attendance?.session_id && attendance?.status === 'open')
+  const attendanceError = query?.attendance === 'error' || Boolean(attendanceResult.error)
 
   const allocationByService = new Map((allocationsResult.data || []).map((item) => [item.service_id, item]))
   const availableActivities = (activitiesResult.data || [])
@@ -103,6 +133,39 @@ export default async function FieldLocationScanPage({ params }) {
 
         <div style={sectionHeader}>
           <div>
+            <span style={identityLabel}>PROJECT ATTENDANCE</span>
+            <h2 style={sectionTitle}>Site status</h2>
+          </div>
+        </div>
+
+        {attendanceError ? (
+          <div style={attendanceErrorBox}>
+            <strong>Attendance could not be confirmed.</strong>
+            <span>Confirm that your FieldOp worker profile has an active assignment to this project, then try again.</span>
+          </div>
+        ) : isCheckedIn ? (
+          <div style={attendanceActiveBox}>
+            <div style={confirmedRow}>
+              <span style={confirmedDot} />
+              <span style={identityLabel}>CHECKED IN</span>
+            </div>
+            <strong style={attendanceTitle}>You are on site</strong>
+            <span style={identityMeta}>Attendance session is open. Field execution can now use this session.</span>
+          </div>
+        ) : (
+          <div style={attendanceReadyBox}>
+            <div>
+              <strong style={attendanceTitle}>Check in before starting work</strong>
+              <p style={attendanceCopy}>This establishes your project attendance session. Task time will be tracked separately when you start an activity.</p>
+            </div>
+            <form action={checkIn}>
+              <button type="submit" style={checkInButton}>Check In to Project</button>
+            </form>
+          </div>
+        )}
+
+        <div style={sectionHeader}>
+          <div>
             <span style={identityLabel}>WORK AVAILABLE HERE</span>
             <h2 style={sectionTitle}>Allocated activities</h2>
           </div>
@@ -138,11 +201,11 @@ export default async function FieldLocationScanPage({ params }) {
             <strong style={actionTitle}>View Location Scope</strong>
             <span style={actionCopy}>Review the activities and quantities assigned to this physical location.</span>
           </div>
-          <div style={actionCardPlanned}>
-            <span style={actionIconMuted}>02</span>
-            <strong style={actionTitle}>Report Production</strong>
-            <span style={actionCopy}>Record installed quantities against work allocated to this location.</span>
-            <span style={comingSoon}>NEXT WORKFLOW</span>
+          <div style={isCheckedIn ? actionCardReady : actionCardPlanned}>
+            <span style={isCheckedIn ? actionIcon : actionIconMuted}>02</span>
+            <strong style={actionTitle}>Start Work</strong>
+            <span style={actionCopy}>{isCheckedIn ? 'Attendance confirmed. Activity execution is ready for the next workflow step.' : 'Check in to the project before starting an activity at this location.'}</span>
+            <span style={comingSoon}>{isCheckedIn ? 'NEXT WORKFLOW' : 'CHECK-IN REQUIRED'}</span>
           </div>
           <div style={actionCardPlanned}>
             <span style={actionIconMuted}>03</span>
@@ -188,6 +251,12 @@ const identityMeta = { fontSize: 11, color: '#607888' }
 const sectionHeader = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginTop: 28, marginBottom: 12 }
 const sectionTitle = { margin: '4px 0 0', fontSize: 18 }
 const countBadge = { minWidth: 32, height: 32, borderRadius: 16, display: 'grid', placeItems: 'center', background: '#073b58', color: '#fff', fontWeight: 900, fontSize: 12 }
+const attendanceActiveBox = { display: 'flex', flexDirection: 'column', gap: 6, padding: 18, borderRadius: 12, background: '#effaf8', border: '1px solid #b9ddd8' }
+const attendanceReadyBox = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: 18, borderRadius: 12, background: '#f8fafb', border: '1px solid #dce6ea' }
+const attendanceErrorBox = { display: 'flex', flexDirection: 'column', gap: 5, padding: 18, borderRadius: 12, background: '#fff6f2', border: '1px solid #f1cfc2', color: '#7a3825', fontSize: 12, lineHeight: 1.5 }
+const attendanceTitle = { fontSize: 14 }
+const attendanceCopy = { maxWidth: 480, margin: '5px 0 0', color: '#607888', fontSize: 11, lineHeight: 1.5 }
+const checkInButton = { minHeight: 42, padding: '0 16px', border: 0, borderRadius: 9, background: '#008f84', color: '#fff', fontWeight: 850, fontSize: 12, cursor: 'pointer' }
 const activityList = { border: '1px solid #e0e8ec', borderRadius: 12, overflow: 'hidden' }
 const activityRow = { minHeight: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '10px 14px', borderBottom: '1px solid #e8eef1' }
 const activityRowLast = { borderBottom: 0 }
@@ -198,6 +267,7 @@ const emptyState = { padding: 20, border: '1px dashed #d3e0e6', borderRadius: 10
 const actionGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }
 const actionCardBase = { minHeight: 138, padding: 16, borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 7, boxSizing: 'border-box' }
 const actionCardActive = { ...actionCardBase, border: '1px solid #b9ddd8', background: '#f3fbfa' }
+const actionCardReady = { ...actionCardBase, border: '1px solid #9fd6cf', background: '#effaf8' }
 const actionCardPlanned = { ...actionCardBase, border: '1px solid #e0e8ec', background: '#f8fafb' }
 const actionIcon = { width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 8, background: '#008f84', color: '#fff', fontSize: 9, fontWeight: 900 }
 const actionIconMuted = { ...actionIcon, background: '#dce6ea', color: '#5f7684' }
