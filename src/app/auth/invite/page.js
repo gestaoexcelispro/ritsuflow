@@ -16,51 +16,96 @@ export default function InvitePage() {
 
   useEffect(() => {
     let mounted = true
-    let subscription = null
-    let validationTimer = null
 
     async function initializeInvitationSession() {
       try {
         setErrorMessage('')
 
-        const { data: { session } } = await supabase.auth.getSession()
+        const url = new URL(window.location.href)
+        const search = url.searchParams
+        const hash = new URLSearchParams(url.hash.replace(/^#/, ''))
 
-        if (session && mounted) {
-          setSessionReady(true)
-          return
+        const returnedError =
+          search.get('error_description') ||
+          hash.get('error_description') ||
+          search.get('error') ||
+          hash.get('error')
+
+        if (returnedError) {
+          throw new Error(decodeURIComponent(returnedError.replace(/\+/g, ' ')))
         }
 
-        const authListener = supabase.auth.onAuthStateChange((event, currentSession) => {
-          if (!mounted) return
+        let session = null
 
-          if (currentSession) {
-            setSessionReady(true)
-            setErrorMessage('')
+        // Supabase PKCE flow: the redirect contains ?code=...
+        const code = search.get('code')
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+          if (error) throw error
+          session = data?.session || null
+        }
+
+        // Supabase token-hash flow: support explicit invite verification links.
+        if (!session) {
+          const tokenHash = search.get('token_hash')
+          const type = search.get('type')
+
+          if (tokenHash && type === 'invite') {
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: 'invite',
+            })
+            if (error) throw error
+            session = data?.session || null
           }
-        })
+        }
 
-        subscription = authListener.data.subscription
+        // Supabase implicit flow: credentials are returned in the URL fragment.
+        if (!session) {
+          const accessToken = hash.get('access_token')
+          const refreshToken = hash.get('refresh_token')
 
-        validationTimer = window.setTimeout(async () => {
-          if (!mounted) return
-
-          const { data: { session: refreshedSession } } = await supabase.auth.getSession()
-
-          if (refreshedSession) {
-            setSessionReady(true)
-            setErrorMessage('')
-            return
+          if (accessToken && refreshToken) {
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+            if (error) throw error
+            session = data?.session || null
           }
+        }
 
-          setErrorMessage(
+        // The browser client may already have consumed the redirect credentials.
+        if (!session) {
+          const { data, error } = await supabase.auth.getSession()
+          if (error) throw error
+          session = data?.session || null
+        }
+
+        if (!session) {
+          throw new Error(
             'This invitation link is invalid or has expired. Please ask your organization administrator to send a new invitation.'
           )
-        }, 1500)
+        }
+
+        if (!mounted) return
+
+        // Remove authentication credentials from the visible browser URL after use.
+        window.history.replaceState({}, document.title, '/auth/invite')
+        setSessionReady(true)
+        setErrorMessage('')
       } catch (error) {
         console.error('Invitation session initialization failed.', error)
 
         if (mounted) {
-          setErrorMessage('RitsuFlow could not validate this invitation.')
+          const message = String(error?.message || '')
+          const looksExpired = /expired|invalid|otp|token|code verifier|pkce/i.test(message)
+
+          setErrorMessage(
+            looksExpired
+              ? 'This invitation link is invalid or has expired. Please ask your organization administrator to send a new invitation.'
+              : message || 'RitsuFlow could not validate this invitation.'
+          )
         }
       }
     }
@@ -69,8 +114,6 @@ export default function InvitePage() {
 
     return () => {
       mounted = false
-      if (validationTimer) window.clearTimeout(validationTimer)
-      subscription?.unsubscribe()
     }
   }, [])
 
