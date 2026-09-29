@@ -58,7 +58,7 @@ export default async function FieldLocationScanPage({ params }) {
       .eq('is_active', true),
     supabase
       .from('location_service_quantities')
-      .select('service_id, quantity')
+      .select('id, service_id, quantity')
       .eq('project_id', location.project_id)
       .eq('location_id', location.id),
   ])
@@ -66,16 +66,21 @@ export default async function FieldLocationScanPage({ params }) {
   const project = projectResult.data
   if (!project) redirect('/workspaces')
 
-  const allocationByService = new Map((allocationsResult.data || []).map((item) => [item.service_id, item.quantity]))
+  const allocationByService = new Map((allocationsResult.data || []).map((item) => [item.service_id, item]))
   const availableActivities = (activitiesResult.data || [])
     .filter((activity) => allocationByService.has(activity.id))
-    .map((activity) => ({
-      id: activity.id,
-      name: activity.source === 'scope' ? (activity.scope_item?.scope_name || activity.activity_name) : activity.activity_name,
-      code: activity.source === 'scope' ? (activity.scope_item?.scope_code || '') : '',
-      unit: activity.source === 'scope' ? (activity.scope_item?.unit || activity.unit || '') : (activity.unit || ''),
-      allocatedQuantity: allocationByService.get(activity.id),
-    }))
+    .map((activity) => {
+      const allocation = allocationByService.get(activity.id)
+
+      return {
+        id: activity.id,
+        allocationId: allocation.id,
+        name: activity.source === 'scope' ? (activity.scope_item?.scope_name || activity.activity_name) : activity.activity_name,
+        code: activity.source === 'scope' ? (activity.scope_item?.scope_code || '') : '',
+        unit: activity.source === 'scope' ? (activity.scope_item?.unit || activity.unit || '') : (activity.unit || ''),
+        allocatedQuantity: allocation.quantity,
+      }
+    })
 
   const breadcrumb = buildBreadcrumb(location, hierarchyResult.data || [], project.name)
 
