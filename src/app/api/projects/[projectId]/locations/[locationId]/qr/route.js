@@ -21,21 +21,9 @@ export async function POST(request, { params }) {
   if (locationError) return NextResponse.json({ error: locationError.message }, { status: 500 })
   if (!location) return NextResponse.json({ error: 'Location not found or access denied.' }, { status: 404 })
 
-  if (['building', 'floor', 'zone'].includes(location.location_type)) {
-    return NextResponse.json({ error: 'QR codes are only available for production locations.' }, { status: 400 })
-  }
-
-  const { count, error: childrenError } = await supabase
-    .from('locations')
-    .select('id', { count: 'exact', head: true })
-    .eq('project_id', projectId)
-    .eq('parent_id', location.id)
-
-  if (childrenError) return NextResponse.json({ error: childrenError.message }, { status: 500 })
-  if ((count || 0) > 0) {
-    return NextResponse.json({ error: 'QR codes are only available for leaf production locations.' }, { status: 400 })
-  }
-
+  // Every canonical Location Breakdown Structure node can represent a physical
+  // FieldOp identity. Floors, zones, rooms and custom locations therefore use
+  // the same stable QR-generation lifecycle, whether or not they have children.
   if (location.qr_token) return NextResponse.json({ qr_token: location.qr_token, created: false })
 
   const qrToken = crypto.randomUUID()
