@@ -1,5 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { createClient } from '../../../lib/supabase/server';
+import { syncWorkflowProductionToDailyReport } from '../../../lib/workflow/fieldop-daily-report-data';
 import styles from './standalone.module.css';
 
 export const metadata = {
@@ -7,7 +9,37 @@ export const metadata = {
   description: 'Standalone RitsuFlow Daily Report field workspace.',
 };
 
-export default function DailyReportLayout({ children }) {
+export default async function DailyReportLayout({ children, params }) {
+  const { reportId } = await params;
+
+  if (reportId) {
+    try {
+      const supabase = await createClient();
+      const { data: userData } = await supabase.auth.getUser();
+
+      if (userData?.user) {
+        const { data: report, error: reportError } = await supabase
+          .from('daily_reports')
+          .select('id, project_id, report_date, status')
+          .eq('id', reportId)
+          .maybeSingle();
+
+        if (!reportError && report?.status === 'draft') {
+          await syncWorkflowProductionToDailyReport(supabase, {
+            reportId: report.id,
+            projectId: report.project_id,
+            reportDate: report.report_date,
+            createdBy: userData.user.id,
+          });
+        }
+      }
+    } catch (error) {
+      // The report must remain available even when synchronization cannot run.
+      // Field execution events remain the source of truth and the next open retries.
+      console.error('Daily Report FieldOp catch-up failed:', error);
+    }
+  }
+
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
