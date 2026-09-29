@@ -34,8 +34,8 @@ async function findAuthUserByEmail(admin, email) {
   return null
 }
 
-async function isActivePlatformOwner(admin, userId) {
-  const { data, error } = await admin.rpc('is_platform_owner', { p_user_id: userId })
+async function isActivePlatformOwner(caller) {
+  const { data, error } = await caller.rpc('is_platform_owner')
   if (error) throw error
   return data === true
 }
@@ -71,7 +71,7 @@ export async function POST(request) {
     if (callerError || !callerUser) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
 
     const admin = adminClient()
-    const platformOwner = await isActivePlatformOwner(admin, callerUser.id)
+    const platformOwner = await isActivePlatformOwner(caller)
 
     if (!platformOwner) {
       const { data: canManage, error: permissionError } = await caller.rpc('can_manage_organization_users', { target_organization_id: organizationId })
