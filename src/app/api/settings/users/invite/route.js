@@ -35,16 +35,9 @@ async function findAuthUserByEmail(admin, email) {
 }
 
 async function isActivePlatformOwner(admin, userId) {
-  const { data, error } = await admin
-    .schema('private')
-    .from('platform_users')
-    .select('user_id')
-    .eq('user_id', userId)
-    .eq('platform_role', 'platform_owner')
-    .eq('status', 'active')
-    .maybeSingle()
+  const { data, error } = await admin.rpc('is_platform_owner', { p_user_id: userId })
   if (error) throw error
-  return Boolean(data)
+  return data === true
 }
 
 export async function POST(request) {
