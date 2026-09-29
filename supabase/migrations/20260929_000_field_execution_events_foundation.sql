@@ -43,62 +43,43 @@ create index if not exists field_execution_events_finished_at_idx
 
 alter table public.field_execution_events enable row level security;
 
--- Reuse the same project-membership boundary used by the rest of the product.
--- Platform-owner bypass is intentionally not introduced here: customer execution
--- data remains tenant-scoped through project membership.
-drop policy if exists field_execution_events_select_project_member
+-- Match the live FieldOp RBAC convention: project access for reads and
+-- project-management permission for operational writes. No platform-owner bypass.
+drop policy if exists field_execution_events_select_authorized
   on public.field_execution_events;
-create policy field_execution_events_select_project_member
+create policy field_execution_events_select_authorized
 on public.field_execution_events
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.project_members pm
-    where pm.project_id = field_execution_events.project_id
-      and pm.user_id = auth.uid()
-  )
-);
+using (private.can_access_project(project_id));
 
-drop policy if exists field_execution_events_insert_project_member
+drop policy if exists field_execution_events_insert_managers
   on public.field_execution_events;
-create policy field_execution_events_insert_project_member
+create policy field_execution_events_insert_managers
 on public.field_execution_events
 for insert
 to authenticated
 with check (
-  created_by = auth.uid()
-  and exists (
-    select 1
-    from public.project_members pm
-    where pm.project_id = field_execution_events.project_id
-      and pm.user_id = auth.uid()
-  )
+  private.can_manage_project(project_id)
+  and created_by = auth.uid()
 );
 
-drop policy if exists field_execution_events_update_project_member
+drop policy if exists field_execution_events_update_managers
   on public.field_execution_events;
-create policy field_execution_events_update_project_member
+create policy field_execution_events_update_managers
 on public.field_execution_events
 for update
 to authenticated
-using (
-  exists (
-    select 1
-    from public.project_members pm
-    where pm.project_id = field_execution_events.project_id
-      and pm.user_id = auth.uid()
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.project_members pm
-    where pm.project_id = field_execution_events.project_id
-      and pm.user_id = auth.uid()
-  )
-);
+using (private.can_manage_project(project_id))
+with check (private.can_manage_project(project_id));
+
+drop policy if exists field_execution_events_delete_managers
+  on public.field_execution_events;
+create policy field_execution_events_delete_managers
+on public.field_execution_events
+for delete
+to authenticated
+using (private.can_manage_project(project_id));
 
 comment on table public.field_execution_events is
   'FieldOp execution ledger: attendance + worker + Location Scope + actual production. Source for Daily Report production projection.';
