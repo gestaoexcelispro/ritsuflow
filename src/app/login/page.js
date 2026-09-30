@@ -8,6 +8,7 @@ import { createClient } from '../../lib/supabase/client'
 import styles from './login.module.css'
 
 const supabase = createClient()
+const OAUTH_CALLBACK_URL = 'https://ritsuflow.com/auth/callback'
 
 function safeNextPath(value) {
   if (!value || typeof value !== 'string') return '/workspaces'
@@ -32,7 +33,7 @@ export default function LoginPage() {
       ? safeNextPath(new URLSearchParams(window.location.search).get('next'))
       : '/workspaces'
 
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
+    const redirectTo = `${OAUTH_CALLBACK_URL}?next=${encodeURIComponent(nextPath)}`
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
