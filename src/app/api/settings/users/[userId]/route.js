@@ -42,17 +42,12 @@ async function authorize(caller, organizationId) {
   }
 }
 
-async function isProtectedPlatformAccount(admin, userId) {
-  const { data, error } = await admin
-    .schema('private')
-    .from('platform_users')
-    .select('user_id,platform_role,status')
-    .eq('user_id', userId)
-    .eq('platform_role', 'platform_owner')
-    .eq('status', 'active')
-    .maybeSingle()
+async function isProtectedPlatformAccount(caller, userId) {
+  const { data, error } = await caller.rpc('is_protected_platform_owner', {
+    target_user_id: userId,
+  })
   if (error) throw error
-  return Boolean(data)
+  return data === true
 }
 
 export async function PATCH(request, { params }) {
@@ -95,7 +90,7 @@ export async function PATCH(request, { params }) {
 
     await authorize(caller, organizationId)
 
-    if (await isProtectedPlatformAccount(admin, userId)) {
+    if (await isProtectedPlatformAccount(caller, userId)) {
       return NextResponse.json({ error: 'The RitsuFlow Platform Owner is protected. Platform authority cannot be changed from organization Users & Access.' }, { status: 403 })
     }
 
@@ -181,7 +176,7 @@ export async function DELETE(request, { params }) {
 
     await authorize(caller, organizationId)
 
-    if (await isProtectedPlatformAccount(admin, userId)) {
+    if (await isProtectedPlatformAccount(caller, userId)) {
       return NextResponse.json({ error: 'The RitsuFlow Platform Owner cannot be removed from organization Users & Access.' }, { status: 403 })
     }
 
