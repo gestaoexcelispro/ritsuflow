@@ -5,152 +5,31 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../../lib/supabase/client'
+import { useLanguage } from '../../../contexts/LanguageContext'
 import styles from './license.module.css'
 
 const supabase = createClient()
 
-const WORKSPACES = [
-  { key: 'projects', icon: '🏢', name: 'Projects', text: 'Core project environment' },
-  { key: 'precon', icon: '⚙️', name: 'PreCon', text: 'Planning and production readiness' },
-  { key: 'fieldop', icon: '👷', name: 'FieldOp', text: 'Field execution and workforce' },
-  { key: 'ritsucad', icon: '📐', name: 'RitsuCAD', text: 'Drawing and takeoff environment' },
-]
-
-function normalizedKey(value = '') {
-  const key = String(value).toLowerCase().replaceAll('_', '').replaceAll('-', '').replaceAll(' ', '')
-  if (key.includes('precon')) return 'precon'
-  if (key.includes('fieldop') || key.includes('field')) return 'fieldop'
-  if (key.includes('ritsucad') || key.includes('cad')) return 'ritsucad'
-  if (key.includes('project')) return 'projects'
-  return String(value).toLowerCase()
+const COPY = {
+  'en-US': {
+    loading:'Loading commercial administration...', noOrg:'No organization is connected to this account.', unable:'Unable to load commercial administration.', title:'Commercial Administration', subtitle:'Contract, project capacity and workspace entitlements', back:'Return to Settings', organization:'ORGANIZATION', commercialStatus:'COMMERCIAL STATUS', active:'Active', commerciallyEnabled:'Organization commercially enabled', licenseBasis:'LICENSE BASIS', activeProjects:'Active Projects', concurrentCapacity:'Concurrent active-project capacity', workspaceEntitlements:'WORKSPACE ENTITLEMENTS', ofEntitled:'of {count} currently entitled', platformControl:'PLATFORM COMMERCIAL CONTROL', entitlementsTitle:'Organization Commercial Entitlements', entitlementsHelp:'This is the commercial source of truth for what this organization is entitled to use in RitsuFlow. Commercial entitlement is established before organization provisioning, user assignment and project access.', commercial:'Commercial', provisioning:'Provisioning', user:'User', project:'Project', agreement:'COMMERCIAL AGREEMENT', subscription:'Subscription & Contract', plan:'Commercial Plan', commercialPlan:'Commercial', userLicensing:'User Licensing', unlimited:'Unlimited by seat', contractStart:'Contract Start', renewal:'Renewal / End Date', reference:'Commercial Reference', contractHelp:'Contract dates, commercial reference and lifecycle status will be stored in the commercial provisioning record. User quantity does not determine the license charge.', projectCapacity:'PROJECT CAPACITY', allowance:'Active Project Allowance', platformControlled:'Platform Controlled', projectLimit:'Project Limit', available:'Available', capacityRule:'Capacity rule', capacityRuleHelp:'A project consumes one commercial allowance while Active. Project closeout releases that capacity. Closed projects remain permanently available in read-only mode for visualization, search, reports and exports.', capacityHelp:'The project limit is granted commercially by the RitsuFlow Platform Operator. Organization administrators cannot increase their own allowance.', commercialEntitlements:'COMMERCIAL ENTITLEMENTS', workspaceTitle:'Workspace Entitlements', workspaceHelp:'These entitlements determine the maximum environments that may subsequently be provisioned to the organization.', viewProvisioning:'View Organization Provisioning', entitled:'Commercially Entitled', notEntitled:'Not Entitled', controlAuthority:'CONTROL AUTHORITY', operatorControl:'Platform Operator Control', operatorHelp:'Commercial status, project allowance and workspace entitlements are platform-controlled values. Customer organization administrators may view their commercial configuration but cannot grant themselves additional capacity or products.', currentRole:'Current organization role', selfUpgrade:'Customer self-upgrade', blocked:'Blocked', authority:'Provisioning authority', operator:'RitsuFlow Platform Operator', boundary:'Commercial boundary', boundaryHelp:'Commercial Administration determines what was purchased or granted. Workspace Access must never exceed these entitlements. Users & Access must never exceed Workspace Access. Project Access must never exceed the user’s assigned scope.', governance:'Governance chain', governanceHelp:'Commercial Administration defines contractual entitlement → Workspace Access provisions entitled environments → Users & Access assigns environments → Project Access defines project scope → Roles & Permissions defines permitted actions.', projectsText:'Core project environment', preconText:'Planning and production readiness', fieldopText:'Field execution and workforce', ritsucadText:'Drawing and takeoff environment'
+  },
+  'pt-BR': {
+    loading:'Carregando administração comercial...', noOrg:'Nenhuma organização está conectada a esta conta.', unable:'Não foi possível carregar a administração comercial.', title:'Administração Comercial', subtitle:'Contrato, capacidade de projetos e direitos de acesso aos workspaces', back:'Voltar às Configurações', organization:'ORGANIZAÇÃO', commercialStatus:'STATUS COMERCIAL', active:'Ativo', commerciallyEnabled:'Organização habilitada comercialmente', licenseBasis:'BASE DA LICENÇA', activeProjects:'Projetos Ativos', concurrentCapacity:'Capacidade simultânea de projetos ativos', workspaceEntitlements:'DIREITOS AOS WORKSPACES', ofEntitled:'de {count} atualmente contratados', platformControl:'CONTROLE COMERCIAL DA PLATAFORMA', entitlementsTitle:'Direitos Comerciais da Organização', entitlementsHelp:'Esta é a fonte comercial de verdade sobre o que esta organização tem direito de utilizar no RitsuFlow. O direito comercial é estabelecido antes do provisionamento da organização, da atribuição aos usuários e do acesso aos projetos.', commercial:'Comercial', provisioning:'Provisionamento', user:'Usuário', project:'Projeto', agreement:'ACORDO COMERCIAL', subscription:'Assinatura e Contrato', plan:'Plano Comercial', commercialPlan:'Comercial', userLicensing:'Licenciamento de Usuários', unlimited:'Usuários ilimitados', contractStart:'Início do Contrato', renewal:'Renovação / Data de Término', reference:'Referência Comercial', contractHelp:'Datas contratuais, referência comercial e status do ciclo de vida serão armazenados no registro de provisionamento comercial. A quantidade de usuários não determina o valor da licença.', projectCapacity:'CAPACIDADE DE PROJETOS', allowance:'Limite de Projetos Ativos', platformControlled:'Controlado pela Plataforma', projectLimit:'Limite de Projetos', available:'Disponível', capacityRule:'Regra de capacidade', capacityRuleHelp:'Um projeto consome uma unidade da capacidade comercial enquanto estiver Ativo. O encerramento do projeto libera essa capacidade. Projetos encerrados permanecem disponíveis permanentemente em modo somente leitura para visualização, pesquisa, relatórios e exportações.', capacityHelp:'O limite de projetos é concedido comercialmente pelo Operador da Plataforma RitsuFlow. Administradores da organização não podem aumentar seu próprio limite.', commercialEntitlements:'DIREITOS COMERCIAIS', workspaceTitle:'Direitos aos Workspaces', workspaceHelp:'Estes direitos determinam o máximo de ambientes que posteriormente poderão ser provisionados para a organização.', viewProvisioning:'Ver Provisionamento da Organização', entitled:'Contratado Comercialmente', notEntitled:'Não Contratado', controlAuthority:'AUTORIDADE DE CONTROLE', operatorControl:'Controle do Operador da Plataforma', operatorHelp:'Status comercial, limite de projetos e direitos aos workspaces são valores controlados pela plataforma. Administradores da organização cliente podem visualizar sua configuração comercial, mas não podem conceder a si mesmos capacidade ou produtos adicionais.', currentRole:'Função atual na organização', selfUpgrade:'Auto-upgrade do cliente', blocked:'Bloqueado', authority:'Autoridade de provisionamento', operator:'Operador da Plataforma RitsuFlow', boundary:'Limite comercial', boundaryHelp:'A Administração Comercial determina o que foi adquirido ou concedido. O Acesso aos Workspaces nunca pode exceder esses direitos. Usuários e Acessos nunca pode exceder o Acesso aos Workspaces. O Acesso aos Projetos nunca pode exceder o escopo atribuído ao usuário.', governance:'Cadeia de governança', governanceHelp:'Administração Comercial define o direito contratual → Acesso aos Workspaces provisiona os ambientes contratados → Usuários e Acessos atribui os ambientes → Acesso aos Projetos define o escopo dos projetos → Funções e Permissões define as ações permitidas.', projectsText:'Ambiente central de projetos', preconText:'Planejamento e prontidão da produção', fieldopText:'Execução em campo e mão de obra', ritsucadText:'Ambiente de desenhos e levantamento'
+  },
+  es: {
+    loading:'Cargando administración comercial...', noOrg:'No hay ninguna organización conectada a esta cuenta.', unable:'No se pudo cargar la administración comercial.', title:'Administración Comercial', subtitle:'Contrato, capacidad de proyectos y derechos de acceso a workspaces', back:'Volver a Configuración', organization:'ORGANIZACIÓN', commercialStatus:'ESTADO COMERCIAL', active:'Activo', commerciallyEnabled:'Organización habilitada comercialmente', licenseBasis:'BASE DE LICENCIA', activeProjects:'Proyectos Activos', concurrentCapacity:'Capacidad simultánea de proyectos activos', workspaceEntitlements:'DERECHOS DE WORKSPACES', ofEntitled:'de {count} actualmente contratados', platformControl:'CONTROL COMERCIAL DE LA PLATAFORMA', entitlementsTitle:'Derechos Comerciales de la Organización', entitlementsHelp:'Esta es la fuente comercial de verdad sobre lo que esta organización tiene derecho a utilizar en RitsuFlow. El derecho comercial se establece antes del provisionamiento de la organización, la asignación de usuarios y el acceso a proyectos.', commercial:'Comercial', provisioning:'Provisionamiento', user:'Usuario', project:'Proyecto', agreement:'ACUERDO COMERCIAL', subscription:'Suscripción y Contrato', plan:'Plan Comercial', commercialPlan:'Comercial', userLicensing:'Licenciamiento de Usuarios', unlimited:'Usuarios ilimitados', contractStart:'Inicio del Contrato', renewal:'Renovación / Fecha de Finalización', reference:'Referencia Comercial', contractHelp:'Las fechas del contrato, la referencia comercial y el estado del ciclo de vida se almacenarán en el registro de provisionamiento comercial. La cantidad de usuarios no determina el cargo de licencia.', projectCapacity:'CAPACIDAD DE PROYECTOS', allowance:'Límite de Proyectos Activos', platformControlled:'Controlado por la Plataforma', projectLimit:'Límite de Proyectos', available:'Disponible', capacityRule:'Regla de capacidad', capacityRuleHelp:'Un proyecto consume una unidad de capacidad comercial mientras esté Activo. El cierre del proyecto libera esa capacidad. Los proyectos cerrados permanecen disponibles permanentemente en modo de solo lectura para visualización, búsqueda, informes y exportaciones.', capacityHelp:'El límite de proyectos es concedido comercialmente por el Operador de la Plataforma RitsuFlow. Los administradores de la organización no pueden aumentar su propio límite.', commercialEntitlements:'DERECHOS COMERCIALES', workspaceTitle:'Derechos de Workspaces', workspaceHelp:'Estos derechos determinan el máximo de entornos que posteriormente podrán provisionarse para la organización.', viewProvisioning:'Ver Provisionamiento de la Organización', entitled:'Contratado Comercialmente', notEntitled:'No Contratado', controlAuthority:'AUTORIDAD DE CONTROL', operatorControl:'Control del Operador de la Plataforma', operatorHelp:'El estado comercial, el límite de proyectos y los derechos de workspaces son valores controlados por la plataforma. Los administradores de la organización cliente pueden ver su configuración comercial, pero no pueden concederse capacidad o productos adicionales.', currentRole:'Rol actual en la organización', selfUpgrade:'Autoactualización del cliente', blocked:'Bloqueado', authority:'Autoridad de provisionamiento', operator:'Operador de la Plataforma RitsuFlow', boundary:'Límite comercial', boundaryHelp:'La Administración Comercial determina lo adquirido o concedido. El Acceso a Workspaces nunca puede superar esos derechos. Usuarios y Acceso nunca puede superar el Acceso a Workspaces. El Acceso a Proyectos nunca puede superar el alcance asignado al usuario.', governance:'Cadena de gobernanza', governanceHelp:'Administración Comercial define el derecho contractual → Acceso a Workspaces provisiona los entornos contratados → Usuarios y Acceso asigna los entornos → Acceso a Proyectos define el alcance de proyectos → Roles y Permisos define las acciones permitidas.', projectsText:'Entorno central de proyectos', preconText:'Planificación y preparación de producción', fieldopText:'Ejecución en campo y mano de obra', ritsucadText:'Entorno de dibujos y takeoff'
+  }
 }
 
-export default function CommercialAdministrationPage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [organization, setOrganization] = useState(null)
-  const [modules, setModules] = useState([])
-  const [membershipRole, setMembershipRole] = useState('')
-  const [error, setError] = useState('')
+function normalizedKey(value=''){const key=String(value).toLowerCase().replaceAll('_','').replaceAll('-','').replaceAll(' ','');if(key.includes('precon'))return'precon';if(key.includes('fieldop')||key.includes('field'))return'fieldop';if(key.includes('ritsucad')||key.includes('cad'))return'ritsucad';if(key.includes('project'))return'projects';return String(value).toLowerCase()}
+function fill(value,count){return String(value).replace('{count}',count)}
 
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const { data: auth } = await supabase.auth.getUser()
-        const user = auth?.user
-        if (!user) {
-          router.replace('/login')
-          return
-        }
-
-        const { data: memberships, error: membershipError } = await supabase
-          .from('organization_members')
-          .select('organization_id,role,status')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-        if (membershipError) throw membershipError
-
-        const membership = memberships?.find((item) => ['owner', 'admin'].includes(item.role)) || memberships?.[0]
-        if (!membership?.organization_id) throw new Error('No organization is connected to this account.')
-
-        const [{ data: org, error: orgError }, { data: orgModules, error: moduleError }] = await Promise.all([
-          supabase.from('organizations').select('id,name,slug,organization_number').eq('id', membership.organization_id).single(),
-          supabase.from('organization_modules').select('module_key,is_enabled,enabled_at,disabled_at').eq('organization_id', membership.organization_id),
-        ])
-        if (orgError) throw orgError
-        if (moduleError) throw moduleError
-        if (!alive) return
-        setMembershipRole(membership.role || '')
-        setOrganization(org)
-        setModules(orgModules || [])
-      } catch (err) {
-        if (alive) setError(err?.message || 'Unable to load commercial administration.')
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => { alive = false }
-  }, [router])
-
-  const enabledKeys = useMemo(() => {
-    const result = new Set(['projects'])
-    modules.forEach((item) => {
-      if (item.is_enabled) result.add(normalizedKey(item.module_key))
-    })
-    return result
-  }, [modules])
-
-  if (loading) return <main className={styles.loading}>Loading commercial administration...</main>
-
-  return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={180} height={65} priority /></div>
-        <div className={styles.headerTitle}><h1>Commercial Administration</h1><p>Contract, project capacity and workspace entitlements</p></div>
-        <Link className={styles.backButton} href="/settings">← Return to Settings</Link>
-      </header>
-
-      <section className={styles.content}>
-        {error && <div className={styles.error}>{error}</div>}
-
-        <section className={styles.summary}>
-          <article><small>ORGANIZATION</small><strong>{organization?.name || '—'}</strong><span>{organization?.organization_number || organization?.slug || '—'}</span></article>
-          <article><small>COMMERCIAL STATUS</small><strong className={styles.active}>Active</strong><span>Organization commercially enabled</span></article>
-          <article><small>LICENSE BASIS</small><strong>Active Projects</strong><span>Concurrent active-project capacity</span></article>
-          <article><small>WORKSPACE ENTITLEMENTS</small><strong>{enabledKeys.size}</strong><span>of {WORKSPACES.length} currently entitled</span></article>
-        </section>
-
-        <section className={styles.intro}>
-          <div><span>PLATFORM COMMERCIAL CONTROL</span><h2>Organization Commercial Entitlements</h2><p>This is the commercial source of truth for what this organization is entitled to use in RitsuFlow. Commercial entitlement is established before organization provisioning, user assignment and project access.</p></div>
-          <div className={styles.flow}><b>Commercial</b><i>→</i><b>Provisioning</b><i>→</i><b>Organization</b><i>→</i><b>User</b><i>→</i><b>Project</b></div>
-        </section>
-
-        <section className={styles.columns}>
-          <article className={styles.panel}>
-            <div className={styles.panelTitle}><div><small>COMMERCIAL AGREEMENT</small><h3>Subscription & Contract</h3></div><span className={styles.activePill}>● Active</span></div>
-            <div className={styles.rows}>
-              <div><span>Commercial Status</span><b>Active</b></div>
-              <div><span>Commercial Plan</span><b>Commercial</b></div>
-              <div><span>License Basis</span><b>Active Projects</b></div>
-              <div><span>User Licensing</span><b>Unlimited by seat</b></div>
-              <div><span>Contract Start</span><b>—</b></div>
-              <div><span>Renewal / End Date</span><b>—</b></div>
-              <div><span>Commercial Reference</span><b>—</b></div>
-            </div>
-            <p className={styles.help}>Contract dates, commercial reference and lifecycle status will be stored in the commercial provisioning record. User quantity does not determine the license charge.</p>
-          </article>
-
-          <article className={styles.panel}>
-            <div className={styles.panelTitle}><div><small>PROJECT CAPACITY</small><h3>Active Project Allowance</h3></div><span className={styles.controlled}>Platform Controlled</span></div>
-            <div className={styles.capacity}><div><span>Active Projects</span><strong>—</strong></div><div><span>Project Limit</span><strong>—</strong></div><div><span>Available</span><strong>—</strong></div></div>
-            <div className={styles.capacityRule}><b>Capacity rule</b><span>A project consumes one commercial allowance while Active. Project closeout releases that capacity. Closed projects remain permanently available in read-only mode for visualization, search, reports and exports.</span></div>
-            <p className={styles.help}>The project limit is granted commercially by the RitsuFlow Platform Operator. Organization administrators cannot increase their own allowance.</p>
-          </article>
-        </section>
-
-        <section className={styles.workspacePanel}>
-          <div className={styles.sectionTitle}><div><small>COMMERCIAL ENTITLEMENTS</small><h3>Workspace Entitlements</h3><p>These entitlements determine the maximum environments that may subsequently be provisioned to the organization.</p></div><Link href="/settings/workspaces">View Organization Provisioning →</Link></div>
-          <div className={styles.workspaceGrid}>
-            {WORKSPACES.map((workspace) => {
-              const enabled = enabledKeys.has(workspace.key)
-              return <article key={workspace.key} className={enabled ? styles.workspaceEnabled : styles.workspaceDisabled}>
-                <div className={styles.workspaceIcon}>{workspace.icon}</div>
-                <div><b>{workspace.name}</b><span>{workspace.text}</span></div>
-                <strong>{enabled ? '● Commercially Entitled' : '○ Not Entitled'}</strong>
-              </article>
-            })}
-          </div>
-        </section>
-
-        <section className={styles.controlPanel}>
-          <div><small>CONTROL AUTHORITY</small><h3>Platform Operator Control</h3><p>Commercial status, project allowance and workspace entitlements are platform-controlled values. Customer organization administrators may view their commercial configuration but cannot grant themselves additional capacity or products.</p></div>
-          <div className={styles.controlFacts}><span><b>Current organization role</b>{membershipRole || '—'}</span><span><b>Customer self-upgrade</b>Blocked</span><span><b>Provisioning authority</b>RitsuFlow Platform Operator</span></div>
-        </section>
-
-        <div className={styles.rule}><b>🔒 Commercial boundary</b><span>Commercial Administration determines what was purchased or granted. Workspace Access must never exceed these entitlements. Users & Access must never exceed Workspace Access. Project Access must never exceed the user's assigned scope.</span></div>
-        <div className={styles.architecture}><b>Governance chain</b><span><strong>Commercial Administration</strong> defines contractual entitlement → <strong>Workspace Access</strong> provisions entitled environments → <strong>Users & Access</strong> assigns environments → <strong>Project Access</strong> defines project scope → <strong>Roles & Permissions</strong> defines permitted actions.</span></div>
-      </section>
-    </main>
-  )
+export default function CommercialAdministrationPage(){
+ const router=useRouter(),{locale}=useLanguage(),t=COPY[locale]||COPY['en-US'];const[loading,setLoading]=useState(true),[organization,setOrganization]=useState(null),[modules,setModules]=useState([]),[membershipRole,setMembershipRole]=useState(''),[error,setError]=useState('');
+ useEffect(()=>{let alive=true;(async()=>{try{const{data:auth}=await supabase.auth.getUser(),user=auth?.user;if(!user){router.replace('/login');return}const{data:memberships,error:membershipError}=await supabase.from('organization_members').select('organization_id,role,status').eq('user_id',user.id).eq('status','active');if(membershipError)throw membershipError;const membership=memberships?.find(item=>['owner','admin'].includes(item.role))||memberships?.[0];if(!membership?.organization_id)throw new Error(t.noOrg);const[{data:org,error:orgError},{data:orgModules,error:moduleError}]=await Promise.all([supabase.from('organizations').select('id,name,slug,organization_number').eq('id',membership.organization_id).single(),supabase.from('organization_modules').select('module_key,is_enabled,enabled_at,disabled_at').eq('organization_id',membership.organization_id)]);if(orgError)throw orgError;if(moduleError)throw moduleError;if(!alive)return;setMembershipRole(membership.role||'');setOrganization(org);setModules(orgModules||[])}catch(err){if(alive)setError(err?.message||t.unable)}finally{if(alive)setLoading(false)}})();return()=>{alive=false}},[router,t.noOrg,t.unable]);
+ const enabledKeys=useMemo(()=>{const result=new Set(['projects']);modules.forEach(item=>{if(item.is_enabled)result.add(normalizedKey(item.module_key))});return result},[modules]);
+ const workspaces=[{key:'projects',icon:'🏢',name:'Projects',text:t.projectsText},{key:'precon',icon:'⚙️',name:'PreCon',text:t.preconText},{key:'fieldop',icon:'👷',name:'FieldOp',text:t.fieldopText},{key:'ritsucad',icon:'📐',name:'RitsuCAD',text:t.ritsucadText}];
+ if(loading)return <main className={styles.loading}>{t.loading}</main>;
+ return <main className={styles.page}><header className={styles.header}><div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={180} height={65} priority/></div><div className={styles.headerTitle}><h1>{t.title}</h1><p>{t.subtitle}</p></div><Link className={styles.backButton} href="/settings">← {t.back}</Link></header><section className={styles.content}>{error&&<div className={styles.error}>{error}</div>}<section className={styles.summary}><article><small>{t.organization}</small><strong>{organization?.name||'—'}</strong><span>{organization?.organization_number||organization?.slug||'—'}</span></article><article><small>{t.commercialStatus}</small><strong className={styles.active}>{t.active}</strong><span>{t.commerciallyEnabled}</span></article><article><small>{t.licenseBasis}</small><strong>{t.activeProjects}</strong><span>{t.concurrentCapacity}</span></article><article><small>{t.workspaceEntitlements}</small><strong>{enabledKeys.size}</strong><span>{fill(t.ofEntitled,workspaces.length)}</span></article></section><section className={styles.intro}><div><span>{t.platformControl}</span><h2>{t.entitlementsTitle}</h2><p>{t.entitlementsHelp}</p></div><div className={styles.flow}><b>{t.commercial}</b><i>→</i><b>{t.provisioning}</b><i>→</i><b>{t.organization}</b><i>→</i><b>{t.user}</b><i>→</i><b>{t.project}</b></div></section><section className={styles.columns}><article className={styles.panel}><div className={styles.panelTitle}><div><small>{t.agreement}</small><h3>{t.subscription}</h3></div><span className={styles.activePill}>● {t.active}</span></div><div className={styles.rows}><div><span>{t.commercialStatus}</span><b>{t.active}</b></div><div><span>{t.plan}</span><b>{t.commercialPlan}</b></div><div><span>{t.licenseBasis}</span><b>{t.activeProjects}</b></div><div><span>{t.userLicensing}</span><b>{t.unlimited}</b></div><div><span>{t.contractStart}</span><b>—</b></div><div><span>{t.renewal}</span><b>—</b></div><div><span>{t.reference}</span><b>—</b></div></div><p className={styles.help}>{t.contractHelp}</p></article><article className={styles.panel}><div className={styles.panelTitle}><div><small>{t.projectCapacity}</small><h3>{t.allowance}</h3></div><span className={styles.controlled}>{t.platformControlled}</span></div><div className={styles.capacity}><div><span>{t.activeProjects}</span><strong>—</strong></div><div><span>{t.projectLimit}</span><strong>—</strong></div><div><span>{t.available}</span><strong>—</strong></div></div><div className={styles.capacityRule}><b>{t.capacityRule}</b><span>{t.capacityRuleHelp}</span></div><p className={styles.help}>{t.capacityHelp}</p></article></section><section className={styles.workspacePanel}><div className={styles.sectionTitle}><div><small>{t.commercialEntitlements}</small><h3>{t.workspaceTitle}</h3><p>{t.workspaceHelp}</p></div><Link href="/settings/workspaces">{t.viewProvisioning} →</Link></div><div className={styles.workspaceGrid}>{workspaces.map(workspace=>{const enabled=enabledKeys.has(workspace.key);return <article key={workspace.key} className={enabled?styles.workspaceEnabled:styles.workspaceDisabled}><div className={styles.workspaceIcon}>{workspace.icon}</div><div><b>{workspace.name}</b><span>{workspace.text}</span></div><strong>{enabled?`● ${t.entitled}`:`○ ${t.notEntitled}`}</strong></article>})}</div></section><section className={styles.controlPanel}><div><small>{t.controlAuthority}</small><h3>{t.operatorControl}</h3><p>{t.operatorHelp}</p></div><div className={styles.controlFacts}><span><b>{t.currentRole}</b>{membershipRole||'—'}</span><span><b>{t.selfUpgrade}</b>{t.blocked}</span><span><b>{t.authority}</b>{t.operator}</span></div></section><div className={styles.rule}><b>🔒 {t.boundary}</b><span>{t.boundaryHelp}</span></div><div className={styles.architecture}><b>{t.governance}</b><span>{t.governanceHelp}</span></div></section></main>
 }
