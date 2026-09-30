@@ -10,6 +10,7 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [sessionReady, setSessionReady] = useState(false)
+  const [validating, setValidating] = useState(true)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -17,36 +18,64 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     let mounted = true
     let subscription = null
-    let timer = null
 
     async function initialize() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session && mounted) {
-        setSessionReady(true)
-        return
-      }
+      setValidating(true)
+      setErrorMessage('')
 
-      const listener = supabase.auth.onAuthStateChange((event, currentSession) => {
-        if (!mounted) return
-        if (event === 'PASSWORD_RECOVERY' || currentSession) {
-          setSessionReady(true)
-          setErrorMessage('')
+      try {
+        const url = new URL(window.location.href)
+        const code = url.searchParams.get('code')
+
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+          if (error) throw error
+
+          if (data?.session && mounted) {
+            setSessionReady(true)
+            setValidating(false)
+            window.history.replaceState({}, document.title, url.pathname)
+            return
+          }
         }
-      })
-      subscription = listener.data.subscription
 
-      timer = window.setTimeout(async () => {
-        if (!mounted) return
-        const { data: { session: refreshedSession } } = await supabase.auth.getSession()
-        if (refreshedSession) setSessionReady(true)
-        else setErrorMessage('This password reset link is invalid or has expired. Please request a new one.')
-      }, 1500)
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError) throw sessionError
+
+        if (session && mounted) {
+          setSessionReady(true)
+          setValidating(false)
+          return
+        }
+
+        if (mounted) {
+          setErrorMessage('This password reset link is invalid or has expired. Please request a new one.')
+          setValidating(false)
+        }
+      } catch (error) {
+        console.error('Password recovery initialization failed.', error)
+        if (mounted) {
+          setSessionReady(false)
+          setValidating(false)
+          setErrorMessage('This password reset link is invalid or has expired. Please request a new one.')
+        }
+      }
     }
 
+    const listener = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (!mounted) return
+      if (event === 'PASSWORD_RECOVERY' && currentSession) {
+        setSessionReady(true)
+        setValidating(false)
+        setErrorMessage('')
+      }
+    })
+    subscription = listener.data.subscription
+
     initialize()
+
     return () => {
       mounted = false
-      if (timer) window.clearTimeout(timer)
       subscription?.unsubscribe()
     }
   }, [])
@@ -86,7 +115,7 @@ export default function ResetPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             {errorMessage && <div role="alert" style={{ padding: 12, borderRadius: 8, background: '#fee2e2', color: '#991b1b', lineHeight: 1.45 }}>{errorMessage}</div>}
-            {!sessionReady && !errorMessage && <div style={{ padding: 12, borderRadius: 8, background: '#f8fafc', color: '#475569', textAlign: 'center' }}>Validating reset link...</div>}
+            {validating && !errorMessage && <div style={{ padding: 12, borderRadius: 8, background: '#f8fafc', color: '#475569', textAlign: 'center' }}>Validating reset link...</div>}
 
             <label style={{ color: '#334155', fontWeight: 600 }}>New Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required disabled={!sessionReady || loading} style={{ width: '100%', boxSizing: 'border-box', marginTop: 8, padding: 12, border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '1rem' }} /></label>
             <label style={{ color: '#334155', fontWeight: 600 }}>Confirm Password<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" required disabled={!sessionReady || loading} style={{ width: '100%', boxSizing: 'border-box', marginTop: 8, padding: 12, border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '1rem' }} /></label>
