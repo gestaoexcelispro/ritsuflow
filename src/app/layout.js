@@ -1,5 +1,6 @@
 import './globals.css'
 import { LanguageProvider } from '../contexts/LanguageContext'
+import LocaleDocumentSync from '../components/i18n/LocaleDocumentSync'
 
 export const metadata = {
   title: {
@@ -22,9 +23,12 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en-US">
       <body>
-        <LanguageProvider>{children}</LanguageProvider>
+        <LanguageProvider>
+          <LocaleDocumentSync />
+          {children}
+        </LanguageProvider>
       </body>
     </html>
   )
