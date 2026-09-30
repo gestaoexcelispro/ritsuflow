@@ -20,8 +20,36 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
+
+  async function handleGoogleLogin() {
+    setGoogleLoading(true)
+    setErrorMessage('')
+
+    const nextPath = typeof window !== 'undefined'
+      ? safeNextPath(new URLSearchParams(window.location.search).get('next'))
+      : '/workspaces'
+
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
+      },
+    })
+
+    if (error) {
+      setErrorMessage('Google sign-in could not be started. Please try again.')
+      setGoogleLoading(false)
+    }
+  }
 
   async function handleLogin(event) {
     event.preventDefault()
@@ -74,9 +102,16 @@ export default function LoginPage() {
             <div className={styles.cardLogo}><Image src="/logo-white.png" alt="RitsuFlow" width={190} height={70} priority /></div>
             <header className={styles.loginHeader}><h2>Welcome back</h2><p>Sign in to continue to RitsuFlow™</p></header>
 
-            <form onSubmit={handleLogin} className={styles.form}>
-              {errorMessage && <div role="alert" className={styles.error}>{errorMessage}</div>}
+            {errorMessage && <div role="alert" className={styles.error}>{errorMessage}</div>}
 
+            <button type="button" onClick={handleGoogleLogin} disabled={googleLoading || loading} className={styles.googleButton}>
+              <span className={styles.googleMark} aria-hidden="true">G</span>
+              <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
+            </button>
+
+            <div className={styles.authDivider}><span>or continue with email</span></div>
+
+            <form onSubmit={handleLogin} className={styles.form}>
               <label className={styles.field}>
                 <span>Email</span>
                 <div className={styles.inputWrapper}>
@@ -98,7 +133,7 @@ export default function LoginPage() {
                 <Link href="/forgot-password" style={{ color: '#11c7b2', fontSize: '.9rem', fontWeight: 700, textDecoration: 'none' }}>Forgot password?</Link>
               </div>
 
-              <button type="submit" disabled={loading} className={styles.submitButton}>{loading ? 'Signing in...' : 'Sign in'}{!loading && <span aria-hidden="true">→</span>}</button>
+              <button type="submit" disabled={loading || googleLoading} className={styles.submitButton}>{loading ? 'Signing in...' : 'Sign in'}{!loading && <span aria-hidden="true">→</span>}</button>
             </form>
 
             <div style={{ marginTop: 20, textAlign: 'center', color: '#b6c3d1', fontSize: '.92rem' }}>
