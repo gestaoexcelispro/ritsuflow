@@ -8,6 +8,7 @@ import { createClient } from '../../lib/supabase/client'
 import styles from './login.module.css'
 
 const supabase = createClient()
+const OAUTH_CALLBACK_URL = 'https://ritsuflow.com/auth/callback'
 
 function safeNextPath(value) {
   if (!value || typeof value !== 'string') return '/workspaces'
@@ -20,8 +21,31 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
+
+  async function handleGoogleLogin() {
+    setGoogleLoading(true)
+    setErrorMessage('')
+
+    const nextPath = typeof window !== 'undefined'
+      ? safeNextPath(new URLSearchParams(window.location.search).get('next'))
+      : '/workspaces'
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${OAUTH_CALLBACK_URL}?next=${encodeURIComponent(nextPath)}`,
+        queryParams: { access_type: 'offline', prompt: 'select_account' },
+      },
+    })
+
+    if (error) {
+      setErrorMessage('Google sign-in could not be started. Please try again.')
+      setGoogleLoading(false)
+    }
+  }
 
   async function handleLogin(event) {
     event.preventDefault()
@@ -60,7 +84,6 @@ export default function LoginPage() {
             <h1>Plan by location.<br />Control by <span>flow.</span></h1>
             <div className={styles.accentLine} />
             <p className={styles.brandDescription}>RitsuFlow™ connects master planning, lookahead preparation, weekly commitments, and production control in one integrated construction workflow.</p>
-
             <div className={styles.principles}>
               <div className={styles.principle}><span className={styles.principleIcon}>01</span><div><strong>Flow-Based Planning</strong><p>Align locations, sequence, and production.</p></div></div>
               <div className={styles.principle}><span className={styles.principleIcon}>02</span><div><strong>Reliable Execution</strong><p>Make work ready before you commit.</p></div></div>
@@ -74,9 +97,16 @@ export default function LoginPage() {
             <div className={styles.cardLogo}><Image src="/logo-white.png" alt="RitsuFlow" width={190} height={70} priority /></div>
             <header className={styles.loginHeader}><h2>Welcome back</h2><p>Sign in to continue to RitsuFlow™</p></header>
 
-            <form onSubmit={handleLogin} className={styles.form}>
-              {errorMessage && <div role="alert" className={styles.error}>{errorMessage}</div>}
+            {errorMessage && <div role="alert" className={styles.error}>{errorMessage}</div>}
 
+            <button type="button" onClick={handleGoogleLogin} disabled={googleLoading || loading} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, width:'100%', minHeight:50, padding:'0 16px', color:'#172033', border:'1px solid rgba(255,255,255,.72)', borderRadius:10, background:'#fff', cursor:(googleLoading || loading) ? 'not-allowed' : 'pointer', fontSize:'.92rem', fontWeight:700, opacity:(googleLoading || loading) ? .62 : 1 }}>
+              <span aria-hidden="true" style={{ color:'#4285f4', fontSize:'1rem', fontWeight:900 }}>G</span>
+              <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
+            </button>
+
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', margin:'18px 0', color:'rgba(182,195,209,.72)', fontSize:'.72rem', textTransform:'uppercase', letterSpacing:'.04em' }}>or continue with email</div>
+
+            <form onSubmit={handleLogin} className={styles.form}>
               <label className={styles.field}>
                 <span>Email</span>
                 <div className={styles.inputWrapper}>
@@ -98,7 +128,7 @@ export default function LoginPage() {
                 <Link href="/forgot-password" style={{ color: '#11c7b2', fontSize: '.9rem', fontWeight: 700, textDecoration: 'none' }}>Forgot password?</Link>
               </div>
 
-              <button type="submit" disabled={loading} className={styles.submitButton}>{loading ? 'Signing in...' : 'Sign in'}{!loading && <span aria-hidden="true">→</span>}</button>
+              <button type="submit" disabled={loading || googleLoading} className={styles.submitButton}>{loading ? 'Signing in...' : 'Sign in'}{!loading && <span aria-hidden="true">→</span>}</button>
             </form>
 
             <div style={{ marginTop: 20, textAlign: 'center', color: '#b6c3d1', fontSize: '.92rem' }}>
