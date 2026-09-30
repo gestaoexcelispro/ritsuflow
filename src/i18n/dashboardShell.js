@@ -15,3 +15,84 @@ export function dashboardShellText(locale, key, vars = {}) {
   for (const [name, replacement] of Object.entries(vars)) value = String(value).replaceAll(`{${name}}`, replacement)
   return value
 }
+
+export function dashboardShellCopy(locale) {
+  const normalized = COPY[locale] ? locale : 'en-US'
+  return COPY[normalized]
+}
+
+export const dashboardShellNavigation = [
+  {
+    key: 'workspace',
+    items: [
+      { key: 'overview', href: '/dashboard', icon: 'overview' },
+      { key: 'projects', href: '/dashboard/projects', icon: 'projects' },
+      { key: 'projectSetup', href: '/dashboard/projects/setup', icon: 'setup' },
+      { label: 'RitsuCAD', href: '/ritsucad', icon: 'cad' },
+    ],
+  },
+  {
+    key: 'fieldManagement',
+    items: [
+      { key: 'operationalDashboard', href: '/dashboard/projects/operations', icon: 'operations' },
+      { key: 'dailyReports', href: '/dashboard/projects/daily-reports', icon: 'reports' },
+      { key: 'workforce', href: '/dashboard/field-management/workforce', icon: 'workforce' },
+      { key: 'projectAssignments', href: '/dashboard/field-management/workforce/assignments', icon: 'assignment' },
+      { key: 'attendance', href: '/dashboard/field-management/workforce/attendance', icon: 'attendance' },
+    ],
+  },
+  {
+    key: 'planning',
+    items: [
+      { key: 'prePlanning', href: '/planning/pre-planning', icon: 'preplanning' },
+      { key: 'masterPlan', href: '/dashboard/planning/master-plan', icon: 'masterplan' },
+      { key: 'lookaheadPlanning', href: '/dashboard/planning/lookahead', icon: 'lookahead' },
+      { key: 'weeklyPlanning', href: '/dashboard/planning/weekly-planning', icon: 'weekly' },
+      { key: 'constraintLog', href: '/dashboard/projects/constraints', icon: 'constraint' },
+    ],
+  },
+  { key: 'control', items: [] },
+  {
+    key: 'administration',
+    items: [
+      { key: 'usersAccess', href: '/dashboard/administration/users', icon: 'users' },
+    ],
+  },
+]
+
+export const dashboardPlatformNavigation = {
+  key: 'platform',
+  items: [
+    { key: 'organizations', href: '/dashboard/platform/organizations', icon: 'organizations' },
+  ],
+}
+
+export const projectSetupHeaderSectionsI18n = [
+  { id: 'general', key: 'general' },
+  { id: 'scope', key: 'scope' },
+  { id: 'locations', key: 'locations' },
+  { id: 'allocation', key: 'allocation' },
+  { id: 'production', key: 'productionParameters' },
+]
+
+export function localizeDashboardNavigation(locale, includePlatform = false) {
+  const groups = includePlatform
+    ? [...dashboardShellNavigation, dashboardPlatformNavigation]
+    : dashboardShellNavigation
+
+  return groups.map(group => ({
+    ...group,
+    label: dashboardShellText(locale, group.key),
+    items: group.items.map(item => ({
+      ...item,
+      label: item.label ?? dashboardShellText(locale, item.key),
+    })),
+  }))
+}
+
+export function localizeProjectSetupHeaderSections(locale) {
+  return projectSetupHeaderSectionsI18n.map(section => ({
+    ...section,
+    label: dashboardShellText(locale, section.key),
+  }))
+}
