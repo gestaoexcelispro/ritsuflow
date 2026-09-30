@@ -45,19 +45,19 @@ export async function POST(request) {
     const fullName = String(body.fullName || '').trim()
     const email = String(body.email || '').trim().toLowerCase()
     const jobTitle = String(body.jobTitle || '').trim()
-    const role = String(body.role || 'member')
-    const projectAccessMode = String(body.projectAccessMode || 'assigned_projects')
+    const role = String(body.role || 'user')
+    const projectAccessMode = String(body.projectAccessMode || 'selected_projects')
     const projectIds = Array.isArray(body.projectIds) ? body.projectIds.filter(Boolean) : []
     const workspaceAccess = Array.isArray(body.workspaceAccess) ? body.workspaceAccess.filter(Boolean) : []
     const requestedAvatarExt = String(body.avatarExt || '').toLowerCase()
     const avatarExt = ['jpg', 'jpeg', 'png', 'webp'].includes(requestedAvatarExt) ? requestedAvatarExt : null
 
     if (!organizationId || !fullName || !email) return NextResponse.json({ error: 'Name, email and organization are required.' }, { status: 400 })
-    if (!['owner', 'admin', 'manager', 'member', 'viewer', 'user'].includes(role)) return NextResponse.json({ error: 'Invalid RitsuFlow role.' }, { status: 400 })
-    if (!['all_projects', 'assigned_projects', 'selected_projects'].includes(projectAccessMode)) return NextResponse.json({ error: 'Invalid project access mode.' }, { status: 400 })
-
-    const selectedMode = projectAccessMode === 'assigned_projects' || projectAccessMode === 'selected_projects'
-    if (selectedMode && !projectIds.length) return NextResponse.json({ error: 'Select at least one assigned project.' }, { status: 400 })
+    if (!['admin', 'manager', 'user'].includes(role)) return NextResponse.json({ error: 'Invalid RitsuFlow role.' }, { status: 400 })
+    if (!['all_projects', 'selected_projects'].includes(projectAccessMode)) return NextResponse.json({ error: 'Invalid project access mode.' }, { status: 400 })
+    if (role === 'admin' && projectAccessMode !== 'all_projects') return NextResponse.json({ error: 'Admins must have All Projects access.' }, { status: 400 })
+    if (role === 'user' && projectAccessMode !== 'selected_projects') return NextResponse.json({ error: 'Users must use Selected Projects access.' }, { status: 400 })
+    if (projectAccessMode === 'selected_projects' && !projectIds.length) return NextResponse.json({ error: 'Select at least one project.' }, { status: 400 })
     if (!workspaceAccess.length) return NextResponse.json({ error: 'Select at least one workspace.' }, { status: 400 })
 
     const caller = authClient(token)
@@ -127,17 +127,15 @@ export async function POST(request) {
     }, { onConflict: 'user_id' })
     if (userProfileError) throw userProfileError
 
-    const dbRole = role === 'member' || role === 'viewer' ? 'user' : role === 'owner' ? 'admin' : role
-    const dbAccessMode = selectedMode ? 'selected_projects' : 'all_projects'
     const membershipStatus = authUser.email_confirmed_at ? 'active' : 'invited'
 
     const { error: accessError } = await caller.rpc('set_organization_member_access', {
       target_organization_id: organizationId,
       target_user_id: authUser.id,
-      target_role: dbRole,
-      target_project_access_mode: dbAccessMode,
+      target_role: role,
+      target_project_access_mode: projectAccessMode,
       target_status: membershipStatus,
-      target_project_ids: selectedMode ? projectIds : [],
+      target_project_ids: projectAccessMode === 'selected_projects' ? projectIds : [],
     })
     if (accessError) throw accessError
 
