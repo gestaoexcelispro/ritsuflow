@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 
 import { createClient } from '../../../../lib/supabase/client'
+import { getLocationWorkspaceCopy, interpolateLocationCopy } from '../../../../i18n/locationWorkspace'
 import styles from '../locations/location-breakdown.module.css'
 
 
@@ -26,18 +27,18 @@ const emptyLocationForm = {
 }
 
 
-function getErrorMessage(error) {
-  if (!error) return 'An unexpected error occurred.'
-  if (error.code === '23505') return 'A location with the same identifying information already exists.'
-  if (error.code === '23503') return 'This record is connected to other project information and cannot be changed.'
-  if (error.code === '23514') return 'One or more values do not satisfy the location structure rules.'
-  if (error.code === '42501') return 'Your account does not have permission to perform this action.'
-  return error.message || 'The requested operation could not be completed.'
+function getErrorMessage(error, t) {
+  if (!error) return t.unexpectedError
+  if (error.code === '23505') return t.duplicateLocation
+  if (error.code === '23503') return t.connectedRecord
+  if (error.code === '23514') return t.invalidRules
+  if (error.code === '42501') return t.permissionDenied
+  return error.message || t.operationFailed
 }
 
 
-function locationTypeLabel(value) {
-  return locationTypes.find((item) => item.value === value)?.label || value || 'Location'
+function locationTypeLabel(value, t) {
+  return t.locationTypes?.[value] || value || t.location
 }
 
 
@@ -81,14 +82,14 @@ function zoneSoft(name) {
 }
 
 
-function formatQuantity(value) {
+function formatQuantity(value, locale = 'en-US') {
   const numericValue = Number(value)
 
   if (!Number.isFinite(numericValue)) {
     return '0'
   }
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(numericValue)
@@ -103,8 +104,11 @@ export default function LocationWorkspace({
   initialLocations = [],
   scopeItems = [],
   allocations = [],
+  locale = 'en-US',
 }) {
   const supabase = useMemo(() => createClient(), [])
+  const t = useMemo(() => getLocationWorkspaceCopy(locale), [locale])
+  const tr = (key, variables = {}) => interpolateLocationCopy(t[key], variables)
 
   const [locations, setLocations] = useState(initialLocations)
   const [searchTerm, setSearchTerm] = useState('')
@@ -430,12 +434,12 @@ export default function LocationWorkspace({
     const normalizedName = locationForm.name.trim()
 
     if (!normalizedName) {
-      setErrorMessage('Enter a location name.')
+      setErrorMessage(t.enterLocationName)
       return
     }
 
     if (locationForm.id && locationForm.parent_id === locationForm.id) {
-      setErrorMessage('A location cannot be its own parent.')
+      setErrorMessage(t.ownParent)
       return
     }
 
@@ -493,7 +497,7 @@ export default function LocationWorkspace({
     }
 
     if (result.error) {
-      setErrorMessage(getErrorMessage(result.error))
+      setErrorMessage(getErrorMessage(result.error, t))
       setIsSaving(false)
       return
     }
@@ -504,10 +508,10 @@ export default function LocationWorkspace({
           location.id === result.data.id ? result.data : location
         )
       )
-      setNoticeMessage(`${result.data.name} was updated.`)
+      setNoticeMessage(tr('updated', { name: result.data.name }))
     } else {
       setLocations((current) => [...current, result.data])
-      setNoticeMessage(`${result.data.name} was added to the location structure.`)
+      setNoticeMessage(tr('added', { name: result.data.name }))
     }
 
     setIsSaving(false)
@@ -544,8 +548,8 @@ export default function LocationWorkspace({
 
     const confirmed = window.confirm(
       descendants.size > 0
-        ? `Delete ${location.name}? This will also delete ${descendants.size} contained location${descendants.size === 1 ? '' : 's'}. This action cannot be undone.`
-        : `Delete ${location.name}? This action cannot be undone.`
+        ? tr('deleteTree', { name: location.name, count: descendants.size, locationWord: descendants.size === 1 ? t.containedLocation : t.containedLocations })
+        : tr('deleteSingle', { name: location.name })
     )
 
     if (!confirmed) return
@@ -559,7 +563,7 @@ export default function LocationWorkspace({
     )
 
     if (error) {
-      setErrorMessage(getErrorMessage(error))
+      setErrorMessage(getErrorMessage(error, t))
       setIsSaving(false)
       return
     }
@@ -607,7 +611,7 @@ export default function LocationWorkspace({
       .eq('project_id', projectId)
 
     if (error) {
-      setErrorMessage(getErrorMessage(error))
+      setErrorMessage(getErrorMessage(error, t))
       setIsSaving(false)
       return
     }
@@ -695,7 +699,7 @@ export default function LocationWorkspace({
             <input
               type="search"
               className={styles.searchInput}
-              placeholder="Search locations..."
+              placeholder={t.searchPlaceholder}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
@@ -1124,7 +1128,7 @@ export default function LocationWorkspace({
                                                     <strong>{location.name}</strong>
                                                     <span>
                                                       {location.environment_type ||
-                                                        locationTypeLabel(location.location_type)}
+                                                        locationTypeLabel(location.location_type, t)}
                                                     </span>
                                                   </div>
                                                 </div>
@@ -1198,7 +1202,7 @@ export default function LocationWorkspace({
                                                   <strong>{location.name}</strong>
                                                   <span>
                                                     {location.environment_type ||
-                                                      locationTypeLabel(location.location_type)}
+                                                      locationTypeLabel(location.location_type, t)}
                                                   </span>
                                                 </div>
                                               </div>
@@ -1372,7 +1376,7 @@ export default function LocationWorkspace({
                     .filter((location) => location.id !== locationForm.id)
                     .map((location) => (
                       <option value={location.id} key={location.id}>
-                        {locationTypeLabel(location.location_type)} — {location.name}
+                        {locationTypeLabel(location.location_type, t)} — {location.name}
                       </option>
                     ))}
                 </select>
@@ -1394,7 +1398,7 @@ export default function LocationWorkspace({
               </label>
 
               <label className={styles.formField}>
-                <span>Sequence</span>
+                <span>{t.sequence}</span>
                 <input
                   type="number"
                   min="0"
