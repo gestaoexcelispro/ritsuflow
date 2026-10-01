@@ -46,6 +46,6 @@ source=source.replace(/>\s*Select company\s*</g,'>{t.selectCompany}<').replace(/
 if(!source.includes('getWorkforceCopy(locale)'))throw new Error('Workforce catalog wiring missing')
 if(!source.includes('loadOrganizationLocale'))throw new Error('Workforce locale loader missing')
 if(!source.includes('getWorkforceStatusLabel(status, locale)'))throw new Error('Workforce status localization missing')
-for(const literal of [/?>\s*Workforce Registry\s*</,/>\s*\+ Add Worker\s*</,/>\s*Loading workforce\.\.\.\s*</,/>\s*No workers registered\s*</,/>\s*Cancel\s*</,/aria-label="Close"/])if(literal.test(source))throw new Error(`Workforce runtime literal remains: ${literal}`)
+for(const literal of [/>\s*Workforce Registry\s*</,/>\s*\+ Add Worker\s*</,/>\s*Loading workforce\.\.\.\s*</,/>\s*No workers registered\s*</,/>\s*Cancel\s*</,/aria-label="Close"/])if(literal.test(source))throw new Error(`Workforce runtime literal remains: ${literal}`)
 fs.writeFileSync(path,source)
 console.log(`Wired Workforce Core registry and Add Worker translations: ${path}`)
