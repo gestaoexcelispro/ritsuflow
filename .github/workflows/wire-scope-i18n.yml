@@ -1,0 +1,37 @@
+name: Wire Scope i18n
+
+on:
+  push:
+    branches:
+      - feat/i18n-project-setup-wiring
+    paths:
+      - scripts/i18n-wire-scope.mjs
+      - .github/workflows/wire-scope-i18n.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire-scope:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/i18n-project-setup-wiring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply deterministic Scope translation wiring
+        run: node scripts/i18n-wire-scope.mjs
+      - name: Commit generated Scope wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/dashboard/projects/setup/ScopeWorkspace.js
+          if git diff --cached --quiet; then
+            echo "No Scope wiring changes required."
+            exit 0
+          fi
+          git commit -m "Wire Scope workspace internationalization"
+          git push
