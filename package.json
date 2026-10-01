@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/wire-master-plan-i18n.mjs && node scripts/wire-lookahead-i18n.mjs && next build",
+    "build": "node scripts/wire-master-plan-i18n.mjs && node scripts/wire-lookahead-i18n.mjs && node scripts/wire-weekly-planning-i18n.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "i18n:audit": "node scripts/i18n-audit.mjs",
