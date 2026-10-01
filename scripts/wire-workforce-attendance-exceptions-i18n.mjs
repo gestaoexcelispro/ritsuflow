@@ -57,14 +57,35 @@ req(`function formatExceptionCode(code) {
     return 'Recorded Exception'
   }
 
-  return code
-    .split('_')
-    .map(
-      (word) =>
-        word.charAt(0).toUpperCase() +
-        word.slice(1)
-    )
-    .join(' ')
+  const labels = {
+    GEOFENCE_OUTSIDE:
+      'Outside Geofence',
+
+    LOCATION_UNAVAILABLE:
+      'Location Unavailable',
+
+    GEOFENCE_UNCERTAIN:
+      'Geofence Uncertain',
+
+    GPS_LOW_ACCURACY:
+      'GPS Low Accuracy',
+
+    MULTIPLE_ATTENDANCE_EXCEPTIONS:
+      'Multiple Attendance Exceptions',
+  }
+
+  return (
+    labels[code] ||
+    code
+      .toLowerCase()
+      .split('_')
+      .map(
+        (word) =>
+          word.charAt(0).toUpperCase() +
+          word.slice(1)
+      )
+      .join(' ')
+  )
 }`,"function formatExceptionCode(code, locale) { return getAttendanceExceptionCodeLabel(code, locale) }")
 s=s.replaceAll("title:\n                  'Over Allowed Hours'","title: t.overAllowedHours").replaceAll("description:\n                  'Worker has exceeded the standard daily working allowance.'","description: t.overAllowedDescription")
 s=s.replace("? 'Long Open Session'\n                      : 'Open Session'","? t.longOpenSession\n                      : t.openSession").replace("? 'Worker has remained checked in for an unusually long period.'\n                      : 'Worker currently has an open attendance session.'","? t.longOpenDescription\n                      : t.openDescription")
