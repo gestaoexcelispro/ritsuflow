@@ -4,14 +4,8 @@ const stages = [
   ['01 Master Plan i18n', 'node', ['scripts/wire-master-plan-i18n.mjs']],
   ['02 Lookahead i18n', 'node', ['scripts/wire-lookahead-i18n.mjs']],
   ['03 Weekly Planning i18n', 'node', ['scripts/wire-weekly-planning-i18n.mjs']],
-  ['04 Workforce Core i18n', 'node', ['scripts/wire-workforce-i18n.mjs']],
-  ['05 Workforce Assignments i18n', 'node', ['scripts/wire-workforce-assignments-i18n.mjs']],
-  ['06 Attendance Core i18n', 'node', ['scripts/wire-workforce-attendance-i18n.mjs']],
-  ['07 Attendance Exceptions i18n', 'node', ['scripts/wire-workforce-attendance-exceptions-i18n.mjs']],
-  ['08 Attendance History i18n', 'node', ['scripts/wire-workforce-attendance-history-i18n.mjs']],
-  ['09 Attendance Audit Trail i18n', 'node', ['scripts/wire-workforce-attendance-audit-i18n.mjs']],
-  ['10 Field Management residual audit', 'node', ['scripts/audit-field-management-i18n.mjs']],
-  ['11 Next.js production build', process.platform === 'win32' ? 'npx.cmd' : 'npx', ['next', 'build']],
+  ['04 Native FieldOp Workforce i18n', 'node', ['scripts/wire-fieldop-workforce-i18n.mjs']],
+  ['05 Next.js production build', process.platform === 'win32' ? 'npx.cmd' : 'npx', ['next', 'build']],
 ]
 
 console.log('\n=== RITSUFLOW I18N BUILD DIAGNOSTICS ===')
