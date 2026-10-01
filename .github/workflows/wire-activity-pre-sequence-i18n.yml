@@ -1,0 +1,37 @@
+name: Wire Activity Pre-Sequence i18n
+
+on:
+  push:
+    branches:
+      - feat/i18n-project-setup-wiring
+    paths:
+      - scripts/wire-activity-pre-sequence-i18n.mjs
+      - .github/workflows/wire-activity-pre-sequence-i18n.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire-activity-pre-sequence:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/i18n-project-setup-wiring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply deterministic Activity Pre-Sequence translation wiring
+        run: node scripts/wire-activity-pre-sequence-i18n.mjs
+      - name: Commit generated Activity Pre-Sequence wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/dashboard/planning/pre-planning/ActivityPreSequence.js
+          if git diff --cached --quiet; then
+            echo "No Activity Pre-Sequence wiring changes required."
+            exit 0
+          fi
+          git commit -m "Wire Activity Pre-Sequence internationalization"
+          git push
