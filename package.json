@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/wire-master-plan-i18n.mjs && node scripts/wire-lookahead-i18n.mjs && node scripts/wire-weekly-planning-i18n.mjs && node scripts/wire-workforce-i18n.mjs && node scripts/wire-workforce-assignments-i18n.mjs && node scripts/wire-workforce-attendance-i18n.mjs && node scripts/wire-workforce-attendance-exceptions-i18n.mjs && node scripts/wire-workforce-attendance-history-i18n.mjs && node scripts/wire-workforce-attendance-audit-i18n.mjs && next build",
+    "build": "node scripts/wire-master-plan-i18n.mjs && node scripts/wire-lookahead-i18n.mjs && node scripts/wire-weekly-planning-i18n.mjs && node scripts/wire-workforce-i18n.mjs && node scripts/wire-workforce-assignments-i18n.mjs && node scripts/wire-workforce-attendance-i18n.mjs && node scripts/wire-workforce-attendance-exceptions-i18n.mjs && node scripts/wire-workforce-attendance-history-i18n.mjs && node scripts/wire-workforce-attendance-audit-i18n.mjs && node scripts/audit-field-management-i18n.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "i18n:audit": "node scripts/i18n-audit.mjs",
-    "i18n:check": "node scripts/i18n-audit.mjs --strict"
+    "i18n:check": "node scripts/i18n-audit.mjs --strict",
+    "i18n:field-management": "node scripts/audit-field-management-i18n.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.1",
