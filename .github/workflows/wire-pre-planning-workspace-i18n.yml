@@ -1,0 +1,37 @@
+name: Wire Pre-Planning Workspace i18n
+
+on:
+  push:
+    branches:
+      - feat/i18n-project-setup-wiring
+    paths:
+      - scripts/wire-pre-planning-workspace-i18n.mjs
+      - .github/workflows/wire-pre-planning-workspace-i18n.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire-pre-planning-workspace:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/i18n-project-setup-wiring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply deterministic Pre-Planning workspace translation wiring
+        run: node scripts/wire-pre-planning-workspace-i18n.mjs
+      - name: Commit generated Pre-Planning workspace wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/dashboard/planning/pre-planning/PrePlanningWorkspace.js
+          if git diff --cached --quiet; then
+            echo "No Pre-Planning workspace wiring changes required."
+            exit 0
+          fi
+          git commit -m "Wire Pre-Planning workspace internationalization"
+          git push
