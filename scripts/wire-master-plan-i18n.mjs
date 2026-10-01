@@ -11,6 +11,9 @@ function required(from, to) {
 if (!source.includes("import { getMasterPlanCopy } from '../../../../i18n/masterPlan';")) {
   required("import React, { useState, useEffect, useRef } from 'react';", "import React, { useState, useEffect, useRef } from 'react';\nimport { getMasterPlanCopy } from '../../../../i18n/masterPlan';")
 }
+if (!source.includes("import { getMasterPlanPortfolioCopy } from '../../../../i18n/masterPlanPortfolio';")) {
+  required("import { getMasterPlanCopy } from '../../../../i18n/masterPlan';", "import { getMasterPlanCopy } from '../../../../i18n/masterPlan';\nimport { getMasterPlanPortfolioCopy } from '../../../../i18n/masterPlanPortfolio';")
+}
 
 if (!source.includes("const [locale, setLocale] = useState('en-US');")) {
   const start = source.indexOf('  const t = {', source.indexOf('export default function MasterPlanPage()'))
@@ -18,7 +21,9 @@ if (!source.includes("const [locale, setLocale] = useState('en-US');")) {
   const endMarker = '\n  };\n\n  const [projects, setProjects]'
   const end = source.indexOf(endMarker, start)
   if (end < 0) throw new Error('Master Plan local translation object end was not found.')
-  source = source.slice(0, start) + "  const [locale, setLocale] = useState('en-US');\n  const t = getMasterPlanCopy(locale);\n" + source.slice(end + '\n  };\n'.length)
+  source = source.slice(0, start) + "  const [locale, setLocale] = useState('en-US');\n  const t = { ...getMasterPlanCopy(locale), ...getMasterPlanPortfolioCopy(locale) };\n" + source.slice(end + '\n  };\n'.length)
+} else {
+  source = source.replace('const t = getMasterPlanCopy(locale);', 'const t = { ...getMasterPlanCopy(locale), ...getMasterPlanPortfolioCopy(locale) };')
 }
 
 if (!source.includes('async function loadOrganizationLocale()')) {
@@ -47,41 +52,18 @@ if (!source.includes('async function loadOrganizationLocale()')) {
 source = source.replace("      'en-US',\n      {", "      locale,\n      {")
 source = source.replaceAll("'PROJECT LOCATIONS'", 't.projectLocations')
 
-// Portfolio/project-selector literals discovered by the rendered-surface audit.
 const portfolioReplacements = [
-  ['PLANNING &amp; PRODUCTION CONTROL', '{t.portfolioEyebrow}'],
-  ['>Master Plan<', '>{t.portfolioTitle}<'],
-  ['Select a project to access its Master Plan.', '{t.portfolioHelp}'],
-  ['No projects are available for Master Plan.', '{t.portfolioEmpty}'],
-  ['PROJECT COVER', '{t.projectCover}'],
-  ["{project.code || 'UNASSIGNED'}", '{project.code || t.unassigned}'],
-  ['>PROJECT<', '>{t.projectLabel}<'],
-  ["{project.client_name || 'Client not assigned'}", '{project.client_name || t.clientNotAssigned}'],
-  ["{locationText || project.country_code || 'Location not assigned'}", '{locationText || project.country_code || t.locationNotAssigned}'],
-  ['>Overall Progress<', '>{t.overallProgress}<'],
-  ["'Production Control data not available yet.'", 't.productionDataUnavailable'],
-  ["'Production scope available. Field production has not started yet.'", 't.productionNotStarted'],
-  ['<span>Open Project</span>', '<span>{t.openProject}</span>'],
-  ["alt={`${project.name} project`}", 'alt={`${project.name} ${t.projectImageSuffix}`}']
+  ['PLANNING &amp; PRODUCTION CONTROL', '{t.portfolioEyebrow}'], ['>Master Plan<', '>{t.portfolioTitle}<'], ['Select a project to access its Master Plan.', '{t.portfolioHelp}'], ['No projects are available for Master Plan.', '{t.portfolioEmpty}'], ['PROJECT COVER', '{t.projectCover}'], ["{project.code || 'UNASSIGNED'}", '{project.code || t.unassigned}'], ['>PROJECT<', '>{t.projectLabel}<'], ["{project.client_name || 'Client not assigned'}", '{project.client_name || t.clientNotAssigned}'], ["{locationText || project.country_code || 'Location not assigned'}", '{locationText || project.country_code || t.locationNotAssigned}'], ['>Overall Progress<', '>{t.overallProgress}<'], ["'Production Control data not available yet.'", 't.productionDataUnavailable'], ["'Production scope available. Field production has not started yet.'", 't.productionNotStarted'], ['<span>Open Project</span>', '<span>{t.openProject}</span>'], ["alt={`${project.name} project`}", 'alt={`${project.name} ${t.projectImageSuffix}`}']
 ]
 for (const [from, to] of portfolioReplacements) source = source.replaceAll(from, to)
+source = source.replace('`${progressRecord.completed_count} of ${progressRecord.scope_item_count} scope items completed.`', 't.completedScopeItems(progressRecord.completed_count, progressRecord.scope_item_count)')
+source = source.replace('`${progressRecord.in_progress_count} scope item${progressRecord.in_progress_count === 1 ? \'\' : \'s\'} in progress.`', 't.scopeItemsInProgress(progressRecord.in_progress_count)')
 
-// Dynamic portfolio progress messages.
-source = source.replace(
-  '`${progressRecord.completed_count} of ${progressRecord.scope_item_count} scope items completed.`',
-  't.completedScopeItems(progressRecord.completed_count, progressRecord.scope_item_count)'
-)
-source = source.replace(
-  '`${progressRecord.in_progress_count} scope item${progressRecord.in_progress_count === 1 ? \'\' : \'s\'} in progress.`',
-  't.scopeItemsInProgress(progressRecord.in_progress_count)'
-)
-
-for (const token of ['get{t.', 'set{t.', 'locale{t.', 'project{t.', 'selected{t.']) {
-  if (source.includes(token)) throw new Error(`Unsafe i18n mutation detected: ${token}`)
-}
-if (source.includes('  const t = {')) throw new Error('Legacy English-only Master Plan translation object still exists.')
+for (const token of ['get{t.', 'set{t.', 'locale{t.', 'project{t.', 'selected{t.']) if (source.includes(token)) throw new Error(`Unsafe i18n mutation detected: ${token}`)
+if (source.includes('  const t = {\n    title:')) throw new Error('Legacy English-only Master Plan translation object still exists.')
 if (!source.includes('getMasterPlanCopy(locale)')) throw new Error('Master Plan catalog is not wired to locale.')
+if (!source.includes('getMasterPlanPortfolioCopy(locale)')) throw new Error('Master Plan portfolio catalog is not wired to locale.')
 if (!source.includes('loadOrganizationLocale')) throw new Error('Organization locale loader is missing.')
 
 fs.writeFileSync(path, source)
-console.log(`Wired Master Plan locale catalog and portfolio literals: ${path}`)
+console.log(`Wired Master Plan locale catalogs and portfolio literals: ${path}`)
