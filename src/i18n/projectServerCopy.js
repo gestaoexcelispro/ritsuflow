@@ -2,11 +2,11 @@ import { projectCopy, projectStatusLabels, projectText } from './projects'
 import { resolveOrganizationLocale } from './serverLocale'
 
 const SETUP_SECTION_KEYS = [
-  { id: 'general', number: '01', labelKey: 'general', descriptionKey: 'generalDescription' },
-  { id: 'scope', number: '02', labelKey: 'scope', descriptionKey: 'scopeDescription' },
-  { id: 'locations', number: '03', labelKey: 'locations', descriptionKey: 'locationsDescription' },
-  { id: 'allocation', number: '04', labelKey: 'allocation', descriptionKey: 'allocationDescription' },
-  { id: 'production', number: '05', labelKey: 'productionParameters', descriptionKey: 'productionDescription' },
+  { id: 'general', number: '01', labelKey: 'general', descriptionKey: 'generalHelp' },
+  { id: 'scope', number: '02', labelKey: 'scope', descriptionKey: 'scopeHelp' },
+  { id: 'locations', number: '03', labelKey: 'locations', descriptionKey: 'locationsHelp' },
+  { id: 'allocation', number: '04', labelKey: 'allocation', descriptionKey: 'allocationHelp' },
+  { id: 'production', number: '05', labelKey: 'productionParameters', descriptionKey: 'productionParametersHelp' },
 ]
 
 const ALLOCATION_STATUS_KEYS = {
