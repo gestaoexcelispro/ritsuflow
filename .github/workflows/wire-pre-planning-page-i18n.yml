@@ -1,0 +1,37 @@
+name: Wire Pre-Planning Page i18n
+
+on:
+  push:
+    branches:
+      - feat/i18n-project-setup-wiring
+    paths:
+      - scripts/wire-pre-planning-page-i18n.mjs
+      - .github/workflows/wire-pre-planning-page-i18n.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire-pre-planning-page:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/i18n-project-setup-wiring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply deterministic Pre-Planning server locale wiring
+        run: node scripts/wire-pre-planning-page-i18n.mjs
+      - name: Commit generated Pre-Planning page wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/dashboard/planning/pre-planning/page.js
+          if git diff --cached --quiet; then
+            echo "No Pre-Planning page wiring changes required."
+            exit 0
+          fi
+          git commit -m "Wire Pre-Planning server internationalization"
+          git push
