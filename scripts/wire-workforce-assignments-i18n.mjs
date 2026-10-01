@@ -49,6 +49,6 @@ if(!source.includes('getWorkforceAssignmentsCopy(locale)'))throw new Error('Assi
 if(!source.includes('loadOrganizationLocale'))throw new Error('Assignments locale loader missing')
 if(!source.includes('formatAssignmentDate(dateValue, locale)'))throw new Error('Assignments locale date formatting missing')
 if(!source.includes('getAssignmentStatusLabel(status, locale)'))throw new Error('Assignments status localization missing')
-for(const literal of [/?>\s*Project Assignments\s*</,/>\s*\+ New Assignment\s*</,/>\s*Loading assignments\.\.\.\s*</,/>\s*No project assignments found\s*</,/>\s*Cancel\s*</,/aria-label="Close"/])if(literal.test(source))throw new Error(`Assignments runtime literal remains: ${literal}`)
+for(const literal of [/>\s*Project Assignments\s*</,/>\s*\+ New Assignment\s*</,/>\s*Loading assignments\.\.\.\s*</,/>\s*No project assignments found\s*</,/>\s*Cancel\s*</,/aria-label="Close"/])if(literal.test(source))throw new Error(`Assignments runtime literal remains: ${literal}`)
 fs.writeFileSync(path,source)
 console.log(`Wired Workforce Assignments locale, statuses, dates and form: ${path}`)
