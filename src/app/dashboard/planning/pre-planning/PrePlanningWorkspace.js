@@ -14,6 +14,7 @@ import {
 } from 'next/navigation'
 
 import styles from './pre-planning.module.css'
+import { getPrePlanningCopy } from '../../../../i18n/prePlanning'
 
 import PrePlanningWbsEditor from './PrePlanningWbsEditor'
 
@@ -37,7 +38,8 @@ const AUTO_SCROLL_SPEED = 16
 
 function safeNumber(
   value,
-  digits = 2
+  digits = 2,
+  locale = 'en-US'
 ) {
   const numeric =
     Number(value)
@@ -51,7 +53,7 @@ function safeNumber(
   }
 
   return new Intl.NumberFormat(
-    'en-US',
+    locale,
     {
       minimumFractionDigits: 0,
       maximumFractionDigits:
@@ -64,36 +66,40 @@ function safeNumber(
 
 
 function getBasisLabel(
-  basis
+  basis,
+  t
 ) {
   return basis ===
     'crew_day'
-    ? 'Per crew / day'
-    : 'Per worker / day'
+    ? t.perCrewDay
+    : t.perWorkerDay
 }
 
 
 function getResourceUnit(
   activity,
-  value = 2
+  value = 2,
+  t
 ) {
   if (
     activity?.productivityBasis ===
     'crew_day'
   ) {
     return value === 1
-      ? 'crew'
-      : 'crews'
+      ? t.crew
+      : t.crews
   }
 
   return value === 1
-    ? 'worker'
-    : 'workers'
+    ? t.worker
+    : t.workers
 }
 
 
 function getResourceLabel(
-  activity
+  activity,
+  t,
+  locale
 ) {
   const value =
     Number(
@@ -110,10 +116,13 @@ function getResourceLabel(
   }
 
   return `${safeNumber(
-    value
+    value,
+    2,
+    locale
   )} ${getResourceUnit(
     activity,
-    value
+    value,
+    t
   )}`
 }
 
@@ -1092,7 +1101,8 @@ function applyDurationTemplate({
 
 function buildWbsRows(
   activities,
-  desiredDurations
+  desiredDurations,
+  t
 ) {
   const rows = []
   const locations = new Map()
@@ -1123,7 +1133,7 @@ function buildWbsRows(
           {
             name:
               activity.locationName ||
-              'Unassigned Location',
+              t.unassignedLocation,
             divisions:
               new Map(),
           }
@@ -1148,7 +1158,7 @@ function buildWbsRows(
               activity.divisionName !==
                 '—'
                 ? activity.divisionName
-                : 'Unassigned Division',
+                : t.unassignedDivision,
             workPackages:
               new Map(),
           }
@@ -1409,9 +1419,15 @@ export default function PrePlanningWorkspace({
   changeProjectHref = '/dashboard/planning/pre-planning',
 
   standalone = false,
+  locale = 'en-US',
 }) {
   const router =
     useRouter()
+
+  const t = useMemo(
+    () => getPrePlanningCopy(locale),
+    [locale]
+  )
 
   const workingVersion =
     currentVersion ||
@@ -2084,7 +2100,8 @@ export default function PrePlanningWorkspace({
       () =>
         buildWbsRows(
           filteredActivities,
-          desiredDurations
+          desiredDurations,
+          t
         ),
       [
         filteredActivities,
