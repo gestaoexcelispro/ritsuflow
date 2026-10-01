@@ -43,7 +43,7 @@ for(const [literal,expr] of jsx)replaceJsxText(literal,expr)
 source=source.replaceAll('label="Total Assignments"','label={t.totalAssignments}').replaceAll('label="Active"','label={t.active}').replaceAll('label="Scheduled"','label={t.scheduled}').replaceAll('label="Ended"','label={t.ended}')
 source=source.replace(/>\s*Select worker\s*</g,'>{t.selectWorker}<').replace(/>\s*Select project\s*</g,'>{t.selectProject}<').replace(/>\s*Select company\s*</g,'>{t.selectCompany}<').replace(/>\s*Select trade\s*</g,'>{t.selectTrade}<').replace(/>\s*Select role\s*</g,'>{t.selectRole}<').replace(/>\s*Select crew\s*</g,'>{t.selectCrew}<')
 source=source.replace(/Allocate workers to projects while preserving company, trade, role and crew context\./g,'{t.description}')
-source=source.replaceAll('aria-label="Close"','aria-label={t.close || \'Close\'}')
+source=source.replaceAll('aria-label="Close"','aria-label={t.close}')
 
 if(!source.includes('getWorkforceAssignmentsCopy(locale)'))throw new Error('Assignments catalog wiring missing')
 if(!source.includes('loadOrganizationLocale'))throw new Error('Assignments locale loader missing')
