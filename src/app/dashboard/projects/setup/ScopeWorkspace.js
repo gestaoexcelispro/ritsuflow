@@ -6,6 +6,7 @@ import {
 } from 'react'
 
 import { createClient } from '../../../../lib/supabase/client'
+import { getScopeWorkspaceCopy, interpolateScopeCopy } from '../../../../i18n/scopeWorkspace'
 
 import styles from './project-setup.module.css'
 
@@ -81,30 +82,30 @@ const emptyScopeItemForm = {
 // HELPERS
 // ============================================================
 
-function getErrorMessage(error) {
+function getErrorMessage(error, t) {
   if (!error) {
-    return 'An unexpected error occurred.'
+    return t.unexpectedError
   }
 
   if (error.code === '23505') {
-    return 'A record with the same identifying information already exists.'
+    return t.duplicateRecord
   }
 
   if (error.code === '23503') {
-    return 'This record is already referenced by other project information and cannot be deleted.'
+    return t.referencedRecord
   }
 
   if (error.code === '23514') {
-    return 'One or more values do not satisfy the project scope rules.'
+    return t.invalidScopeRules
   }
 
   if (error.code === '42501') {
-    return 'Your account does not have permission to perform this action.'
+    return t.permissionDenied
   }
 
   return (
     error.message ||
-    'The requested operation could not be completed.'
+    t.operationFailed
   )
 }
 
@@ -162,7 +163,7 @@ function createServiceCode(
 }
 
 
-function formatCurrency(value, currencyCode = 'USD') {
+function formatCurrency(value, currencyCode = 'USD', locale = 'en-US') {
   if (value === null || value === undefined || value === '') {
     return '—'
   }
@@ -174,14 +175,14 @@ function formatCurrency(value, currencyCode = 'USD') {
   }
 
   try {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: currencyCode || 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(numericValue)
   } catch {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(numericValue)
@@ -189,7 +190,7 @@ function formatCurrency(value, currencyCode = 'USD') {
 }
 
 
-function formatQuantity(value) {
+function formatQuantity(value, locale = 'en-US') {
   if (
     value === null ||
     value === undefined ||
@@ -206,7 +207,7 @@ function formatQuantity(value) {
   }
 
   return new Intl.NumberFormat(
-    'en-US',
+    locale,
     {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
@@ -225,7 +226,10 @@ export default function ScopeWorkspace({
   initialWorkPackages = [],
   initialScopeItems = [],
   currencyCode = 'USD',
+  locale = 'en-US',
 }) {
+  const t = getScopeWorkspaceCopy(locale)
+  const tx = (key, variables = {}) => interpolateScopeCopy(t[key], variables)
   const supabase =
     useMemo(
       () => createClient(),
@@ -661,7 +665,7 @@ export default function ScopeWorkspace({
       normalizedCode.length !== 3
     ) {
       setErrorMessage(
-        'Work Package code must contain exactly three letters.'
+        t.wpCodeThreeLetters
       )
 
       return
@@ -670,7 +674,7 @@ export default function ScopeWorkspace({
 
     if (!normalizedDescription) {
       setErrorMessage(
-        'Enter a Work Package description.'
+        t.enterWpDescription
       )
 
       return
@@ -689,7 +693,7 @@ export default function ScopeWorkspace({
 
     if (duplicateCode) {
       setErrorMessage(
-        `Work Package ${normalizedCode} already exists in this project.`
+        tx('duplicateWp', { code: normalizedCode })
       )
 
       return
@@ -720,7 +724,8 @@ export default function ScopeWorkspace({
     if (colorError) {
       setErrorMessage(
         getErrorMessage(
-          colorError
+          colorError,
+          t
         )
       )
 
@@ -774,7 +779,8 @@ export default function ScopeWorkspace({
     if (error) {
       setErrorMessage(
         getErrorMessage(
-          error
+          error,
+          t
         )
       )
 
@@ -792,7 +798,7 @@ export default function ScopeWorkspace({
 
 
     setNoticeMessage(
-      `${data.code} — ${data.description} was added to the project scope.`
+      tx('wpAdded', { code: data.code, description: data.description })
     )
 
 
@@ -843,11 +849,7 @@ export default function ScopeWorkspace({
       relatedScopeItems.length > 0
     ) {
       setErrorMessage(
-        `${workPackage.code} cannot be deleted because ${relatedScopeItems.length} Scope ${
-          relatedScopeItems.length === 1
-            ? 'Item is'
-            : 'Items are'
-        } still assigned to it. Reassign those Scope Items first.`
+        tx('wpHasItems', { code: workPackage.code, count: relatedScopeItems.length, itemWord: relatedScopeItems.length === 1 ? t.itemIs : t.itemsAre })
       )
 
       setNoticeMessage('')
@@ -858,7 +860,7 @@ export default function ScopeWorkspace({
 
     const confirmed =
       window.confirm(
-        `Delete Work Package "${workPackage.code} — ${workPackage.description}"?\n\nThis permanently removes the Work Package from the project scope.`
+        tx('confirmDeleteWp', { code: workPackage.code, description: workPackage.description })
       )
 
 
@@ -896,7 +898,8 @@ export default function ScopeWorkspace({
     if (error) {
       setErrorMessage(
         getErrorMessage(
-          error
+          error,
+          t
         )
       )
 
@@ -924,7 +927,7 @@ export default function ScopeWorkspace({
 
 
     setNoticeMessage(
-      `${workPackage.code} — ${workPackage.description} was deleted from the project scope.`
+      tx('wpDeleted', { code: workPackage.code, description: workPackage.description })
     )
   }
 
@@ -952,7 +955,7 @@ export default function ScopeWorkspace({
 
     if (!normalizedName) {
       setErrorMessage(
-        'Enter a Scope Item description.'
+        t.enterScopeDescription
       )
 
       return
@@ -963,7 +966,7 @@ export default function ScopeWorkspace({
       !scopeItemForm.project_work_package_id
     ) {
       setErrorMessage(
-        'Select a Work Package.'
+        t.selectWpError
       )
 
       return
@@ -987,7 +990,7 @@ export default function ScopeWorkspace({
 
       if (!finalUnit) {
         setErrorMessage(
-          'Enter a custom unit.'
+          t.enterCustomUnit
         )
 
         return
@@ -1028,7 +1031,7 @@ export default function ScopeWorkspace({
         scopeQuantity < 0
       ) {
         setErrorMessage(
-          'Enter a valid Scope Quantity greater than or equal to zero.'
+          t.invalidQuantity
         )
 
         return
@@ -1054,7 +1057,7 @@ export default function ScopeWorkspace({
         unitCost < 0
       ) {
         setErrorMessage(
-          'Enter a valid Unit Cost greater than or equal to zero.'
+          t.invalidUnitCost
         )
         return
       }
@@ -1106,7 +1109,7 @@ export default function ScopeWorkspace({
 
     if (duplicateName) {
       setErrorMessage(
-        'A Scope Item with this description already exists in the project.'
+        t.duplicateScopeDescription
       )
 
       return
@@ -1132,7 +1135,7 @@ export default function ScopeWorkspace({
 
     if (duplicateCode) {
       setErrorMessage(
-        'A Scope Item with this code already exists in the project.'
+        t.duplicateScopeCode
       )
 
       return
@@ -1223,7 +1226,7 @@ export default function ScopeWorkspace({
 
 
       setNoticeMessage(
-        `${data.service_name} was updated.`
+        tx('scopeUpdated', { name: data.service_name })
       )
     }
 
@@ -1324,7 +1327,7 @@ export default function ScopeWorkspace({
 
 
       setNoticeMessage(
-        `${data.service_name} was added to the project scope.`
+        tx('scopeAdded', { name: data.service_name })
       )
     }
 
@@ -1386,7 +1389,8 @@ export default function ScopeWorkspace({
     if (error) {
       setErrorMessage(
         getErrorMessage(
-          error
+          error,
+          t
         )
       )
 
@@ -1421,7 +1425,7 @@ export default function ScopeWorkspace({
 
 
     setNoticeMessage(
-      'Scope Item was assigned to its Work Package.'
+      t.assignedNotice
     )
   }
 
@@ -1435,7 +1439,7 @@ export default function ScopeWorkspace({
   ) {
     const confirmed =
       window.confirm(
-        `Archive "${scopeItem.service_name}"? Existing planning, quantity, and production records will remain connected to this Scope Item.`
+        tx('confirmArchive', { name: scopeItem.service_name })
       )
 
 
@@ -1488,7 +1492,8 @@ export default function ScopeWorkspace({
     if (error) {
       setErrorMessage(
         getErrorMessage(
-          error
+          error,
+          t
         )
       )
 
@@ -1518,7 +1523,7 @@ export default function ScopeWorkspace({
 
 
     setNoticeMessage(
-      `${scopeItem.service_name} was archived from the active project scope.`
+      tx('scopeArchived', { name: scopeItem.service_name })
     )
   }
 
@@ -1653,7 +1658,8 @@ export default function ScopeWorkspace({
           >
             {formatCurrency(
               projectScopeCost,
-              currencyCode
+              currencyCode,
+              locale
             )}
           </strong>
 
@@ -1662,7 +1668,7 @@ export default function ScopeWorkspace({
               styles.metricDetail
             }
           >
-            {costDefinedCount}/{activeScopeItems.length} Scope Items costed
+            {costDefinedCount}/{activeScopeItems.length} {t.scopeItemsCosted}
           </span>
         </article>
       </section>
@@ -1688,8 +1694,8 @@ export default function ScopeWorkspace({
 
           <strong>
             {scopeDefinitionComplete
-              ? 'Complete'
-              : 'Incomplete'}
+              ? t.complete
+              : t.incomplete}
           </strong>
         </div>
 
@@ -1702,8 +1708,8 @@ export default function ScopeWorkspace({
           }
         >
           {scopeDefinitionComplete
-            ? 'READY'
-            : 'ACTION REQUIRED'}
+            ? t.ready
+            : t.actionRequired}
         </span>
       </section>
 
@@ -1735,13 +1741,7 @@ export default function ScopeWorkspace({
               className={
                 styles.formDescription
               }
-            >
-              Define Work Packages and the Scope Items
-              contained within each package. Work Packages
-              represent scope. Planning buffers and time lags
-              are managed by the scheduling model rather than
-              the Scope Breakdown Structure.
-            </p>
+            >{t.projectScopeHelp}</p>
           </div>
 
 
@@ -1815,12 +1815,7 @@ export default function ScopeWorkspace({
               Start the Scope Breakdown Structure.
             </h3>
 
-            <p>
-              Create the first Work Package,
-              then add the Scope Items that
-              define what the project must
-              deliver.
-            </p>
+            <p>{t.startSbsHelp}</p>
 
             <button
               type="button"
@@ -1953,12 +1948,13 @@ export default function ScopeWorkspace({
                         >
                           {packageItems.length}{' '}
                           {packageItems.length === 1
-                            ? 'Scope Item'
-                            : 'Scope Items'}
+                            ? t.scopeItem
+                            : t.scopeItems}
                           {' · '}
                           {formatCurrency(
                             packageCost,
-                            currencyCode
+                            currencyCode,
+                            locale
                           )}
                         </span>
 
@@ -1994,8 +1990,8 @@ export default function ScopeWorkspace({
                           }
                           title={
                             packageItems.length > 0
-                              ? 'Reassign Scope Items before deleting this Work Package.'
-                              : 'Delete Work Package'
+                              ? t.reassignBeforeDelete
+                              : t.deleteWpTitle
                           }
                         >
                           {deletingWorkPackageId ===
@@ -2114,7 +2110,7 @@ export default function ScopeWorkspace({
 
                                   <span>
                                     {scopeItem.service_code ||
-                                      'No code'}
+                                      t.noCode}
                                   </span>
                                 </div>
 
@@ -2138,7 +2134,8 @@ export default function ScopeWorkspace({
                                   }
                                 >
                                   {formatQuantity(
-                                    scopeItem.scope_quantity
+                                    scopeItem.scope_quantity,
+                                    locale
                                   )}
                                 </span>
 
@@ -2146,7 +2143,8 @@ export default function ScopeWorkspace({
                                 <span>
                                   {formatCurrency(
                                     scopeItem.unit_cost,
-                                    currencyCode
+                                    currencyCode,
+                                    locale
                                   )}
                                 </span>
 
@@ -2159,7 +2157,8 @@ export default function ScopeWorkspace({
                                     ? formatCurrency(
                                         Number(scopeItem.scope_quantity) *
                                           Number(scopeItem.unit_cost),
-                                        currencyCode
+                                        currencyCode,
+                                        locale
                                       )
                                     : '—'}
                                 </span>
@@ -2173,8 +2172,8 @@ export default function ScopeWorkspace({
                                   }
                                 >
                                   {isComplete
-                                    ? 'Complete'
-                                    : 'Incomplete'}
+                                    ? t.complete
+                                    : t.incomplete}
                                 </span>
 
 
@@ -2364,7 +2363,7 @@ export default function ScopeWorkspace({
 
                             <span>
                               {scopeItem.service_code ||
-                                'No code'}
+                                t.noCode}
                             </span>
                           </div>
 
@@ -2388,7 +2387,8 @@ export default function ScopeWorkspace({
                             }
                           >
                             {formatQuantity(
-                              scopeItem.scope_quantity
+                              scopeItem.scope_quantity,
+                              locale
                             )}
                           </span>
 
@@ -2487,7 +2487,7 @@ export default function ScopeWorkspace({
             onClick={() =>
               setNoticeMessage('')
             }
-            aria-label="Close notification"
+            aria-label={t.closeNotification}
           >
             ×
           </button>
@@ -2541,7 +2541,7 @@ export default function ScopeWorkspace({
                 onClick={
                   closeWorkPackageModal
                 }
-                aria-label="Close modal"
+                aria-label={t.closeModal}
               >
                 ×
               </button>
@@ -2552,13 +2552,7 @@ export default function ScopeWorkspace({
               className={
                 styles.scopeModalDescription
               }
-            >
-              Work Packages are the first
-              organizational level of the
-              project Scope Breakdown Structure.
-              Buffers and scheduling lags are
-              defined separately in Planning.
-            </p>
+            >{t.workPackageHelp}</p>
 
 
             <div
@@ -2675,8 +2669,8 @@ export default function ScopeWorkspace({
                 }
               >
                 {isSaving
-                  ? 'Saving...'
-                  : 'Add Work Package'}
+                  ? t.saving
+                  : t.addWorkPackageTitle}
               </button>
             </div>
           </form>
@@ -2732,7 +2726,7 @@ export default function ScopeWorkspace({
                 onClick={
                   closeScopeItemModal
                 }
-                aria-label="Close modal"
+                aria-label={t.closeModal}
               >
                 ×
               </button>
@@ -2743,12 +2737,7 @@ export default function ScopeWorkspace({
               className={
                 styles.scopeModalDescription
               }
-            >
-              A Scope Item is a measurable
-              project deliverable or production
-              operation belonging to a Work
-              Package.
-            </p>
+            >{t.scopeItemHelp}</p>
 
 
             <div
@@ -2915,7 +2904,7 @@ export default function ScopeWorkspace({
                         key={unit}
                       >
                         {unit === 'OTHER'
-                          ? 'Other...'
+                          ? t.other
                           : unit}
                       </option>
                     )
@@ -2988,10 +2977,7 @@ export default function ScopeWorkspace({
                   placeholder="1500"
                 />
 
-                <small>
-                  Authoritative project
-                  quantity for this Scope Item.
-                </small>
+                <small>{t.authoritativeQuantity}</small>
               </label>
 
 
@@ -3026,9 +3012,7 @@ export default function ScopeWorkspace({
                 />
 
                 <small>
-                  Cost per {scopeItemForm.unit === 'OTHER'
-                    ? scopeItemForm.custom_unit || 'unit'
-                    : scopeItemForm.unit}.
+                  {tx('costPer', { unit: scopeItemForm.unit === 'OTHER' ? scopeItemForm.custom_unit || t.genericUnit : scopeItemForm.unit })}
                 </small>
               </label>
 
@@ -3050,14 +3034,13 @@ export default function ScopeWorkspace({
                     ? formatCurrency(
                         Number(scopeItemForm.scope_quantity) *
                           Number(scopeItemForm.unit_cost),
-                        currencyCode
+                        currencyCode,
+                        locale
                       )
                     : '—'}
                 </strong>
 
-                <small>
-                  Calculated automatically from Quantity × Unit Cost.
-                </small>
+                <small>{t.calculatedTotal}</small>
               </div>
             </div>
 
@@ -3104,10 +3087,10 @@ export default function ScopeWorkspace({
                 }
               >
                 {isSaving
-                  ? 'Saving...'
+                  ? t.saving
                   : scopeItemForm.id
-                    ? 'Save Scope Item'
-                    : 'Add Scope Item'}
+                    ? t.saveScopeItem
+                    : t.addScopeItemTitle}
               </button>
             </div>
           </form>
