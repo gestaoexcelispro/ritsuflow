@@ -22,16 +22,96 @@ req("  const [projects, setProjects] =\n    useState([])",`  const [projects, se
     loadOrganizationLocale()
     return()=>{active=false}
   },[])`)
-s=s.replace(/function formatTime\(value\) \{[\s\S]*?\n\}/,"function formatTime(value, locale) { return formatAttendanceHistoryTime(value, locale) }")
-s=s.replace(/function formatDateTime\(value\) \{[\s\S]*?\n\}/,"function formatDateTime(value, locale) { return formatAttendanceHistoryDateTime(value, locale) }")
-s=s.replace(/function getTimecardStatus\(\{[\s\S]*?\n\}/,`function getTimecardStatus({hasOpenSession,totalWorkedMinutes,allowedMinutes,locale}) {
+req(`function formatTime(value) {
+  if (!value) {
+    return '—'
+  }
+
+  return new Intl.DateTimeFormat(
+    undefined,
+    {
+      hour: '2-digit',
+      minute: '2-digit',
+    }
+  ).format(new Date(value))
+}`,"function formatTime(value, locale) { return formatAttendanceHistoryTime(value, locale) }")
+req(`function formatDateTime(value) {
+  if (!value) {
+    return '—'
+  }
+
+  return new Intl.DateTimeFormat(
+    undefined,
+    {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }
+  ).format(new Date(value))
+}`,"function formatDateTime(value, locale) { return formatAttendanceHistoryDateTime(value, locale) }")
+req(`function getTimecardStatus({
+  hasOpenSession,
+  totalWorkedMinutes,
+  allowedMinutes,
+}) {
+  if (hasOpenSession) {
+    return {
+      key: 'open',
+      label: 'Open Session',
+    }
+  }
+
+  if (
+    allowedMinutes === null ||
+    allowedMinutes === undefined
+  ) {
+    return {
+      key: 'not_configured',
+      label: 'Not Configured',
+    }
+  }
+
+  if (
+    totalWorkedMinutes >
+    allowedMinutes
+  ) {
+    return {
+      key: 'over',
+      label: 'Over Allowed',
+    }
+  }
+
+  return {
+    key: 'normal',
+    label: 'Within Allowance',
+  }
+}`,`function getTimecardStatus({hasOpenSession,totalWorkedMinutes,allowedMinutes,locale}) {
   if(hasOpenSession)return {key:'open',label:getAttendanceTimecardStatusLabel('open',locale)}
   if(allowedMinutes===null||allowedMinutes===undefined)return {key:'not_configured',label:getAttendanceTimecardStatusLabel('not_configured',locale)}
   if(totalWorkedMinutes>allowedMinutes)return {key:'over',label:getAttendanceTimecardStatusLabel('over',locale)}
   return {key:'normal',label:getAttendanceTimecardStatusLabel('normal',locale)}
 }`)
-s=s.replace(/allowedMinutes:\n\s+allowedMinutes ===[\s\S]*?\),\n\s+\}\)/,m=>m.replace(/\n\s+\}\)$/,'\n                locale,\n              })'))
-s=s.replaceAll("'Unable to load attendance history.'",'t.unableLoad').replaceAll("'Unable to initialize Attendance History.'",'t.unableInitialize').replaceAll("'Unable to correct the attendance session.'",'t.unableCorrect').replaceAll("'Attendance session corrected successfully.'",'t.correctionSuccess')
+req(`                allowedMinutes:
+                  allowedMinutes ===
+                  null
+                    ? null
+                    : Number(
+                        allowedMinutes
+                      ),
+              })`,`                allowedMinutes:
+                  allowedMinutes ===
+                  null
+                    ? null
+                    : Number(
+                        allowedMinutes
+                      ),
+                locale,
+              })`)
+s=s.replace(`      selectedProject,
+    ])`,`      selectedProject,
+      locale,
+    ])`)
+s=s.replaceAll("'Unable to load attendance history.'",'t.unableLoad').replaceAll("'Unable to initialize Attendance History.'",'t.unableInitialize').replaceAll("'Unable to correct the attendance session.'",'t.unableCorrect')
+s=s.replaceAll("'Please enter a correction reason.'",'t.correctionReasonRequired').replaceAll("'Check-In time is required.'",'t.correctionCheckInRequired').replaceAll("'Check-Out cannot occur before Check-In.'",'t.checkOutBeforeCheckIn')
 const pairs=[['Field Management','{t.fieldManagement}'],['Attendance History','{t.title}'],['No projects available','{t.noProjects}'],['Workers With Attendance','{t.workersWithAttendance}'],['Labor-Hours','{t.laborHours}'],['Over Allowed','{t.overAllowed}'],['Exceptions','{t.exceptions}'],['Daily Timecards','{t.dailyTimecards}'],['Field ID','{t.fieldId}'],['Worker','{t.worker}'],['First In','{t.firstIn}'],['Last Out','{t.lastOut}'],['Sessions','{t.sessions}'],['Worked','{t.worked}'],['Allowed','{t.allowed}'],['Variance','{t.variance}'],['Status','{t.status}'],['Details','{t.details}']]
 for(const [a,b] of pairs)s=s.replaceAll(`>${a}<`,`>${b}<`)
 s=s.replace(/Review daily\s+timecards, individual\s+attendance sessions,\s+worked time, allowed\s+hours, and audited\s+supervisor corrections\./g,'{t.description}')
