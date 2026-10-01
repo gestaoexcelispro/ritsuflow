@@ -8,52 +8,46 @@ import {
 import { useRouter } from 'next/navigation'
 
 import { createClient } from '../../../../lib/supabase/client'
+import { getQuantityAllocationCopy } from '../../../../i18n/quantityAllocationMatrix'
 
 import styles from './project-setup.module.css'
 
 
-function getErrorMessage(error) {
+function getErrorMessage(error, t) {
   if (!error) {
-    return 'An unexpected error occurred.'
+    return t.unexpectedError
   }
 
   if (error.code === '23505') {
-    return 'A quantity record with the same identifying information already exists.'
+    return t.duplicateQuantity
   }
 
   if (error.code === '23503') {
-    return 'This quantity is connected to other project information and cannot be changed.'
+    return t.connectedQuantity
   }
 
   if (error.code === '23514') {
-    return 'The quantity does not satisfy the project allocation rules.'
+    return t.invalidAllocationRules
   }
 
   if (error.code === '42501') {
-    return 'Your account does not have permission to perform this action.'
+    return t.permissionDenied
   }
 
   return (
     error.message ||
-    'The requested operation could not be completed.'
+    t.operationFailed
   )
 }
 
 
-function getLocationTypeLabel(locationType) {
-  const labels = {
-    building: 'Building',
-    floor: 'Floor',
-    zone: 'Zone',
-    area: 'Area',
-    room: 'Room',
-    custom: 'Custom',
-  }
+function getLocationTypeLabel(locationType, t) {
+  const labels = t.locationTypes
 
   return (
     labels[locationType] ||
     locationType ||
-    'Location'
+    t.location
   )
 }
 
@@ -128,7 +122,7 @@ function getZoneColor(zoneName) {
 }
 
 
-function formatQuantity(value) {
+function formatQuantity(value, locale = 'en-US') {
   if (
     value === null ||
     value === undefined ||
@@ -149,7 +143,7 @@ function formatQuantity(value) {
   }
 
   return new Intl.NumberFormat(
-    'en-US',
+    locale,
     {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
@@ -165,6 +159,7 @@ export default function QuantityAllocationMatrix({
   locations = [],
   scopeItems = [],
   initialAllocations = [],
+  locale = 'en-US',
 }) {
   const router =
     useRouter()
@@ -174,6 +169,8 @@ export default function QuantityAllocationMatrix({
       () => createClient(),
       []
     )
+
+  const t = useMemo(() => getQuantityAllocationCopy(locale), [locale])
 
 
   // ==========================================================
@@ -816,7 +813,8 @@ export default function QuantityAllocationMatrix({
       if (error) {
         setErrorMessage(
           getErrorMessage(
-            error
+            error,
+            t
           )
         )
 
@@ -878,7 +876,7 @@ export default function QuantityAllocationMatrix({
       )
 
       setNoticeMessage(
-        'Allocation quantity was cleared.'
+        t.quantityCleared
       )
 
       router.refresh()
@@ -906,7 +904,7 @@ export default function QuantityAllocationMatrix({
       numericValue < 0
     ) {
       setErrorMessage(
-        'Enter a valid quantity greater than or equal to zero.'
+        t.invalidQuantity
       )
 
       if (
@@ -1011,7 +1009,8 @@ export default function QuantityAllocationMatrix({
       if (error) {
         setErrorMessage(
           getErrorMessage(
-            error
+            error,
+            t
           )
         )
 
@@ -1073,7 +1072,7 @@ export default function QuantityAllocationMatrix({
       )
 
       setNoticeMessage(
-        'Allocation quantity was updated.'
+        t.quantityUpdated
       )
 
       router.refresh()
@@ -1125,7 +1124,8 @@ export default function QuantityAllocationMatrix({
     if (error) {
       setErrorMessage(
         getErrorMessage(
-          error
+          error,
+          t
         )
       )
 
@@ -1174,7 +1174,7 @@ export default function QuantityAllocationMatrix({
     )
 
     setNoticeMessage(
-      'Allocation quantity was saved.'
+      t.quantitySaved
     )
 
     router.refresh()
@@ -1209,10 +1209,7 @@ export default function QuantityAllocationMatrix({
             styles.formDescription
           }
         >
-          Distribute each Scope Item quantity across the
-          project&apos;s production locations. Scope Quantity
-          remains authoritative and the reconciliation above
-          updates after each saved allocation.
+          {t.description}
         </p>
       </div>
 
@@ -1271,7 +1268,7 @@ export default function QuantityAllocationMatrix({
                 event.target.value
               )
             }
-            placeholder="Search locations or Scope Items..."
+            placeholder={t.searchPlaceholder}
             style={{
               width: '100%',
               minHeight: '42px',
@@ -1308,7 +1305,7 @@ export default function QuantityAllocationMatrix({
               event.target.value
             )
           }
-          aria-label="Filter allocation matrix by division"
+          aria-label={t.filterDivision}
           style={{
             minWidth:
               '170px',
@@ -1398,15 +1395,11 @@ export default function QuantityAllocationMatrix({
           </span>
 
           <h3>
-            No Scope Items
-            available.
+            {t.noScopeItems}
           </h3>
 
           <p>
-            Define the project
-            Scope Breakdown
-            Structure before
-            allocating quantities.
+            {t.noScopeItemsHelp}
           </p>
         </div>
       ) : matrixLocations.length ===
@@ -1425,15 +1418,11 @@ export default function QuantityAllocationMatrix({
           </span>
 
           <h3>
-            No production
-            locations available.
+            {t.noLocations}
           </h3>
 
           <p>
-            Define the physical
-            production hierarchy
-            before allocating Scope
-            Item quantities.
+            {t.noLocationsHelp}
           </p>
         </div>
       ) : (
@@ -1664,9 +1653,10 @@ export default function QuantityAllocationMatrix({
                                 850,
                             }}
                           >
-                            Scope:{' '}
+                            {t.scope}:{' '}
                             {formatQuantity(
-                              scopeItem.scope_quantity
+                              scopeItem.scope_quantity,
+                              locale
                             )}
                           </span>
                         </div>
@@ -1786,7 +1776,8 @@ export default function QuantityAllocationMatrix({
                           >
                             {location.environment_type ||
                               getLocationTypeLabel(
-                                location.location_type
+                                location.location_type,
+                                t
                               )}
                           </span>
                         </td>
