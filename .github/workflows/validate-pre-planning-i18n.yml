@@ -1,0 +1,27 @@
+name: Validate Pre-Planning i18n
+
+on:
+  push:
+    branches:
+      - feat/i18n-project-setup-wiring
+    paths:
+      - src/app/dashboard/planning/pre-planning/**
+      - src/i18n/prePlanning.js
+      - scripts/validate-pre-planning-i18n.mjs
+      - .github/workflows/validate-pre-planning-i18n.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate-pre-planning-i18n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/i18n-project-setup-wiring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate integrated Pre-Planning internationalization
+        run: node scripts/validate-pre-planning-i18n.mjs
