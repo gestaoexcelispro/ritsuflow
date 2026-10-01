@@ -46,9 +46,9 @@ export default function FieldOpProjectsPage() {
       <nav>
         <Link href="/fieldop"><i>⌂</i>Portfolio Overview</Link>
         <Link href="/fieldop/projects" className={styles.active}><i>▣</i>Projects</Link>
-        <Link href="/dashboard/field-management/workforce"><i>♙</i>Workforce</Link>
-        <Link href="/dashboard/projects/operations"><i>⌖</i>Operations</Link>
-        <Link href="/dashboard/projects/constraints"><i>△</i>Occurrences</Link>
+        <Link href="/fieldop/workforce"><i>♙</i>Workforce</Link>
+        <Link href="#"><i>⌖</i>Operations</Link>
+        <Link href="#"><i>△</i>Occurrences</Link>
         <Link href="/fieldop/reports/daily"><i>▤</i>Reports</Link>
         <Link href="/settings"><i>⚙</i>Settings</Link>
       </nav>
