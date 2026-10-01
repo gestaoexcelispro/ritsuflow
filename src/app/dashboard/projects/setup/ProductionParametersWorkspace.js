@@ -9,39 +9,40 @@ import {
 import { useRouter } from 'next/navigation'
 
 import { createClient } from '../../../../lib/supabase/client'
+import { getProductionParametersCopy, interpolateProductionParametersCopy } from '../../../../i18n/productionParametersWorkspace'
 
 import styles from './project-setup.module.css'
 
 
-function getErrorMessage(error) {
+function getErrorMessage(error, t) {
   if (!error) {
-    return 'An unexpected error occurred.'
+    return t.unexpectedError
   }
 
   if (error.code === '23505') {
-    return 'Production Parameters already exist for this Scope Item.'
+    return t.duplicate
   }
 
   if (error.code === '23503') {
-    return 'This production parameter is connected to invalid project information.'
+    return t.invalidProjectInfo
   }
 
   if (error.code === '23514') {
-    return 'The production parameter does not satisfy the project rules.'
+    return t.invalidRules
   }
 
   if (error.code === '42501') {
-    return 'Your account does not have permission to perform this action.'
+    return t.permissionDenied
   }
 
   return (
     error.message ||
-    'The requested operation could not be completed.'
+    t.operationFailed
   )
 }
 
 
-function formatNumber(value) {
+function formatNumber(value, locale = 'en-US') {
   if (
     value === null ||
     value === undefined ||
@@ -58,7 +59,7 @@ function formatNumber(value) {
   }
 
   return new Intl.NumberFormat(
-    'en-US',
+    locale,
     {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
@@ -81,6 +82,7 @@ export default function ProductionParametersWorkspace({
   workPackages = [],
   scopeItems = [],
   initialParameters = [],
+  locale = 'en-US',
 }) {
   const router =
     useRouter()
@@ -90,6 +92,9 @@ export default function ProductionParametersWorkspace({
       () => createClient(),
       []
     )
+
+  const t = useMemo(() => getProductionParametersCopy(locale), [locale])
+  const tr = (key, variables = {}) => interpolateProductionParametersCopy(t[key], variables)
 
   const [parameters, setParameters] =
     useState(initialParameters)
@@ -323,7 +328,7 @@ export default function ProductionParametersWorkspace({
 
       if (error) {
         setErrorMessage(
-          getErrorMessage(error)
+          getErrorMessage(error, t)
         )
         setSavingKey(null)
         return
@@ -339,7 +344,7 @@ export default function ProductionParametersWorkspace({
 
       setSavingKey(null)
       setNoticeMessage(
-        `${scopeItem.service_name} production parameters were cleared.`
+        tr('cleared', { name: scopeItem.service_name })
       )
       router.refresh()
       return
@@ -363,7 +368,7 @@ export default function ProductionParametersWorkspace({
       )
     ) {
       setErrorMessage(
-        `Enter a Productivity greater than zero for ${scopeItem.service_name}.`
+        tr('productivityGreaterThanZero', { name: scopeItem.service_name })
       )
       return
     }
@@ -376,7 +381,7 @@ export default function ProductionParametersWorkspace({
       )
     ) {
       setErrorMessage(
-        `Enter an Effective Workforce greater than zero for ${scopeItem.service_name}.`
+        tr('workforceGreaterThanZero', { name: scopeItem.service_name })
       )
       return
     }
@@ -438,7 +443,7 @@ export default function ProductionParametersWorkspace({
 
     if (error) {
       setErrorMessage(
-        getErrorMessage(error)
+        getErrorMessage(error, t)
       )
       setSavingKey(null)
       return
@@ -468,7 +473,7 @@ export default function ProductionParametersWorkspace({
 
     setSavingKey(null)
     setNoticeMessage(
-      `${scopeItem.service_name} production parameters were saved.`
+      tr('saved', { name: scopeItem.service_name })
     )
     router.refresh()
   }
@@ -495,7 +500,7 @@ export default function ProductionParametersWorkspace({
     <>
       <section className={styles.metricGrid}>
         <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Scope Items</span>
+          <span className={styles.metricLabel}>{t.scopeItems}</span>
           <strong className={styles.metricValue}>
             {activeScopeItems.length}
           </strong>
@@ -505,7 +510,7 @@ export default function ProductionParametersWorkspace({
         </article>
 
         <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Configured</span>
+          <span className={styles.metricLabel}>{t.configured}</span>
           <strong className={styles.metricValue}>
             {configuredCount}
           </strong>
@@ -515,7 +520,7 @@ export default function ProductionParametersWorkspace({
         </article>
 
         <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Pending</span>
+          <span className={styles.metricLabel}>{t.pending}</span>
           <strong className={styles.metricValue}>
             {Math.max(
               activeScopeItems.length - configuredCount,
@@ -536,10 +541,7 @@ export default function ProductionParametersWorkspace({
             </h2>
 
             <p className={styles.formDescription}>
-              Define one project-wide production parameter set for each Scope Item.
-              These values form the calculation database used later to derive raw
-              activity durations from allocated quantities. Takt standardization is
-              intentionally handled in the planning stage, not here.
+              {t.description}
             </p>
           </div>
         </div>
@@ -557,8 +559,8 @@ export default function ProductionParametersWorkspace({
             onChange={(event) =>
               setSearchTerm(event.target.value)
             }
-            placeholder="Search Work Packages or Scope Items..."
-            aria-label="Search Production Parameters"
+            placeholder={t.searchPlaceholder}
+            aria-label={t.searchAria}
             style={{
               width: '100%',
               minHeight: '42px',
@@ -585,9 +587,9 @@ export default function ProductionParametersWorkspace({
         {activeScopeItems.length === 0 ? (
           <div className={styles.workspaceEmpty}>
             <span className={styles.workspaceEmptyIcon}>PP</span>
-            <h3>No Scope Items available.</h3>
+            <h3>{t.noScopeItems}</h3>
             <p>
-              Define the project Scope before establishing Production Parameters.
+              {t.noScopeItemsHelp}
             </p>
           </div>
         ) : (
@@ -620,13 +622,13 @@ export default function ProductionParametersWorkspace({
                   letterSpacing: '0.04em',
                 }}
               >
-                <span>Work Package</span>
-                <span>Scope Item</span>
-                <span>Unit</span>
-                <span>Productivity</span>
-                <span>Basis</span>
-                <span>Effective Workforce</span>
-                <span>Production Capacity</span>
+                <span>{t.workPackage}</span>
+                <span>{t.scopeItem}</span>
+                <span>{t.unit}</span>
+                <span>{t.productivity}</span>
+                <span>{t.basis}</span>
+                <span>{t.effectiveWorkforce}</span>
+                <span>{t.productionCapacity}</span>
               </div>
 
               {filteredScopeItems.map(
@@ -828,7 +830,7 @@ export default function ProductionParametersWorkspace({
                         >
                           {capacity === null
                             ? '—'
-                            : formatNumber(capacity)}
+                            : formatNumber(capacity, locale)}
                         </strong>
 
                         <span
