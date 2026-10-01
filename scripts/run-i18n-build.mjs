@@ -10,8 +10,9 @@ const stages = [
   ['07 Attendance Exceptions i18n', 'node', ['scripts/wire-workforce-attendance-exceptions-i18n.mjs']],
   ['08 Attendance History i18n', 'node', ['scripts/wire-workforce-attendance-history-i18n.mjs']],
   ['09 Attendance Audit Trail i18n', 'node', ['scripts/wire-workforce-attendance-audit-i18n.mjs']],
-  ['10 Field Management residual audit', 'node', ['scripts/audit-field-management-i18n.mjs']],
-  ['11 Next.js production build', process.platform === 'win32' ? 'npx.cmd' : 'npx', ['next', 'build']],
+  ['10 Native FieldOp Workforce Audit Trail', 'node', ['scripts/wire-fieldop-workforce-audit.mjs']],
+  ['11 Field Management residual audit', 'node', ['scripts/audit-field-management-i18n.mjs']],
+  ['12 Next.js production build', process.platform === 'win32' ? 'npx.cmd' : 'npx', ['next', 'build']],
 ]
 
 console.log('\n=== RITSUFLOW I18N BUILD DIAGNOSTICS ===')
