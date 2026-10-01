@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import styles from './fieldop.module.css'
 
-const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/fieldop/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','/fieldop/reports/daily'],['⚙','Settings','#']]
+const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/fieldop/projects'],['♙','Workforce','/fieldop/workforce'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','/fieldop/reports/daily'],['⚙','Settings','#']]
 
 export default function FieldOpPage(){
  const router=useRouter()
@@ -37,10 +37,7 @@ export default function FieldOpPage(){
  const attention=ongoing.filter(p=>['attention','need attention','needs attention','at risk'].includes(String(p.status||'').toLowerCase().replaceAll('_',' '))).length
 
  function createDailyReport(){
-  if(ongoing.length===1){
-   router.push(`/fieldop/reports/daily/new?projectId=${ongoing[0].id}`)
-   return
-  }
+  if(ongoing.length===1){router.push(`/fieldop/reports/daily/new?projectId=${ongoing[0].id}`);return}
   router.push('/fieldop/reports/daily/new')
  }
 
