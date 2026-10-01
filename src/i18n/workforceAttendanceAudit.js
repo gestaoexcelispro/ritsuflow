@@ -1,83 +1,17 @@
 const copy = {
   'en-US': {
-    fieldManagement: 'Field Management', title: 'Attendance Audit Trail',
-    description: 'Review original attendance events, supervisor corrections, exception reviews, and final resolution decisions in one immutable timeline.',
-    unknownWorker: 'Unknown worker', unnamedWorker: 'Unnamed worker', unknownProject: 'Unknown project', unnamedProject: 'Unnamed project', unknownUser: 'Unknown user', unknown: 'Unknown',
-    project: 'Project', workDate: 'Work Date', event: 'Event', allEvents: 'All Events', refresh: 'Refresh', refreshing: 'Refreshing...', noProjects: 'No projects available',
-    checkIns: 'Check-Ins', checkOuts: 'Check-Outs', corrections: 'Corrections', exceptionActions: 'Exception Actions', auditEvents: 'Audit Events',
-    checkIn: 'Check-In', checkOut: 'Check-Out', manualAdjustment: 'Manual Adjustment', sessionCancelled: 'Session Cancelled', exceptionReviewed: 'Exception Reviewed', exceptionResolved: 'Exception Resolved',
-    accepted: 'Accepted', rejected: 'Rejected', dismissed: 'Dismissed',
-    worker: 'Worker', fieldId: 'Field ID', actor: 'Actor', time: 'Time', method: 'Method', source: 'Source', notes: 'Notes', details: 'Details',
-    before: 'Before', after: 'After', metadata: 'Metadata', geofence: 'Geofence', gpsAccuracy: 'GPS Accuracy', distance: 'Distance', latitude: 'Latitude', longitude: 'Longitude',
-    yes: 'Yes', no: 'No', loading: 'Loading Attendance Audit Trail...', noEvents: 'No audit events found for the selected project, date, and event filter.',
-    unableLoad: 'Unable to load attendance audit trail.', unableInitialize: 'Unable to initialize Attendance Audit Trail.', immutable: 'Immutable audit record', recordedBy: 'Recorded By', createdAt: 'Created At', resolutionAction: 'Resolution Action',
+    fieldManagement:'Field Management',title:'Attendance Audit Trail',description:'Review original attendance events, supervisor corrections, exception reviews, and final resolution decisions in one immutable timeline.',unknownWorker:'Unknown worker',unnamedWorker:'Unnamed worker',unknownProject:'Unknown project',unnamedProject:'Unnamed project',unknownUser:'Unknown user',unknown:'Unknown',systemUnknown:'System / Unknown',identityUnavailable:'Identity unavailable',project:'Project',workDate:'Work Date',event:'Event',allEvents:'All Events',refresh:'Refresh',refreshing:'Refreshing...',noProjects:'No projects available',totalEvents:'Total Events',checkIns:'Check-Ins',checkOuts:'Check-Outs',corrections:'Corrections',exceptionActions:'Exception Actions',exceptionDecisions:'Exception Decisions',auditEvents:'Audit Events',checkIn:'Check-In',checkOut:'Check-Out',manualAdjustment:'Manual Adjustment',sessionCancelled:'Session Cancelled',exceptionReviewed:'Exception Reviewed',exceptionResolved:'Exception Resolved',exceptionReview:'Exception Review',exceptionResolution:'Exception Resolution',accepted:'Accepted',rejected:'Rejected',dismissed:'Dismissed',underReview:'Under Review',worker:'Worker',fieldId:'Field ID',actor:'Actor',time:'Time',method:'Method',source:'Source',notes:'Notes',details:'Details',recordedBy:'Recorded By',before:'Before',after:'After',metadata:'Metadata',geofence:'Geofence',gpsAccuracy:'GPS Accuracy',distance:'Distance',distanceToProject:'Distance to Project',coordinates:'Coordinates',latitude:'Latitude',longitude:'Longitude',yes:'Yes',no:'No',loading:'Loading Attendance Audit Trail...',noEvents:'No audit events found for the selected project, date, and event filter.',unableLoad:'Unable to load attendance audit trail.',unableInitialize:'Unable to initialize Attendance Audit Trail.',immutable:'Immutable audit record',createdAt:'Created At',resolutionAction:'Resolution Action',resolutionStatus:'Resolution Status',resolutionNotes:'Resolution Notes',resolvedAt:'Resolved At',correctionReason:'Correction Reason',exceptionCode:'Exception Code',decision:'Decision',exceptionNotes:'Exception Notes',actionNotes:'Action Notes',viewDetails:'View Details',hideDetails:'Hide Details',noValues:'No values available.',originalEvent:'Original Event',eventAt:'Event At',workedMinutes:'Worked Minutes',status:'Status'
   },
   'pt-BR': {
-    fieldManagement: 'Gestão de Campo', title: 'Trilha de Auditoria de Presença',
-    description: 'Revise eventos originais de presença, correções da supervisão, revisões de exceções e decisões finais de resolução em uma única linha do tempo imutável.',
-    unknownWorker: 'Trabalhador desconhecido', unnamedWorker: 'Trabalhador sem nome', unknownProject: 'Projeto desconhecido', unnamedProject: 'Projeto sem nome', unknownUser: 'Usuário desconhecido', unknown: 'Desconhecido',
-    project: 'Projeto', workDate: 'Data de Trabalho', event: 'Evento', allEvents: 'Todos os Eventos', refresh: 'Atualizar', refreshing: 'Atualizando...', noProjects: 'Nenhum projeto disponível',
-    checkIns: 'Entradas', checkOuts: 'Saídas', corrections: 'Correções', exceptionActions: 'Ações de Exceção', auditEvents: 'Eventos de Auditoria',
-    checkIn: 'Entrada', checkOut: 'Saída', manualAdjustment: 'Ajuste Manual', sessionCancelled: 'Sessão Cancelada', exceptionReviewed: 'Exceção Revisada', exceptionResolved: 'Exceção Resolvida',
-    accepted: 'Aceita', rejected: 'Rejeitada', dismissed: 'Descartada',
-    worker: 'Trabalhador', fieldId: 'ID de Campo', actor: 'Responsável', time: 'Horário', method: 'Método', source: 'Origem', notes: 'Notas', details: 'Detalhes',
-    before: 'Antes', after: 'Depois', metadata: 'Metadados', geofence: 'Geofence', gpsAccuracy: 'Precisão GPS', distance: 'Distância', latitude: 'Latitude', longitude: 'Longitude',
-    yes: 'Sim', no: 'Não', loading: 'Carregando Trilha de Auditoria de Presença...', noEvents: 'Nenhum evento de auditoria encontrado para o projeto, data e filtro de evento selecionados.',
-    unableLoad: 'Não foi possível carregar a trilha de auditoria de presença.', unableInitialize: 'Não foi possível inicializar a Trilha de Auditoria de Presença.', immutable: 'Registro de auditoria imutável', recordedBy: 'Registrado Por', createdAt: 'Criado Em', resolutionAction: 'Ação de Resolução',
+    fieldManagement:'Gestão de Campo',title:'Trilha de Auditoria de Presença',description:'Revise eventos originais de presença, correções da supervisão, revisões de exceções e decisões finais de resolução em uma única linha do tempo imutável.',unknownWorker:'Trabalhador desconhecido',unnamedWorker:'Trabalhador sem nome',unknownProject:'Projeto desconhecido',unnamedProject:'Projeto sem nome',unknownUser:'Usuário desconhecido',unknown:'Desconhecido',systemUnknown:'Sistema / Desconhecido',identityUnavailable:'Identidade indisponível',project:'Projeto',workDate:'Data de Trabalho',event:'Evento',allEvents:'Todos os Eventos',refresh:'Atualizar',refreshing:'Atualizando...',noProjects:'Nenhum projeto disponível',totalEvents:'Total de Eventos',checkIns:'Entradas',checkOuts:'Saídas',corrections:'Correções',exceptionActions:'Ações de Exceção',exceptionDecisions:'Decisões de Exceção',auditEvents:'Eventos de Auditoria',checkIn:'Entrada',checkOut:'Saída',manualAdjustment:'Ajuste Manual',sessionCancelled:'Sessão Cancelada',exceptionReviewed:'Exceção Revisada',exceptionResolved:'Exceção Resolvida',exceptionReview:'Revisão da Exceção',exceptionResolution:'Resolução da Exceção',accepted:'Aceita',rejected:'Rejeitada',dismissed:'Descartada',underReview:'Em Revisão',worker:'Trabalhador',fieldId:'ID de Campo',actor:'Responsável',time:'Horário',method:'Método',source:'Origem',notes:'Notas',details:'Detalhes',recordedBy:'Registrado Por',before:'Antes',after:'Depois',metadata:'Metadados',geofence:'Geofence',gpsAccuracy:'Precisão GPS',distance:'Distância',distanceToProject:'Distância até o Projeto',coordinates:'Coordenadas',latitude:'Latitude',longitude:'Longitude',yes:'Sim',no:'Não',loading:'Carregando Trilha de Auditoria de Presença...',noEvents:'Nenhum evento de auditoria encontrado para o projeto, data e filtro de evento selecionados.',unableLoad:'Não foi possível carregar a trilha de auditoria de presença.',unableInitialize:'Não foi possível inicializar a Trilha de Auditoria de Presença.',immutable:'Registro de auditoria imutável',createdAt:'Criado Em',resolutionAction:'Ação de Resolução',resolutionStatus:'Status da Resolução',resolutionNotes:'Notas da Resolução',resolvedAt:'Resolvida Em',correctionReason:'Motivo da Correção',exceptionCode:'Código da Exceção',decision:'Decisão',exceptionNotes:'Notas da Exceção',actionNotes:'Notas da Ação',viewDetails:'Ver Detalhes',hideDetails:'Ocultar Detalhes',noValues:'Nenhum valor disponível.',originalEvent:'Evento Original',eventAt:'Horário do Evento',workedMinutes:'Minutos Trabalhados',status:'Status'
   },
   es: {
-    fieldManagement: 'Gestión de Campo', title: 'Registro de Auditoría de Asistencia',
-    description: 'Revisa eventos originales de asistencia, correcciones de supervisión, revisiones de excepciones y decisiones finales de resolución en una única línea de tiempo inmutable.',
-    unknownWorker: 'Trabajador desconocido', unnamedWorker: 'Trabajador sin nombre', unknownProject: 'Proyecto desconocido', unnamedProject: 'Proyecto sin nombre', unknownUser: 'Usuario desconocido', unknown: 'Desconocido',
-    project: 'Proyecto', workDate: 'Fecha de Trabajo', event: 'Evento', allEvents: 'Todos los Eventos', refresh: 'Actualizar', refreshing: 'Actualizando...', noProjects: 'No hay proyectos disponibles',
-    checkIns: 'Entradas', checkOuts: 'Salidas', corrections: 'Correcciones', exceptionActions: 'Acciones de Excepción', auditEvents: 'Eventos de Auditoría',
-    checkIn: 'Entrada', checkOut: 'Salida', manualAdjustment: 'Ajuste Manual', sessionCancelled: 'Sesión Cancelada', exceptionReviewed: 'Excepción Revisada', exceptionResolved: 'Excepción Resuelta',
-    accepted: 'Aceptada', rejected: 'Rechazada', dismissed: 'Descartada',
-    worker: 'Trabajador', fieldId: 'ID de Campo', actor: 'Responsable', time: 'Hora', method: 'Método', source: 'Origen', notes: 'Notas', details: 'Detalles',
-    before: 'Antes', after: 'Después', metadata: 'Metadatos', geofence: 'Geocerca', gpsAccuracy: 'Precisión GPS', distance: 'Distancia', latitude: 'Latitud', longitude: 'Longitud',
-    yes: 'Sí', no: 'No', loading: 'Cargando Registro de Auditoría de Asistencia...', noEvents: 'No se encontraron eventos de auditoría para el proyecto, la fecha y el filtro de evento seleccionados.',
-    unableLoad: 'No se pudo cargar el registro de auditoría de asistencia.', unableInitialize: 'No se pudo inicializar el Registro de Auditoría de Asistencia.', immutable: 'Registro de auditoría inmutable', recordedBy: 'Registrado Por', createdAt: 'Creado En', resolutionAction: 'Acción de Resolución',
+    fieldManagement:'Gestión de Campo',title:'Registro de Auditoría de Asistencia',description:'Revisa eventos originales de asistencia, correcciones de supervisión, revisiones de excepciones y decisiones finales de resolución en una única línea de tiempo inmutable.',unknownWorker:'Trabajador desconocido',unnamedWorker:'Trabajador sin nombre',unknownProject:'Proyecto desconocido',unnamedProject:'Proyecto sin nombre',unknownUser:'Usuario desconocido',unknown:'Desconocido',systemUnknown:'Sistema / Desconocido',identityUnavailable:'Identidad no disponible',project:'Proyecto',workDate:'Fecha de Trabajo',event:'Evento',allEvents:'Todos los Eventos',refresh:'Actualizar',refreshing:'Actualizando...',noProjects:'No hay proyectos disponibles',totalEvents:'Total de Eventos',checkIns:'Entradas',checkOuts:'Salidas',corrections:'Correcciones',exceptionActions:'Acciones de Excepción',exceptionDecisions:'Decisiones de Excepción',auditEvents:'Eventos de Auditoría',checkIn:'Entrada',checkOut:'Salida',manualAdjustment:'Ajuste Manual',sessionCancelled:'Sesión Cancelada',exceptionReviewed:'Excepción Revisada',exceptionResolved:'Excepción Resuelta',exceptionReview:'Revisión de Excepción',exceptionResolution:'Resolución de Excepción',accepted:'Aceptada',rejected:'Rechazada',dismissed:'Descartada',underReview:'En Revisión',worker:'Trabajador',fieldId:'ID de Campo',actor:'Responsable',time:'Hora',method:'Método',source:'Origen',notes:'Notas',details:'Detalles',recordedBy:'Registrado Por',before:'Antes',after:'Después',metadata:'Metadatos',geofence:'Geocerca',gpsAccuracy:'Precisión GPS',distance:'Distancia',distanceToProject:'Distancia al Proyecto',coordinates:'Coordenadas',latitude:'Latitud',longitude:'Longitud',yes:'Sí',no:'No',loading:'Cargando Registro de Auditoría de Asistencia...',noEvents:'No se encontraron eventos de auditoría para el proyecto, la fecha y el filtro de evento seleccionados.',unableLoad:'No se pudo cargar el registro de auditoría de asistencia.',unableInitialize:'No se pudo inicializar el Registro de Auditoría de Asistencia.',immutable:'Registro de auditoría inmutable',createdAt:'Creado En',resolutionAction:'Acción de Resolución',resolutionStatus:'Estado de Resolución',resolutionNotes:'Notas de Resolución',resolvedAt:'Resuelta En',correctionReason:'Motivo de Corrección',exceptionCode:'Código de Excepción',decision:'Decisión',exceptionNotes:'Notas de Excepción',actionNotes:'Notas de Acción',viewDetails:'Ver Detalles',hideDetails:'Ocultar Detalles',noValues:'No hay valores disponibles.',originalEvent:'Evento Original',eventAt:'Hora del Evento',workedMinutes:'Minutos Trabajados',status:'Estado'
   },
 }
-
-export function getAttendanceAuditCopy(locale = 'en-US') {
-  return copy[locale] || copy['en-US']
-}
-
-export function getAttendanceAuditResolutionLabel(value, locale = 'en-US') {
-  const t = getAttendanceAuditCopy(locale)
-  const labels = { accepted: t.accepted, rejected: t.rejected, dismissed: t.dismissed }
-  return labels[value] || humanizeAuditValue(value)
-}
-
-export function getAttendanceAuditEventLabel(event, locale = 'en-US') {
-  const t = getAttendanceAuditCopy(locale)
-  const auditAction = event?.metadata?.audit_action || null
-  if (auditAction === 'exception_reviewed') return t.exceptionReviewed
-  if (auditAction === 'exception_resolved') {
-    const action = getAttendanceAuditResolutionLabel(event?.metadata?.resolution_action, locale)
-    return action ? `${t.exceptionResolved} · ${action}` : t.exceptionResolved
-  }
-  const labels = { check_in: t.checkIn, check_out: t.checkOut, manual_adjustment: t.manualAdjustment, session_cancelled: t.sessionCancelled }
-  return labels[event?.event_type] || humanizeAuditValue(event?.event_type) || t.unknown
-}
-
-export function humanizeAuditValue(value) {
-  if (!value) return ''
-  return String(value).split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-}
-
-export function formatAttendanceAuditDateTime(value, locale = 'en-US') {
-  if (!value) return '—'
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-}
-
-export function formatAttendanceAuditMetadataValue(value, locale = 'en-US') {
-  const t = getAttendanceAuditCopy(locale)
-  if (value === null || value === undefined || value === '') return '—'
-  if (typeof value === 'boolean') return value ? t.yes : t.no
-  if (typeof value === 'number') return String(value)
-  if (typeof value === 'string' && value.includes('T') && !Number.isNaN(new Date(value).getTime())) return formatAttendanceAuditDateTime(value, locale)
-  if (typeof value === 'string') return value
-  return JSON.stringify(value)
-}
+export function getAttendanceAuditCopy(locale='en-US'){return copy[locale]||copy['en-US']}
+export function getAttendanceAuditResolutionLabel(value,locale='en-US'){const t=getAttendanceAuditCopy(locale);const labels={accepted:t.accepted,rejected:t.rejected,dismissed:t.dismissed};return labels[value]||humanizeAuditValue(value)}
+export function getAttendanceAuditEventLabel(event,locale='en-US'){const t=getAttendanceAuditCopy(locale);const auditAction=event?.metadata?.audit_action||null;if(auditAction==='exception_reviewed')return t.exceptionReviewed;if(auditAction==='exception_resolved'){const action=getAttendanceAuditResolutionLabel(event?.metadata?.resolution_action,locale);return action?`${t.exceptionResolved} · ${action}`:t.exceptionResolved}const labels={check_in:t.checkIn,check_out:t.checkOut,manual_adjustment:t.manualAdjustment,session_cancelled:t.sessionCancelled};return labels[event?.event_type]||humanizeAuditValue(event?.event_type)||t.unknown}
+export function humanizeAuditValue(value){if(!value)return '';return String(value).split('_').map((word)=>word.charAt(0).toUpperCase()+word.slice(1)).join(' ')}
+export function formatAttendanceAuditDateTime(value,locale='en-US'){if(!value)return '—';return new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}
+export function formatAttendanceAuditMetadataValue(value,locale='en-US'){const t=getAttendanceAuditCopy(locale);if(value===null||value===undefined||value==='')return '—';if(typeof value==='boolean')return value?t.yes:t.no;if(typeof value==='number')return String(value);if(typeof value==='string'&&value.includes('T')&&!Number.isNaN(new Date(value).getTime()))return formatAttendanceAuditDateTime(value,locale);if(typeof value==='string')return value;return JSON.stringify(value)}
