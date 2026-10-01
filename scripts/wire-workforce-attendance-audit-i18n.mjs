@@ -22,14 +22,158 @@ req("  const [projects, setProjects] =\n    useState([])",`  const [projects, se
     loadOrganizationLocale()
     return()=>{active=false}
   },[])`)
-s=s.replace(/function formatDateTime\(value\) \{[\s\S]*?\n\}/,"function formatDateTime(value,locale='en-US'){return formatAttendanceAuditDateTime(value,locale)}")
-s=s.replace(/function formatMethod\(value\) \{[\s\S]*?\n\}/,"function formatMethod(value){return value ? humanizeAuditValue(value) : '—'}")
-s=s.replace(/function formatResolutionAction\(value\) \{[\s\S]*?\n\}/,"function formatResolutionAction(value,locale='en-US'){return value ? getAttendanceAuditResolutionLabel(value,locale) : null}")
-s=s.replace(/function getEventPresentation\(event\) \{[\s\S]*?\n\}/,`function getEventPresentation(event,locale='en-US'){
+req(`function formatDateTime(value) {
+  if (!value) {
+    return '—'
+  }
+
+  return new Intl.DateTimeFormat(
+    undefined,
+    {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }
+  ).format(new Date(value))
+}`,"function formatDateTime(value,locale='en-US'){return formatAttendanceAuditDateTime(value,locale)}")
+req(`function formatMethod(value) {
+  if (!value) {
+    return '—'
+  }
+
+  return value
+    .split('_')
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
+    .join(' ')
+}`,"function formatMethod(value){return value ? humanizeAuditValue(value) : '—'}")
+req(`function formatResolutionAction(value) {
+  if (!value) {
+    return null
+  }
+
+  const labels = {
+    accepted: 'Accepted',
+    rejected: 'Rejected',
+    dismissed: 'Dismissed',
+  }
+
+  return (
+    labels[value] ||
+    value
+      .split('_')
+      .map(
+        (word) =>
+          word.charAt(0).toUpperCase() +
+          word.slice(1)
+      )
+      .join(' ')
+  )
+}`,"function formatResolutionAction(value,locale='en-US'){return value ? getAttendanceAuditResolutionLabel(value,locale) : null}")
+req(`function getEventPresentation(event) {
+  const auditAction =
+    getAuditAction(event)
+
+  if (
+    auditAction ===
+    'exception_reviewed'
+  ) {
+    return {
+      label: 'Exception Reviewed',
+      tone: 'review',
+    }
+  }
+
+  if (
+    auditAction ===
+    'exception_resolved'
+  ) {
+    const resolutionAction =
+      formatResolutionAction(
+        event?.metadata
+          ?.resolution_action
+      )
+
+    return {
+      label:
+        resolutionAction
+          ? \`Exception Resolved · \${resolutionAction}\`
+          : 'Exception Resolved',
+      tone: 'resolution',
+    }
+  }
+
+  const labels = {
+    check_in: 'Check-In',
+    check_out: 'Check-Out',
+    manual_adjustment:
+      'Manual Adjustment',
+    session_cancelled:
+      'Session Cancelled',
+  }
+
+  return {
+    label:
+      labels[event?.event_type] ||
+      event?.event_type
+        ?.split('_')
+        .map(
+          (word) =>
+            word
+              .charAt(0)
+              .toUpperCase() +
+            word.slice(1)
+        )
+        .join(' ') ||
+      'Unknown',
+    tone:
+      event?.event_type ||
+      'default',
+  }
+}`,`function getEventPresentation(event,locale='en-US'){
   const auditAction=getAuditAction(event)
   return {label:getAttendanceAuditEventLabel(event,locale),tone:auditAction==='exception_reviewed'?'review':auditAction==='exception_resolved'?'resolution':event?.event_type||'default'}
 }`)
-s=s.replace(/function renderMetadataValue\(value\) \{[\s\S]*?\n\}/,"function renderMetadataValue(value,locale='en-US'){return formatAttendanceAuditMetadataValue(value,locale)}")
+req(`function renderMetadataValue(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '—'
+  }
+
+  if (typeof value === 'boolean') {
+    return value
+      ? 'Yes'
+      : 'No'
+  }
+
+  if (
+    typeof value === 'number'
+  ) {
+    return String(value)
+  }
+
+  if (
+    typeof value === 'string'
+  ) {
+    if (
+      value.includes('T') &&
+      !Number.isNaN(
+        new Date(value).getTime()
+      )
+    ) {
+      return formatDateTime(value)
+    }
+
+    return value
+  }
+
+  return JSON.stringify(value)
+}`,"function renderMetadataValue(value,locale='en-US'){return formatAttendanceAuditMetadataValue(value,locale)}")
 s=s.replaceAll("'Unknown user'",'t.unknownUser').replaceAll("'Unable to load attendance audit trail.'",'t.unableLoad').replaceAll("'Unable to initialize Attendance Audit Trail.'",'t.unableInitialize')
 const pairs=[['Field Management','{t.fieldManagement}'],['Attendance Audit Trail','{t.title}'],['No projects available','{t.noProjects}'],['All Events','{t.allEvents}'],['Check-In','{t.checkIn}'],['Check-Out','{t.checkOut}'],['Manual Adjustment','{t.manualAdjustment}'],['Exception Reviewed','{t.exceptionReviewed}'],['Exception Resolved','{t.exceptionResolved}'],['Session Cancelled','{t.sessionCancelled}'],['Audit Events','{t.auditEvents}'],['Time','{t.time}'],['Field ID','{t.fieldId}'],['Worker','{t.worker}'],['Recorded By','{t.recordedBy}'],['Method','{t.method}'],['Source','{t.source}'],['Notes','{t.notes}'],['Details','{t.details}']]
 for(const [a,b] of pairs)s=s.replaceAll(`>${a}<`,`>${b}<`)
@@ -61,6 +205,8 @@ s=s.replaceAll('formatDateTime(\n              data.check_in_at\n            )',
 if(!s.includes('getAttendanceAuditCopy(locale)'))throw new Error('Audit catalog wiring missing')
 if(!s.includes('loadOrganizationLocale'))throw new Error('Audit locale loader missing')
 if(!s.includes('getAttendanceAuditEventLabel(event,locale)'))throw new Error('Audit event taxonomy localization missing')
-for(const x of ['>Attendance Audit Trail<','>All Events<','Loading Audit Trail...','System / Unknown','>View Details<'])if(s.includes(x))throw new Error(`Audit runtime literal remains: ${x}`)
+if(!s.includes('formatAttendanceAuditDateTime(value,locale)'))throw new Error('Audit datetime formatter localization missing')
+if(!s.includes('formatAttendanceAuditMetadataValue(value,locale)'))throw new Error('Audit metadata formatter localization missing')
+for(const x of ['>Attendance Audit Trail<','>All Events<','Loading Audit Trail...','System / Unknown','>View Details<','new Intl.DateTimeFormat(\n    undefined',"? 'Yes'",": 'No'"])if(s.includes(x))throw new Error(`Audit runtime literal remains: ${x}`)
 fs.writeFileSync(path,s)
 console.log(`Wired Attendance Audit Trail locale, taxonomy, filters and detail workflow: ${path}`)
