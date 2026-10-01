@@ -22,29 +22,40 @@ req("  const [projects, setProjects] =\n    useState([])",`  const [projects, se
     loadOrganizationLocale()
     return()=>{active=false}
   },[])`)
-// Locale-aware presentation helpers.
 s=s.replace(/function formatTime\(value\) \{[\s\S]*?\n\}/,"function formatTime(value, locale) { return formatAttendanceExceptionTime(value, locale) }")
 s=s.replace(/function formatDateTime\(value\) \{[\s\S]*?\n\}/,"function formatDateTime(value, locale) { return formatAttendanceExceptionDateTime(value, locale) }")
 s=s.replace(/function formatExceptionCode\(code\) \{[\s\S]*?\n\}/,"function formatExceptionCode(code, locale) { return getAttendanceExceptionCodeLabel(code, locale) }")
-// Dynamic exception taxonomy.
 s=s.replaceAll("title:\n                  'Over Allowed Hours'","title: t.overAllowedHours").replaceAll("description:\n                  'Worker has exceeded the standard daily working allowance.'","description: t.overAllowedDescription")
 s=s.replace("? 'Long Open Session'\n                      : 'Open Session'","? t.longOpenSession\n                      : t.openSession").replace("? 'Worker has remained checked in for an unusually long period.'\n                      : 'Worker currently has an open attendance session.'","? t.longOpenDescription\n                      : t.openDescription")
 s=s.replaceAll('title: formatExceptionCode(\n                    session.exception_code\n                  )','title: formatExceptionCode(\n                    session.exception_code, locale\n                  )')
-// Errors and resolution feedback.
-s=s.replaceAll("'Unable to load Attendance Exceptions.'",'t.unableLoad').replaceAll("'Unable to initialize Attendance Exceptions.'",'t.unableInitialize').replaceAll("'Exception resolver identity could not be loaded.'",'t.resolverLoadWarning').replaceAll("'Unable to load geofence evidence for this exception.'",'t.evidenceLoadWarning').replaceAll("'Resolution notes are required before resolving an exception.'",'t.resolutionRequired').replaceAll("'Unable to resolve the attendance exception.'",'t.unableResolve')
-// Core page UI.
-const jsx=[['Field Management','{t.fieldManagement}'],['Attendance Exceptions','{t.title}'],['Project','{t.project}'],['No projects available','{t.noProjects}'],['Queue','{t.queue}'],['Critical','{t.critical}'],['Severity','{t.severity}'],['Worker','{t.worker}'],['Exception','{t.exception}'],['Value','{t.value}'],['Resolution','{t.resolution}']]
+// Feedback and review workflow.
+s=s.replaceAll("'Unable to load Attendance Exceptions.'",'t.unableLoad').replaceAll("'Unable to initialize Attendance Exceptions.'",'t.unableInitialize').replaceAll("'Exception resolver identity could not be loaded.'",'t.resolverLoadWarning').replaceAll("'Unable to load geofence evidence for this exception.'",'t.evidenceLoadWarning').replaceAll("'Resolution notes are required before resolving an exception.'",'t.resolutionRequired').replaceAll("'Unable to resolve the attendance exception.'",'t.unableResolve').replaceAll("'Unable to mark the exception as reviewed.'",'t.unableReview')
+s=s.replace(/`\$\{workerName\}'s attendance exception is now under review\.`/g,'t.reviewedSuccess(workerName)')
+s=s.replace(/const actionLabels = \{[\s\S]*?\n      \}/,`const actionLabels = { accepted:t.accepted, rejected:t.rejected, dismissed:t.dismissed }`)
+s=s.replace(/`\$\{workerName\}'s attendance exception was \$\{actionLabels\[action\]\}\.`/g,'t.resolutionSuccess(workerName,actionLabels[action])')
+// Main page and queue.
+const jsx=[['Field Management','{t.fieldManagement}'],['Attendance Exceptions','{t.title}'],['No projects available','{t.noProjects}'],['Critical','{t.critical}'],['Warnings','{t.warnings}'],['Open Sessions','{t.openSessions}'],['Recorded Exceptions','{t.recordedExceptions}'],['Resolved Today','{t.resolvedToday}'],['Exception Queue','{t.exceptionQueue}'],['Severity','{t.severity}'],['Field ID','{t.fieldId}'],['Worker','{t.worker}'],['Exception','{t.exception}'],['Check-In','{t.checkIn}'],['Check-Out','{t.checkOut}'],['Value','{t.value}'],['Description','{t.descriptionLabel}'],['Resolution','{t.resolution}'],['Action','{t.action}']]
 for(const [a,b] of jsx)s=s.replaceAll(`>${a}<`,`>${b}<`)
 s=s.replace(/Monitor operational alerts,\s+review recorded attendance\s+exceptions, and document\s+supervisor resolution decisions\./g,'{t.description}')
 s=s.replace("{refreshing\n              ? 'Refreshing...'\n              : 'Refresh'}","{refreshing ? t.refreshing : t.refresh}")
-s=s.replaceAll('label="Project"','label={t.project}').replaceAll('label="Queue"','label={t.queue}')
-s=s.replaceAll('>Resolved<','>{t.resolved}<').replaceAll('>All<','>{t.all}<')
-// Date/time and taxonomy call sites.
-s=s.replace(/formatTime\(\s*exception\.session\.check_in_at\s*\)/g,'formatTime(exception.session.check_in_at, locale)').replace(/formatTime\(\s*exception\.session\.check_out_at\s*\)/g,'formatTime(exception.session.check_out_at, locale)').replace(/formatDateTime\(\s*selectedException\.session\.exception_resolved_at\s*\)/g,'formatDateTime(selectedException.session.exception_resolved_at, locale)')
-// Guards ensure machine keys survive while English presentation is removed from primary workflow.
+s=s.replaceAll('label="Project"','label={t.project}').replaceAll('label="Work Date"','label={t.workDate}').replaceAll('label="Queue"','label={t.queue}').replaceAll('label="Daily Allowance"','label={t.dailyAllowance}')
+s=s.replaceAll('>Open / Review<','>{t.openReview}<').replaceAll('>Resolved<','>{t.resolved}<').replaceAll('>All<','>{t.all}<').replaceAll("? 'Not configured'",'? t.notConfigured')
+s=s.replace(/\{filteredExceptions\.length\}\{' '\}\s*item\s*\{filteredExceptions\.length ===\s*1\s*\? ''\s*:\s*'s'\}/g,'{t.item(filteredExceptions.length)}')
+s=s.replace(/Loading Attendance\s+Exceptions\.\.\./g,'{t.loading}').replace(/No attendance exceptions\s+were found for the selected\s+queue, project, and date\./g,'{t.noExceptions}')
+// Locale-aware status, severity and dates.
+s=s.replace(/formatTime\(\s*exception\.session\.check_in_at\s*\)/g,'formatTime(exception.session.check_in_at, locale)').replace(/formatTime\(\s*exception\.session\.check_out_at\s*\)/g,'formatTime(exception.session.check_out_at, locale)')
+s=s.replace(/formatDateTime\(\s*selectedException\.session\.exception_resolved_at\s*\)/g,'formatDateTime(selectedException.session.exception_resolved_at, locale)')
+s=s.replace(/<SeverityBadge\s+severity=\{\s*exception\.severity\s*\}\s*\/>/g,'<SeverityBadge severity={exception.severity} label={getAttendanceExceptionSeverityLabel(exception.severity,locale)} />')
+// Review/evidence modal visible labels and actions.
+const modal=[['Review Exception','{t.reviewException}'],['Evidence','{t.evidence}'],['Resolution Notes','{t.resolutionNotes}'],['Resolved By','{t.resolvedBy}'],['Resolved At','{t.resolvedAt}'],['Mark Reviewed','{t.markReviewed}'],['Accept','{t.accept}'],['Reject','{t.reject}'],['Dismiss','{t.dismiss}'],['Cancel','{t.cancel}'],['Loading evidence...','{t.loadingEvidence}'],['Event','{t.event}'],['Time','{t.time}'],['Geofence','{t.geofence}'],['GPS Accuracy','{t.gpsAccuracy}'],['Distance','{t.distance}'],['Method','{t.method}'],['Source','{t.source}']]
+for(const [a,b] of modal)s=s.replaceAll(`>${a}<`,`>${b}<`)
+s=s.replaceAll('label="Resolution Notes"','label={t.resolutionNotes}').replaceAll('label="Resolved By"','label={t.resolvedBy}').replaceAll('label="Resolved At"','label={t.resolvedAt}')
+// Guards.
 if(!s.includes('getAttendanceExceptionsCopy(locale)'))throw new Error('Exceptions catalog wiring missing')
 if(!s.includes('loadOrganizationLocale'))throw new Error('Exceptions locale loader missing')
 if(!s.includes('getAttendanceExceptionCodeLabel(code, locale)'))throw new Error('Exception taxonomy localization missing')
-for(const x of ['>Attendance Exceptions<','>No projects available<',"'Over Allowed Hours'","'Long Open Session'"])if(s.includes(x))throw new Error(`Exceptions runtime literal remains: ${x}`)
+if(!s.includes('t.reviewedSuccess(workerName)'))throw new Error('Review feedback localization missing')
+if(!s.includes('t.resolutionSuccess(workerName,actionLabels[action])'))throw new Error('Resolution feedback localization missing')
+for(const x of ['>Attendance Exceptions<','>No projects available<',"'Over Allowed Hours'","'Long Open Session'","'Unable to mark the exception as reviewed.'"])if(s.includes(x))throw new Error(`Exceptions runtime literal remains: ${x}`)
 fs.writeFileSync(path,s)
-console.log(`Wired Attendance Exceptions taxonomy and supervisory workflow: ${path}`)
+console.log(`Wired Attendance Exceptions review, evidence and resolution workflow: ${path}`)
