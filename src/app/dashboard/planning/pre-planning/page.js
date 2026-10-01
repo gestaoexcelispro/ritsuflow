@@ -3,6 +3,8 @@ import Link from 'next/link'
 import {
   createClient,
 } from '../../../../lib/supabase/server'
+import { resolveProjectCopy } from '../../../../i18n/projectServerCopy'
+import { getPrePlanningCopy } from '../../../../i18n/prePlanning'
 
 import PrePlanningWorkspace from './PrePlanningWorkspace'
 
@@ -32,25 +34,16 @@ function buildLocationMap(
 
 
 function locationTypeLabel(
-  value
+  value,
+  t
 ) {
-  const labels = {
-    project: 'Project',
-    building: 'Building',
-    floor: 'Level',
-    level: 'Level',
-    division: 'Level',
-    zone: 'Zone',
-    area: 'Area',
-    room: 'Room',
-    custom: 'Custom',
-  }
+  const labels = t.locationTypes
 
 
   return (
     labels[value] ||
     value ||
-    'Division'
+    t.division
   )
 }
 
@@ -98,7 +91,8 @@ function getLocationChain(
 
 function resolveProductionLocation(
   allocationLocation,
-  locationMap
+  locationMap,
+  t
 ) {
   if (
     !allocationLocation
@@ -226,7 +220,8 @@ function resolveProductionLocation(
     divisionType:
       divisionNode
         ? locationTypeLabel(
-            divisionNode.location_type
+            divisionNode.location_type,
+            t
           )
         : '',
 
@@ -246,6 +241,7 @@ function calculateActivity({
   parameter,
   location,
   locationMap,
+  t,
 }) {
   const quantity =
     Number(
@@ -304,7 +300,8 @@ function calculateActivity({
   const locationPresentation =
     resolveProductionLocation(
       location,
-      locationMap
+      locationMap,
+      t
     )
 
 
@@ -344,7 +341,7 @@ function calculateActivity({
 
     scopeItemName:
       scopeItem?.service_name ||
-      'Scope Item',
+      t.scopeItem,
 
     unit:
       scopeItem?.unit ||
@@ -755,6 +752,7 @@ function buildVersionDurationStrategyMap(
 
 function ProjectSelector({
   projects,
+  t,
   baseHref = '/dashboard/planning/pre-planning',
 }) {
   return (
@@ -781,7 +779,7 @@ function ProjectSelector({
             fontWeight: 900,
           }}
         >
-          Pre-Planning
+          {t.title}
         </h2>
 
 
@@ -794,7 +792,7 @@ function ProjectSelector({
             lineHeight: 1.55,
           }}
         >
-          Select a project to review calculated production durations and define the preliminary production sequence.
+          {t.selectProjectHelp}
         </p>
       </div>
 
@@ -862,7 +860,7 @@ function ProjectSelector({
                     fontSize: '11px',
                   }}
                 >
-                  Open Pre-Planning
+                  {t.openPrePlanning}
                 </div>
               </Link>
             )
@@ -879,7 +877,7 @@ function ProjectSelector({
               fontSize: '13px',
             }}
           >
-            No accessible projects were found.
+            {t.noAccessibleProjects}
           </div>
         )}
       </div>
@@ -927,10 +925,15 @@ export default async function PrePlanningPage({
           padding: '24px',
         }}
       >
-        Authentication is required.
+        {t.authenticationRequired}
       </div>
     )
   }
+
+
+  const i18n = await resolveProjectCopy(supabase, user.id)
+  const locale = i18n.locale
+  const t = getPrePlanningCopy(locale)
 
 
   /* =======================================================
@@ -993,6 +996,7 @@ export default async function PrePlanningPage({
         projects={
           projects
         }
+        t={t}
         baseHref={
           standalone
             ? '/planning/pre-planning'
@@ -1506,6 +1510,7 @@ export default async function PrePlanningPage({
             location,
 
             locationMap,
+            t,
           })
         }
       )
@@ -1544,6 +1549,8 @@ export default async function PrePlanningPage({
       project={
         selectedProject
       }
+
+      locale={locale}
 
       activities={
         orderedActivities
