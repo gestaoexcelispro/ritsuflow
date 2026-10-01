@@ -7,8 +7,9 @@ function required(from,to){if(!source.includes(from))throw new Error(`Expected A
 required("import { supabase } from '../../../../../lib/supabase'", "import { supabase } from '../../../../../lib/supabase'\nimport { getWorkforceAssignmentsCopy, getAssignmentStatusLabel, formatAssignmentDate } from '../../../../../i18n/workforceAssignments'")
 required('export default function WorkforceAssignmentsPage() {',"export default function WorkforceAssignmentsPage() {\n  const [locale,setLocale]=useState('en-US')\n  const t=useMemo(()=>getWorkforceAssignmentsCopy(locale),[locale])")
 
-const anchor='  const [organizationId, setOrganizationId] = useState(null)'
-if(source.includes(anchor))required(anchor,`${anchor}
+const localeAnchor=`  const [formData, setFormData] =
+    useState(createInitialFormData())`
+required(localeAnchor,`${localeAnchor}
 
   useEffect(() => {
     let active = true
@@ -28,10 +29,9 @@ if(source.includes(anchor))required(anchor,`${anchor}
     loadOrganizationLocale()
     return () => { active = false }
   }, [])`)
-else throw new Error('Assignments organization anchor missing')
 
-source=source.replace(/function formatDate\(value\) \{[\s\S]*?\n\}/,"function formatDate(value) { return formatAssignmentDate(value, locale) }")
-source=source.replace(/function formatStatus\(status\) \{[\s\S]*?\n\}/,"function formatStatus(status) { return getAssignmentStatusLabel(status, locale) }")
+source=source.replace(/  function formatDate\(dateValue\) \{[\s\S]*?\n  \}/,"  function formatDate(dateValue) {\n    return formatAssignmentDate(dateValue, locale)\n  }")
+source=source.replace(/  function formatStatus\(status\) \{[\s\S]*?\n  \}/,"  function formatStatus(status) {\n    return getAssignmentStatusLabel(status, locale)\n  }")
 
 const messages=[['Worker is required.','t.workerRequired'],['Project is required.','t.projectRequired'],['Company is required.','t.companyRequired'],['Start Date is required.','t.startDateRequired'],['End Date cannot be earlier than Start Date.','t.endBeforeStart'],['Unable to determine the selected Worker or Project.','t.unableDetermineSelection'],['Worker and Project must belong to the same organization.','t.organizationMismatch'],['This worker already has an active or scheduled assignment for the selected project.','t.duplicateAssignment'],['Assignment was created but no identifier was returned.','t.missingIdentifier'],['Project assignment created successfully.','t.created'],['Unable to load project assignments.','t.unableLoad'],['Unable to create the project assignment.','t.unableCreate']]
 for(const [literal,expr] of messages)source=source.replaceAll(`'${literal}'`,expr)
@@ -44,7 +44,7 @@ source=source.replace(/Allocate workers to projects while preserving company, tr
 
 if(!source.includes('getWorkforceAssignmentsCopy(locale)'))throw new Error('Assignments catalog wiring missing')
 if(!source.includes('loadOrganizationLocale'))throw new Error('Assignments locale loader missing')
-if(!source.includes('formatAssignmentDate(value, locale)'))throw new Error('Assignments locale date formatting missing')
+if(!source.includes('formatAssignmentDate(dateValue, locale)'))throw new Error('Assignments locale date formatting missing')
 if(!source.includes('getAssignmentStatusLabel(status, locale)'))throw new Error('Assignments status localization missing')
 for(const literal of ['>Project Assignments<','>Loading assignments...<','>No project assignments found<','>New Project Assignment<','>Create Assignment<'])if(source.includes(literal))throw new Error(`Assignments runtime literal remains: ${literal}`)
 fs.writeFileSync(path,source)
