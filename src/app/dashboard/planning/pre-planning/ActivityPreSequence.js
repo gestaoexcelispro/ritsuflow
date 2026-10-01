@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { getPrePlanningCopy, interpolatePrePlanningCopy } from '../../../../i18n/prePlanning'
 
 import {
   createClient,
@@ -118,7 +119,10 @@ function rebuildFromLayers(layers) {
 export default function ActivityPreSequence({
   projectId,
   initialItems,
+  locale = 'en-US',
 }) {
+  const t = useMemo(() => getPrePlanningCopy(locale), [locale])
+
   const [items, setItems] =
     useState(
       normalizeLayers(
@@ -223,7 +227,7 @@ export default function ActivityPreSequence({
       setSaveState('error')
       setErrorMessage(
         result?.error ||
-        'The activity sequence could not be saved.'
+        t.activitySequenceSaveFailed
       )
       return
     }
@@ -405,7 +409,7 @@ export default function ActivityPreSequence({
           fontSize: '13px',
         }}
       >
-        No active Scope Items are available for sequencing.
+        {t.noActiveScopeItemsForSequencing}
       </div>
     )
   }
@@ -435,9 +439,9 @@ export default function ActivityPreSequence({
           }}
         >
           <strong>
-            Production rule:
+            {t.productionRule}:
           </strong>{' '}
-          one layer follows the previous layer. Activities inside the same layer may be performed in parallel.
+          {t.productionRuleHelp}
         </div>
 
         <div
@@ -455,12 +459,12 @@ export default function ActivityPreSequence({
           }}
         >
           {saveState === 'saving'
-            ? 'Saving sequence…'
+            ? t.savingSequence
             : saveState === 'saved'
-              ? 'Sequence saved'
+              ? t.sequenceSavedShort
               : saveState === 'error'
-                ? 'Save failed'
-                : 'Autosave enabled'}
+                ? t.saveFailed
+                : t.autosaveEnabled}
         </div>
       </div>
 
@@ -472,7 +476,7 @@ export default function ActivityPreSequence({
           lineHeight: 1.5,
         }}
       >
-        Drop an activity <strong>inside a layer</strong> to make it parallel with that layer. Drop it on the <strong>gap between layers</strong> to create a separate production layer.
+        {t.dropActivityPrefix} <strong>{t.insideLayer}</strong> {t.dropActivityParallel} <strong>{t.gapBetweenLayers}</strong> {t.dropActivitySeparateLayer}
       </div>
 
       <div
@@ -597,7 +601,7 @@ export default function ActivityPreSequence({
                           'uppercase',
                       }}
                     >
-                      Production Layer
+                      {t.productionLayer}
                     </span>
 
                     <strong
@@ -627,8 +631,8 @@ export default function ActivityPreSequence({
                     }}
                   >
                     {layer.items.length > 1
-                      ? `${layer.items.length} activities · parallel allowed`
-                      : '1 activity'}
+                      ? interpolatePrePlanningCopy(t.activitiesParallelAllowed, { count: layer.items.length })
+                      : t.oneActivity}
                   </span>
                 </div>
 
@@ -672,8 +676,8 @@ export default function ActivityPreSequence({
                           onDragEnd={
                             endDrag
                           }
-                          title="Hold and drag"
-                          aria-label={`Drag ${item.code} ${item.description}`}
+                          title={t.holdAndDrag}
+                          aria-label={interpolatePrePlanningCopy(t.dragActivity, { code: item.code, description: item.description })}
                           style={{
                             display:
                               'grid',
