@@ -8,57 +8,51 @@ import {
 import { useRouter } from 'next/navigation'
 
 import { createClient } from '../../../../lib/supabase/client'
+import { getQuantityAllocationCopy } from '../../../../i18n/quantityAllocationMatrix'
 
 import styles from './project-setup.module.css'
 
 
-function getErrorMessage(error) {
+function getErrorMessage(error, t) {
   if (!error) {
-    return 'An unexpected error occurred.'
+    return t.unexpectedError
   }
 
   if (error.code === '23505') {
-    return 'A quantity record with the same identifying information already exists.'
+    return t.duplicateQuantity
   }
 
   if (error.code === '23503') {
-    return 'This quantity is connected to other project information and cannot be changed.'
+    return t.connectedQuantity
   }
 
   if (error.code === '23514') {
-    return 'The quantity does not satisfy the project allocation rules.'
+    return t.invalidAllocationRules
   }
 
   if (error.code === '42501') {
-    return 'Your account does not have permission to perform this action.'
+    return t.permissionDenied
   }
 
   return (
     error.message ||
-    'The requested operation could not be completed.'
+    t.operationFailed
   )
 }
 
 
-function getLocationTypeLabel(locationType) {
-  const labels = {
-    building: 'Building',
-    floor: 'Floor',
-    zone: 'Zone',
-    area: 'Area',
-    room: 'Room',
-    custom: 'Custom',
-  }
+function get{t.location}{t.type}Label(location{t.type}, t) {
+  const labels = t.location{t.type}s
 
   return (
-    labels[locationType] ||
-    locationType ||
-    'Location'
+    labels[location{t.type}] ||
+    location{t.type} ||
+    t.location
   )
 }
 
 
-function getZoneColor(zoneName) {
+function get{t.zone}Color(zoneName) {
   if (!zoneName) {
     return '#ffffff'
   }
@@ -128,7 +122,7 @@ function getZoneColor(zoneName) {
 }
 
 
-function formatQuantity(value) {
+function formatQuantity(value, locale = 'en-US') {
   if (
     value === null ||
     value === undefined ||
@@ -149,7 +143,7 @@ function formatQuantity(value) {
   }
 
   return new Intl.NumberFormat(
-    'en-US',
+    locale,
     {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
@@ -165,6 +159,7 @@ export default function QuantityAllocationMatrix({
   locations = [],
   scopeItems = [],
   initialAllocations = [],
+  locale = 'en-US',
 }) {
   const router =
     useRouter()
@@ -174,6 +169,8 @@ export default function QuantityAllocationMatrix({
       () => createClient(),
       []
     )
+
+  const t = useMemo(() => getQuantityAllocationCopy(locale), [locale])
 
 
   // ==========================================================
@@ -304,27 +301,27 @@ export default function QuantityAllocationMatrix({
           const visitedIds =
             new Set()
 
-          let currentLocation =
+          let current{t.location} =
             location
 
           while (
-            currentLocation &&
+            current{t.location} &&
             !visitedIds.has(
-              currentLocation.id
+              current{t.location}.id
             )
           ) {
             visitedIds.add(
-              currentLocation.id
+              current{t.location}.id
             )
 
             path.unshift(
-              currentLocation
+              current{t.location}
             )
 
-            currentLocation =
-              currentLocation.parent_id
+            current{t.location} =
+              current{t.location}.parent_id
                 ? locationMap.get(
-                    currentLocation.parent_id
+                    current{t.location}.parent_id
                   )
                 : null
           }
@@ -356,22 +353,22 @@ export default function QuantityAllocationMatrix({
   // SORT LOCATIONS
   // ==========================================================
 
-  const sortedLocations =
+  const sorted{t.location}s =
     useMemo(
       () =>
         [...locations].sort(
           (
-            firstLocation,
-            secondLocation
+            first{t.location},
+            second{t.location}
           ) => {
             const firstSequence =
               Number(
-                firstLocation.sequence_number
+                first{t.location}.sequence_number
               ) || 0
 
             const secondSequence =
               Number(
-                secondLocation.sequence_number
+                second{t.location}.sequence_number
               ) || 0
 
             if (
@@ -385,11 +382,11 @@ export default function QuantityAllocationMatrix({
             }
 
             return String(
-              firstLocation.name ||
+              first{t.location}.name ||
                 ''
             ).localeCompare(
               String(
-                secondLocation.name ||
+                second{t.location}.name ||
                   ''
               )
             )
@@ -460,16 +457,16 @@ export default function QuantityAllocationMatrix({
   // FLOOR LOCATIONS
   // ==========================================================
 
-  const floorLocations =
+  const floor{t.location}s =
     useMemo(
       () =>
-        sortedLocations.filter(
+        sorted{t.location}s.filter(
           (location) =>
             location.location_type ===
             'floor'
         ),
       [
-        sortedLocations,
+        sorted{t.location}s,
       ]
     )
 
@@ -481,15 +478,15 @@ export default function QuantityAllocationMatrix({
   //
   // If Area / Room / Custom locations do not exist,
   // leaf locations are used. This preserves the current
-  // RF-0001 model where Zones are acting as the production
+  // RF-0001 model where {t.zone}s are acting as the production
   // locations.
   // ==========================================================
 
-  const matrixLocations =
+  const matrix{t.location}s =
     useMemo(
       () => {
-        const assignableLocations =
-          sortedLocations.filter(
+        const assignable{t.location}s =
+          sorted{t.location}s.filter(
             (location) =>
               location.location_type ===
                 'area' ||
@@ -499,11 +496,11 @@ export default function QuantityAllocationMatrix({
                 'custom'
           )
 
-        const sourceLocations =
-          assignableLocations.length >
+        const source{t.location}s =
+          assignable{t.location}s.length >
           0
-            ? assignableLocations
-            : sortedLocations.filter(
+            ? assignable{t.location}s
+            : sorted{t.location}s.filter(
                 (location) =>
                   !locations.some(
                     (
@@ -519,7 +516,7 @@ export default function QuantityAllocationMatrix({
             .trim()
             .toLowerCase()
 
-        return sourceLocations.filter(
+        return source{t.location}s.filter(
           (location) => {
             const path =
               locationPathMap.get(
@@ -529,9 +526,9 @@ export default function QuantityAllocationMatrix({
             const floor =
               path.find(
                 (
-                  pathLocation
+                  path{t.location}
                 ) =>
-                  pathLocation.location_type ===
+                  path{t.location}.location_type ===
                   'floor'
               )
 
@@ -543,9 +540,9 @@ export default function QuantityAllocationMatrix({
 
                 ...path.map(
                   (
-                    pathLocation
+                    path{t.location}
                   ) =>
-                    pathLocation.name
+                    path{t.location}.name
                 ),
 
                 ...activeScopeItems.map(
@@ -591,7 +588,7 @@ export default function QuantityAllocationMatrix({
         locationPathMap,
         locations,
         searchTerm,
-        sortedLocations,
+        sorted{t.location}s,
       ]
     )
 
@@ -600,13 +597,13 @@ export default function QuantityAllocationMatrix({
   // QUANTIFICATION BY DIVISION / ZONE
   // ==========================================================
 
-  const quantificationByDivision =
+  const quantificationBy{t.division} =
     useMemo(
       () =>
-        floorLocations
+        floor{t.location}s
           .map((floor) => {
             const zones =
-              sortedLocations
+              sorted{t.location}s
                 .filter(
                   (location) =>
                     location.location_type ===
@@ -619,8 +616,8 @@ export default function QuantityAllocationMatrix({
                     ) || []
 
                   return path.some(
-                    (pathLocation) =>
-                      pathLocation.id ===
+                    (path{t.location}) =>
+                      path{t.location}.id ===
                       floor.id
                   )
                 })
@@ -657,15 +654,15 @@ export default function QuantityAllocationMatrix({
 
                 const floorInPath =
                   path.find(
-                    (pathLocation) =>
-                      pathLocation.location_type ===
+                    (path{t.location}) =>
+                      path{t.location}.location_type ===
                       'floor'
                   )
 
                 const zoneInPath =
                   path.find(
-                    (pathLocation) =>
-                      pathLocation.location_type ===
+                    (path{t.location}) =>
+                      path{t.location}.location_type ===
                       'zone'
                   )
 
@@ -709,10 +706,10 @@ export default function QuantityAllocationMatrix({
       [
         activeScopeItems,
         allocations,
-        floorLocations,
+        floor{t.location}s,
         locationMap,
         locationPathMap,
-        sortedLocations,
+        sorted{t.location}s,
       ]
     )
 
@@ -816,7 +813,8 @@ export default function QuantityAllocationMatrix({
       if (error) {
         setErrorMessage(
           getErrorMessage(
-            error
+            error,
+            t
           )
         )
 
@@ -878,7 +876,7 @@ export default function QuantityAllocationMatrix({
       )
 
       setNoticeMessage(
-        'Allocation quantity was cleared.'
+        t.quantityCleared
       )
 
       router.refresh()
@@ -906,7 +904,7 @@ export default function QuantityAllocationMatrix({
       numericValue < 0
     ) {
       setErrorMessage(
-        'Enter a valid quantity greater than or equal to zero.'
+        t.invalidQuantity
       )
 
       if (
@@ -1011,7 +1009,8 @@ export default function QuantityAllocationMatrix({
       if (error) {
         setErrorMessage(
           getErrorMessage(
-            error
+            error,
+            t
           )
         )
 
@@ -1073,7 +1072,7 @@ export default function QuantityAllocationMatrix({
       )
 
       setNoticeMessage(
-        'Allocation quantity was updated.'
+        t.quantityUpdated
       )
 
       router.refresh()
@@ -1125,7 +1124,8 @@ export default function QuantityAllocationMatrix({
     if (error) {
       setErrorMessage(
         getErrorMessage(
-          error
+          error,
+          t
         )
       )
 
@@ -1174,7 +1174,7 @@ export default function QuantityAllocationMatrix({
     )
 
     setNoticeMessage(
-      'Allocation quantity was saved.'
+      t.quantitySaved
     )
 
     router.refresh()
@@ -1201,7 +1201,7 @@ export default function QuantityAllocationMatrix({
             styles.formTitle
           }
         >
-          Scope Allocation Matrix
+          {t.title}
         </h2>
 
         <p
@@ -1209,10 +1209,7 @@ export default function QuantityAllocationMatrix({
             styles.formDescription
           }
         >
-          Distribute each Scope Item quantity across the
-          project&apos;s production locations. Scope Quantity
-          remains authoritative and the reconciliation above
-          updates after each saved allocation.
+          {t.description}
         </p>
       </div>
 
@@ -1271,7 +1268,7 @@ export default function QuantityAllocationMatrix({
                 event.target.value
               )
             }
-            placeholder="Search locations or Scope Items..."
+            placeholder="{t.searchPlaceholder}"
             style={{
               width: '100%',
               minHeight: '42px',
@@ -1308,7 +1305,7 @@ export default function QuantityAllocationMatrix({
               event.target.value
             )
           }
-          aria-label="Filter allocation matrix by division"
+          aria-label={t.filterDivision}
           style={{
             minWidth:
               '170px',
@@ -1337,10 +1334,10 @@ export default function QuantityAllocationMatrix({
           <option
             value="all"
           >
-            All divisions
+            {t.all{t.division}s}
           </option>
 
-          {floorLocations.map(
+          {floor{t.location}s.map(
             (
               floor
             ) => (
@@ -1398,18 +1395,14 @@ export default function QuantityAllocationMatrix({
           </span>
 
           <h3>
-            No Scope Items
-            available.
+            {t.noScopeItems}
           </h3>
 
           <p>
-            Define the project
-            Scope Breakdown
-            Structure before
-            allocating quantities.
+            {t.noScopeItemsHelp}
           </p>
         </div>
-      ) : matrixLocations.length ===
+      ) : matrix{t.location}s.length ===
         0 ? (
         <div
           className={
@@ -1425,15 +1418,11 @@ export default function QuantityAllocationMatrix({
           </span>
 
           <h3>
-            No production
-            locations available.
+            {t.no{t.location}s}
           </h3>
 
           <p>
-            Define the physical
-            production hierarchy
-            before allocating Scope
-            Item quantities.
+            {t.noLocationsHelp}
           </p>
         </div>
       ) : (
@@ -1507,7 +1496,7 @@ export default function QuantityAllocationMatrix({
                         'uppercase',
                     }}
                   >
-                    Location
+                    {t.location}
                   </th>
 
                   <th
@@ -1530,7 +1519,7 @@ export default function QuantityAllocationMatrix({
                         'uppercase',
                     }}
                   >
-                    Type
+                    {t.type}
                   </th>
 
                   <th
@@ -1553,7 +1542,7 @@ export default function QuantityAllocationMatrix({
                         'uppercase',
                     }}
                   >
-                    Division
+                    {t.division}
                   </th>
 
                   <th
@@ -1576,7 +1565,7 @@ export default function QuantityAllocationMatrix({
                         'uppercase',
                     }}
                   >
-                    Zone
+                    {t.zone}
                   </th>
 
                   {activeScopeItems.map(
@@ -1664,9 +1653,10 @@ export default function QuantityAllocationMatrix({
                                 850,
                             }}
                           >
-                            Scope:{' '}
+                            {t.scope}:{' '}
                             {formatQuantity(
-                              scopeItem.scope_quantity
+                              scopeItem.scope_quantity,
+                              locale
                             )}
                           </span>
                         </div>
@@ -1677,7 +1667,7 @@ export default function QuantityAllocationMatrix({
               </thead>
 
               <tbody>
-                {matrixLocations.map(
+                {matrix{t.location}s.map(
                   (
                     location
                   ) => {
@@ -1689,23 +1679,23 @@ export default function QuantityAllocationMatrix({
                     const floor =
                       path.find(
                         (
-                          pathLocation
+                          path{t.location}
                         ) =>
-                          pathLocation.location_type ===
+                          path{t.location}.location_type ===
                           'floor'
                       )
 
                     const zone =
                       path.find(
                         (
-                          pathLocation
+                          path{t.location}
                         ) =>
-                          pathLocation.location_type ===
+                          path{t.location}.location_type ===
                           'zone'
                       )
 
                     const rowColor =
-                      getZoneColor(
+                      get{t.zone}Color(
                         zone?.name ||
                           location.name
                       )
@@ -1785,8 +1775,9 @@ export default function QuantityAllocationMatrix({
                             }}
                           >
                             {location.environment_type ||
-                              getLocationTypeLabel(
-                                location.location_type
+                              get{t.location}{t.type}Label(
+                                location.location_type,
+                                t
                               )}
                           </span>
                         </td>
@@ -1986,9 +1977,9 @@ export default function QuantityAllocationMatrix({
           >
             <span>
               {
-                matrixLocations.length
+                matrix{t.location}s.length
               }{' '}
-              {matrixLocations.length ===
+              {matrix{t.location}s.length ===
               1
                 ? 'production location'
                 : 'production locations'}
@@ -2054,7 +2045,7 @@ export default function QuantityAllocationMatrix({
               className={styles.formTitle}
               style={{ margin: 0 }}
             >
-              Quantification by Location
+              Quantification by {t.location}
             </h3>
           </div>
 
@@ -2083,7 +2074,7 @@ export default function QuantityAllocationMatrix({
               background: '#ffffff',
             }}
           >
-            {quantificationByDivision.length ===
+            {quantificationBy{t.division}.length ===
             0 ? (
               <div
                 className={styles.workspaceEmpty}
@@ -2092,11 +2083,11 @@ export default function QuantityAllocationMatrix({
                   No division totals available.
                 </h3>
                 <p>
-                  Create Division / Floor and Zone locations and enter Scope Item quantities to generate this table.
+                  Create {t.division} / Floor and {t.zone} locations and enter Scope Item quantities to generate this table.
                 </p>
               </div>
             ) : (
-              quantificationByDivision.map(
+              quantificationBy{t.division}.map(
                 ({ floor, zones, totals }) => (
                   <div
                     key={floor.id}
@@ -2177,7 +2168,7 @@ export default function QuantityAllocationMatrix({
                                 textAlign: 'center',
                                 fontWeight: 800,
                                 backgroundColor:
-                                  getZoneColor(
+                                  get{t.zone}Color(
                                     zone.name
                                   ),
                               }}
@@ -2254,7 +2245,7 @@ export default function QuantityAllocationMatrix({
                                           : '#a0aec0',
                                       backgroundColor:
                                         total > 0
-                                          ? getZoneColor(
+                                          ? get{t.zone}Color(
                                               zone.name
                                             )
                                           : undefined,
