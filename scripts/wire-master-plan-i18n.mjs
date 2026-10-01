@@ -52,12 +52,15 @@ if (!source.includes('async function loadOrganizationLocale()')) {
 source = source.replace("      'en-US',\n      {", "      locale,\n      {")
 source = source.replaceAll("'PROJECT LOCATIONS'", 't.projectLocations')
 
-const portfolioReplacements = [
-  ['PLANNING &amp; PRODUCTION CONTROL', '{t.portfolioEyebrow}'], ['>Master Plan<', '>{t.portfolioTitle}<'], ['Select a project to access its Master Plan.', '{t.portfolioHelp}'], ['No projects are available for Master Plan.', '{t.portfolioEmpty}'], ['PROJECT COVER', '{t.projectCover}'], ["{project.code || 'UNASSIGNED'}", '{project.code || t.unassigned}'], ['>PROJECT<', '>{t.projectLabel}<'], ["{project.client_name || 'Client not assigned'}", '{project.client_name || t.clientNotAssigned}'], ["{locationText || project.country_code || 'Location not assigned'}", '{locationText || project.country_code || t.locationNotAssigned}'], ['>Overall Progress<', '>{t.overallProgress}<'], ["'Production Control data not available yet.'", 't.productionDataUnavailable'], ["'Production scope available. Field production has not started yet.'", 't.productionNotStarted'], ['<span>Open Project</span>', '<span>{t.openProject}</span>'], ["alt={`${project.name} project`}", 'alt={`${project.name} ${t.projectImageSuffix}`}']
+const literalReplacements = [
+  ['PLANNING &amp; PRODUCTION CONTROL', '{t.portfolioEyebrow}'], ['>Master Plan<', '>{t.portfolioTitle}<'], ['Select a project to access its Master Plan.', '{t.portfolioHelp}'], ['No projects are available for Master Plan.', '{t.portfolioEmpty}'], ['PROJECT COVER', '{t.projectCover}'], ["{project.code || 'UNASSIGNED'}", '{project.code || t.unassigned}'], ['>PROJECT<', '>{t.projectLabel}<'], ["{project.client_name || 'Client not assigned'}", '{project.client_name || t.clientNotAssigned}'], ["{locationText || project.country_code || 'Location not assigned'}", '{locationText || project.country_code || t.locationNotAssigned}'], ['>Overall Progress<', '>{t.overallProgress}<'], ["'Production Control data not available yet.'", 't.productionDataUnavailable'], ["'Production scope available. Field production has not started yet.'", 't.productionNotStarted'], ['<span>Open Project</span>', '<span>{t.openProject}</span>'], ["alt={`${project.name} project`}", 'alt={`${project.name} ${t.projectImageSuffix}`}'],
+  ['>MASTER PLAN<', '>{t.masterPlanLabel}<'], ['<span>ACTIVITY</span>', '<span>{t.activityHeader}</span>'], ['title="Update current scenario"', 'title={t.updateScenarioTitle}'], ['title="Create a copy of this scenario"', 'title={t.duplicateScenarioTitle}']
 ]
-for (const [from, to] of portfolioReplacements) source = source.replaceAll(from, to)
+for (const [from, to] of literalReplacements) source = source.replaceAll(from, to)
 source = source.replace('`${progressRecord.completed_count} of ${progressRecord.scope_item_count} scope items completed.`', 't.completedScopeItems(progressRecord.completed_count, progressRecord.scope_item_count)')
 source = source.replace('`${progressRecord.in_progress_count} scope item${progressRecord.in_progress_count === 1 ? \'\' : \'s\'} in progress.`', 't.scopeItemsInProgress(progressRecord.in_progress_count)')
+source = source.replace('}</strong> locations × <strong>{sequenceActivities.length}</strong> activities =', '}</strong> {t.locationsWord} × <strong>{sequenceActivities.length}</strong> {t.activitiesWord} =')
+source = source.replace('`Row ID: ${row.id}`', '`${t.rowIdLabel}: ${row.id}`')
 
 for (const token of ['get{t.', 'set{t.', 'locale{t.', 'project{t.', 'selected{t.']) if (source.includes(token)) throw new Error(`Unsafe i18n mutation detected: ${token}`)
 if (source.includes('  const t = {\n    title:')) throw new Error('Legacy English-only Master Plan translation object still exists.')
@@ -66,4 +69,4 @@ if (!source.includes('getMasterPlanPortfolioCopy(locale)')) throw new Error('Mas
 if (!source.includes('loadOrganizationLocale')) throw new Error('Organization locale loader is missing.')
 
 fs.writeFileSync(path, source)
-console.log(`Wired Master Plan locale catalogs and portfolio literals: ${path}`)
+console.log(`Wired Master Plan locale catalogs and rendered literals: ${path}`)
