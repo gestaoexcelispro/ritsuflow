@@ -5,10 +5,11 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { getPrePlanningCopy } from '../../../../i18n/prePlanning'
 
 const ROW_HEIGHT = 44
 
-function safeNumber(value, digits = 2) {
+function safeNumber(value, digits = 2, locale = 'en-US') {
   const numeric = Number(value)
 
   if (!Number.isFinite(numeric)) {
@@ -16,7 +17,7 @@ function safeNumber(value, digits = 2) {
   }
 
   return new Intl.NumberFormat(
-    'en-US',
+    locale,
     {
       minimumFractionDigits: 0,
       maximumFractionDigits: digits,
@@ -88,10 +89,10 @@ function flattenWbsItems(items) {
   return rows
 }
 
-function getItemTypeLabel(itemType) {
-  if (itemType === 'summary') return 'Summary'
-  if (itemType === 'milestone') return 'Milestone'
-  return 'Task'
+function getItemTypeLabel(itemType, t) {
+  if (itemType === 'summary') return t.summary
+  if (itemType === 'milestone') return t.milestone
+  return t.task
 }
 
 function getItemSymbol(itemType) {
@@ -168,7 +169,10 @@ export default function PrePlanningWbsEditor({
   dayWidth = 34,
   timelineDays = 30,
   onNotice,
+  locale = 'en-US',
 }) {
+  const t = useMemo(() => getPrePlanningCopy(locale), [locale])
+
   const [items, setItems] = useState([])
   const [selectedItemId, setSelectedItemId] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -238,7 +242,7 @@ export default function PrePlanningWbsEditor({
       if (!response.ok) {
         throw new Error(
           result?.error ||
-          'WBS could not be loaded.'
+          t.wbsLoadFailed
         )
       }
 
@@ -264,7 +268,7 @@ export default function PrePlanningWbsEditor({
         type: 'error',
         text:
           error?.message ||
-          'WBS could not be loaded.',
+          t.wbsLoadFailed,
       })
     } finally {
       setLoading(false)
@@ -299,7 +303,7 @@ export default function PrePlanningWbsEditor({
     if (!response.ok) {
       throw new Error(
         result?.error ||
-        'WBS operation failed.'
+        t.wbsOperationFailed
       )
     }
 
@@ -312,8 +316,8 @@ export default function PrePlanningWbsEditor({
         type: 'warning',
         text:
           versionId
-            ? 'Historical versions are read-only.'
-            : 'Save the sequence first to create a Pre-Planning version.',
+            ? t.historicalReadOnly
+            : t.saveSequenceFirst,
       })
       return
     }
@@ -335,7 +339,7 @@ export default function PrePlanningWbsEditor({
       showNotice({
         type: 'warning',
         text:
-          'Enter a name for the new WBS line.',
+          t.enterWbsName,
       })
       return
     }
@@ -377,7 +381,8 @@ export default function PrePlanningWbsEditor({
         type: 'success',
         text:
           `${getItemTypeLabel(
-            addType
+            addType,
+            t
           )} added to the WBS.`,
       })
     } catch (error) {
@@ -385,7 +390,7 @@ export default function PrePlanningWbsEditor({
         type: 'error',
         text:
           error?.message ||
-          'The WBS line could not be added.',
+          t.wbsAddFailed,
       })
     } finally {
       setActionState('idle')
@@ -425,7 +430,7 @@ export default function PrePlanningWbsEditor({
         type: 'error',
         text:
           error?.message ||
-          'The WBS line could not be updated.',
+          t.wbsUpdateFailed,
       })
 
       await loadWbs()
@@ -466,7 +471,7 @@ export default function PrePlanningWbsEditor({
         type: 'error',
         text:
           error?.message ||
-          'The WBS structure could not be updated.',
+          t.wbsStructureFailed,
       })
 
       await loadWbs()
@@ -495,7 +500,7 @@ export default function PrePlanningWbsEditor({
       showNotice({
         type: 'warning',
         text:
-          'There is no previous Summary available for this line.',
+          t.noPreviousSummary,
       })
       return
     }
@@ -507,7 +512,7 @@ export default function PrePlanningWbsEditor({
       showNotice({
         type: 'warning',
         text:
-          'A WBS line can only be indented under a Summary.',
+          t.indentSummaryOnly,
       })
       return
     }
@@ -535,7 +540,7 @@ export default function PrePlanningWbsEditor({
 
     persistStructure(
       nextItems,
-      'WBS line indented.'
+      t.wbsIndented
     )
   }
 
@@ -546,7 +551,7 @@ export default function PrePlanningWbsEditor({
       showNotice({
         type: 'warning',
         text:
-          'This WBS line is already at the root level.',
+          t.alreadyRoot,
       })
       return
     }
@@ -587,7 +592,7 @@ export default function PrePlanningWbsEditor({
 
     persistStructure(
       nextItems,
-      'WBS line outdented.'
+      t.wbsOutdented
     )
   }
 
@@ -658,8 +663,8 @@ export default function PrePlanningWbsEditor({
     persistStructure(
       nextItems,
       direction < 0
-        ? 'WBS line moved up.'
-        : 'WBS line moved down.'
+        ? t.wbsMovedUp
+        : t.wbsMovedDown
     )
   }
 
@@ -708,7 +713,7 @@ export default function PrePlanningWbsEditor({
         type: 'error',
         text:
           error?.message ||
-          'The WBS line could not be deleted.',
+          t.wbsDeleteFailed,
       })
     } finally {
       setActionState('idle')
@@ -970,10 +975,10 @@ export default function PrePlanningWbsEditor({
               color: '#5f7078',
             }}
           >
-            <div style={{padding:'0 10px'}}>WBS</div>
+            <div style={{padding:'0 10px'}}>{t.wbs}</div>
             <div style={{padding:'0 10px'}}>Type</div>
-            <div style={{padding:'0 10px'}}>Name</div>
-            <div style={{padding:'0 10px', textAlign:'right'}}>Duration</div>
+            <div style={{padding:'0 10px'}}>{t.name}</div>
+            <div style={{padding:'0 10px', textAlign:'right'}}>{t.duration}</div>
             <div style={{padding:'0 10px'}}>Predecessor</div>
             <div style={{padding:'0 10px'}}>Relationship</div>
           </div>
