@@ -5,6 +5,12 @@ const ROOT = process.cwd()
 const SCAN_ROOTS = ['src/app', 'src/components'].map(p => path.join(ROOT, p)).filter(fs.existsSync)
 const EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx'])
 const IGNORE_DIRS = new Set(['node_modules', '.next', 'dist', 'build'])
+
+// RitsuCAD is intentionally English-only and is not part of the RitsuFlow i18n scope.
+const IGNORE_PATH_PREFIXES = [
+  'src/app/ritsucad/',
+]
+
 const IGNORE_TEXT = [
   /^RitsuFlow$/i, /^RitsuCAD$/i, /^PreCon$/i, /^FieldOp$/i,
   /^https?:\/\//i, /^\/[^ ]*$/, /^[A-Z0-9_-]{1,6}$/,
@@ -32,6 +38,10 @@ function shouldReport(text) {
   return true
 }
 
+function shouldScanFile(relative) {
+  return !IGNORE_PATH_PREFIXES.some(prefix => relative === prefix.slice(0, -1) || relative.startsWith(prefix))
+}
+
 function lineNumber(source, index) {
   return source.slice(0, index).split('\n').length
 }
@@ -39,8 +49,10 @@ function lineNumber(source, index) {
 const findings = []
 for (const root of SCAN_ROOTS) {
   for (const file of walk(root)) {
-    const source = fs.readFileSync(file, 'utf8')
     const relative = path.relative(ROOT, file).replaceAll('\\', '/')
+    if (!shouldScanFile(relative)) continue
+
+    const source = fs.readFileSync(file, 'utf8')
     const patterns = [
       { kind: 'jsx-text', rx: />\s*([^<>{}\n][^<>{}]*)\s*</g },
       { kind: 'ui-attribute', rx: /\b(?:placeholder|title|aria-label|alt)\s*=\s*["']([^"']+)["']/g },
@@ -66,6 +78,7 @@ for (const item of findings) {
 
 console.log('\nRitsuFlow Internationalization Audit')
 console.log('====================================')
+console.log('Scope exclusion: RitsuCAD (English-only)')
 console.log(`Files scanned: ${new Set(findings.map(x => x.file)).size}`)
 console.log(`Potential hard-coded UI strings: ${findings.length}\n`)
 console.log('By area:')
