@@ -1,7 +1,7 @@
 const copy = {
   'en-US': {
     locationTypes: { project: 'Project', building: 'Building', floor: 'Level', level: 'Level', division: 'Level', zone: 'Zone', area: 'Area', room: 'Room', custom: 'Custom' },
-    division: 'Division', location: 'Location', project: 'Project', building: 'Building', level: 'Level', zone: 'Zone', area: 'Area', room: 'Room', custom: 'Custom',
+    division: 'Division', location: 'Location', project: 'Project', building: 'Building', level: 'Level', zone: 'Zone', area: 'Area', room: 'Room', custom: 'Custom', unassignedLocation: 'Unassigned Location', unassignedDivision: 'Unassigned Division',
     title: 'Pre-Planning', sequencing: 'Sequencing', durations: 'Durations', wbs: 'WBS', productionCells: 'Production Cells', versions: 'Versions', filters: 'Filters',
     selectProjectHelp: 'Select a project to review calculated production durations and define the preliminary production sequence.', openPrePlanning: 'Open Pre-Planning', noAccessibleProjects: 'No accessible projects were found.', authenticationRequired: 'Authentication is required.',
     workPackage: 'Work Package', scopeItem: 'Scope Item', activity: 'Activity', quantity: 'Quantity', unit: 'Unit', productivity: 'Productivity', productivityBasis: 'Productivity Basis', duration: 'Duration', workforce: 'Workforce', resources: 'Resources', start: 'Start', finish: 'Finish', predecessor: 'Predecessor', successors: 'Successors', sequence: 'Sequence', actions: 'Actions',
@@ -15,7 +15,7 @@ const copy = {
   },
   'pt-BR': {
     locationTypes: { project: 'Projeto', building: 'Edifício', floor: 'Nível', level: 'Nível', division: 'Nível', zone: 'Zona', area: 'Área', room: 'Ambiente', custom: 'Personalizado' },
-    division: 'Divisão', location: 'Localização', project: 'Projeto', building: 'Edifício', level: 'Nível', zone: 'Zona', area: 'Área', room: 'Ambiente', custom: 'Personalizado',
+    division: 'Divisão', location: 'Localização', project: 'Projeto', building: 'Edifício', level: 'Nível', zone: 'Zona', area: 'Área', room: 'Ambiente', custom: 'Personalizado', unassignedLocation: 'Localização não atribuída', unassignedDivision: 'Divisão não atribuída',
     title: 'Pré-Planejamento', sequencing: 'Sequenciamento', durations: 'Durações', wbs: 'EAP', productionCells: 'Células de Produção', versions: 'Versões', filters: 'Filtros',
     selectProjectHelp: 'Selecione um projeto para revisar as durações de produção calculadas e definir a sequência preliminar de produção.', openPrePlanning: 'Abrir Pré-Planejamento', noAccessibleProjects: 'Nenhum projeto acessível foi encontrado.', authenticationRequired: 'É necessário estar autenticado.',
     workPackage: 'Pacote de Trabalho', scopeItem: 'Item de Escopo', activity: 'Atividade', quantity: 'Quantidade', unit: 'Unidade', productivity: 'Produtividade', productivityBasis: 'Base de Produtividade', duration: 'Duração', workforce: 'Mão de Obra', resources: 'Recursos', start: 'Início', finish: 'Término', predecessor: 'Predecessora', successors: 'Sucessoras', sequence: 'Sequência', actions: 'Ações',
@@ -29,7 +29,7 @@ const copy = {
   },
   es: {
     locationTypes: { project: 'Proyecto', building: 'Edificio', floor: 'Nivel', level: 'Nivel', division: 'Nivel', zone: 'Zona', area: 'Área', room: 'Ambiente', custom: 'Personalizado' },
-    division: 'División', location: 'Ubicación', project: 'Proyecto', building: 'Edificio', level: 'Nivel', zone: 'Zona', area: 'Área', room: 'Ambiente', custom: 'Personalizado',
+    division: 'División', location: 'Ubicación', project: 'Proyecto', building: 'Edificio', level: 'Nivel', zone: 'Zona', area: 'Área', room: 'Ambiente', custom: 'Personalizado', unassignedLocation: 'Ubicación no asignada', unassignedDivision: 'División no asignada',
     title: 'Preplanificación', sequencing: 'Secuenciación', durations: 'Duraciones', wbs: 'EDT', productionCells: 'Células de Producción', versions: 'Versiones', filters: 'Filtros',
     selectProjectHelp: 'Selecciona un proyecto para revisar las duraciones de producción calculadas y definir la secuencia preliminar de producción.', openPrePlanning: 'Abrir Preplanificación', noAccessibleProjects: 'No se encontraron proyectos accesibles.', authenticationRequired: 'Se requiere autenticación.',
     workPackage: 'Paquete de Trabajo', scopeItem: 'Ítem de Alcance', activity: 'Actividad', quantity: 'Cantidad', unit: 'Unidad', productivity: 'Productividad', productivityBasis: 'Base de Productividad', duration: 'Duración', workforce: 'Mano de Obra', resources: 'Recursos', start: 'Inicio', finish: 'Fin', predecessor: 'Predecesora', successors: 'Sucesoras', sequence: 'Secuencia', actions: 'Acciones',
