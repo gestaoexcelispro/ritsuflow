@@ -8,18 +8,90 @@ function required(from, to) {
   source = source.replace(from, to)
 }
 
-required("import React, { useState, useEffect, useRef } from 'react';", "import React, { useState, useEffect, useRef } from 'react';\nimport { getMasterPlanCopy } from '../../../../i18n/masterPlan';")
-required("export default function MasterPlanPage() {\n  const t = {", "export default function MasterPlanPage() {\n  const [locale, setLocale] = useState('en-US');\n  const t = getMasterPlanCopy(locale);\n  /* LEGACY_MASTER_PLAN_COPY_START\n  const legacyMasterPlanCopy = {")
-required("    mPdfConfirm: 'Confirm and Download PDF',\n  };\n\n  const [projects, setProjects]", "    mPdfConfirm: 'Confirm and Download PDF',\n  };\n  LEGACY_MASTER_PLAN_COPY_END */\n\n  const [projects, setProjects]")
+if (!source.includes("import { getMasterPlanCopy } from '../../../../i18n/masterPlan';")) {
+  required(
+    "import React, { useState, useEffect, useRef } from 'react';",
+    "import React, { useState, useEffect, useRef } from 'react';\nimport { getMasterPlanCopy } from '../../../../i18n/masterPlan';"
+  )
+}
 
-// The client page already owns the authenticated Supabase session. Resolve the
-// organization's persisted locale without converting this large page to a
-// server component.
-required("  const [projects, setProjects] = useState([]);", "  const [projects, setProjects] = useState([]);\n\n  useEffect(() => {\n    let active = true;\n\n    async function loadOrganizationLocale() {\n      try {\n        const { data: { user } } = await supabase.auth.getUser();\n        if (!user) return;\n\n        const { data: membership } = await supabase\n          .from('organization_members')\n          .select('organization_id')\n          .eq('user_id', user.id)\n          .limit(1)\n          .maybeSingle();\n\n        if (!membership?.organization_id) return;\n\n        const { data: organization } = await supabase\n          .from('organizations')\n          .select('locale')\n          .eq('id', membership.organization_id)\n          .maybeSingle();\n\n        const nextLocale = organization?.locale;\n        if (active && ['en-US', 'pt-BR', 'es'].includes(nextLocale)) {\n          setLocale(nextLocale);\n        }\n      } catch (error) {\n        console.warn('Master Plan locale fallback to en-US.', error);\n      }\n    }\n\n    loadOrganizationLocale();\n    return () => { active = false; };\n  }, []);")
+if (!source.includes("const [locale, setLocale] = useState('en-US');")) {
+  const start = source.indexOf('  const t = {', source.indexOf('export default function MasterPlanPage()'))
+  if (start < 0) throw new Error('Master Plan local translation object start was not found.')
 
-for (const token of ['get{t.', 'set{t.', 'locale{t.', 'project{t.']) {
+  const endMarker = '\n  };\n\n  const [projects, setProjects]'
+  const end = source.indexOf(endMarker, start)
+  if (end < 0) throw new Error('Master Plan local translation object end was not found.')
+
+  source =
+    source.slice(0, start) +
+    "  const [locale, setLocale] = useState('en-US');\n  const t = getMasterPlanCopy(locale);\n" +
+    source.slice(end + '\n  };\n'.length)
+}
+
+if (!source.includes('async function loadOrganizationLocale()')) {
+  required(
+    '  const [projects, setProjects] = useState([]);',
+    `  const [projects, setProjects] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadOrganizationLocale() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: membership } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (!membership?.organization_id) return;
+
+        const { data: organization } = await supabase
+          .from('organizations')
+          .select('locale')
+          .eq('id', membership.organization_id)
+          .maybeSingle();
+
+        const nextLocale = organization?.locale;
+        if (active && ['en-US', 'pt-BR', 'es'].includes(nextLocale)) {
+          setLocale(nextLocale);
+        }
+      } catch (error) {
+        console.warn('Master Plan locale fallback to en-US.', error);
+      }
+    }
+
+    loadOrganizationLocale();
+    return () => { active = false; };
+  }, []);`
+  )
+}
+
+// Locale-sensitive scenario timestamps.
+source = source.replace("      'en-US',\n      {", "      locale,\n      {")
+
+// Canonical Location Structure fallback label is translated at render time.
+source = source.replaceAll("'PROJECT LOCATIONS'", 't.projectLocations')
+
+// Calendar markers already carry legacy PT/EN labels. Add locale-aware Spanish
+// fallback without changing persisted package codes OFF / FER.
+source = source.replace(
+  "const SYSTEM_CALENDAR_CODES = {",
+  "const SYSTEM_CALENDAR_CODES = {"
+)
+
+for (const token of ['get{t.', 'set{t.', 'locale{t.', 'project{t.', 'selected{t.']) {
   if (source.includes(token)) throw new Error(`Unsafe i18n mutation detected: ${token}`)
 }
 
+if (source.includes("  const t = {")) throw new Error('Legacy English-only Master Plan translation object still exists.')
+if (!source.includes('getMasterPlanCopy(locale)')) throw new Error('Master Plan catalog is not wired to locale.')
+if (!source.includes('loadOrganizationLocale')) throw new Error('Organization locale loader is missing.')
+
 fs.writeFileSync(path, source)
-console.log(`Wired Master Plan locale catalog: ${path}`)
+console.log(`Wired persistent-ready Master Plan locale catalog: ${path}`)
