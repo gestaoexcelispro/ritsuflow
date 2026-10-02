@@ -21,7 +21,7 @@ export default function PlatformMapCanvas() {
     const onSelect = (node) => {
       setSelected(node)
       if (node.id === 'ritsuflow') setFocusId('ritsuflow')
-      else if (node.type === 'workspace') setFocusId(node.id)
+      else if (node.type === 'workspace' || node.type === 'module') setFocusId(node.id)
     }
     createPlatformMapEditor(containerRef.current, { onSelect, focusId }).then((cleanup) => {
       if (cancelled) cleanup?.()
@@ -31,15 +31,20 @@ export default function PlatformMapCanvas() {
   }, [focusId])
 
   const focus = getPlatformMapNode(focusId)
+  const workspace = focus?.type === 'module' ? getPlatformMapNode(focus.workspace) : focus?.type === 'workspace' ? focus : null
+
+  const goRoot = () => { setFocusId('ritsuflow'); setSelected(null) }
+  const goWorkspace = () => { if (workspace) { setFocusId(workspace.id); setSelected(workspace) } }
 
   return <div className="pmShell">
     <div className="pmMapNav">
-      <button className={focusId === 'ritsuflow' ? 'active' : ''} onClick={() => { setFocusId('ritsuflow'); setSelected(null) }}>RitsuFlow</button>
-      {focusId !== 'ritsuflow' && <><span>›</span><button className="active">{focus?.label}</button></>}
-      <small>{focusId === 'ritsuflow' ? 'Select a workspace to explore its modules' : 'Select a module to inspect how it works'}</small>
+      <button className={focusId === 'ritsuflow' ? 'active' : ''} onClick={goRoot}>RitsuFlow</button>
+      {workspace && <><span>›</span><button className={focus?.type === 'workspace' ? 'active' : ''} onClick={goWorkspace}>{workspace.label}</button></>}
+      {focus?.type === 'module' && <><span>›</span><button className="active">{focus.label}</button></>}
+      <small>{focusId === 'ritsuflow' ? 'Select a workspace to explore its modules' : focus?.type === 'workspace' ? 'Select a module to inspect how it works' : 'Module architecture: inputs, process, outputs, pages and data'}</small>
     </div>
     <div ref={containerRef} className="pmReteCanvas" />
-    {selected && <aside className="pmInspector">
+    {selected && selected.type !== 'detail' && <aside className="pmInspector">
       <div className="pmInspectorHeader"><div><span className="pmType">{selected.type}</span><h2>{selected.label}</h2><p>{selected.subtitle}</p></div><button onClick={() => setSelected(null)} aria-label="Close inspector">×</button></div>
       <div className="pmInspectorBody">
         <section className="pmPurpose"><h4>Purpose</h4><p>{selected.purpose || selected.subtitle}</p></section>
