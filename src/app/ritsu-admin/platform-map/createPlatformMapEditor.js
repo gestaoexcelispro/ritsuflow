@@ -27,6 +27,19 @@ function getVisibleGraph(focusId) {
   return getVisibleGraph('ritsuflow')
 }
 
+function workspaceModulePosition(index, count) {
+  const centerX = 560
+  const firstY = 390
+  const xGap = 260
+  const yGap = 235
+  if (count <= 3) return { x:centerX + (index-(count-1)/2)*xGap, y:firstY }
+  const topCount = Math.ceil(count/2)
+  const bottomCount = count-topCount
+  if (index < topCount) return { x:centerX + (index-(topCount-1)/2)*xGap, y:firstY }
+  const bottomIndex = index-topCount
+  return { x:centerX + (bottomIndex-(bottomCount-1)/2)*xGap, y:firstY+yGap }
+}
+
 function getPosition(item, focusId, nodes) {
   const focus = platformMapNodes.find((node)=>node.id===focusId)
   if (!focus || focusId === 'ritsuflow') {
@@ -34,13 +47,11 @@ function getPosition(item, focusId, nodes) {
     return {x:{projects:160,precon:520,fieldop:880}[item.id]||520,y:390}
   }
   if (focus.type === 'workspace') {
-    if (item.id === 'ritsuflow') return {x:80,y:70}
-    if (item.id === focusId) return {x:520,y:70}
+    if (item.id === 'ritsuflow') return {x:70,y:75}
+    if (item.id === focusId) return {x:560,y:75}
     const modules = nodes.filter((node)=>node.type==='module')
     const index = modules.findIndex((node)=>node.id===item.id)
-    const row = Math.floor(index / 3)
-    const col = index % 3
-    return {x:120+col*420,y:390+row*250}
+    return workspaceModulePosition(index,modules.length)
   }
   if (focus.type === 'module') {
     if (item.id === 'ritsuflow') return {x:60,y:70}
