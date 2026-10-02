@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { supabase } from '../../../../lib/supabase'
+import { supabase } from '../../../../../lib/supabase'
 
 function workerName(worker){return [worker?.first_name,worker?.middle_name,worker?.last_name].filter(Boolean).join(' ').trim()||worker?.full_name||worker?.name||'Unnamed worker'}
 function todayKey(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`}
