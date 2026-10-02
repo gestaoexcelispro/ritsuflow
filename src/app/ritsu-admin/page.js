@@ -4,15 +4,10 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../lib/supabase/client'
+import PlatformMapCanvas from './platform-map/PlatformMapCanvas'
 import styles from './ritsu-admin.module.css'
 
 const supabase=createClient()
-
-const workspaceNodes=[
-  {name:'Projects',subtitle:'Project Portfolio',className:'projects',children:['Project Information','Team','Locations','Configuration']},
-  {name:'PreCon',subtitle:'Plan & Prepare',className:'precon',children:['Pre-Planning','Master Plan','Lookahead','Constraints','Weekly Planning','Reports']},
-  {name:'FieldOp',subtitle:'Execute & Measure',className:'fieldop',children:['Daily Reports','Workforce','Attendance','Timecards','Exceptions']},
-]
 
 export default function RitsuAdminPage(){
   const router=useRouter()
@@ -45,16 +40,13 @@ export default function RitsuAdminPage(){
         <Link href="/fieldop">FieldOp</Link>
         <Link href="/ritsu-admin" className={styles.active}>⚙ Ritsu Admin</Link>
       </nav>
-      <div className={styles.subnav}><b>Platform Map</b><span>System Status</span><span>Organizations</span><span>Feature Flags</span><span>Audit Log</span></div>
+      <div className={styles.subnav}><b>Platform Map</b><span>System Status · Coming Soon</span><span>Organizations · Coming Soon</span><span>Feature Flags · Coming Soon</span><span>Audit Log · Coming Soon</span></div>
       <Link href="/workspaces" className={styles.back}>← Workspaces</Link>
     </aside>
     <section className={styles.workspace}>
       <header className={styles.header}><div><h1>Platform Map</h1><p>RitsuFlow architecture & system flow</p></div><span className={styles.ownerBadge}>🔒 Platform Owner</span></header>
       <div className={styles.toolbar}><div className={styles.filters}><button className={styles.selected}>All</button><button>Workspaces</button><button>Modules</button><button>Pages</button><button>Database</button><button>APIs</button></div><input placeholder="Search nodes..." /></div>
-      <div className={styles.canvas}>
-        <div className={styles.root}><b>RitsuFlow</b><span>Construction Production System</span></div>
-        <div className={styles.workspaceRow}>{workspaceNodes.map(node=><section key={node.name} className={`${styles.branch} ${styles[node.className]}`}><div className={styles.workspaceNode}><b>{node.name}</b><span>{node.subtitle}</span></div><div className={styles.children}>{node.children.map(child=><div key={child}>{child}</div>)}</div></section>)}</div>
-      </div>
+      <div className={styles.canvas}><PlatformMapCanvas /></div>
     </section>
   </main>
 }
