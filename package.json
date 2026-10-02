@@ -20,6 +20,11 @@
     "react": "^18",
     "react-dom": "^18",
     "react-leaflet": "^4.2.1",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "rete": "^2.0.6",
+    "rete-area-plugin": "^2.1.5",
+    "rete-react-plugin": "^2.1.0",
+    "rete-render-utils": "^2.0.3",
+    "styled-components": "^6.1.19"
   }
 }
