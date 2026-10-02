@@ -44,22 +44,7 @@ export default function FieldOpProjectWorkforcePage() {
       </header>
 
       <section style={{ padding: '26px 28px 40px' }}>
-        <div
-          style={{
-            marginBottom: 18,
-            padding: '12px 14px',
-            border: '1px solid #bae6fd',
-            borderRadius: 10,
-            background: '#f0f9ff',
-            color: '#075985',
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
-          Native FieldOp workforce migration is active. This route currently reuses the proven attendance engine while we move the operational views into the FieldOp project context without breaking existing workforce controls.
-        </div>
-
-        <AttendancePage />
+        <AttendancePage projectId={projectId} projectLocked />
       </section>
     </main>
   )
