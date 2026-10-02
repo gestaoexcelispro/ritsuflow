@@ -33,6 +33,8 @@ export default function PlatformMapCanvas() {
   const focus = getPlatformMapNode(focusId)
   const workspace = focus?.type === 'module' ? getPlatformMapNode(focus.workspace) : focus?.type === 'workspace' ? focus : null
 
+  const selectedParent = selected?.type === 'detail' ? getPlatformMapNode(selected.parent) : null
+
   const goRoot = () => { setFocusId('ritsuflow'); setSelected(null) }
   const goWorkspace = () => { if (workspace) { setFocusId(workspace.id); setSelected(workspace) } }
 
@@ -44,12 +46,17 @@ export default function PlatformMapCanvas() {
       <small>{focusId === 'ritsuflow' ? 'Select a workspace to explore its modules' : focus?.type === 'workspace' ? 'Select a module to inspect how it works' : 'Module architecture: inputs, process, outputs, pages and data'}</small>
     </div>
     <div ref={containerRef} className="pmReteCanvas" />
-    {selected && selected.type !== 'detail' && <aside className="pmInspector">
+    {selected && <aside className="pmInspector">
       <div className="pmInspectorHeader"><div><span className="pmType">{selected.type}</span><h2>{selected.label}</h2><p>{selected.subtitle}</p></div><button onClick={() => setSelected(null)} aria-label="Close inspector">×</button></div>
       <div className="pmInspectorBody">
+        {selected.type === 'detail' ? <>
+          <section className="pmPurpose"><h4>Module</h4><p>{selectedParent?.label || focus?.label}</p></section>
+          <List title={selected.label} items={selected.items} />
+        </> : <>
         <section className="pmPurpose"><h4>Purpose</h4><p>{selected.purpose || selected.subtitle}</p></section>
         {(selected.inputs?.length || selected.process?.length || selected.outputs?.length) && <div className="pmFlowGrid"><List title="Inputs" items={selected.inputs} /><List title="Process" items={selected.process} /><List title="Outputs" items={selected.outputs} /></div>}
         <List title="Related Modules" items={selected.related} /><List title="Data Layer" items={selected.data} /><List title="Key Pages" items={selected.pages} />
+        </>}
       </div>
     </aside>}
   </div>
