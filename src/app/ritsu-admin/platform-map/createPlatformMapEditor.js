@@ -3,7 +3,6 @@ import { AreaExtensions, AreaPlugin } from 'rete-area-plugin'
 import { ReactPlugin, Presets } from 'rete-react-plugin'
 import { createRoot } from 'react-dom/client'
 import { platformMapNodes, platformMapEdges } from './platformMapData'
-import OrthogonalConnection from './OrthogonalConnection'
 
 function detailNodes(focus) {
   const groups = [['inputs','Inputs',focus.inputs],['process','Process',focus.process],['outputs','Outputs',focus.outputs],['pages','Pages',focus.pages],['data','Data',focus.data]]
@@ -35,19 +34,21 @@ function getPosition(item, focusId, nodes) {
     return {x:{projects:160,precon:520,fieldop:880}[item.id]||520,y:390}
   }
   if (focus.type === 'workspace') {
-    if (item.id === 'ritsuflow') return {x:160,y:60}
-    if (item.id === focusId) return {x:520,y:60}
+    if (item.id === 'ritsuflow') return {x:80,y:70}
+    if (item.id === focusId) return {x:520,y:70}
     const modules = nodes.filter((node)=>node.type==='module')
     const index = modules.findIndex((node)=>node.id===item.id)
-    return {x:120+(index%3)*400,y:370+Math.floor(index/3)*240}
+    const row = Math.floor(index / 3)
+    const col = index % 3
+    return {x:120+col*420,y:390+row*250}
   }
   if (focus.type === 'module') {
-    if (item.id === 'ritsuflow') return {x:80,y:60}
-    if (item.id === focus.workspace) return {x:390,y:60}
-    if (item.id === focus.id) return {x:700,y:60}
+    if (item.id === 'ritsuflow') return {x:60,y:70}
+    if (item.id === focus.workspace) return {x:380,y:70}
+    if (item.id === focus.id) return {x:700,y:70}
     const details = nodes.filter((node)=>node.type==='detail')
     const index = details.findIndex((node)=>node.id===item.id)
-    return {x:100+index*280,y:390}
+    return {x:80+index*300,y:420}
   }
   return {x:500,y:400}
 }
@@ -56,7 +57,7 @@ export async function createPlatformMapEditor(container,{onSelect,focusId='ritsu
   const editor = new NodeEditor()
   const area = new AreaPlugin(container)
   const render = new ReactPlugin({createRoot})
-  render.addPreset(Presets.classic.setup({ customize:{ connection(){ return OrthogonalConnection } } }))
+  render.addPreset(Presets.classic.setup())
   area.use(render)
   editor.use(area)
   const graph = getVisibleGraph(focusId)
