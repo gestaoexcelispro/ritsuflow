@@ -2,11 +2,27 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPlatformMapEditor } from './createPlatformMapEditor'
-import { getPlatformMapNode } from './platformMapData'
+import { getPlatformMapNode, platformMapNodes } from './platformMapData'
 
 function List({ title, items }) {
   if (!items?.length) return null
   return <section className="pmInspectorSection"><h4>{title}</h4>{items.map((item) => <div className="pmInspectorItem" key={item}>{item}</div>)}</section>
+}
+
+
+function RelatedModules({ items, onNavigate }) {
+  if (!items?.length) return null
+  return <section className="pmInspectorSection"><h4>Related Modules</h4>{items.map((label) => {
+    const matches = platformMapNodes.filter((node) => node.label === label && (node.type === 'module' || node.type === 'workspace'))
+    const target = matches.length === 1 ? matches[0] : null
+    return target
+      ? <button type="button" className="pmInspectorItem" key={label} onClick={() => onNavigate(target)}
+          aria-label={`Explore ${label}`}
+          style={{ display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}>
+          {label}<span aria-hidden="true" style={{ float: 'right' }}>›</span>
+        </button>
+      : <div className="pmInspectorItem" key={label}>{label}</div>
+  })}</section>
 }
 
 export default function PlatformMapCanvas() {
@@ -35,6 +51,8 @@ export default function PlatformMapCanvas() {
 
   const selectedParent = selected?.type === 'detail' ? getPlatformMapNode(selected.parent) : null
 
+  const navigateToNode = (node) => { setFocusId(node.id); setSelected(node) }
+
   const goRoot = () => { setFocusId('ritsuflow'); setSelected(null) }
   const goWorkspace = () => { if (workspace) { setFocusId(workspace.id); setSelected(workspace) } }
 
@@ -55,7 +73,7 @@ export default function PlatformMapCanvas() {
         </> : <>
         <section className="pmPurpose"><h4>Purpose</h4><p>{selected.purpose || selected.subtitle}</p></section>
         {(selected.inputs?.length || selected.process?.length || selected.outputs?.length) && <div className="pmFlowGrid"><List title="Inputs" items={selected.inputs} /><List title="Process" items={selected.process} /><List title="Outputs" items={selected.outputs} /></div>}
-        <List title="Related Modules" items={selected.related} /><List title="Data Layer" items={selected.data} /><List title="Key Pages" items={selected.pages} />
+        <RelatedModules items={selected.related} onNavigate={navigateToNode} /><List title="Data Layer" items={selected.data} /><List title="Key Pages" items={selected.pages} />
         </>}
       </div>
     </aside>}
