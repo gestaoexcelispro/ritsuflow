@@ -56,7 +56,7 @@ function DatabaseDependencies({ database }) {
   const operationLabels = { select: 'Read', insert: 'Insert', upsert: 'Upsert', update: 'Update', delete: 'Delete' }
 
   return <section className="pmInspectorSection">
-    <h4>Database Dependencies</h4>
+    <h4>Data Dependencies</h4>
     <span className="pmPageStatus pmPageStatusMapped">Source and schema verified</span>
     <p className="pmPageNote">Verified on {database.verifiedOn}. Direct page access is shown below; RPC entry points are listed separately.</p>
     <table className="pmDependencyTable">
@@ -72,6 +72,18 @@ function DatabaseDependencies({ database }) {
         )}</div></td>
       </tr>)}</tbody>
     </table>
+
+    {database.storage?.length > 0 && <section className="pmInspectorSection">
+      <h4>Storage Buckets</h4>
+      {database.storage.map((bucket) => <div className="pmRpcCard" key={bucket.name}>
+        <a href={`${sourceUrl}#L${bucket.line}`} target="_blank" rel="noopener noreferrer" aria-label={`View access to ${bucket.name} in source code`}>
+          <code>{bucket.name}</code>
+        </a>
+        <p>{bucket.purpose}</p>
+        <small>Access: read via signed URL</small>
+      </div>)}
+    </section>}
+
     <section className="pmInspectorSection">
       <h4>RPC Functions</h4>
       {database.functions.map((fn) => <div className="pmRpcCard" key={fn.name}>
