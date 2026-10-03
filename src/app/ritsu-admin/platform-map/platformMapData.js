@@ -1,3 +1,163 @@
+const platformMapDatabase = {
+  "weekly-planning": {
+    "sourcePath": "src/app/dashboard/planning/weekly-planning/page.js",
+    "sourceRef": "f1fc8beed686c6ab629ee3e9a2df7ff8a87cbafb",
+    "verifiedOn": "2026-10-03",
+    "dataSources": [
+      {
+        "name": "projects",
+        "operations": [
+          {
+            "method": "select",
+            "line": 688
+          }
+        ],
+        "schema": "public",
+        "kind": "table",
+        "purpose": "Projects available for planning"
+      },
+      {
+        "name": "weekly_plans",
+        "operations": [
+          {
+            "method": "select",
+            "line": 744
+          },
+          {
+            "method": "insert",
+            "line": 1057
+          },
+          {
+            "method": "update",
+            "line": 1427
+          }
+        ],
+        "schema": "public",
+        "kind": "table",
+        "purpose": "Weekly plan definitions and settings"
+      },
+      {
+        "name": "weekly_plan_items",
+        "operations": [
+          {
+            "method": "select",
+            "line": 790
+          },
+          {
+            "method": "insert",
+            "line": 1196
+          },
+          {
+            "method": "update",
+            "line": 1329
+          },
+          {
+            "method": "delete",
+            "line": 1372
+          }
+        ],
+        "schema": "public",
+        "kind": "table",
+        "purpose": "Commitments, quantities and execution results"
+      },
+      {
+        "name": "weekly_plan_performance",
+        "operations": [
+          {
+            "method": "select",
+            "line": 807
+          }
+        ],
+        "schema": "public",
+        "kind": "view",
+        "purpose": "Plan performance"
+      },
+      {
+        "name": "weekly_ppc_trend",
+        "operations": [
+          {
+            "method": "select",
+            "line": 818
+          }
+        ],
+        "schema": "public",
+        "kind": "view",
+        "purpose": "PPC trend"
+      },
+      {
+        "name": "weekly_variance_pareto",
+        "operations": [
+          {
+            "method": "select",
+            "line": 829
+          }
+        ],
+        "schema": "public",
+        "kind": "view",
+        "purpose": "Variance reason counts"
+      },
+      {
+        "name": "weekly_lookahead_package_readiness",
+        "operations": [
+          {
+            "method": "select",
+            "line": 915
+          }
+        ],
+        "schema": "public",
+        "kind": "view",
+        "purpose": "Work-package readiness"
+      },
+      {
+        "name": "constraint_management_overview",
+        "operations": [
+          {
+            "method": "select",
+            "line": 978
+          }
+        ],
+        "schema": "public",
+        "kind": "view",
+        "purpose": "Constraint status used for readiness validation"
+      }
+    ],
+    "functions": [
+      {
+        "name": "get_active_lookahead_plan",
+        "schema": "public",
+        "arguments": "target_project_id uuid",
+        "returns": "uuid",
+        "line": 1034,
+        "purpose": "Locate the active Lookahead plan before creating a weekly plan."
+      },
+      {
+        "name": "cancel_weekly_plan",
+        "schema": "public",
+        "arguments": "target_weekly_plan_id uuid",
+        "returns": "void",
+        "line": 1474,
+        "purpose": "Cancel a draft weekly plan."
+      },
+      {
+        "name": "commit_weekly_plan_with_make_ready",
+        "schema": "public",
+        "arguments": "target_weekly_plan_id uuid",
+        "returns": "void",
+        "line": 1535,
+        "purpose": "Commit the plan using the Make Ready validation entry point."
+      },
+      {
+        "name": "close_weekly_plan",
+        "schema": "public",
+        "arguments": "target_weekly_plan_id uuid",
+        "returns": "void",
+        "line": 2132,
+        "purpose": "Close the weekly plan."
+      }
+    ]
+  }
+}
+
 const preconPageMap = {
   "pre-planning": {
     "status": "mapped",
@@ -103,11 +263,18 @@ export const platformMapNodes = [
   { id: 'workforce-timekeeping', label: 'Workforce Timekeeping', subtitle: 'Check-in/out, GPS and timecards', type: 'module', workspace: 'fieldop', purpose: 'Track workforce presence and time associated with project execution.', inputs: ['Worker check-in/out', 'Location'], process: ['Track attendance', 'Build timecards'], outputs: ['Attendance records', 'Timecards'], related: ['Operational Dashboard', 'Daily Reports'] },
 ].map((node) => {
   const implementation = preconPageMap[node.id]
-  if (!implementation) return node
+  const database = platformMapDatabase[node.id]
+  if (!implementation && !database) return node
   return {
     ...node,
-    implementation,
-    pages: [...new Set([...(node.pages || []), ...implementation.routes.map((route) => route.href)])],
+    ...(implementation && {
+      implementation,
+      pages: [...new Set([...(node.pages || []), ...implementation.routes.map((route) => route.href)])],
+    }),
+    ...(database && {
+      database,
+      data: database.dataSources.map((source) => source.name),
+    }),
   }
 })
 

@@ -49,6 +49,43 @@ function ApplicationPages({ module }) {
   </section>
 }
 
+
+function DatabaseDependencies({ database }) {
+  if (!database) return null
+  const sourceUrl = `https://github.com/gestaoexcelispro/ritsuflow/blob/${database.sourceRef}/${database.sourcePath}`
+  const operationLabels = { select: 'Read', insert: 'Insert', upsert: 'Upsert', update: 'Update', delete: 'Delete' }
+
+  return <section className="pmInspectorSection">
+    <h4>Database Dependencies</h4>
+    <span className="pmPageStatus pmPageStatusMapped">Source and schema verified</span>
+    <p className="pmPageNote">Verified on {database.verifiedOn}. Direct page access is shown below; RPC entry points are listed separately.</p>
+    <table className="pmDependencyTable">
+      <caption>Tables and views</caption>
+      <thead><tr><th scope="col">Data source</th><th scope="col">Page access</th></tr></thead>
+      <tbody>{database.dataSources.map((source) => <tr key={source.name}>
+        <td><code>{source.schema}.{source.name}</code><small>{source.kind} · {source.purpose}</small></td>
+        <td><div className="pmDbOperations">{source.operations.map((operation) =>
+          <a key={operation.method} href={`${sourceUrl}#L${operation.line}`} target="_blank" rel="noopener noreferrer"
+            aria-label={`View ${operationLabels[operation.method]} access to ${source.name} in source code`}>
+            {operationLabels[operation.method]}
+          </a>
+        )}</div></td>
+      </tr>)}</tbody>
+    </table>
+    <section className="pmInspectorSection">
+      <h4>RPC Functions</h4>
+      {database.functions.map((fn) => <div className="pmRpcCard" key={fn.name}>
+        <a href={`${sourceUrl}#L${fn.line}`} target="_blank" rel="noopener noreferrer" aria-label={`View call to ${fn.name} in source code`}>
+          <code>{fn.schema}.{fn.name}</code>
+        </a>
+        <p>{fn.purpose}</p>
+        <small>Parameters: <code>{fn.arguments}</code></small>
+        <small>Returns: <code>{fn.returns}</code></small>
+      </div>)}
+    </section>
+  </section>
+}
+
 export default function PlatformMapCanvas() {
   const containerRef = useRef(null)
   const [selected, setSelected] = useState(null)
@@ -93,13 +130,17 @@ export default function PlatformMapCanvas() {
       <div className="pmInspectorBody">
         {selected.type === 'detail' ? <>
           <section className="pmPurpose"><h4>Module</h4><p>{selectedParent?.label || focus?.label}</p></section>
-          <List title={selected.label} items={selected.items} />
+          {selected.detailType === 'data' && selectedParent?.database
+            ? <DatabaseDependencies database={selectedParent.database} />
+            : <List title={selected.label} items={selected.items} />}
           {selected.detailType === 'pages' && <ApplicationPages module={selectedParent} />}
         </> : <>
         <section className="pmPurpose"><h4>Purpose</h4><p>{selected.purpose || selected.subtitle}</p></section>
         {(selected.inputs?.length || selected.process?.length || selected.outputs?.length) && <div className="pmFlowGrid"><List title="Inputs" items={selected.inputs} /><List title="Process" items={selected.process} /><List title="Outputs" items={selected.outputs} /></div>}
         <ApplicationPages module={selected} />
-        <RelatedModules items={selected.related} onNavigate={navigateToNode} /><List title="Data Layer" items={selected.data} /><List title="Key Pages" items={selected.pages} />
+        <RelatedModules items={selected.related} onNavigate={navigateToNode} />{selected.database
+          ? <DatabaseDependencies database={selected.database} />
+          : <List title="Data Layer" items={selected.data} />}<List title="Key Pages" items={selected.pages} />
         </>}
       </div>
     </aside>}
