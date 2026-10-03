@@ -35,7 +35,7 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
 
         const { data: drawingMap, error: drawingMapError } = await supabase
           .from('project_drawing_maps')
-          .select('id,print_view')
+          .select('id,print_view,scale_calibration')
           .eq('id', geometryRow.drawing_map_id)
           .maybeSingle()
         if (drawingMapError) throw drawingMapError
@@ -56,6 +56,7 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
         if (!cancelled) setPrintMap({
           geometry: geometryRow.geometry,
           printView: drawingMap?.print_view || null,
+          scaleCalibration: drawingMap?.scale_calibration || null,
           pageNumber: geometryRow.page_number || 1,
           document: documentRow,
           signedUrl: signed.signedUrl,
