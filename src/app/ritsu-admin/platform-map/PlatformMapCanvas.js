@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPlatformMapEditor } from './createPlatformMapEditor'
 import { getPlatformMapNode, platformMapNodes } from './platformMapData'
 import {
-  getArchitectureNode, getNodeModule, getRelationships, getTechnicalGraph,
+  architectureAudit, getArchitectureNode, getNodeModule, getRelationships, getTechnicalGraph,
   nodeTypeLabels, searchArchitecture, sourceUrl,
 } from './platformMapModel'
 
@@ -107,6 +107,8 @@ export default function PlatformMapCanvas({ query = '', filter = 'All', initialN
   const initial = getArchitectureNode(initialNodeId)
   const initialModule = getNodeModule(initial)
   const containerRef = useRef(null)
+  const printCleanupRef = useRef(null)
+  const [printError, setPrintError] = useState('')
   const previousFilter = useRef(filter)
   const [selected, setSelected] = useState(initial)
   const [focusId, setFocusId] = useState(initialModule?.id || (initial?.type === 'workspace' ? initial.id : 'ritsuflow'))
@@ -122,6 +124,32 @@ export default function PlatformMapCanvas({ query = '', filter = 'All', initialN
   const inventoryActive = !!query.trim() || filter !== 'All'
   const results = useMemo(() => searchArchitecture(query, filter), [query, filter])
   const technicalGraph = useMemo(() => focus?.type === 'module' ? getTechnicalGraph(focusId, technicalFocusId || focusId, filter, graphPage, 8) : null, [focus, focusId, technicalFocusId, filter, graphPage])
+
+  function printInspector() {
+    if (!selected || printCleanupRef.current) return
+    setPrintError('')
+    const originalTitle = document.title
+    const printClass = 'pmInspectorPrint'
+    const alreadyMarked = document.body.classList.contains(printClass)
+    const parent = selected.type === 'detail' ? getPlatformMapNode(selected.parent) : null
+    document.title = ['RitsuFlow', parent?.label, selected.label].filter(Boolean).join(' - ')
+    document.body.classList.add(printClass)
+    const restore = () => {
+      window.removeEventListener('afterprint', restore)
+      if (!alreadyMarked) document.body.classList.remove(printClass)
+      document.title = originalTitle
+      printCleanupRef.current = null
+    }
+    printCleanupRef.current = restore
+    window.addEventListener('afterprint', restore, { once: true })
+    try {
+      window.print()
+    } catch {
+      restore()
+      setPrintError('The print dialog could not be opened. Please retry.')
+    }
+  }
+  useEffect(() => () => printCleanupRef.current?.(), [])
 
   function navigateToNode(node) {
     if (!node) return
@@ -193,7 +221,18 @@ export default function PlatformMapCanvas({ query = '', filter = 'All', initialN
     {(loading || editorError) && <div className="pmCanvasNotice" role="status">{editorError || 'Loading map…'}</div>}
     {showTechnical && <div className="pmGraphLegend">CONTAINS · DEPENDS ON · ROUTES TO · CONSUMES · READS · WRITES · TRIGGERS <small>Relationship labels appear at the source ports. Source evidence is in the inspector.</small></div>}
     {selected && <aside className="pmInspector" aria-label="Node inspector">
-      <div className="pmInspectorHeader"><div><span className="pmType">{nodeTypeLabels[selected.type] || selected.type}</span><h2>{selected.label}</h2><p>{selected.subtitle || selected.schema}</p></div><button type="button" onClick={() => setSelected(null)} aria-label="Close inspector">×</button></div>
+      <div className="pmInspectorHeader">
+        <div>
+          <span className="pmType">{nodeTypeLabels[selected.type] || selected.type}</span>
+          <h2>{selected.label}</h2>
+          <p>{selected.subtitle || selected.schema}</p>
+          <div className="pmInspectorPrintActions"><button type="button" onClick={printInspector} aria-label={'Print ' + selected.label + ' or save as PDF'} title="Print the complete inspector or choose Save as PDF">Print / PDF</button></div>
+          <p className="pmPrintMeta">RitsuFlow · Platform Map{workspace ? ' · ' + workspace.label : ''}{selectedParent ? ' · ' + selectedParent.label : ''}</p>
+          <p className="pmPrintMeta">Architecture verified {architectureAudit.verifiedOn} · Source snapshot {architectureAudit.sourceRef.slice(0, 7)}</p>
+          {printError && <p className="pmPrintError" role="alert">{printError}</p>}
+        </div>
+        <button type="button" onClick={() => setSelected(null)} aria-label="Close inspector">×</button>
+      </div>
       <div className="pmInspectorBody">
         {selected.type === 'detail' ? <>
           <section className="pmPurpose"><h4>Module</h4><p>{selectedParent?.label || focus?.label}</p></section>

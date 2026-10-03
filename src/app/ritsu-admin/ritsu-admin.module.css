@@ -72,3 +72,60 @@
 @media(max-width:1200px){.canvas :global(.pmMapNav small){display:none}.filters button{padding:8px 10px}.toolbar{gap:12px;padding:0 16px}.toolbar input{width:220px}}
 @media(max-width:900px){.header{padding:0 14px}.header h1{font-size:22px}.headerActions{gap:7px}.ownerBadge{font-size:10px;padding:8px}.toolbar{height:auto;padding:14px}.toolbar input{width:100%;box-sizing:border-box}.searchBox{width:100%}.canvas :global(.pmMapControls){top:72px}.canvas :global(.pmSearchResults){width:min(300px,calc(100% - 32px));box-sizing:border-box;max-height:45%;top:120px}.canvas :global(.pmGraphLegend){display:none}.canvas :global(.pmMapNav){right:16px}.canvas :global(.pmInspector){z-index:21}}
 @media(max-width:520px){.headerActions>a{padding:8px;font-size:11px}.ownerBadge{display:none}.header p{font-size:10px}.canvas :global(.pmMapNav button){font-size:10px;padding:5px}.canvas :global(.pmMapNav){gap:3px}.canvas :global(.pmGraphPagination small){display:none}}
+
+.canvas :global(.pmInspectorPrintActions){margin-top:12px}
+.canvas :global(.pmInspectorPrintActions button){height:auto;background:#251b3e;color:#ddd6fe;border:1px solid #574477;border-radius:6px;padding:7px 10px;font:700 11px Arial,sans-serif;cursor:pointer}
+.canvas :global(.pmInspectorPrintActions button:hover){background:#3b2764}
+.canvas :global(.pmPrintMeta){display:none}
+.canvas :global(.pmInspectorHeader .pmPrintError){margin-top:10px;color:#e9c78a;font-size:11px}
+@media print{
+  :global(body.pmInspectorPrint) .page{display:block;min-height:0;width:100%;margin:0;padding:0;background:#fff;color:#17212b}
+  :global(body.pmInspectorPrint) .page :global(*){visibility:hidden}
+  :global(body.pmInspectorPrint) .page :global(.pmInspector),
+  :global(body.pmInspectorPrint) .page :global(.pmInspector *){visibility:visible}
+  :global(body.pmInspectorPrint) .sidebar,
+  :global(body.pmInspectorPrint) .header,
+  :global(body.pmInspectorPrint) .toolbar,
+  :global(body.pmInspectorPrint) .page ~ :global(*){display:none!important}
+  :global(body.pmInspectorPrint) .workspace,
+  :global(body.pmInspectorPrint) .canvas,
+  :global(body.pmInspectorPrint) .canvas :global(.pmShell){display:block!important;position:static!important;height:auto!important;min-height:0!important;max-height:none!important;width:100%!important;overflow:visible!important;background:#fff!important}
+  :global(body.pmInspectorPrint) .canvas :global(.pmReteCanvas),
+  :global(body.pmInspectorPrint) .canvas :global(.pmMapNav),
+  :global(body.pmInspectorPrint) .canvas :global(.pmMapControls),
+  :global(body.pmInspectorPrint) .canvas :global(.pmSearchResults),
+  :global(body.pmInspectorPrint) .canvas :global(.pmCanvasNotice),
+  :global(body.pmInspectorPrint) .canvas :global(.pmGraphLegend){display:none!important}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspector){position:static!important;inset:auto!important;transform:none!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;border:0!important;border-radius:0!important;background:#fff!important;box-shadow:none!important;font:10pt Arial,sans-serif}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspector *){color:#17212b!important;background:transparent!important;box-shadow:none!important;text-shadow:none!important;border-color:#cbd0d6!important;overflow-wrap:anywhere}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorHeader){display:block;padding:0 0 12pt;border-bottom:1px solid #cbd0d6}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorHeader h2){font-size:20pt;margin:8pt 0 5pt}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorHeader p){font-size:9pt;line-height:1.5}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorHeader>button),
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorPrintActions),
+  :global(body.pmInspectorPrint) .canvas :global(.pmPrintError),
+  :global(body.pmInspectorPrint) .canvas :global(.pmPageActions button),
+  :global(body.pmInspectorPrint) .canvas :global(.pmNodeButton span){display:none!important}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorHeader .pmPrintMeta){display:block;font-size:8pt;margin:6pt 0 0}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorBody){padding:0}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorBody h4){font-size:10pt;margin:0 0 6pt;break-after:avoid-page}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspector p){font-size:9pt;line-height:1.5;orphans:2;widows:2}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorSection){margin:12pt 0}
+  :global(body.pmInspectorPrint) .canvas :global(.pmFlowGrid){display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8pt;margin:12pt 0;break-inside:avoid-page}
+  :global(body.pmInspectorPrint) .canvas :global(.pmFlowGrid .pmInspectorSection){margin:0;padding:8pt}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspectorItem){font-size:8.5pt;line-height:1.5;break-inside:avoid-page}
+  :global(body.pmInspectorPrint) .canvas :global(.pmNodeButton),
+  :global(body.pmInspectorPrint) .canvas :global(.pmTextButton){color:#17212b!important;text-decoration:none;border:0!important;padding:3pt 0;font-size:8.5pt;font-family:inherit;white-space:normal;cursor:default}
+  :global(body.pmInspectorPrint) .canvas :global(.pmPageCard),
+  :global(body.pmInspectorPrint) .canvas :global(.pmRpcCard),
+  :global(body.pmInspectorPrint) .canvas :global(.pmRelationCard){padding:8pt;break-inside:avoid-page;border-radius:0}
+  :global(body.pmInspectorPrint) .canvas :global(.pmPageCard strong){font-size:9pt}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspector small){font-size:7.5pt;line-height:1.5}
+  :global(body.pmInspectorPrint) .canvas :global(.pmInspector code){font-size:8pt;white-space:normal;overflow-wrap:anywhere}
+  :global(body.pmInspectorPrint) .canvas :global(.pmDependencyTable){width:100%;font-size:8pt}
+  :global(body.pmInspectorPrint) .canvas :global(.pmDependencyTable thead){display:table-header-group}
+  :global(body.pmInspectorPrint) .canvas :global(.pmDependencyTable tr){break-inside:avoid-page}
+  :global(body.pmInspectorPrint) .canvas :global(.pmDependencyTable td){padding:6pt;line-height:1.5}
+  :global(body.pmInspectorPrint) .canvas :global(.pmPageActions a),
+  :global(body.pmInspectorPrint) .canvas :global(.pmDbOperations a){font-size:7.5pt;text-decoration:underline;border:0;padding:2pt 0}
+}
