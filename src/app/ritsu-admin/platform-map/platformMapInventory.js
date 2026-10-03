@@ -3,7 +3,7 @@ export const platformMapInventory = {
   "audit": {
     "verifiedOn": "2026-10-03",
     "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b",
-    "scope": "Direct accesses in the listed page, component and API files; public Supabase relations, RPC signatures and storage bucket existence checked against the RitsuFlow project. RPC internals and nested relational-select dependencies are outside this snapshot."
+    "scope": "Direct accesses in the listed page, component and API files, including resolved bucket constants and documented fallbacks; public Supabase relations, RPC signatures and storage bucket existence checked against the RitsuFlow project. Record-dependent storage targets, RPC internals and nested relational-select dependencies are outside this snapshot."
   },
   "implementation": {
     "pre-planning": {
@@ -2629,7 +2629,35 @@ export const platformMapInventory = {
           ]
         }
       ],
-      "storage": []
+      "storage": [
+        {
+          "name": "project-covers",
+          "public": false,
+          "purpose": "Project cover images, resolved from the PROJECT_COVER_BUCKET source constant.",
+          "operations": [
+            {
+              "method": "createSignedUrl",
+              "line": 285,
+              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
+            },
+            {
+              "method": "upload",
+              "line": 430,
+              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
+            },
+            {
+              "method": "remove",
+              "line": 468,
+              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
+            },
+            {
+              "method": "createSignedUrl",
+              "line": 375,
+              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
+            }
+          ]
+        }
+      ]
     },
     "operational-dashboard": {
       "sourcePath": "src/app/fieldop/page.js",
@@ -3049,7 +3077,21 @@ export const platformMapInventory = {
         }
       ],
       "functions": [],
-      "storage": []
+      "storage": [
+        {
+          "name": "daily-report-attachments",
+          "public": false,
+          "purpose": "Default bucket for report attachments. The handler uses each attachment's storage_bucket value when provided; those record-dependent targets are outside this snapshot.",
+          "operations": [
+            {
+              "method": "createSignedUrl",
+              "line": 256,
+              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js",
+              "fallback": true
+            }
+          ]
+        }
+      ]
     },
     "workforce-timekeeping": {
       "sourcePath": "src/app/fieldop/projects/[projectId]/FieldOpWorkforceSetup.js",
