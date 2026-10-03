@@ -38,6 +38,16 @@
 .authorizationError button{padding:10px 16px;border:1px solid #8b5cf6;border-radius:7px;background:#4c1d95;color:#fff;cursor:pointer}
 .headerActions>a:focus-visible,.subnav a:focus-visible,.filters button:focus-visible,.searchBox button:focus-visible{outline:2px solid #c4b5fd;outline-offset:3px}
 .canvas :global(.pmEditorHost){width:100%;height:100%;position:relative}
+.canvas :global(.pmDraggable [data-testid="node"]){cursor:grab}
+.canvas :global(.pmDragging [data-testid="node"]){cursor:grabbing}
+.canvas :global([data-pm-node]:focus-visible){outline:3px solid #c4b5fd;outline-offset:5px;border-radius:10px}
+.canvas :global([data-testid="node"] .title){overflow-wrap:anywhere}
+.canvas :global([data-testid="connection"] path){stroke-width:3.5px;stroke-linejoin:round;stroke-linecap:round;pointer-events:none}
+.canvas :global(.pmMapControls button:disabled){opacity:.45;cursor:default}
+.canvas :global(.pmDragToggle.active){border-color:#8b5cf6;background:#251643;color:#ddd6fe}
+.canvas :global(.pmInteractionHint){color:#9fb0c5;font-size:10px;background:rgba(7,17,31,.92);padding:7px;border-radius:5px}
+.canvas :global(.pmMapControls button:focus-visible){outline:2px solid #c4b5fd;outline-offset:3px}
+@media(min-width:901px){.canvas :global(.pmHasInspector .pmReteCanvas){width:calc(100% - min(390px,38vw) - 28px);flex:0 0 calc(100% - min(390px,38vw) - 28px)}.canvas :global(.pmHasInspector .pmMapNav),.canvas :global(.pmHasInspector .pmMapControls){max-width:calc(100% - min(390px,38vw) - 60px)}}
 .canvas :global(.pmMapNav){max-width:calc(100% - 32px);flex-wrap:wrap}
 .canvas :global(.pmMapControls){position:absolute;left:16px;top:76px;z-index:16;display:flex;flex-wrap:wrap;gap:9px;align-items:center;max-width:calc(100% - 32px)}
 .canvas :global(.pmViewSwitch),.canvas :global(.pmGraphPagination){display:flex;align-items:center;gap:4px;padding:4px;border:1px solid #263a54;border-radius:7px;background:rgba(7,17,31,.94);color:#aebdd0;font-size:11px}

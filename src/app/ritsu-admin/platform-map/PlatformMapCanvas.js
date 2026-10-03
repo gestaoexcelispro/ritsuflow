@@ -107,6 +107,11 @@ export default function PlatformMapCanvas({ query = '', filter = 'All', initialN
   const initial = getArchitectureNode(initialNodeId)
   const initialModule = getNodeModule(initial)
   const containerRef = useRef(null)
+  const editorRef = useRef(null)
+  const positionCache = useRef(new Map())
+  const dragEnabledRef = useRef(true)
+  const [dragEnabled, setDragEnabled] = useState(true)
+  const [arranging, setArranging] = useState(false)
   const printCleanupRef = useRef(null)
   const [printError, setPrintError] = useState('')
   const previousFilter = useRef(filter)
@@ -151,11 +156,31 @@ export default function PlatformMapCanvas({ query = '', filter = 'All', initialN
   }
   useEffect(() => () => printCleanupRef.current?.(), [])
 
+  useEffect(() => {
+    try { setDragEnabled(localStorage.getItem('ritsu-map-drag-enabled') !== 'false') } catch { /* Browser storage is optional. */ }
+  }, [])
+  useEffect(() => {
+    dragEnabledRef.current = dragEnabled
+    editorRef.current?.setDragEnabled(dragEnabled)
+  }, [dragEnabled])
+  function toggleDragging() {
+    const value = !dragEnabled
+    setDragEnabled(value)
+    try { localStorage.setItem('ritsu-map-drag-enabled', String(value)) } catch { /* Keep the setting for this session. */ }
+  }
+  async function arrangeMap(action) {
+    if (!editorRef.current || arranging) return
+    setArranging(true); setEditorError('')
+    try { await editorRef.current[action]() }
+    catch (error) { if (error.name !== 'AbortError') { setEditorError('The map could not be arranged. Please retry.'); console.error('Platform map arrangement failed', error) } }
+    finally { setArranging(false) }
+  }
+
   function navigateToNode(node) {
     if (!node) return
     setSelected(node); setGraphPage(0); setShowResults(false)
     if (['platform', 'workspace'].includes(node.type)) { setFocusId(node.id); setView('flow'); setTechnicalFocusId(null); return }
-    if (node.type === 'module') { setFocusId(node.id); setTechnicalFocusId(node.id); if (['Pages', 'Database', 'APIs'].includes(filter)) setView('technical'); return }
+    if (node.type === 'module') { setFocusId(node.id); setTechnicalFocusId(node.id); setView(['Pages', 'Database', 'APIs'].includes(filter) ? 'technical' : 'flow'); return }
     if (node.type === 'detail') return
     const module = getNodeModule(node, focusId)
     if (module) { setFocusId(module.id); setView('technical'); setTechnicalFocusId(node.id) }
@@ -173,30 +198,43 @@ export default function PlatformMapCanvas({ query = '', filter = 'All', initialN
     const host = document.createElement('div')
     host.className = 'pmEditorHost'
     containerRef.current.appendChild(host)
-    let dispose
+    let instance
+    const key = JSON.stringify([focusId, view, technicalFocusId || '', filter, graphPage])
+    const storageKey = 'ritsu-map-positions-v2:' + key
+    let positions = positionCache.current.get(key)
+    if (!positions) {
+      try { const saved = JSON.parse(localStorage.getItem(storageKey)); if (saved && typeof saved === 'object' && !Array.isArray(saved)) positions = saved } catch { /* Use automatic layout if storage is unavailable. */ }
+    }
+    const rememberPositions = (value) => {
+      positionCache.current.set(key, value)
+      try { localStorage.setItem(storageKey, JSON.stringify(value)) } catch { /* Positions remain available during this session. */ }
+    }
     setLoading(true); setEditorError('')
-    createPlatformMapEditor(host, { onSelect: navigateToNode, focusId, view, technicalFocusId, filter, graphPage, signal: controller.signal })
-      .then((cleanup) => {
-        if (controller.signal.aborted) cleanup?.()
-        else { dispose = cleanup; setLoading(false) }
+    createPlatformMapEditor(host, { onSelect: setSelected, onOpen: navigateToNode, positions, onPositionsChange: rememberPositions, dragEnabled: dragEnabledRef.current, focusId, view, technicalFocusId, filter, graphPage, signal: controller.signal })
+      .then((editor) => {
+        if (controller.signal.aborted) editor.destroy()
+        else { instance = editor; editorRef.current = editor; editor.setDragEnabled(dragEnabledRef.current); setLoading(false) }
       }).catch((error) => {
         if (!controller.signal.aborted) { setEditorError('The map could not be rendered. Change focus to retry.'); setLoading(false); console.error('Platform map render failed', error) }
       })
-    return () => { controller.abort(); dispose?.(); host.remove() }
+    return () => { controller.abort(); if (editorRef.current === instance) editorRef.current = null; instance?.destroy(); host.remove() }
   }, [focusId, view, technicalFocusId, filter, graphPage])
 
   const selectedParent = selected?.type === 'detail' ? getPlatformMapNode(selected.parent) : null
   const goRoot = () => { setFocusId('ritsuflow'); setSelected(null); setView('flow'); setTechnicalFocusId(null); setGraphPage(0) }
   const resultPages = Math.max(1, Math.ceil(results.length / 8))
   const showTechnical = focus?.type === 'module' && view === 'technical'
-  return <div className="pmShell">
+  return <div className={selected ? 'pmShell pmHasInspector' : 'pmShell'}>
     <div className="pmMapNav">
       <button type="button" className={focusId === 'ritsuflow' ? 'active' : ''} onClick={goRoot}>RitsuFlow</button>
       {workspace && <><span>›</span><button type="button" className={focus?.type === 'workspace' ? 'active' : ''} onClick={() => navigateToNode(workspace)}>{workspace.label}</button></>}
       {focus?.type === 'module' && <><span>›</span><button type="button" className="active" onClick={() => { setTechnicalFocusId(focus.id); setGraphPage(0); setSelected(focus) }}>{focus.label}</button></>}
-      <small>{showTechnical ? 'Select a page, component or dependency to trace access' : focusId === 'ritsuflow' ? 'Select a workspace to explore its modules' : focus?.type === 'workspace' ? 'Select a module to inspect how it works' : 'Inputs → Process → Outputs'}</small>
+      <small>{showTechnical ? 'Double-click a page, component or dependency to trace access' : focusId === 'ritsuflow' ? 'Double-click a workspace to explore its modules' : focus?.type === 'workspace' ? 'Double-click a module to open its flow' : 'Inputs → Process → Outputs'}</small>
     </div>
     <div className="pmMapControls">
+      <button type="button" disabled={loading || arranging} onClick={() => arrangeMap('arrange')} title="Arrange all cards and connections with clear spacing">{arranging ? 'Arranging…' : 'Auto arrange'}</button>
+      <button type="button" disabled={loading || arranging} onClick={() => arrangeMap('fit')} title="Fit all cards and connections in the map">Fit view</button>
+      <button type="button" className={dragEnabled ? 'pmDragToggle active' : 'pmDragToggle'} aria-pressed={dragEnabled} onClick={toggleDragging} title="Allow moving cards with the left mouse button">Drag cards: {dragEnabled ? 'On' : 'Off'}</button>
       {focus?.type === 'module' && <div className="pmViewSwitch">
         <button type="button" aria-pressed={view === 'flow'} className={view === 'flow' ? 'active' : ''} onClick={() => { setView('flow'); setGraphPage(0) }}>Flow</button>
         <button type="button" aria-pressed={view === 'technical'} className={view === 'technical' ? 'active' : ''} onClick={() => { setView('technical'); setTechnicalFocusId(focusId); setGraphPage(0) }}>Technical</button>
@@ -208,6 +246,7 @@ export default function PlatformMapCanvas({ query = '', filter = 'All', initialN
         <button type="button" disabled={(technicalGraph?.page || 0) >= (technicalGraph?.pages || 1) - 1} onClick={() => setGraphPage(graphPage + 1)} aria-label="Next graph items">›</button>
         <small>{technicalGraph?.total || 0} related items</small>
       </div>}
+      <small className="pmInteractionHint">Drag to move · Click for details · Double-click to open</small>
     </div>
     {inventoryActive && showResults && <aside className="pmSearchResults" aria-label="Architecture search results">
       <div className="pmSearchHeading"><strong>{filter === 'All' ? 'Search results' : filter}</strong><span>{results.length} matches</span></div>

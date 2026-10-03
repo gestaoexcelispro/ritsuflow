@@ -7,7 +7,7 @@
     "build": "npm run test:platform-map && next build",
     "start": "next start",
     "lint": "next lint",
-    "test:platform-map": "node scripts/check-platform-map.mjs"
+    "test:platform-map": "node scripts/check-platform-map.mjs && node scripts/check-platform-map-layout.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.1",
