@@ -1,3 +1,83 @@
+const preconPageMap = {
+  "pre-planning": {
+    "status": "mapped",
+    "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
+    "note": "The PreCon navigation opens the standalone entry, which reuses the dashboard page implementation.",
+    "routes": [
+      {
+        "label": "Standalone entry",
+        "href": "/planning/pre-planning",
+        "sourcePath": "src/app/planning/pre-planning/page.js"
+      },
+      {
+        "label": "Shared dashboard page",
+        "href": "/dashboard/planning/pre-planning",
+        "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
+      }
+    ]
+  },
+  "master-plan": {
+    "status": "mapped",
+    "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
+    "note": "Page entry points verified in the source code.",
+    "routes": [
+      {
+        "label": "Master Plan",
+        "href": "/dashboard/planning/master-plan",
+        "sourcePath": "src/app/dashboard/planning/master-plan/page.js"
+      }
+    ]
+  },
+  "lookahead-planning": {
+    "status": "mapped",
+    "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
+    "note": "Page entry points verified in the source code.",
+    "routes": [
+      {
+        "label": "Lookahead Planning",
+        "href": "/dashboard/planning/lookahead",
+        "sourcePath": "src/app/dashboard/planning/lookahead/page.js"
+      }
+    ]
+  },
+  "constraint-management": {
+    "status": "mapped",
+    "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
+    "note": "Page entry points verified in the source code.",
+    "routes": [
+      {
+        "label": "Constraint Management",
+        "href": "/dashboard/projects/constraints",
+        "sourcePath": "src/app/dashboard/projects/constraints/page.js"
+      }
+    ]
+  },
+  "weekly-planning": {
+    "status": "mapped",
+    "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
+    "note": "Page entry points verified in the source code.",
+    "routes": [
+      {
+        "label": "Weekly Planning",
+        "href": "/dashboard/planning/weekly-planning",
+        "sourcePath": "src/app/dashboard/planning/weekly-planning/page.js"
+      }
+    ]
+  },
+  "pull-planning": {
+    "status": "no-route",
+    "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
+    "note": "No dedicated page was found in the audited branch. This module remains in the architecture map.",
+    "routes": []
+  },
+  "precon-reports": {
+    "status": "no-route",
+    "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
+    "note": "No dedicated page was found in the audited branch. This module remains in the architecture map.",
+    "routes": []
+  }
+}
+
 export const platformMapNodes = [
   { id: 'ritsuflow', label: 'RitsuFlow', subtitle: 'Construction Planning & Control Platform', type: 'platform', purpose: 'Connect project setup, planning, control and field execution through a location- and flow-based production system.' },
 
@@ -21,7 +101,15 @@ export const platformMapNodes = [
   { id: 'operational-dashboard', label: 'Operational Dashboard', subtitle: 'Field progress, productivity and safety', type: 'module', workspace: 'fieldop', purpose: 'Provide an operational view of current field production.', inputs: ['Field records', 'Workforce data'], process: ['Aggregate operational status'], outputs: ['Field production overview'], related: ['Daily Reports', 'Workforce Timekeeping'] },
   { id: 'daily-reports', label: 'Daily Reports', subtitle: 'Daily logs, quantities and issues', type: 'module', workspace: 'fieldop', purpose: 'Capture contemporaneous records of what happened during field execution.', inputs: ['Executed work', 'Field events', 'Issues'], process: ['Record daily production', 'Capture field context'], outputs: ['Daily production record', 'Execution history'], related: ['Weekly Planning', 'Operational Dashboard'] },
   { id: 'workforce-timekeeping', label: 'Workforce Timekeeping', subtitle: 'Check-in/out, GPS and timecards', type: 'module', workspace: 'fieldop', purpose: 'Track workforce presence and time associated with project execution.', inputs: ['Worker check-in/out', 'Location'], process: ['Track attendance', 'Build timecards'], outputs: ['Attendance records', 'Timecards'], related: ['Operational Dashboard', 'Daily Reports'] },
-]
+].map((node) => {
+  const implementation = preconPageMap[node.id]
+  if (!implementation) return node
+  return {
+    ...node,
+    implementation,
+    pages: [...new Set([...(node.pages || []), ...implementation.routes.map((route) => route.href)])],
+  }
+})
 
 export const platformMapEdges = [
   { id: 'ritsuflow-projects', source: 'ritsuflow', target: 'projects', type: 'contains' },
