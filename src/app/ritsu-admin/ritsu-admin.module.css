@@ -26,3 +26,49 @@
 .canvas :global(.pmRpcCard a){color:#c4b5fd;text-decoration:underline;font-size:11px;overflow-wrap:anywhere}
 .canvas :global(.pmRpcCard p){margin:8px 0;color:#b7c6d8;font-size:11px;line-height:1.5}
 .canvas :global(.pmRpcCard small){display:block;color:#8191a6;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+
+.sidebar .subnav a{padding:4px 6px;font-size:12px;border-radius:5px}
+.sidebar .subnav .subnavActive{background:#251643;color:#ddd6fe;font-weight:700}
+.headerActions{display:flex;align-items:center;gap:12px}
+.headerActions>a{color:#c4b5fd;text-decoration:none;font-size:12px;font-weight:700;padding:9px 12px;border:1px solid #4a386b;border-radius:7px}
+.searchBox{display:flex;align-items:center;position:relative}
+.searchBox input{padding-right:32px}
+.searchBox>button{position:absolute;right:8px;border:0;background:transparent;color:#c4b5fd;cursor:pointer;font-size:19px}
+.authorizationError{text-align:center;padding:20px}
+.authorizationError button{padding:10px 16px;border:1px solid #8b5cf6;border-radius:7px;background:#4c1d95;color:#fff;cursor:pointer}
+.headerActions>a:focus-visible,.subnav a:focus-visible,.filters button:focus-visible,.searchBox button:focus-visible{outline:2px solid #c4b5fd;outline-offset:3px}
+.canvas :global(.pmEditorHost){width:100%;height:100%;position:relative}
+.canvas :global(.pmMapNav){max-width:calc(100% - 32px);flex-wrap:wrap}
+.canvas :global(.pmMapControls){position:absolute;left:16px;top:76px;z-index:16;display:flex;flex-wrap:wrap;gap:9px;align-items:center;max-width:calc(100% - 32px)}
+.canvas :global(.pmViewSwitch),.canvas :global(.pmGraphPagination){display:flex;align-items:center;gap:4px;padding:4px;border:1px solid #263a54;border-radius:7px;background:rgba(7,17,31,.94);color:#aebdd0;font-size:11px}
+.canvas :global(.pmMapControls button){border:1px solid #30435d;background:#0e1c2e;color:#aebdd0;border-radius:5px;cursor:pointer;padding:7px 10px;font:700 11px Arial,sans-serif}
+.canvas :global(.pmViewSwitch button.active){background:#4c1d95;border-color:#8b5cf6;color:#ede9fe}
+.canvas :global(.pmGraphPagination button:disabled){opacity:.35;cursor:default}
+.canvas :global(.pmGraphPagination small){padding:0 8px;color:#8191a6}
+.canvas :global(.pmInventoryToggle){background:#1b1631!important;color:#ddd6fe!important}
+.canvas :global(.pmSearchResults){position:absolute;left:16px;top:130px;z-index:18;width:260px;max-height:calc(100% - 180px);overflow:auto;border:1px solid #33435a;border-radius:10px;background:rgba(9,23,40,.98);padding:10px;box-shadow:0 10px 35px #0005}
+.canvas :global(.pmSearchHeading){display:flex;align-items:center;justify-content:space-between;color:#eaf2ff;padding:3px 4px 9px;gap:7px;font-size:12px}
+.canvas :global(.pmSearchHeading span){color:#8191a6;font-size:10px}
+.canvas :global(.pmSearchResults>button){width:100%;text-align:left;margin:3px 0;padding:9px;border:1px solid #263a54;border-radius:6px;background:#0c1b2d;color:#eaf2ff;cursor:pointer;overflow-wrap:anywhere}
+.canvas :global(.pmSearchResults>button:hover){background:#1e2040;border-color:#6d28d9}
+.canvas :global(.pmSearchResults strong){font-size:11px}
+.canvas :global(.pmSearchResults small){display:block;font-size:10px;line-height:1.4;color:#8191a6;margin-top:4px}
+.canvas :global(.pmSearchResults p){font-size:12px;color:#9fb0c5;line-height:1.5}
+.canvas :global(.pmResultPagination){display:flex;justify-content:space-between;align-items:center;gap:5px;padding-top:8px;color:#aebdd0;font-size:11px}
+.canvas :global(.pmResultPagination button){border:1px solid #33435a;background:#152439;color:#c4b5fd;border-radius:5px;padding:6px;cursor:pointer}
+.canvas :global(.pmResultPagination button:disabled){opacity:.35;cursor:default}
+.canvas :global(.pmCanvasNotice){position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);padding:12px 16px;border:1px solid #33435a;background:#0c1b2d;color:#c4b5fd;border-radius:8px;z-index:17;font-size:12px}
+.canvas :global(.pmGraphLegend){position:absolute;left:16px;bottom:14px;max-width:calc(100% - 440px);z-index:15;padding:9px 12px;border:1px solid #263a54;border-radius:8px;background:rgba(7,17,31,.94);color:#c4b5fd;font-size:10px;line-height:1.6}
+.canvas :global(.pmGraphLegend small){display:block;color:#8191a6;font-size:10px}
+.canvas :global(.pmNodeButton){display:block;width:100%;text-align:left;cursor:pointer;font-family:inherit}
+.canvas :global(.pmNodeButton span){float:right}
+.canvas :global(.pmTextButton){background:transparent;border:0;padding:0;text-align:left;color:#c4b5fd;cursor:pointer;font:inherit;text-decoration:underline;overflow-wrap:anywhere}
+.canvas :global(.pmPageActions button){color:#ddd6fe;border:1px solid #574477;background:#251b3e;padding:6px 9px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer}
+.canvas :global(.pmRelationCard){padding:10px;background:#0c1b2d;border:1px solid #263a54;border-radius:7px;margin:6px 0}
+.canvas :global(.pmRelationType){display:block;font-size:9px;letter-spacing:.05em;color:#8191a6;margin-bottom:6px}
+.canvas :global(.pmRelationCard>.pmTextButton){font-size:11px}
+.canvas :global(.pmRpcCard>code){font-size:10px;color:#c4b5fd;overflow-wrap:anywhere}
+.canvas :global(.pmShell button:focus-visible){outline:2px solid #c4b5fd;outline-offset:3px}
+@media(max-width:1200px){.canvas :global(.pmMapNav small){display:none}.filters button{padding:8px 10px}.toolbar{gap:12px;padding:0 16px}.toolbar input{width:220px}}
+@media(max-width:900px){.header{padding:0 14px}.header h1{font-size:22px}.headerActions{gap:7px}.ownerBadge{font-size:10px;padding:8px}.toolbar{height:auto;padding:14px}.toolbar input{width:100%;box-sizing:border-box}.searchBox{width:100%}.canvas :global(.pmMapControls){top:72px}.canvas :global(.pmSearchResults){width:min(300px,calc(100% - 32px));box-sizing:border-box;max-height:45%;top:120px}.canvas :global(.pmGraphLegend){display:none}.canvas :global(.pmMapNav){right:16px}.canvas :global(.pmInspector){z-index:21}}
+@media(max-width:520px){.headerActions>a{padding:8px;font-size:11px}.ownerBadge{display:none}.header p{font-size:10px}.canvas :global(.pmMapNav button){font-size:10px;padding:5px}.canvas :global(.pmMapNav){gap:3px}.canvas :global(.pmGraphPagination small){display:none}}

@@ -3,6 +3,7 @@ import { AreaExtensions, AreaPlugin } from 'rete-area-plugin'
 import { ReactPlugin, Presets } from 'rete-react-plugin'
 import { createRoot } from 'react-dom/client'
 import { platformMapNodes, platformMapEdges } from './platformMapData'
+import { getTechnicalGraph } from './platformMapModel'
 
 function detailNodes(focus) {
   const groups = [['inputs','Inputs',focus.inputs],['process','Process',focus.process],['outputs','Outputs',focus.outputs],['pages','Pages',focus.pages],['data','Data',focus.data]]
@@ -78,32 +79,69 @@ function getPosition(item,focusId,nodes) {
   return {x:500,y:400}
 }
 
-export async function createPlatformMapEditor(container,{onSelect,focusId='ritsuflow'}={}) {
-  const editor=new NodeEditor()
-  const area=new AreaPlugin(container)
-  const render=new ReactPlugin({createRoot})
+
+function technicalPosition(item, graph, moduleId, focusId) {
+  const focus = graph.nodes.find((node) => node.id === focusId) || graph.nodes.find((node) => node.id === moduleId)
+  if (item.id === moduleId) return { x: 40, y: 60 }
+  if (focus?.id !== moduleId && item.id === focus?.id) return { x: 350, y: 60 }
+  const dependencies = ['table', 'view', 'rpc', 'storage'].includes(item.type)
+  const peers = graph.nodes.filter((node) => node.id !== moduleId && node.id !== (focus?.id !== moduleId ? focus?.id : null) && ['table', 'view', 'rpc', 'storage'].includes(node.type) === dependencies)
+  const index = peers.findIndex((node) => node.id === item.id)
+  return { x: dependencies ? 1040 : focus?.id === moduleId ? 450 : 700, y: 60 + index * 260 }
+}
+
+export async function createPlatformMapEditor(container, {
+  onSelect, focusId = 'ritsuflow', view = 'flow', technicalFocusId, filter = 'All', graphPage = 0, signal,
+} = {}) {
+  const editor = new NodeEditor()
+  const area = new AreaPlugin(container)
+  const render = new ReactPlugin({ createRoot })
   render.addPreset(Presets.classic.setup())
   area.use(render)
   editor.use(area)
-  const graph=getVisibleGraph(focusId)
-  const socket=new ClassicPreset.Socket('architecture')
-  const nodeMap=new Map()
-  for(const item of graph.nodes){
-    const node=new ClassicPreset.Node(item.label)
-    node.meta=item
-    node.addInput('in',new ClassicPreset.Input(socket,''))
-    node.addOutput('out',new ClassicPreset.Output(socket,''))
-    await editor.addNode(node)
-    nodeMap.set(item.id,node)
+  const technical = view === 'technical' && platformMapNodes.some((node) => node.id === focusId && node.type === 'module')
+  const graph = technical ? getTechnicalGraph(focusId, technicalFocusId || focusId, filter, graphPage, 8) : getVisibleGraph(focusId)
+  const socket = new ClassicPreset.Socket('architecture')
+  const nodeMap = new Map()
+  const checkCancelled = () => {
+    if (signal?.aborted) { const error = new Error('Editor cancelled'); error.name = 'AbortError'; throw error }
   }
-  for(const edge of graph.edges){
-    const source=nodeMap.get(edge.source),target=nodeMap.get(edge.target)
-    if(source&&target) await editor.addConnection(new ClassicPreset.Connection(source,'out',target,'in'))
+  try {
+    for (const item of graph.nodes) {
+      checkCancelled()
+      const node = new ClassicPreset.Node(item.label)
+      node.meta = item
+      node.addInput('in', new ClassicPreset.Input(socket, technical ? 'IN' : '', true))
+      const types = technical ? [...new Set(graph.edges.filter((edge) => edge.source === item.id).map((edge) => edge.type))] : ['flow']
+      for (const type of types) node.addOutput(type, new ClassicPreset.Output(socket, technical ? type : '', true))
+      await editor.addNode(node)
+      nodeMap.set(item.id, node)
+    }
+    for (const edge of graph.edges) {
+      checkCancelled()
+      const source = nodeMap.get(edge.source), target = nodeMap.get(edge.target)
+      if (source && target) await editor.addConnection(new ClassicPreset.Connection(source, technical ? edge.type : 'flow', target, 'in'))
+    }
+    for (const item of graph.nodes) {
+      checkCancelled()
+      const node = nodeMap.get(item.id)
+      if (node) await area.translate(node.id, technical ? technicalPosition(item, graph, focusId, technicalFocusId || focusId) : getPosition(item, focusId, graph.nodes))
+    }
+    AreaExtensions.selectableNodes(area, AreaExtensions.selector(), { accumulating: AreaExtensions.accumulateOnCtrl() })
+    AreaExtensions.simpleNodesOrder(area)
+    area.addPipe((context) => {
+      if (context.type === 'nodepicked' && !signal?.aborted) {
+        const node = editor.getNode(context.data.id)
+        if (node?.meta) onSelect?.(node.meta)
+      }
+      return context
+    })
+    checkCancelled()
+    await AreaExtensions.zoomAt(area, editor.getNodes())
+    checkCancelled()
+    return () => area.destroy()
+  } catch (error) {
+    area.destroy()
+    throw error
   }
-  for(const item of graph.nodes){const node=nodeMap.get(item.id);if(node) await area.translate(node.id,getPosition(item,focusId,graph.nodes))}
-  AreaExtensions.selectableNodes(area,AreaExtensions.selector(),{accumulating:AreaExtensions.accumulateOnCtrl()})
-  AreaExtensions.simpleNodesOrder(area)
-  area.addPipe((context)=>{if(context.type==='nodepicked'){const node=editor.getNode(context.data.id);if(node?.meta) onSelect?.(node.meta)}return context})
-  await AreaExtensions.zoomAt(area,editor.getNodes())
-  return ()=>area.destroy()
 }
