@@ -51,6 +51,7 @@ export default function WorkspacesPage(){
   const router=useRouter()
   const [checking,setChecking]=useState(true)
   const [isPlatformOwner,setIsPlatformOwner]=useState(false)
+  const [hasRitsuScope,setHasRitsuScope]=useState(false)
 
   useEffect(()=>{
     let active=true
@@ -60,16 +61,21 @@ export default function WorkspacesPage(){
       const user=data?.user
       if(!user){router.replace('/login');return}
 
-      const {data:platformRole}=await supabase
-        .from('platform_user_roles')
-        .select('role,is_active')
-        .eq('user_id',user.id)
-        .eq('role','platform_owner')
-        .eq('is_active',true)
-        .maybeSingle()
+      const [{data:platformRole},{data:ritsuScopeAccess}]=await Promise.all([
+        supabase
+          .from('platform_user_roles')
+          .select('role,is_active')
+          .eq('user_id',user.id)
+          .eq('role','platform_owner')
+          .eq('is_active',true)
+          .maybeSingle(),
+        // RitsuScope is sold separately: show it only when the company's license includes it.
+        supabase.rpc('has_workspace_access',{p_workspace_key:'ritsuscope'})
+      ])
 
       if(!active)return
       setIsPlatformOwner(Boolean(platformRole))
+      setHasRitsuScope(ritsuScopeAccess===true||Boolean(platformRole))
       setChecking(false)
     }
     checkSession()
@@ -78,7 +84,8 @@ export default function WorkspacesPage(){
 
   if(checking)return <main className={styles.loading}>Loading RitsuFlow™...</main>
 
-  const visibleWorkspaces=isPlatformOwner?[...workspaces,adminWorkspace]:workspaces
+  const licensed=workspaces.filter(w=>w.key!=='ritsuscope'||hasRitsuScope)
+  const visibleWorkspaces=isPlatformOwner?[...licensed,adminWorkspace]:licensed
 
   return <main className={styles.page}>
     <div className={styles.glow}/>
@@ -90,7 +97,7 @@ export default function WorkspacesPage(){
       </div>
     </header>
     <section className={styles.hero}><div className={styles.kicker}>WELCOME TO RITSUFLOW</div><h1>Choose your workspace</h1></section>
-    <section className={`${styles.grid} ${isPlatformOwner ? styles.gridOwner : styles.gridStandard}`} aria-label="RitsuFlow workspaces">
+    <section className={`${styles.grid} ${isPlatformOwner ? styles.gridOwner : visibleWorkspaces.length===3 ? styles.gridThree : styles.gridStandard}`} aria-label="RitsuFlow workspaces">
       {visibleWorkspaces.map(workspace=><WorkspaceCard key={workspace.key} workspace={workspace}/>)}
     </section>
     <div aria-hidden="true"/>

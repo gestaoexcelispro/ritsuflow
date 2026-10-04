@@ -160,12 +160,7 @@ export default function ProjectDocuments({ project }) {
 
   function mapLocations(doc) {
     if (!project?.id || !doc?.id) return
-    const params = new URLSearchParams({
-      projectId: project.id,
-      documentId: doc.id,
-      mode: 'location-mapping',
-    })
-    router.push(`/ritsucad/project-document?${params.toString()}`)
+    router.push(`/ritsuscope/${project.id}`)
   }
 
   async function deleteDocument(doc) {
