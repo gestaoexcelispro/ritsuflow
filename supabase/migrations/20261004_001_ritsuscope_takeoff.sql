@@ -2,7 +2,11 @@
 -- and its library (materials, recipes, wall types). Same schema as the ExcelisPro takeoff module,
 -- with RitsuFlow access rules:
 --   * project data: read = private.can_access_project, write = private.can_manage_project
---   * library (no project): read = active organization members, write = platform owner
+--   * library, two layers:
+--       - RitsuFlow standard library (organization_id null): every member reads it, only the
+--         platform owner edits it;
+--       - company library (organization_id set): only that company reads and edits it
+--         (owner / admin / planner). Rows created by a company user land there automatically.
 --   * project-specific wall types follow the project rules.
 
 -- ---------------------------------------------------------------- helpers
@@ -14,9 +18,39 @@ returns boolean language sql stable security definer set search_path = '' as $$
   );
 $$;
 
+-- Library row visible: the standard library (no company) to every member; a company's rows to that company.
+create or replace function private.ritsuscope_can_read_library(target_organization_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select case when target_organization_id is null then private.ritsuscope_is_member()
+              else private.is_organization_member(target_organization_id) or private.is_platform_owner() end;
+$$;
+
+-- Library row editable: the standard library by the platform owner; a company's rows by its owner / admin / planner.
+create or replace function private.ritsuscope_can_edit_library(target_organization_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select case when target_organization_id is null then private.is_platform_owner()
+              else private.has_organization_role(target_organization_id, array['owner', 'admin', 'planner']) or private.is_platform_owner() end;
+$$;
+
+-- New library rows from a company user go to that company's library; the platform owner adds to the standard one.
+create or replace function private.ritsuscope_library_owner()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.organization_id is null and not private.is_platform_owner() then
+    select m.organization_id into new.organization_id
+      from public.organization_members m
+     where m.user_id = auth.uid() and m.status = 'active'
+     order by m.joined_at nulls last
+     limit 1;
+  end if;
+  return new;
+end;
+$$;
+
 -- ---------------------------------------------------------------- library
 create table public.takeoff_reference_sources (
   id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
   name text not null,
   publisher text,
   edition text,
@@ -32,6 +66,7 @@ create table public.takeoff_reference_sources (
 
 create table public.takeoff_recipes (
   id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
   name text not null,
   maker text,
   system text,
@@ -53,6 +88,7 @@ create table public.takeoff_recipes (
 
 create table public.takeoff_materials (
   id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
   country_code text not null check (country_code ~ '^[A-Z]{2}$'),
   code text,
   name text not null,
@@ -68,12 +104,13 @@ create table public.takeoff_materials (
   updated_at timestamptz not null default now(),
   supplier text
 );
-create unique index takeoff_materials_country_name_key on public.takeoff_materials (country_code, lower(name));
+create unique index takeoff_materials_country_name_key on public.takeoff_materials (coalesce(organization_id, '00000000-0000-0000-0000-000000000000'::uuid), country_code, lower(name));
 create index takeoff_materials_category_idx on public.takeoff_materials (country_code, category);
 create index takeoff_materials_supplier_idx on public.takeoff_materials (country_code, supplier);
 
 create table public.takeoff_wall_types (
   id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
   project_id uuid references public.projects(id) on delete cascade,
   country_code text not null check (country_code ~ '^[A-Z]{2}$'),
   region text,
@@ -97,8 +134,8 @@ create table public.takeoff_wall_types (
   updated_at timestamptz not null default now(),
   materials jsonb not null default '{}'::jsonb check (jsonb_typeof(materials) = 'object')
 );
-create unique index takeoff_wall_types_code_key on public.takeoff_wall_types (country_code, coalesce(project_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(code)) where code is not null;
-create unique index takeoff_wall_types_name_key on public.takeoff_wall_types (country_code, coalesce(project_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
+create unique index takeoff_wall_types_code_key on public.takeoff_wall_types (coalesce(organization_id, '00000000-0000-0000-0000-000000000000'::uuid), country_code, coalesce(project_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(code)) where code is not null;
+create unique index takeoff_wall_types_name_key on public.takeoff_wall_types (coalesce(organization_id, '00000000-0000-0000-0000-000000000000'::uuid), country_code, coalesce(project_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
 create index takeoff_wall_types_country_idx on public.takeoff_wall_types (country_code, region);
 create index takeoff_wall_types_project_idx on public.takeoff_wall_types (project_id) where project_id is not null;
 
@@ -300,24 +337,28 @@ begin
   -- Shared library.
   foreach t in array array['takeoff_reference_sources', 'takeoff_recipes', 'takeoff_materials'] loop
     execute format('alter table public.%I enable row level security', t);
-    execute format('create policy %I on public.%I for select to authenticated using (private.ritsuscope_is_member())', t || '_select', t);
-    execute format('create policy %I on public.%I for insert to authenticated with check (private.is_platform_owner())', t || '_insert', t);
-    execute format('create policy %I on public.%I for update to authenticated using (private.is_platform_owner()) with check (private.is_platform_owner())', t || '_update', t);
-    execute format('create policy %I on public.%I for delete to authenticated using (private.is_platform_owner())', t || '_delete', t);
+    execute format('create policy %I on public.%I for select to authenticated using (private.ritsuscope_can_read_library(organization_id))', t || '_select', t);
+    execute format('create policy %I on public.%I for insert to authenticated with check (private.ritsuscope_can_edit_library(organization_id))', t || '_insert', t);
+    execute format('create policy %I on public.%I for update to authenticated using (private.ritsuscope_can_edit_library(organization_id)) with check (private.ritsuscope_can_edit_library(organization_id))', t || '_update', t);
+    execute format('create policy %I on public.%I for delete to authenticated using (private.ritsuscope_can_edit_library(organization_id))', t || '_delete', t);
+    execute format('create trigger %I before insert on public.%I for each row execute function private.ritsuscope_library_owner()', t || '_library_owner', t);
   end loop;
 end $$;
 
 -- Wall types: the library (no project) like the other library tables; project types like project data.
 alter table public.takeoff_wall_types enable row level security;
 create policy takeoff_wall_types_select on public.takeoff_wall_types for select to authenticated
-  using (case when project_id is null then private.ritsuscope_is_member() else private.can_access_project(project_id) end);
+  using (case when project_id is null then private.ritsuscope_can_read_library(organization_id) else private.can_access_project(project_id) end);
 create policy takeoff_wall_types_insert on public.takeoff_wall_types for insert to authenticated
-  with check (case when project_id is null then private.is_platform_owner() else private.can_manage_project(project_id) end);
+  with check (case when project_id is null then private.ritsuscope_can_edit_library(organization_id) else private.can_manage_project(project_id) end);
 create policy takeoff_wall_types_update on public.takeoff_wall_types for update to authenticated
-  using (case when project_id is null then private.is_platform_owner() else private.can_manage_project(project_id) end)
-  with check (case when project_id is null then private.is_platform_owner() else private.can_manage_project(project_id) end);
+  using (case when project_id is null then private.ritsuscope_can_edit_library(organization_id) else private.can_manage_project(project_id) end)
+  with check (case when project_id is null then private.ritsuscope_can_edit_library(organization_id) else private.can_manage_project(project_id) end);
 create policy takeoff_wall_types_delete on public.takeoff_wall_types for delete to authenticated
-  using (case when project_id is null then private.is_platform_owner() else private.can_manage_project(project_id) end);
+  using (case when project_id is null then private.ritsuscope_can_edit_library(organization_id) else private.can_manage_project(project_id) end);
+
+create trigger takeoff_wall_types_library_owner before insert on public.takeoff_wall_types
+  for each row execute function private.ritsuscope_library_owner();
 
 alter table public.takeoff_audit_log enable row level security;
 create policy takeoff_audit_log_select on public.takeoff_audit_log for select to authenticated using (private.can_access_project(project_id));
@@ -364,4 +405,6 @@ create policy "RitsuScope files: delete" on storage.objects for delete to authen
   using (bucket_id = 'takeoff-files' and private.can_manage_project(private.ritsuscope_file_project(name)));
 
 grant execute on function private.ritsuscope_is_member() to authenticated;
+grant execute on function private.ritsuscope_can_read_library(uuid) to authenticated;
+grant execute on function private.ritsuscope_can_edit_library(uuid) to authenticated;
 grant execute on function private.ritsuscope_file_project(text) to authenticated;
