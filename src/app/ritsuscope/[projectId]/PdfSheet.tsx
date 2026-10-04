@@ -104,7 +104,7 @@ export default function PdfSheet(props: Props) {
     ;(async () => {
       const pdfjs = await import('pdfjs-dist-v5')
       if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist-v5/build/pdf.worker.min.mjs', import.meta.url).toString()
+        pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
       }
       task = pdfjs.getDocument(url) as unknown as typeof task
       const pdf = await task!.promise
