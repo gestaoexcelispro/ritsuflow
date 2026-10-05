@@ -29,10 +29,12 @@ type Props = {
   onDrawKind: (kind: ZoneKind) => void
   /** Adds the given zones to the project's Location Breakdown. */
   onCreateLocations: (zones: ZoneRow[]) => Promise<void> | void
+  /** Moves linked locations sitting at the root under their floor or zone. */
+  onOrganize: () => Promise<void> | void
 }
 
 /** Left sidebar in Zoning mode: the locations drawn on the current sheet. */
-export default function ZoningSidebar({ zones, sheetName, ptPerM, selectedId, onSelect, onAdd, onDetect, onToggleVisible, onRename, onDelete, onDeleteMany, onSetVisibleMany, unavailable, drawKind, onDrawKind, onCreateLocations }: Props) {
+export default function ZoningSidebar({ zones, sheetName, ptPerM, selectedId, onSelect, onAdd, onDetect, onToggleVisible, onRename, onDelete, onDeleteMany, onSetVisibleMany, unavailable, drawKind, onDrawKind, onCreateLocations, onOrganize }: Props) {
   const t = useTakeoffT()
   const { formatNumber } = useLanguage()
   const [search, setSearch] = useState('')
@@ -111,6 +113,11 @@ export default function ZoningSidebar({ zones, sheetName, ptPerM, selectedId, on
         {!unavailable && unlinked.length > 0 && (
           <button type="button" style={{ ...addBtn, justifyContent: 'center', color: '#5b21b6', borderColor: '#d8c8f5', background: '#f7f3fe' }} disabled={creating} onClick={() => void create(unlinked)}>
             <Icon name="plus" size={14} />{t('zone.createMany', { count: unlinked.length })}
+          </button>
+        )}
+        {!unavailable && unlinked.length === 0 && zones.some(z => z.location_id) && (
+          <button type="button" style={{ ...addBtn, justifyContent: 'center' }} disabled={creating} onClick={async () => { setCreating(true); try { await onOrganize() } finally { setCreating(false) } }}>
+            {t('zone.organize')}
           </button>
         )}
         <label style={searchBox}>

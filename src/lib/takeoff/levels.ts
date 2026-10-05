@@ -35,6 +35,7 @@ export function normalizeLevels(rows: Partial<LevelRow>[]): LevelRow[] {
     slab_m: num(r.slab_m),
     typical_of: r.typical_of ?? null,
     sort_order: num(r.sort_order) ?? 0,
+    location_id: r.location_id ?? null,
   }))
 }
 

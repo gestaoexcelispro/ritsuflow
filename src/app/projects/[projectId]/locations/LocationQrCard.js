@@ -23,6 +23,37 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
       setPrintMapError('')
       setPrintMap(null)
       try {
+        // RitsuScope first: the latest outline drawn for this location, its sheet and the sheet's A4 print area.
+        const { data: zoneRow } = await supabase
+          .from('takeoff_zones')
+          .select('id,points,color,source_id')
+          .eq('location_id', location.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (zoneRow?.source_id) {
+          const { data: sheet } = await supabase
+            .from('takeoff_sources')
+            .select('id,file_path,page_number,scale_pt_per_m,metadata')
+            .eq('id', zoneRow.source_id)
+            .maybeSingle()
+          if (sheet?.file_path) {
+            const { data: signedSheet, error: sheetError } = await supabase.storage.from('takeoff-files').createSignedUrl(sheet.file_path, 300)
+            if (sheetError || !signedSheet?.signedUrl) throw sheetError || new Error('Unable to access the RitsuScope sheet.')
+            if (!cancelled) setPrintMap({
+              geometry: { points: zoneRow.points || [], display: { color: zoneRow.color || '#008F84', fill_opacity: 0.35 } },
+              coordinateSpace: 'pt',
+              ptPerM: Number(sheet.scale_pt_per_m) || 0,
+              printView: sheet.metadata?.print_view || null,
+              scaleCalibration: null,
+              pageNumber: sheet.page_number || 1,
+              signedUrl: signedSheet.signedUrl,
+            })
+            return
+          }
+        }
+
+        // Older projects: the Location Map outline.
         const { data: geometryRow, error: geometryError } = await supabase
           .from('project_drawing_location_geometries')
           .select('id,geometry,page_number,document_id,drawing_map_id')

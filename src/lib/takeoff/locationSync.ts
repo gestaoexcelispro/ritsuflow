@@ -132,7 +132,45 @@ export async function createLocationsForZones(
     zone.location_id = location.id
     created++
   }
+  // Locations already linked to zones but sitting at the root (drawn before their floor or the zone
+  // around them existed) move under the place the drawing says they belong to.
+  await placeRootLocations(supabase, { zones, levels: input.levels, sources: input.sources, locations })
   return created
+}
+
+/**
+ * Moves zone locations that sit at the root of the tree under their suggested parent (the zone
+ * around them, or the sheet's floor). Locations the user already placed somewhere are left alone.
+ * Returns how many were moved.
+ */
+export async function placeRootLocations(
+  supabase: Supabase,
+  input: { zones: ZoneRow[]; levels: LevelRow[]; sources: SourceRow[]; locations: ProjectLocation[] },
+): Promise<number> {
+  const byId = new Map(input.locations.map(l => [l.id, { ...l }] as [string, ProjectLocation]))
+  const isDescendant = (candidate: string, of: string) => {
+    let cur = byId.get(candidate)
+    const seen = new Set<string>()
+    while (cur && cur.parent_id && !seen.has(cur.id)) {
+      if (cur.parent_id === of) return true
+      seen.add(cur.id)
+      cur = byId.get(cur.parent_id)
+    }
+    return false
+  }
+  let moved = 0
+  // Largest kinds first, so a zone is placed before the rooms inside it.
+  for (const zone of input.zones.slice().sort((a, b) => kindRank(a.zone_kind) - kindRank(b.zone_kind))) {
+    const loc = zone.location_id ? byId.get(zone.location_id) : undefined
+    if (!loc || loc.parent_id) continue
+    const parentId = suggestedParentId(zone, input.zones, input.levels, input.sources)
+    if (!parentId || parentId === loc.id || !byId.has(parentId) || isDescendant(parentId, loc.id)) continue
+    const { error } = await supabase.from('locations').update({ parent_id: parentId }).eq('id', loc.id)
+    if (error) throw error
+    loc.parent_id = parentId
+    moved++
+  }
+  return moved
 }
 
 /** Creates a "Floor" location for each level that has none yet (lowest first) and links them. */

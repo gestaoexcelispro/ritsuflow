@@ -37,7 +37,8 @@ import OpeningsEditor from './OpeningsEditor'
 import { useRecipeContext } from './useRecipeContext'
 import MaterialsCatalog from './MaterialsCatalog'
 import { ZONE_COLUMNS, scaleRatio, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
-import { createFloorsForLevels, createLocationsForZones, loadLocations } from '@/lib/takeoff/locationSync'
+import { createFloorsForLevels, createLocationsForZones, loadLocations, placeRootLocations } from '@/lib/takeoff/locationSync'
+import { importLegacyLocationMap, importableOutline, loadLegacyLocationMaps, type LegacyMap } from '@/lib/takeoff/importLocationMap'
 import type { ElementOpening, Vec2 } from '@/lib/takeoff/geometry'
 import ZoningSidebar from './ZoningSidebar'
 import ZoneProperties from './ZoneProperties'
@@ -139,6 +140,14 @@ export default function TakeoffWorkspacePage() {
   const [section, setSection] = useState<'zoning' | 'takeoff' | 'estimating' | 'settings'>(licensed ? 'takeoff' : 'zoning')
   /** Kind given to the next zone drawn in Zoning. */
   const [drawKind, setDrawKind] = useState<ZoneKind>('room')
+  /** Old Location Map pages not moved into RitsuScope yet. */
+  const [legacyMaps, setLegacyMaps] = useState<LegacyMap[]>([])
+  const [legacyBusy, setLegacyBusy] = useState(false)
+  useEffect(() => {
+    let alive = true
+    loadLegacyLocationMaps(createClient(), projectId).then(rows => { if (alive) setLegacyMaps(rows) }).catch(() => { if (alive) setLegacyMaps([]) })
+    return () => { alive = false }
+  }, [projectId])
   const [settingsTab, setSettingsTab] = useState<'project' | 'walltypes' | 'recipes' | 'materials'>('project')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [zones, setZones] = useState<ZoneRow[]>([])
@@ -946,6 +955,39 @@ export default function TakeoffWorkspacePage() {
     }
     await load()
   }
+  /** Moves an old Location Map page into RitsuScope (sheet, scale, print area, outlines linked to the same locations). */
+  async function importLegacy(map: LegacyMap) {
+    setError('')
+    setLegacyBusy(true)
+    setStatus(t('legacy.importing'))
+    try {
+      const supabase = createClient()
+      const result = await importLegacyLocationMap(supabase, map, { projectId, sortOrder: (sources.length + 1) * 10, levels })
+      setLegacyMaps(await loadLegacyLocationMaps(supabase, projectId))
+      await load()
+      setSelectedSourceId(result.sourceId)
+      setSection('zoning')
+      const sheetName = map.fileName.replace(/\.pdf$/i, '')
+      setStatus(t('legacy.done', { sheet: sheetName, count: result.imported }) + (result.skipped.length ? ' ' + t('legacy.skipped', { names: result.skipped.join(', ') }) : ''))
+    } catch (e) {
+      setError(t('workspace.error', { message: e instanceof Error ? e.message : String(e) }))
+    } finally {
+      setLegacyBusy(false)
+    }
+  }
+  /** Moves linked locations sitting at the root under their floor or zone. */
+  async function organizeZoneLocations() {
+    setError('')
+    try {
+      const supabase = createClient()
+      const locations = await loadLocations(supabase, projectId)
+      const count = await placeRootLocations(supabase, { zones, levels, sources, locations })
+      setStatus(t('zone.organized', { count }))
+    } catch (e) {
+      setError(t('workspace.error', { message: e instanceof Error ? e.message : String(e) }))
+    }
+    await load()
+  }
   /** A "Floor" location for every level that has none yet. */
   async function syncFloors() {
     setError('')
@@ -1279,6 +1321,13 @@ export default function TakeoffWorkspacePage() {
   const zoningLeft = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
     {levelsPanelFor(false)}
+    {legacyMaps.map(m => (
+      <div key={m.mapId} style={{ margin: '10px 14px 0', padding: 10, border: '1px solid #d8c8f5', borderRadius: 8, background: '#f7f3fe', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <strong style={{ fontSize: 11, color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '.06em' }}>{t('legacy.title')}</strong>
+        <span style={{ fontSize: 11, color: '#3b2a63' }}>{t('legacy.found', { count: m.outlines.filter(importableOutline).length, file: m.fileName })}</span>
+        <button type="button" disabled={legacyBusy} onClick={() => void importLegacy(m)} style={{ alignSelf: 'flex-start', height: 28, padding: '0 10px', border: 0, borderRadius: 7, background: '#6d28d9', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{t('legacy.import')}</button>
+      </div>
+    ))}
     <div style={{ flex: 1, minHeight: 0 }}>
     <ZoningSidebar
       zones={sheetZones}
@@ -1297,6 +1346,7 @@ export default function TakeoffWorkspacePage() {
       drawKind={drawKind}
       onDrawKind={setDrawKind}
       onCreateLocations={createZoneLocations}
+      onOrganize={organizeZoneLocations}
     />
     </div>
     </div>

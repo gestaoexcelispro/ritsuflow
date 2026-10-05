@@ -75,7 +75,8 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
         {loadError ? <div style={errorBox}>Some Location Breakdown data could not be loaded: {loadError.message}</div> : null}
         <nav style={viewTabs} aria-label="Location workspace views">
           <Link href={`/projects/${projectId}/locations`} style={activeTab}>☷ Location Breakdown</Link>
-          <Link href={`/projects/${projectId}/location-map`} style={viewTab}>⌑ Location Map</Link>
+          <Link href={`/ritsuscope/${projectId}`} style={viewTab}>⌑ Map in RitsuScope</Link>
+          <Link href={`/projects/${projectId}/location-map/card-view`} style={viewTab}>▣ A4 Card View</Link>
         </nav>
         <div id="lbs-workspace" style={workspace}>
           <StandaloneLocationWorkspace
