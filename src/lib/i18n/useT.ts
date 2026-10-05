@@ -23,6 +23,9 @@ import fieldopHubPtBR from './messages/fieldopHub.pt-BR.json'
 import fieldopReportsEnUS from './messages/fieldopReports.en-US.json'
 import fieldopReportsEs from './messages/fieldopReports.es.json'
 import fieldopReportsPtBR from './messages/fieldopReports.pt-BR.json'
+import projectsEnUS from './messages/projects.en-US.json'
+import projectsEs from './messages/projects.es.json'
+import projectsPtBR from './messages/projects.pt-BR.json'
 
 /**
  * One message file per module and language: messages/<namespace>.<language>.json.
@@ -36,6 +39,7 @@ const namespaces = {
   fieldopWorkforce: { 'en-US': fieldopWorkforceEnUS, es: fieldopWorkforceEs, 'pt-BR': fieldopWorkforcePtBR },
   fieldopHub: { 'en-US': fieldopHubEnUS, es: fieldopHubEs, 'pt-BR': fieldopHubPtBR },
   fieldopReports: { 'en-US': fieldopReportsEnUS, es: fieldopReportsEs, 'pt-BR': fieldopReportsPtBR },
+  projects: { 'en-US': projectsEnUS, es: projectsEs, 'pt-BR': projectsPtBR },
 } satisfies Record<string, Record<AppLanguage, Messages>>
 
 export type Namespace = keyof typeof namespaces
