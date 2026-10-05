@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { LanguageProvider } from '@/lib/i18n/LanguageProvider'
+import { useRitsuScopeBody } from './useRitsuScopeBody'
 
 const screen = { minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f4f7f8', color: '#536d78', font: '600 14px Arial, sans-serif' } as const
 
@@ -13,6 +14,7 @@ const screen = { minHeight: '100vh', display: 'grid', placeItems: 'center', back
  * (the platform owner always gets in), with its own language settings.
  */
 export default function RitsuScopeLayout({ children }: { children: ReactNode }) {
+  useRitsuScopeBody()
   const router = useRouter()
   const [state, setState] = useState<'checking' | 'ready' | 'unlicensed'>('checking')
 

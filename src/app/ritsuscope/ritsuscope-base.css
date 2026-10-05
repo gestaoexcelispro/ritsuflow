@@ -1,0 +1,44 @@
+/*
+ * The base styles the takeoff was built on in ExcelisPro Management (its globals.css reset),
+ * applied only while a RitsuScope page is open: the layouts add `ritsuscope-body` to <body>.
+ * :where() keeps every rule at zero specificity, exactly like the ExcelisPro reset, so the
+ * takeoff's own inline styles always win. Scoped to <body> (not a wrapper) because the tool
+ * menus render through portals straight into <body>.
+ */
+body.ritsuscope-body {
+  margin: 0;
+  background: #ffffff;
+  color: #102033;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:where(body.ritsuscope-body) *,
+:where(body.ritsuscope-body) *::before,
+:where(body.ritsuscope-body) *::after {
+  box-sizing: border-box;
+}
+
+:where(body.ritsuscope-body) * {
+  padding: 0;
+  margin: 0;
+}
+
+:where(body.ritsuscope-body) a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:where(body.ritsuscope-body) :where(button, input, textarea, select) {
+  font: inherit;
+}
+
+:where(body.ritsuscope-body) button {
+  border: 0;
+}
+
+:where(body.ritsuscope-body) img {
+  display: block;
+  max-width: 100%;
+}
