@@ -63,7 +63,7 @@
 .menuPanel { display: none; }
 
 .tabbar { background: var(--fo-surface); border-bottom: 1px solid var(--fo-line); }
-.tabbarInner { display: flex; align-items: center; gap: 4px; min-height: 60px; padding: 0 28px; }
+.tabbarInner { display: flex; align-items: center; gap: 4px; min-height: 60px; padding: 0 28px; overflow-x: auto; scrollbar-width: none; }
 .mtab { display: inline-flex; align-items: center; gap: 8px; height: 60px; padding: 0 14px; color: var(--fo-muted); text-decoration: none; font-size: 15px; font-weight: 500; border-bottom: 3px solid transparent; white-space: nowrap; }
 .mtab:hover { color: var(--fo-ink); }
 .mtabOn { color: var(--fo-ink); font-weight: 600; border-bottom-color: var(--fo-teal); }
