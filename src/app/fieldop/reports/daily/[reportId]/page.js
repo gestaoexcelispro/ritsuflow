@@ -11,6 +11,9 @@ import LanguageSelector from '../../../../../components/LanguageSelector'
 import GeneralSection from './GeneralSection'
 import ProductionSection from './ProductionSection'
 import WorkforceSection from './WorkforceSection'
+import WeatherSection from './WeatherSection'
+import SafetySection from './SafetySection'
+import NotesSection from './NotesSection'
 import ApprovalSection from './ApprovalSection'
 import styles from '../daily-reports.module.css'
 
@@ -29,7 +32,7 @@ const TABS = [
   ['attachments', 'capture_photos'],
   ['approval', null],
 ]
-const BUILT = ['overview', 'general', 'workforce', 'production', 'approval']
+const BUILT = ['overview', 'general', 'weather', 'workforce', 'production', 'safety', 'notes', 'approval']
 
 export default function FieldOpDailyReportWorkspace() {
   const { reportId } = useParams()
@@ -57,7 +60,7 @@ export default function FieldOpDailyReportWorkspace() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const { data, error: loadError } = await supabase.from('daily_reports').select('id,report_number,report_date,status,work_start_time,work_end_time,general_notes,projects(id,code,name,client_name)').eq('id', reportId).single()
+      const { data, error: loadError } = await supabase.from('daily_reports').select('id,report_number,report_date,status,work_start_time,work_end_time,general_notes,projects(id,code,name,client_name,organization_id)').eq('id', reportId).single()
       if (loadError) { setError(loadError.message); setLoading(false); return }
       setReport(data)
       const { data: settingsRow } = await supabase.from('fieldop_daily_report_settings').select('*').eq('project_id', data.projects.id).maybeSingle()
@@ -112,6 +115,9 @@ export default function FieldOpDailyReportWorkspace() {
       {active === 'general' && <GeneralSection {...sectionProps} onSaved={(patch) => refresh(patch)} />}
       {active === 'production' && <ProductionSection {...sectionProps} onSaved={() => refresh()} />}
       {active === 'workforce' && <WorkforceSection {...sectionProps} />}
+      {active === 'weather' && <WeatherSection {...sectionProps} />}
+      {active === 'safety' && <SafetySection {...sectionProps} />}
+      {active === 'notes' && <NotesSection {...sectionProps} />}
       {active === 'approval' && <ApprovalSection {...sectionProps} approvalRequired={settings?.require_approval === true} onChanged={(patch) => refresh(patch)} />}
       {!BUILT.includes(active) && <section className={styles.panel}><div className={styles.panelHead}><h3>{t(`tab.${active}`)}</h3></div><div className={styles.empty}>{t('placeholder.text', { section: t(`tab.${active}`) })}</div></section>}
     </section>
