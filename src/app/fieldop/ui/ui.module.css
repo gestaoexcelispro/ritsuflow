@@ -224,3 +224,17 @@
 .feed li > a:hover { background: var(--fo-sunken); }
 .feed time { color: var(--fo-muted); font-size: 14px; padding-top: 1px; }
 .feed small { display: block; color: var(--fo-faint); font-size: 13px; }
+
+/* Tables whose cells carry inline styles (Workforce screens): on phones each row becomes a card.
+   !important is needed to override the inline widths, paddings and borders. */
+@media (max-width: 760px) {
+  .phoneCards { min-width: 0 !important; }
+  .phoneCards thead { display: none; }
+  .phoneCards, .phoneCards tbody, .phoneCards tr, .phoneCards td { display: block; width: 100%; }
+  .phoneCards tr { padding: 10px 14px; border-top: 1px solid var(--fo-line-soft) !important; }
+  .phoneCards td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0 !important; border: 0 !important; text-align: right; white-space: normal !important; }
+  .phoneCards td::before { content: attr(data-label); color: var(--fo-muted); font-size: 14px; text-align: left; flex: none; }
+  .phoneCards td[data-label=''] { display: block; text-align: left; }
+  .phoneCards td[data-label='']::before { display: none; }
+  .phoneCards td[data-label=''] > div { overflow-x: auto; }
+}

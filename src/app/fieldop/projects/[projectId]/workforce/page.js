@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../../../lib/supabase'
 import WorkforceFrame, { localDateKey, useWorkforceFormat } from './WorkforceFrame'
+import { ui } from '../../../ui'
 
 function deviceLocation() {
   return new Promise((resolve) => {
@@ -156,20 +157,20 @@ export default function FieldOpProjectWorkforcePage() {
         ? <div style={empty}>{t('live.loading')}</div>
         : rows.length === 0
           ? <div style={empty}>{t('live.empty')}</div>
-          : <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', minWidth: 1050, borderCollapse: 'collapse' }}>
+          : <div style={{ overflowX: 'auto' }}><table className={ui.phoneCards} style={{ width: '100%', minWidth: 1050, borderCollapse: 'collapse' }}>
             <thead><tr style={{ background: 'var(--fo-sunken)' }}>{columns.map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{rows.map((row) => <tr key={row.assignment.id} style={{ borderTop: '1px solid var(--fo-line)' }}>
-              <td style={td}>{row.worker?.field_id || row.worker?.company_employee_number || '—'}</td>
-              <td style={td}><strong>{f.workerName(row.worker)}</strong></td>
-              <td style={td}>{row.company?.name || '—'}</td>
-              <td style={td}>{row.trade?.name || '—'}</td>
-              <td style={td}><span style={{ fontWeight: 800, color: row.open ? '#047857' : 'var(--fo-muted)' }}>{row.open ? t('live.onSite') : t('live.offSite')}</span></td>
-              <td style={td}>{row.openFromEarlierDay
+              <td style={td} data-label={t('col.fieldId')}>{row.worker?.field_id || row.worker?.company_employee_number || '—'}</td>
+              <td style={td} data-label=""><strong>{f.workerName(row.worker)}</strong></td>
+              <td style={td} data-label={t('col.company')}>{row.company?.name || '—'}</td>
+              <td style={td} data-label={t('col.trade')}>{row.trade?.name || '—'}</td>
+              <td style={td} data-label={t('col.status')}><span style={{ fontWeight: 800, color: row.open ? '#047857' : 'var(--fo-muted)' }}>{row.open ? t('live.onSite') : t('live.offSite')}</span></td>
+              <td style={td} data-label={t('col.checkIn')}>{row.openFromEarlierDay
                 ? <span style={{ color: 'var(--fo-warn)', fontWeight: 700 }}>{f.time(row.lastCheckIn)} · {t('live.openSince', { date: f.date(row.open.work_date) })}</span>
                 : f.time(row.lastCheckIn)}</td>
-              <td style={td}>{row.open ? f.minutes(row.currentMinutes) : '—'}</td>
-              <td style={td}><strong>{f.minutes(row.worked)}</strong></td>
-              <td style={td}>{row.open
+              <td style={td} data-label={t('live.colCurrent')}>{row.open ? f.minutes(row.currentMinutes) : '—'}</td>
+              <td style={td} data-label={t('live.colWorked')}><strong>{f.minutes(row.worked)}</strong></td>
+              <td style={td} data-label="">{row.open
                 ? <button disabled={processing === row.open.id} onClick={() => checkOut(row.open)} style={button(false)}>{processing === row.open.id ? t('live.checkingOut') : t('live.checkOut')}</button>
                 : <button disabled={processing === row.assignment.id} onClick={() => checkIn(row.assignment)} style={button(true)}>{processing === row.assignment.id ? t('live.checkingIn') : t('live.checkIn')}</button>}</td>
             </tr>)}</tbody>

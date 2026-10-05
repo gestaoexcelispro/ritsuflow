@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '../../../../../../lib/supabase/client'
 import WorkforceFrame, { localDateKey, useWorkforceFormat } from '../WorkforceFrame'
+import { ui } from '../../../../ui'
 
 const supabase = createClient()
 const DONE = ['closed', 'corrected']
@@ -134,7 +135,7 @@ export default function FieldOpProjectTimecardsPage() {
         ? <div style={msg}>{t('timecards.loading')}</div>
         : cards.length === 0
           ? <div style={msg}>{t('timecards.empty')}</div>
-          : <div style={{ overflowX: 'auto' }}><table style={table}>
+          : <div style={{ overflowX: 'auto' }}><table className={ui.phoneCards} style={table}>
             <thead><tr>{columns.map((x) => <th key={x} style={th}>{x}</th>)}</tr></thead>
             <tbody>{cards.map((c) => <Timecard key={c.workerId} c={c} f={f} expanded={expanded === c.workerId} toggle={() => setExpanded(expanded === c.workerId ? null : c.workerId)} correct={openCorrection} />)}</tbody>
           </table></div>}
@@ -159,18 +160,18 @@ function Timecard({ c, f, expanded, toggle, correct }) {
   const status = c.open ? t('timecards.statusOpen') : c.allowed == null ? t('common.notConfigured') : c.variance > 0 ? t('timecards.statusOver') : t('timecards.statusWithin')
   return <>
     <tr>
-      <td style={td}>{c.worker?.field_id || '—'}</td>
-      <td style={td}><strong>{f.workerName(c.worker)}</strong></td>
-      <td style={td}>{f.time(c.first)}</td>
-      <td style={td}>{c.open ? t('common.open') : f.time(c.last)}</td>
-      <td style={td}>{c.sessions.length}</td>
-      <td style={td}>{f.minutes(c.worked)}</td>
-      <td style={td}>{c.allowed == null ? '—' : f.minutes(c.allowed)}</td>
-      <td style={td}>{c.variance == null ? '—' : `${c.variance > 0 ? '+' : c.variance < 0 ? '−' : ''}${f.minutes(Math.abs(c.variance))}`}</td>
-      <td style={td}>{status}</td>
-      <td style={td}><button onClick={toggle} style={button}>{expanded ? t('timecards.hideSessions') : t('timecards.viewSessions')}</button></td>
+      <td style={td} data-label={t('col.fieldId')}>{c.worker?.field_id || '—'}</td>
+      <td style={td} data-label=""><strong>{f.workerName(c.worker)}</strong></td>
+      <td style={td} data-label={t('timecards.colFirstIn')}>{f.time(c.first)}</td>
+      <td style={td} data-label={t('timecards.colLastOut')}>{c.open ? t('common.open') : f.time(c.last)}</td>
+      <td style={td} data-label={t('timecards.colSessions')}>{c.sessions.length}</td>
+      <td style={td} data-label={t('timecards.colWorked')}>{f.minutes(c.worked)}</td>
+      <td style={td} data-label={t('timecards.colAllowed')}>{c.allowed == null ? '—' : f.minutes(c.allowed)}</td>
+      <td style={td} data-label={t('timecards.colVariance')}>{c.variance == null ? '—' : `${c.variance > 0 ? '+' : c.variance < 0 ? '−' : ''}${f.minutes(Math.abs(c.variance))}`}</td>
+      <td style={td} data-label={t('col.status')}>{status}</td>
+      <td style={td} data-label=""><button onClick={toggle} style={button}>{expanded ? t('timecards.hideSessions') : t('timecards.viewSessions')}</button></td>
     </tr>
-    {expanded && <tr><td colSpan={10} style={{ ...td, background: 'var(--fo-sunken)' }}>{c.sessions.map((s, i) => <div key={s.id} style={session}>
+    {expanded && <tr><td colSpan={10} data-label="" style={{ ...td, background: 'var(--fo-sunken)' }}>{c.sessions.map((s, i) => <div key={s.id} style={session}>
       <strong>#{i + 1}</strong>
       <span>{t('timecards.sessionIn', { time: f.time(s.check_in_at) })}</span>
       <span>{t('timecards.sessionOut', { time: s.check_out_at ? f.time(s.check_out_at) : t('common.open') })}</span>
@@ -183,7 +184,7 @@ function Timecard({ c, f, expanded, toggle, correct }) {
 
 const lab = { fontSize: 13, fontWeight: 800, color: 'var(--fo-muted)', letterSpacing: '.06em' }
 const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff' }
-const filter = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 190px 190px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
+const filter = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
 const metrics = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 12 }
 const card = { padding: 16, border: '1px solid var(--fo-line)', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
 const box = { border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff', overflow: 'hidden' }
@@ -192,7 +193,7 @@ const th = { padding: '11px 12px', textAlign: 'left', fontSize: 13, color: 'var(
 const td = { padding: '12px', borderTop: '1px solid var(--fo-line)', fontSize: 15 }
 const button = { padding: '8px 11px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff', fontWeight: 700, cursor: 'pointer' }
 const primary = { ...button, background: 'var(--fo-teal)', color: '#04312c', borderColor: 'var(--fo-teal)' }
-const session = { display: 'grid', gridTemplateColumns: '50px repeat(4,minmax(100px,1fr)) auto', gap: 10, alignItems: 'center', padding: 8, borderBottom: '1px solid var(--fo-line)' }
+const session = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(90px,1fr))', gap: 10, alignItems: 'center', padding: 8, borderBottom: '1px solid var(--fo-line)' }
 const msg = { padding: 28, textAlign: 'center', color: 'var(--fo-muted)' }
 const err = { padding: 12, border: '1px solid transparent', background: 'var(--fo-bad-wash)', color: 'var(--fo-bad)', borderRadius: 9 }
 const ok = { padding: 12, border: '1px solid transparent', background: 'var(--fo-ok-wash)', color: 'var(--fo-ok)', borderRadius: 9 }

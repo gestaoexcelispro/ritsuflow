@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '../../../../../../lib/supabase/client'
 import WorkforceFrame, { localDateKey, useWorkforceFormat } from '../WorkforceFrame'
+import { ui } from '../../../../ui'
 
 const supabase = createClient()
 const LONG_OPEN_SESSION_MINUTES = 720
@@ -180,19 +181,19 @@ export default function FieldOpProjectWorkforceExceptionsPage() {
         ? <div style={msg}>{t('exceptions.loading')}</div>
         : !filtered.length
           ? <div style={msg}>{t('exceptions.empty')}</div>
-          : <div style={{ overflowX: 'auto' }}><table style={table}>
+          : <div style={{ overflowX: 'auto' }}><table className={ui.phoneCards} style={table}>
             <thead><tr>{columns.map((x) => <th key={x} style={th}>{x}</th>)}</tr></thead>
             <tbody>{filtered.map((x) => <tr key={x.id}>
-              <td style={td}><strong style={{ color: x.severity === 'critical' ? 'var(--fo-bad)' : 'var(--fo-warn)' }}>{t(`severity.${x.severity}`)}</strong></td>
-              <td style={td}>{x.worker?.field_id || '—'}</td>
-              <td style={td}><strong>{f.workerName(x.worker)}</strong></td>
-              <td style={td}>{title(x)}</td>
-              <td style={td}>{f.time(x.session.check_in_at)}</td>
-              <td style={td}>{x.session.check_out_at ? f.time(x.session.check_out_at) : t('common.open')}</td>
-              <td style={td}>{value(x)}</td>
-              <td style={td}>{description(x)}</td>
-              <td style={td}>{x.persisted ? f.label('resolution', x.session.exception_resolution_status || 'open') : t('exceptions.operational')}</td>
-              <td style={td}>{x.persisted ? <button onClick={() => openReview(x)} style={button}>{t('exceptions.review')}</button> : t('exceptions.monitor')}</td>
+              <td style={td} data-label={t('exceptions.colSeverity')}><strong style={{ color: x.severity === 'critical' ? 'var(--fo-bad)' : 'var(--fo-warn)' }}>{t(`severity.${x.severity}`)}</strong></td>
+              <td style={td} data-label={t('col.fieldId')}>{x.worker?.field_id || '—'}</td>
+              <td style={td} data-label=""><strong>{f.workerName(x.worker)}</strong></td>
+              <td style={td} data-label={t('exceptions.colException')}>{title(x)}</td>
+              <td style={td} data-label={t('col.checkIn')}>{f.time(x.session.check_in_at)}</td>
+              <td style={td} data-label={t('col.checkOut')}>{x.session.check_out_at ? f.time(x.session.check_out_at) : t('common.open')}</td>
+              <td style={td} data-label={t('exceptions.colValue')}>{value(x)}</td>
+              <td style={td} data-label={t('exceptions.colDescription')}>{description(x)}</td>
+              <td style={td} data-label={t('exceptions.colResolution')}>{x.persisted ? f.label('resolution', x.session.exception_resolution_status || 'open') : t('exceptions.operational')}</td>
+              <td style={td} data-label="">{x.persisted ? <button onClick={() => openReview(x)} style={button}>{t('exceptions.review')}</button> : t('exceptions.monitor')}</td>
             </tr>)}</tbody>
           </table></div>}
     </section>
@@ -223,7 +224,7 @@ export default function FieldOpProjectWorkforceExceptionsPage() {
 
 const lab = { fontSize: 13, fontWeight: 800, color: 'var(--fo-muted)', letterSpacing: '.06em' }
 const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff' }
-const filters = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 180px 180px 180px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
+const filters = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
 const metrics = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }
 const card = { padding: 16, border: '1px solid var(--fo-line)', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
 const box = { border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff', overflow: 'hidden' }
