@@ -22,6 +22,8 @@
   "status.planning": "Planning",
   "status.active": "Active",
   "status.on_hold": "On hold",
+  "status.completed": "Completed",
+  "status.archived": "Archived",
   "kpi.ongoing": "Ongoing Projects",
   "kpi.ongoingDetail": "{active} active · {planning} planning · {onHold} on hold",
   "kpi.workers": "Workers On Site",
