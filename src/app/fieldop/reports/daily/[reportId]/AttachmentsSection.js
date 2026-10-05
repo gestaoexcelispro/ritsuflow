@@ -136,7 +136,7 @@ export default function AttachmentsSection({ report, supabase, t, language, lock
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>{t('tab.attachments')}</h3><p>{t('attachments.text')}</p></div><span className={styles.badge}>{t('attachments.count', { photos: photos.length, files: others.length })}</span></div>
 
-    {!locked && <div style={{ display: 'grid', gap: 12, padding: 18, borderBottom: '1px solid #e2e8ec', background: '#fbfcfd' }}>
+    {!locked && <div style={{ display: 'grid', gap: 12, padding: 18, borderBottom: '1px solid var(--fo-line-soft)', background: 'var(--fo-sunken)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12 }}>
         <label style={field}><b>{t('attachments.caption')}</b><input value={meta.title} onChange={(e) => setMeta({ ...meta, title: e.target.value })} placeholder={t('attachments.captionPlaceholder')} /></label>
         <label style={field}><b>{t('attachments.location')}</b><select value={meta.location_id} onChange={(e) => setMeta({ ...meta, location_id: e.target.value })}><option value="">{t('list.noLocation')}</option>{locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
@@ -147,7 +147,7 @@ export default function AttachmentsSection({ report, supabase, t, language, lock
         <input ref={fileInput} type="file" accept={ACCEPT} multiple hidden onChange={(e) => upload(e.target.files)} />
         <button type="button" className={styles.primaryButton} disabled={Boolean(progress)} onClick={() => cameraInput.current?.click()}>📷 {t('attachments.takePhoto')}</button>
         <button type="button" className={styles.secondaryButton} disabled={Boolean(progress)} onClick={() => fileInput.current?.click()}>{t('attachments.chooseFiles')}</button>
-        <small style={{ color: '#718594' }}>{progress || t('attachments.hint')}</small>
+        <small style={{ color: 'var(--fo-muted)' }}>{progress || t('attachments.hint')}</small>
       </div>
     </div>}
 
@@ -162,22 +162,22 @@ export default function AttachmentsSection({ report, supabase, t, language, lock
       : items.length === 0 ? <div className={styles.empty}>{t('attachments.empty')}</div>
         : <div style={{ display: 'grid', gap: 18, padding: '0 18px 18px' }}>
           {showPhotos && photos.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 12 }}>
-            {photos.map((p) => <figure key={p.id} style={{ margin: 0, border: '1px solid #d6e0e5', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            {photos.map((p) => <figure key={p.id} style={{ margin: 0, border: '1px solid var(--fo-line)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
               <a href={urls[p.storage_path]} target="_blank" rel="noreferrer" style={{ display: 'block', aspectRatio: '4 / 3', background: '#edf2f4' }}>
                 {urls[p.storage_path] && <img src={urls[p.storage_path]} alt={p.title || p.file_name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
               </a>
-              <figcaption style={{ padding: 10, display: 'grid', gap: 3, fontSize: 11 }}>
+              <figcaption style={{ padding: 10, display: 'grid', gap: 3, fontSize: 13 }}>
                 <strong>{p.title || p.file_name}</strong>
-                {caption(p) && <span style={{ color: '#667c89' }}>{caption(p)}</span>}
-                <span style={{ color: '#82939e' }}>{dateTime.format(new Date(p.captured_at || p.created_at))}</span>
+                {caption(p) && <span style={{ color: 'var(--fo-muted)' }}>{caption(p)}</span>}
+                <span style={{ color: 'var(--fo-faint)' }}>{dateTime.format(new Date(p.captured_at || p.created_at))}</span>
                 {!locked && <button type="button" className={styles.secondaryButton} style={{ minHeight: 28, marginTop: 4 }} disabled={busyId === p.id} onClick={() => remove(p)}>{t('list.delete')}</button>}
               </figcaption>
             </figure>)}
           </div>}
           {showFiles && others.length > 0 && <table className={styles.table}><tbody>{others.map((f) => <tr key={f.id}>
             <td style={{ width: 90 }}><span className={styles.badge}>{t(`attachments.kind.${f.attachment_type}`)}</span></td>
-            <td><a className={styles.reportLink} href={urls[f.storage_path]} target="_blank" rel="noreferrer">{f.title || f.file_name}</a>{caption(f) && <small style={{ display: 'block', color: '#667c89' }}>{caption(f)}</small>}</td>
-            <td style={{ color: '#667c89', whiteSpace: 'nowrap' }}>{size(f.file_size_bytes)} · {dateTime.format(new Date(f.created_at))}</td>
+            <td><a className={styles.reportLink} href={urls[f.storage_path]} target="_blank" rel="noreferrer">{f.title || f.file_name}</a>{caption(f) && <small style={{ display: 'block', color: 'var(--fo-muted)' }}>{caption(f)}</small>}</td>
+            <td style={{ color: 'var(--fo-muted)', whiteSpace: 'nowrap' }}>{size(f.file_size_bytes)} · {dateTime.format(new Date(f.created_at))}</td>
             <td style={{ textAlign: 'right' }}>{!locked && <button type="button" className={styles.secondaryButton} style={{ minHeight: 30 }} disabled={busyId === f.id} onClick={() => remove(f)}>{t('list.delete')}</button>}</td>
           </tr>)}</tbody></table>}
         </div>}

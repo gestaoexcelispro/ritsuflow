@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../../../../lib/supabase/client'
 import { useT } from '../../../../../lib/i18n/useT'
-import LanguageSelector from '../../../../../components/LanguageSelector'
+import { FieldOpShell, PageHeader, Panel, Notice, ui } from '../../../ui'
 import styles from '../daily-reports.module.css'
 
 const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -64,18 +63,12 @@ export default function NewFieldOpDailyReportPage() {
     router.push(`/fieldop/reports/daily/${created.id}`)
   }
 
-  return <main className={styles.page}>
-    <header className={styles.header}>
-      <Image className={styles.logo} src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority />
-      <div className={styles.headerTitle}><span className={styles.eyebrow}>{t('new.eyebrow')}</span><h1>{t('new.title')}</h1></div>
-      <div className={styles.headerActions}><LanguageSelector compact dark /><Link className={styles.headerButton} href="/fieldop/reports/daily">{t('new.back')}</Link></div>
-    </header>
-    <div className={styles.content}>
-      <section className={styles.hero}><div><h2>{t('new.heroTitle')}</h2><p>{t('new.heroText')}</p></div></section>
-      {error && <div className={styles.error}>{error}</div>}
-      <section className={styles.panel}>
-        <div className={styles.panelHead}><h3>{t('new.setup')}</h3><span>{t('status.draft')}</span></div>
-        <form className={styles.form} onSubmit={submit} style={{ padding: 18 }}>
+  return <FieldOpShell active="reports" projectId={projectId || undefined}>
+    <PageHeader back={{ href: '/fieldop/reports/daily', label: t('common.reports') }} title={t('new.title')} subtitle={t('new.heroText')} />
+    <div style={{ display: 'grid', gap: 14, maxWidth: 760 }}>
+      <Notice>{error}</Notice>
+      <Panel title={t('new.setup')}>
+        <form className={styles.form} onSubmit={submit}>
           <div className={styles.formGrid}>
             <label className={styles.field}><span>{t('new.project')}</span><select required value={projectId} onChange={(e) => setProjectId(e.target.value)}><option value="">{t('new.selectProject')}</option>{projects.map((p) => <option key={p.id} value={p.id}>{[p.code, p.name].filter(Boolean).join(' · ')}</option>)}</select></label>
             <label className={styles.field}><span>{t('new.date')}</span><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></label>
@@ -83,12 +76,13 @@ export default function NewFieldOpDailyReportPage() {
             <label className={styles.field}><span>{t('new.end')}</span><input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
           </div>
           <label className={styles.field}><span>{t('new.notes')}</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('new.notesPlaceholder')} /></label>
+          <p style={{ margin: 0, color: 'var(--fo-muted)', fontSize: 14 }}>{t('new.sameDayHint')}</p>
           <div className={styles.formActions}>
-            <Link className={styles.secondaryButton} href="/fieldop/reports/daily">{t('common.cancel')}</Link>
-            <button className={styles.primaryButton} type="submit" disabled={!projectId || !date || saving}>{saving ? t('new.creating') : t('new.submit')}</button>
+            <Link className={ui.btn} href="/fieldop/reports/daily">{t('common.cancel')}</Link>
+            <button className={ui.btnPrimary} type="submit" disabled={!projectId || !date || saving}>{saving ? t('new.creating') : t('new.submit')}</button>
           </div>
         </form>
-      </section>
+      </Panel>
     </div>
-  </main>
+  </FieldOpShell>
 }

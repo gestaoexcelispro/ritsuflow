@@ -93,11 +93,11 @@ export default function RecordListSection({
       {!locked && !open && <button type="button" className={styles.primaryButton} onClick={startAdd}>{t(addKey)}</button>}
     </div>
 
-    {totals.length > 0 && <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '12px 18px', borderBottom: '1px solid #e2e8ec' }}>
-      {totals.map((s) => <div key={s.label} style={{ padding: '8px 12px', borderRadius: 8, background: '#f3f7f9' }}><small style={{ display: 'block', color: '#718594', fontSize: 10, fontWeight: 800 }}>{s.label}</small><strong>{s.value}</strong></div>)}
+    {totals.length > 0 && <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '12px 18px', borderBottom: '1px solid var(--fo-line-soft)' }}>
+      {totals.map((s) => <div key={s.label} style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--fo-sunken)' }}><small style={{ display: 'block', color: 'var(--fo-muted)', fontSize: 13, fontWeight: 800 }}>{s.label}</small><strong>{s.value}</strong></div>)}
     </div>}
 
-    {open && !locked && <form onSubmit={save} style={{ display: 'grid', gap: 12, padding: 18, borderBottom: '1px solid #e2e8ec', background: '#fbfcfd' }}>
+    {open && !locked && <form onSubmit={save} style={{ display: 'grid', gap: 12, padding: 18, borderBottom: '1px solid var(--fo-line-soft)', background: 'var(--fo-sunken)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12 }}>
         {fields.filter((f) => !f.showIf || f.showIf(form)).map((f) => <label key={f.key} style={{ ...field, gridColumn: f.span ? '1 / -1' : undefined }}><b>{t(f.label)}{f.required ? ' *' : ''}</b>{input(f)}</label>)}
       </div>

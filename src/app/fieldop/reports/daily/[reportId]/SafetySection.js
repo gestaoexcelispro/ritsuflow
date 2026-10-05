@@ -77,7 +77,7 @@ export default function SafetySection({ report, supabase, t, locked }) {
 
   const field = { display: 'grid', gap: 6 }
   const check = { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }
-  const box = { border: '1px solid #d6e0e5', borderRadius: 10, padding: 14, display: 'grid', gap: 10, margin: 0 }
+  const box = { border: '1px solid var(--fo-line)', borderRadius: 10, padding: 14, display: 'grid', gap: 10, margin: 0 }
 
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>{t('tab.safety')}</h3><p>{t('safety.text')}</p></div><span className={styles.badge}>{t(`safety.status.${form.overall_status}`)}</span></div>
@@ -109,7 +109,7 @@ export default function SafetySection({ report, supabase, t, locked }) {
       <label style={field}><b>{t('safety.notes')}</b><textarea rows={3} value={form.general_notes} onChange={(e) => set('general_notes', e.target.value)} /></label>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px,320px) 1fr', gap: 12, alignItems: 'end' }}>
         <label style={field}><b>{t('safety.overall')}</b><select value={form.overall_status} onChange={(e) => set('overall_status', e.target.value)}>{STATUS.map((s) => <option key={s} value={s}>{t(`safety.status.${s}`)}</option>)}</select></label>
-        {suggested !== form.overall_status && <p style={{ margin: 0, color: '#986100', fontSize: 12 }}>
+        {suggested !== form.overall_status && <p style={{ margin: 0, color: 'var(--fo-warn)', fontSize: 13 }}>
           {t('safety.suggested', { status: t(`safety.status.${suggested}`) })} <button type="button" className={styles.secondaryButton} style={{ minHeight: 30, marginLeft: 8 }} onClick={() => set('overall_status', suggested)}>{t('safety.useSuggested')}</button>
         </p>}
       </div>

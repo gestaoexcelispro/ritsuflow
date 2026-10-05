@@ -75,7 +75,7 @@ export default function NotesSection({ report, supabase, t, language, locked }) 
 
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>{t('tab.notes')}</h3><p>{t('notes.text')}</p></div><span className={styles.badge}>{t('notes.count', { count: notes.length })}</span></div>
-    {!locked && <form onSubmit={add} style={{ display: 'grid', gap: 12, padding: 18, borderBottom: '1px solid #e2e8ec' }}>
+    {!locked && <form onSubmit={add} style={{ display: 'grid', gap: 12, padding: 18, borderBottom: '1px solid var(--fo-line-soft)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12 }}>
         <label style={field}><b>{t('notes.category')}</b><select value={form.category} onChange={(e) => set('category', e.target.value)}>{CATEGORIES.map((c) => <option key={c} value={c}>{t(`notes.cat.${c}`)}</option>)}</select></label>
         <label style={field}><b>{t('notes.title')}</b><input value={form.title} onChange={(e) => set('title', e.target.value)} placeholder={t('notes.titlePlaceholder')} /></label>
@@ -96,8 +96,8 @@ export default function NotesSection({ report, supabase, t, language, locked }) 
       : shown.length === 0 ? <div className={styles.empty}>{t('notes.empty')}</div>
         : <table className={styles.table}><tbody>{shown.map((n) => <tr key={n.id}>
           <td style={{ width: 120 }}><span className={styles.badge}>{t(`notes.cat.${n.category}`)}</span></td>
-          <td>{n.title && <strong style={{ display: 'block', marginBottom: 4 }}>{n.title}</strong>}<span style={{ whiteSpace: 'pre-wrap' }}>{n.content}</span>{n.location_name && <small style={{ display: 'block', marginTop: 4, color: '#667c89' }}>📍 {n.location_name}</small>}</td>
-          <td style={{ whiteSpace: 'nowrap', color: '#667c89' }}>{people.get(n.created_by) || '—'}<br /><small>{n.created_at ? dateTime.format(new Date(n.created_at)) : ''}</small></td>
+          <td>{n.title && <strong style={{ display: 'block', marginBottom: 4 }}>{n.title}</strong>}<span style={{ whiteSpace: 'pre-wrap' }}>{n.content}</span>{n.location_name && <small style={{ display: 'block', marginTop: 4, color: 'var(--fo-muted)' }}>📍 {n.location_name}</small>}</td>
+          <td style={{ whiteSpace: 'nowrap', color: 'var(--fo-muted)' }}>{people.get(n.created_by) || '—'}<br /><small>{n.created_at ? dateTime.format(new Date(n.created_at)) : ''}</small></td>
           <td style={{ width: 90, textAlign: 'right' }}>{!locked && <button type="button" className={styles.secondaryButton} style={{ minHeight: 30 }} disabled={busyId === n.id} onClick={() => remove(n)}>{t('notes.delete')}</button>}</td>
         </tr>)}</tbody></table>}
   </section>

@@ -1,13 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { createClient } from '../../../../../lib/supabase/client'
 import { useT } from '../../../../../lib/i18n/useT'
 import { useLanguage } from '../../../../../lib/i18n/LanguageProvider'
-import LanguageSelector from '../../../../../components/LanguageSelector'
+import { FieldOpShell, PageHeader, Badge, Empty, Segments, Icon, ui, reportTone } from '../../../ui'
 import GeneralSection from './GeneralSection'
 import ProductionSection from './ProductionSection'
 import WorkforceSection from './WorkforceSection'
@@ -21,22 +19,15 @@ import AttachmentsSection from './AttachmentsSection'
 import ApprovalSection from './ApprovalSection'
 import styles from '../daily-reports.module.css'
 
-// Each tab and the Daily Report Settings switch that controls it (null = always shown).
-const TABS = [
-  ['overview', null],
-  ['general', null],
-  ['weather', 'capture_weather'],
-  ['workforce', 'capture_workforce'],
-  ['production', 'capture_progress'],
-  ['materials', 'capture_materials'],
-  ['equipment', 'capture_equipment'],
-  ['safety', 'capture_occurrences'],
-  ['issues', 'capture_occurrences'],
-  ['notes', 'capture_general_notes'],
-  ['attachments', 'capture_photos'],
-  ['approval', null],
+// The report is filled in four steps. Each section names the Daily Report Settings switch
+// that can hide it (null = always shown).
+const GROUPS = [
+  ['day', [['general', null], ['weather', 'capture_weather'], ['workforce', 'capture_workforce']]],
+  ['work', [['production', 'capture_progress'], ['materials', 'capture_materials'], ['equipment', 'capture_equipment']]],
+  ['site', [['safety', 'capture_occurrences'], ['issues', 'capture_occurrences'], ['notes', 'capture_general_notes'], ['attachments', 'capture_photos']]],
+  ['approval', [['approval', null]]],
 ]
-const BUILT = ['overview', 'general', 'weather', 'workforce', 'production', 'materials', 'equipment', 'safety', 'issues', 'notes', 'attachments', 'approval']
+const EMPTY_SUMMARY = { workers: 0, minutes: 0, production: 0, weather: 0, materials: 0, equipment: 0, issues: 0, openIssues: 0, notes: 0, attachments: 0, safety: null }
 
 export default function FieldOpDailyReportWorkspace() {
   const { reportId } = useParams()
@@ -45,7 +36,7 @@ export default function FieldOpDailyReportWorkspace() {
   const { language } = useLanguage()
   const [report, setReport] = useState(null)
   const [settings, setSettings] = useState(null)
-  const [summary, setSummary] = useState({ workers: 0, minutes: 0, production: 0, weather: 0, materials: 0, equipment: 0, openIssues: 0, notes: 0, attachments: 0, safety: null })
+  const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState('overview')
   const [error, setError] = useState('')
@@ -57,12 +48,13 @@ export default function FieldOpDailyReportWorkspace() {
       if (extra) q = extra(q)
       return q
     }
-    const [sessions, production, weather, materials, equipment, issues, notes, attachments, safety] = await Promise.all([
+    const [sessions, production, weather, materials, equipment, issues, openIssues, notes, attachments, safety] = await Promise.all([
       supabase.from('field_attendance_sessions').select('worker_id,worked_minutes,check_in_at,check_out_at,status').eq('project_id', current.projects.id).eq('work_date', current.report_date).neq('status', 'cancelled'),
       count('daily_report_production'),
       count('daily_report_weather'),
       count('daily_report_materials'),
       count('daily_report_equipment'),
+      count('daily_report_issues'),
       count('daily_report_issues', (q) => q.in('status', ['open', 'in_progress'])),
       count('daily_report_notes'),
       count('daily_report_attachments'),
@@ -73,7 +65,7 @@ export default function FieldOpDailyReportWorkspace() {
     setSummary({
       workers: new Set(list.map((s) => s.worker_id)).size, minutes, production: production.count || 0,
       weather: weather.count || 0, materials: materials.count || 0, equipment: equipment.count || 0,
-      openIssues: issues.count || 0, notes: notes.count || 0, attachments: attachments.count || 0,
+      issues: issues.count || 0, openIssues: openIssues.count || 0, notes: notes.count || 0, attachments: attachments.count || 0,
       safety: safety.data?.overall_status || null,
     })
   }, [supabase])
@@ -92,73 +84,128 @@ export default function FieldOpDailyReportWorkspace() {
     if (reportId) load()
   }, [reportId, supabase, loadSummary])
 
-  // Refresh the overview counts whenever the user comes back to it.
-  useEffect(() => { if (active === 'overview' && report) loadSummary(report) }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Keep the checklist current: recount whenever the user moves to another section.
+  useEffect(() => { if (report) loadSummary(report) }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const visibleTabs = useMemo(() => TABS.filter(([, setting]) => !setting || !settings || settings[setting] !== false).map(([key]) => key), [settings])
-  const hiddenSomething = visibleTabs.length < TABS.length
+  const groups = useMemo(() => GROUPS
+    .map(([group, sections]) => [group, sections.filter(([, setting]) => !setting || !settings || settings[setting] !== false).map(([key]) => key)])
+    .filter(([, sections]) => sections.length), [settings])
 
-  if (loading) return <main className={styles.page}><div className={styles.empty}>{t('report.loading')}</div></main>
-  if (error || !report) return <main className={styles.page}><div className={styles.empty}><strong>{t('report.unavailable')}</strong><p>{error}</p><Link href="/fieldop/reports/daily">{t('report.backToList')}</Link></div></main>
+  if (loading) return <FieldOpShell active="reports"><Empty title={t('report.loading')} /></FieldOpShell>
+  if (error || !report) return <FieldOpShell active="reports"><Empty title={t('report.unavailable')} text={error} action={<a className={ui.btn} href="/fieldop/reports/daily">{t('report.backToList')}</a>} /></FieldOpShell>
 
   const locked = report.status === 'approved'
   const reportDate = new Intl.DateTimeFormat(language, { dateStyle: 'full' }).format(new Date(`${report.report_date}T12:00:00`))
   const number = `DR-${String(report.report_number || 0).padStart(4, '0')}`
   const sectionProps = { report, supabase, t, language, locked, reportDate }
-  const overviewCards = [
-    ['general', report.work_start_time ? `${report.work_start_time.slice(0, 5)} – ${report.work_end_time?.slice(0, 5) || '…'}` : t('overview.notFilled')],
-    ['weather', summary.weather ? t('overview.weather', { count: summary.weather }) : t('overview.notFilled')],
-    ['workforce', t('overview.workforce', { workers: summary.workers, hours: (summary.minutes / 60).toFixed(1) })],
-    ['production', t('overview.production', { count: summary.production })],
-    ['materials', t('overview.items', { count: summary.materials })],
-    ['equipment', t('overview.items', { count: summary.equipment })],
-    ['safety', summary.safety ? t(`safety.status.${summary.safety}`) : t('overview.notFilled')],
-    ['issues', t('overview.openIssues', { count: summary.openIssues })],
-    ['notes', t('overview.items', { count: summary.notes })],
-    ['attachments', t('overview.items', { count: summary.attachments })],
-    ['approval', t('overview.status', { status: t(`status.${report.status}`) })],
-  ]
   const refresh = (patch) => { const next = { ...report, ...(patch || {}) }; setReport(next); loadSummary(next) }
 
-  return <main className={styles.page}>
-    <header className={styles.header}>
-      <Image className={styles.logo} src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority />
-      <div className={styles.headerTitle}><span className={styles.eyebrow}>{t('report.eyebrow')}</span><h1>{number}</h1></div>
-      <div className={styles.headerActions}>
-        <LanguageSelector compact dark />
-        <Link className={styles.headerButton} href="/fieldop">{t('common.backToFieldOp')}</Link>
-        <Link className={styles.secondaryButton} href="/fieldop/reports/daily">{t('common.reports')}</Link>
-      </div>
-    </header>
-    <section className={styles.reportMeta}>
-      <strong>{[report.projects?.code, report.projects?.name].filter(Boolean).join(' · ')}</strong>
-      <span>{reportDate}</span>
-      <span>{report.projects?.client_name || ''}</span>
-      <span className={styles.badge}>{t(`status.${report.status}`)}</span>
-    </section>
-    <nav className={styles.tabs}>{visibleTabs.map((tab) => <button key={tab} type="button" onClick={() => setActive(tab)} className={`${styles.tab} ${active === tab ? styles.tabActive : ''}`}>{t(`tab.${tab}`)}</button>)}</nav>
-    <section className={styles.workspace}>
-      {locked && active !== 'approval' && <div className={styles.error} style={{ marginBottom: 12 }}>{t('report.locked')}</div>}
+  // What each section shows in the checklist: whether it has entries, and a short count.
+  const state = {
+    general: { done: Boolean(report.work_start_time || report.general_notes) },
+    weather: { done: summary.weather > 0, count: summary.weather || null },
+    workforce: { done: summary.workers > 0, count: summary.workers || null },
+    production: { done: summary.production > 0, count: summary.production || null },
+    materials: { done: summary.materials > 0, count: summary.materials || null },
+    equipment: { done: summary.equipment > 0, count: summary.equipment || null },
+    safety: { done: Boolean(summary.safety) },
+    issues: { done: summary.issues > 0, count: summary.openIssues ? t('rail.open', { count: summary.openIssues }) : null, warn: summary.openIssues > 0 },
+    notes: { done: summary.notes > 0, count: summary.notes || null },
+    attachments: { done: summary.attachments > 0, count: summary.attachments || null },
+    approval: { done: report.status === 'approved' },
+  }
+  const content = groups.flatMap(([, sections]) => sections).filter((key) => key !== 'approval')
+  const filled = content.filter((key) => state[key].done).length
+  const pct = content.length ? Math.round((filled / content.length) * 100) : 0
+  const activeGroup = groups.find(([, sections]) => sections.includes(active))?.[0] || null
 
-      {active === 'overview' && <>
-        <div className={styles.hero}><div><h2>{t('overview.title')}</h2><p>{t('overview.text', { date: reportDate })}</p></div></div>
-        <div className={styles.sectionGrid}>
-          {overviewCards.filter(([tab]) => visibleTabs.includes(tab)).map(([tab, text]) => <article key={tab} className={styles.sectionCard} onClick={() => setActive(tab)} style={{ cursor: 'pointer' }}><h3>{t(`tab.${tab}`)}</h3><p>{text}</p><small>{t('overview.open')}</small></article>)}
+  const overviewText = {
+    general: report.work_start_time ? `${report.work_start_time.slice(0, 5)} – ${report.work_end_time?.slice(0, 5) || '…'}` : t('overview.notFilled'),
+    weather: summary.weather ? t('overview.weather', { count: summary.weather }) : t('overview.notFilled'),
+    workforce: t('overview.workforce', { workers: summary.workers, hours: (summary.minutes / 60).toFixed(1) }),
+    production: t('overview.production', { count: summary.production }),
+    materials: t('overview.items', { count: summary.materials }),
+    equipment: t('overview.items', { count: summary.equipment }),
+    safety: summary.safety ? t(`safety.status.${summary.safety}`) : t('overview.notFilled'),
+    issues: t('overview.openIssues', { count: summary.openIssues }),
+    notes: t('overview.items', { count: summary.notes }),
+    attachments: t('overview.items', { count: summary.attachments }),
+    approval: t(`status.${report.status}`),
+  }
+
+  const renderStep = (id, linked) => {
+    const s = state[id]
+    return <button key={id} type="button" onClick={() => setActive(id)} aria-current={active === id ? 'step' : undefined}
+      className={[styles.step, active === id && styles.stepOn, linked && styles.stepLinked].filter(Boolean).join(' ')}>
+      <span className={[styles.mark, s.done && styles.markDone].filter(Boolean).join(' ')}>{s.done && <Icon name="check" size={12} strokeWidth={3} />}</span>
+      {t(`tab.${id}`)}
+      {s.count != null && <span className={[styles.count, s.warn && styles.countWarn].filter(Boolean).join(' ')}>{s.count}</span>}
+    </button>
+  }
+
+  return <FieldOpShell active="reports" projectId={report.projects?.id}>
+    <PageHeader
+      back={{ href: '/fieldop/reports/daily', label: t('common.reports') }}
+      title={`${number} · ${report.projects?.name || ''}`}
+      meta={<><span>{reportDate}</span><Badge tone={reportTone(report.status)}>{t(`status.${report.status}`)}</Badge></>}
+    />
+
+    <div className={styles.workspace}>
+      <nav className={styles.rail} aria-label={t('rail.label')}>
+        <div className={styles.railProgress}>
+          <strong>{t('rail.progress', { filled, total: content.length })}</strong>
+          <span>{t('rail.progressHint')}</span>
+          <div className={styles.bar}><i style={{ width: `${pct}%` }} /></div>
         </div>
-        {hiddenSomething && <p style={{ color: '#64748b', marginTop: 12 }}>{t('overview.hiddenTabs')}</p>}
-      </>}
-      {active === 'general' && <GeneralSection {...sectionProps} onSaved={(patch) => refresh(patch)} />}
-      {active === 'production' && <ProductionSection {...sectionProps} onSaved={() => refresh()} />}
-      {active === 'workforce' && <WorkforceSection {...sectionProps} />}
-      {active === 'weather' && <WeatherSection {...sectionProps} />}
-      {active === 'safety' && <SafetySection {...sectionProps} />}
-      {active === 'notes' && <NotesSection {...sectionProps} />}
-      {active === 'materials' && <MaterialsSection {...sectionProps} />}
-      {active === 'equipment' && <EquipmentSection {...sectionProps} />}
-      {active === 'issues' && <IssuesSection {...sectionProps} />}
-      {active === 'attachments' && <AttachmentsSection {...sectionProps} />}
-      {active === 'approval' && <ApprovalSection {...sectionProps} approvalRequired={settings?.require_approval === true} onChanged={(patch) => refresh(patch)} />}
-      {!BUILT.includes(active) && <section className={styles.panel}><div className={styles.panelHead}><h3>{t(`tab.${active}`)}</h3></div><div className={styles.empty}>{t('placeholder.text', { section: t(`tab.${active}`) })}</div></section>}
-    </section>
-  </main>
+        <button type="button" className={[styles.step, active === 'overview' && styles.stepOn].filter(Boolean).join(' ')} onClick={() => setActive('overview')}>
+          <span className={styles.mark} style={{ borderStyle: 'dashed' }} />{t('tab.overview')}
+        </button>
+        {groups.map(([group, sections]) => <div key={group} className={styles.group}>
+          <div className={styles.groupName}>{t(`group.${group}`)}</div>
+          {sections.map((id, i) => renderStep(id, i > 0 && state[sections[i - 1]].done && state[id].done))}
+        </div>)}
+      </nav>
+
+      <div style={{ minWidth: 0 }}>
+        <div className={styles.stepper}>
+          <div className={styles.railProgress} style={{ padding: 0, border: 0, margin: 0 }}>
+            <strong>{t('rail.progress', { filled, total: content.length })}</strong>
+            <div className={styles.bar}><i style={{ width: `${pct}%` }} /></div>
+          </div>
+          <div className={styles.stepperGroups}>
+            <Segments value={activeGroup || 'overview'} onChange={(g) => setActive(g === 'overview' ? 'overview' : groups.find(([name]) => name === g)[1][0])}
+              items={[{ value: 'overview', label: t('tab.overview') }, ...groups.map(([g, sections]) => ({ value: g, label: g === 'approval' ? t(`group.${g}`) : `${t(`group.${g}`)} ${sections.filter((s) => state[s].done).length}/${sections.length}` }))]} />
+          </div>
+          {activeGroup && groups.find(([g]) => g === activeGroup)[1].length > 1 && <div className={styles.stepperGroups}>
+            <Segments value={active} onChange={setActive} items={groups.find(([g]) => g === activeGroup)[1].map((id) => ({ value: id, label: `${state[id].done ? '✓ ' : ''}${t(`tab.${id}`)}` }))} />
+          </div>}
+        </div>
+
+        {locked && active !== 'approval' && <div className={styles.lockNote}>{t('report.locked')}</div>}
+
+        {active === 'overview' && <div style={{ display: 'grid', gap: 18 }}>
+          {groups.map(([group, sections]) => <section key={group}>
+            <h2 style={{ margin: '0 0 10px', fontSize: 17, fontWeight: 600 }}>{t(`group.${group}`)}</h2>
+            <div className={styles.sectionGrid}>
+              {sections.map((id) => <button type="button" key={id} className={styles.sectionCard} onClick={() => setActive(id)}>
+                <h3><span className={[styles.mark, state[id].done && styles.markDone].filter(Boolean).join(' ')}>{state[id].done && <Icon name="check" size={12} strokeWidth={3} />}</span>{t(`tab.${id}`)}</h3>
+                <p>{overviewText[id]}</p>
+              </button>)}
+            </div>
+          </section>)}
+        </div>}
+        {active === 'general' && <GeneralSection {...sectionProps} onSaved={(patch) => refresh(patch)} />}
+        {active === 'weather' && <WeatherSection {...sectionProps} />}
+        {active === 'workforce' && <WorkforceSection {...sectionProps} />}
+        {active === 'production' && <ProductionSection {...sectionProps} onSaved={() => refresh()} />}
+        {active === 'materials' && <MaterialsSection {...sectionProps} />}
+        {active === 'equipment' && <EquipmentSection {...sectionProps} />}
+        {active === 'safety' && <SafetySection {...sectionProps} />}
+        {active === 'issues' && <IssuesSection {...sectionProps} />}
+        {active === 'notes' && <NotesSection {...sectionProps} />}
+        {active === 'attachments' && <AttachmentsSection {...sectionProps} />}
+        {active === 'approval' && <ApprovalSection {...sectionProps} approvalRequired={settings?.require_approval === true} onChanged={(patch) => refresh(patch)} />}
+      </div>
+    </div>
+  </FieldOpShell>
 }

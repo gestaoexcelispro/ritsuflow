@@ -37,7 +37,7 @@ export default function MaterialsSection(props) {
   const { formatNumber } = useLanguage()
   const columns = [
     { key: 'movement_type', label: 'materials.movement', render: (r) => t(`materials.move.${r.movement_type}`) },
-    { key: 'material_name', label: 'materials.name', render: (r) => <><strong>{r.material_name}</strong>{r.material_code && <small style={{ display: 'block', color: '#82939e' }}>{r.material_code}</small>}</> },
+    { key: 'material_name', label: 'materials.name', render: (r) => <><strong>{r.material_name}</strong>{r.material_code && <small style={{ display: 'block', color: 'var(--fo-faint)' }}>{r.material_code}</small>}</> },
     { key: 'quantity', label: 'materials.quantity', render: (r) => `${formatNumber(Number(r.quantity))} ${r.unit || ''}` },
     { key: 'supplier_name', label: 'materials.supplier', render: (r) => [r.supplier_name, r.delivery_reference].filter(Boolean).join(' · ') || '—' },
     { key: 'delivery_time', label: 'materials.time', render: (r) => r.delivery_time?.slice(0, 5) || '—' },

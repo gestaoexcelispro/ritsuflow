@@ -1,12 +1,12 @@
 {
   "brand.tagline": "Execute. Capture. Measure.",
   "nav.section": "FIELD OPERATIONS",
-  "nav.portfolio": "Portfolio Overview",
+  "nav.portfolio": "Portfolio",
   "nav.projects": "Projects",
   "nav.workforce": "Workforce",
   "nav.operations": "Operations",
   "nav.occurrences": "Occurrences",
-  "nav.reports": "Reports",
+  "nav.reports": "Daily Reports",
   "nav.settings": "Settings",
   "nav.workspaces": "Workspaces",
   "nav.soon": "Soon",
@@ -60,5 +60,6 @@
   "activity.unknownWorker": "A worker",
   "callout.title": "Safer sites. Higher productivity. Stronger projects.",
   "callout.text": "Field reality connected to planning. That's RitsuFlow.",
-  "callout.button": "Create Daily Report"
+  "callout.button": "Create Daily Report",
+  "nav.openMenu": "Open menu"
 }

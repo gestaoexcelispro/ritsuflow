@@ -42,14 +42,14 @@ function toPayload(f, { location, original }) {
   }
 }
 
-const SEV_COLOR = { low: ['#eef2f4', '#607888'], medium: ['#fff3d6', '#986100'], high: ['#ffe6d5', '#b4500c'], critical: ['#fde2e2', '#a32020'] }
+const SEV_COLOR = { low: ['#eef2f4', '#607888'], medium: ['#fff3d6', 'var(--fo-warn)'], high: ['#ffe6d5', '#b4500c'], critical: ['#fde2e2', '#a32020'] }
 
 export default function IssuesSection(props) {
   const { t, language } = props
   const date = new Intl.DateTimeFormat(language, { dateStyle: 'medium' })
   const columns = [
-    { key: 'severity', label: 'issues.severity', render: (r) => { const [bg, fg] = SEV_COLOR[r.severity] || SEV_COLOR.low; return <span style={{ padding: '4px 8px', borderRadius: 999, background: bg, color: fg, fontWeight: 800, fontSize: 10 }}>{t(`issues.sev.${r.severity}`)}</span> } },
-    { key: 'title', label: 'issues.title', render: (r) => <><strong>{r.title}</strong><small style={{ display: 'block', color: '#82939e' }}>{[t(`issues.type.${r.issue_type}`), r.location_name].filter(Boolean).join(' · ')}</small></> },
+    { key: 'severity', label: 'issues.severity', render: (r) => { const [bg, fg] = SEV_COLOR[r.severity] || SEV_COLOR.low; return <span style={{ padding: '4px 8px', borderRadius: 999, background: bg, color: fg, fontWeight: 800, fontSize: 13 }}>{t(`issues.sev.${r.severity}`)}</span> } },
+    { key: 'title', label: 'issues.title', render: (r) => <><strong>{r.title}</strong><small style={{ display: 'block', color: 'var(--fo-faint)' }}>{[t(`issues.type.${r.issue_type}`), r.location_name].filter(Boolean).join(' · ')}</small></> },
     { key: 'production_impact', label: 'issues.impact', render: (r) => t(`issues.impactValue.${r.production_impact}`) },
     { key: 'responsible_party', label: 'issues.responsible', render: (r) => [r.responsible_party, r.due_date && date.format(new Date(`${r.due_date}T12:00:00`))].filter(Boolean).join(' · ') || '—' },
     { key: 'status', label: 'issues.statusLabel', render: (r) => t(`issues.status.${r.status}`) },

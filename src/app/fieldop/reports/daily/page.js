@@ -1,15 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { createClient } from '../../../../lib/supabase/client'
 import { useT } from '../../../../lib/i18n/useT'
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider'
-import LanguageSelector from '../../../../components/LanguageSelector'
-import styles from './daily-reports.module.css'
+import { FieldOpShell, PageHeader, Panel, Stats, Stat, Badge, Empty, Segments, Icon, ui, reportTone } from '../../ui'
 
 const localDateKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const FILTERS = ['all', 'draft', 'submitted', 'reviewed', 'approved']
 
 export default function FieldOpDailyReportsPage() {
   const supabase = useMemo(() => createClient(), [])
@@ -17,12 +16,14 @@ export default function FieldOpDailyReportsPage() {
   const { language } = useLanguage()
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+  const [projectId, setProjectId] = useState('all')
 
   useEffect(() => {
     let alive = true
     async function load() {
       setLoading(true)
-      const { data, error } = await supabase.from('daily_reports').select('id,report_number,report_date,status,created_at,projects(id,code,name)').order('report_date', { ascending: false }).limit(100)
+      const { data, error } = await supabase.from('daily_reports').select('id,report_number,report_date,status,created_at,projects(id,code,name)').order('report_date', { ascending: false }).limit(200)
       if (!alive) return
       if (error) { console.error('FieldOp Daily Reports:', error); setReports([]) } else setReports(data || [])
       setLoading(false)
@@ -31,52 +32,51 @@ export default function FieldOpDailyReportsPage() {
     return () => { alive = false }
   }, [supabase])
 
-  const dateFormat = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'medium' }), [language])
-  const dateTimeFormat = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'short', timeStyle: 'short' }), [language])
+  const dateFormat = useMemo(() => new Intl.DateTimeFormat(language, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), [language])
   const reportDate = (value) => (value ? dateFormat.format(new Date(`${value}T12:00:00`)) : '—')
 
   // "Today" is the local date, not UTC (after 21:00 in Brazil UTC is already tomorrow).
   const today = localDateKey()
-  const todayCount = reports.filter((r) => r.report_date === today).length
-  const drafts = reports.filter((r) => r.status === 'draft').length
-  const inReview = reports.filter((r) => ['submitted', 'reviewed'].includes(r.status)).length
-  const approved = reports.filter((r) => r.status === 'approved').length
+  const projects = useMemo(() => [...new Map(reports.filter((r) => r.projects).map((r) => [r.projects.id, r.projects])).values()], [reports])
+  const inProject = projectId === 'all' ? reports : reports.filter((r) => r.projects?.id === projectId)
+  const shown = filter === 'all' ? inProject : inProject.filter((r) => r.status === filter)
+  const count = (status) => inProject.filter((r) => r.status === status).length
+  const awaiting = count('submitted') + count('reviewed')
+  const newHref = projectId === 'all' ? '/fieldop/reports/daily/new' : `/fieldop/reports/daily/new?projectId=${projectId}`
 
-  return <main className={styles.page}>
-    <header className={styles.header}>
-      <Image className={styles.logo} src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority />
-      <div className={styles.headerTitle}><span className={styles.eyebrow}>{t('list.eyebrow')}</span><h1>{t('list.title')}</h1></div>
-      <div className={styles.headerActions}>
-        <LanguageSelector compact dark />
-        <Link className={styles.headerButton} href="/fieldop">{t('common.backToFieldOp')}</Link>
-        <Link className={styles.primaryButton} href="/fieldop/reports/daily/new">{t('list.newReport')}</Link>
+  return <FieldOpShell active="reports">
+    <PageHeader title={t('list.title')} subtitle={t('list.heroText')}
+      actions={<Link className={ui.btnPrimary} href={newHref}><Icon name="plus" size={18} />{t('list.newReport')}</Link>} />
+
+    <Stats>
+      <Stat label={t('list.cardToday')} value={inProject.filter((r) => r.report_date === today).length} hint={t('list.cardTodayHint')} />
+      <Stat label={t('list.cardDraft')} value={count('draft')} />
+      <Stat label={t('list.cardReview')} value={awaiting} tone={awaiting ? 'warn' : undefined} hint={awaiting ? t('list.cardReviewHint') : undefined} />
+      <Stat label={t('list.cardApproved')} value={count('approved')} tone="ok" />
+    </Stats>
+
+    <Panel body={false} title={t('list.history')} text={t('list.count', { count: shown.length })}
+      actions={projects.length > 1 && <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ minWidth: 220 }} aria-label={t('list.colProject')}>
+        <option value="all">{t('list.allProjects')}</option>
+        {projects.map((p) => <option key={p.id} value={p.id}>{[p.code, p.name].filter(Boolean).join(' · ')}</option>)}
+      </select>}>
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--fo-line-soft)', overflowX: 'auto' }}>
+        <Segments value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ value: f, label: f === 'all' ? t('list.filterAll') : t(`status.${f}`) }))} />
       </div>
-    </header>
-    <div className={styles.content}>
-      <section className={styles.hero}><div><h2>{t('list.title')}</h2><p>{t('list.heroText')}</p></div><Link className={styles.primaryButton} href="/fieldop/reports/daily/new">{t('list.create')}</Link></section>
-      <section className={styles.cards}>
-        <div className={styles.card}><span>{t('list.cardToday')}</span><strong>{todayCount}</strong></div>
-        <div className={styles.card}><span>{t('list.cardDraft')}</span><strong>{drafts}</strong></div>
-        <div className={styles.card}><span>{t('list.cardReview')}</span><strong>{inReview}</strong></div>
-        <div className={styles.card}><span>{t('list.cardApproved')}</span><strong>{approved}</strong></div>
-      </section>
-      <section className={styles.panel}>
-        <div className={styles.panelHead}><h3>{t('list.history')}</h3><span>{t('list.count', { count: reports.length })}</span></div>
-        {loading
-          ? <div className={styles.empty}>{t('list.loading')}</div>
-          : reports.length === 0
-            ? <div className={styles.empty}><strong>{t('list.emptyTitle')}</strong><p>{t('list.emptyText')}</p></div>
-            : <table className={styles.table}>
-              <thead><tr><th>{t('list.colReport')}</th><th>{t('list.colProject')}</th><th>{t('list.colDate')}</th><th>{t('list.colStatus')}</th><th>{t('list.colCreated')}</th></tr></thead>
-              <tbody>{reports.map((r) => <tr key={r.id}>
-                <td><Link className={styles.reportLink} href={`/fieldop/reports/daily/${r.id}`}>DR-{String(r.report_number || 0).padStart(4, '0')}</Link></td>
-                <td>{[r.projects?.code, r.projects?.name].filter(Boolean).join(' · ') || '—'}</td>
-                <td>{reportDate(r.report_date)}</td>
-                <td><span className={styles.badge}>{t(`status.${r.status || 'draft'}`)}</span></td>
-                <td>{r.created_at ? dateTimeFormat.format(new Date(r.created_at)) : '—'}</td>
-              </tr>)}</tbody>
-            </table>}
-      </section>
-    </div>
-  </main>
+      {loading
+        ? <Empty title={t('list.loading')} />
+        : shown.length === 0
+          ? <Empty title={reports.length ? t('list.emptyFiltered') : t('list.emptyTitle')} text={reports.length ? null : t('list.emptyText')}
+            action={!reports.length && <Link className={ui.btnPrimary} href={newHref}>{t('list.create')}</Link>} />
+          : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards}`}>
+            <thead><tr><th>{t('list.colReport')}</th><th>{t('list.colDate')}</th><th>{t('list.colProject')}</th><th>{t('list.colStatus')}</th></tr></thead>
+            <tbody>{shown.map((r) => <tr key={r.id}>
+              <td data-label=""><span><Link className={ui.rowLink} href={`/fieldop/reports/daily/${r.id}`}>DR-{String(r.report_number || 0).padStart(4, '0')}</Link>{r.report_date === today && <span className={ui.sub}>{t('list.todayTag')}</span>}</span></td>
+              <td data-label={t('list.colDate')}>{reportDate(r.report_date)}</td>
+              <td data-label={t('list.colProject')}><span>{r.projects?.name || '—'}{r.projects?.code && <span className={ui.sub}>{r.projects.code}</span>}</span></td>
+              <td data-label={t('list.colStatus')}><Badge tone={reportTone(r.status)}>{t(`status.${r.status || 'draft'}`)}</Badge></td>
+            </tr>)}</tbody>
+          </table></div>}
+    </Panel>
+  </FieldOpShell>
 }

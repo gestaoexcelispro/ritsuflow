@@ -1,12 +1,12 @@
 {
   "brand.tagline": "Executar. Registrar. Medir.",
   "nav.section": "OPERAÇÕES DE CAMPO",
-  "nav.portfolio": "Visão do portfólio",
+  "nav.portfolio": "Portfólio",
   "nav.projects": "Projetos",
   "nav.workforce": "Mão de obra",
   "nav.operations": "Operações",
   "nav.occurrences": "Ocorrências",
-  "nav.reports": "Relatórios",
+  "nav.reports": "Diários de obra",
   "nav.settings": "Configurações",
   "nav.workspaces": "Espaços de trabalho",
   "nav.soon": "Em breve",
@@ -60,5 +60,6 @@
   "activity.unknownWorker": "Um trabalhador",
   "callout.title": "Obras mais seguras. Mais produtividade. Projetos mais fortes.",
   "callout.text": "A realidade do campo conectada ao planejamento. Isso é RitsuFlow.",
-  "callout.button": "Criar diário de obra"
+  "callout.button": "Criar diário de obra",
+  "nav.openMenu": "Abrir menu"
 }

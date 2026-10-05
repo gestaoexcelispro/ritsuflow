@@ -39,7 +39,7 @@ export default function EquipmentSection(props) {
   const { formatNumber } = useLanguage()
   const h = (v) => (v === null || v === undefined ? '—' : `${formatNumber(Number(v))} h`)
   const columns = [
-    { key: 'equipment_name', label: 'equipment.name', render: (r) => <><strong>{r.quantity > 1 ? `${r.quantity}× ` : ''}{r.equipment_name}</strong>{(r.equipment_code || r.company_name) && <small style={{ display: 'block', color: '#82939e' }}>{[r.equipment_code, r.company_name].filter(Boolean).join(' · ')}</small>}</> },
+    { key: 'equipment_name', label: 'equipment.name', render: (r) => <><strong>{r.quantity > 1 ? `${r.quantity}× ` : ''}{r.equipment_name}</strong>{(r.equipment_code || r.company_name) && <small style={{ display: 'block', color: 'var(--fo-faint)' }}>{[r.equipment_code, r.company_name].filter(Boolean).join(' · ')}</small>}</> },
     { key: 'operating_status', label: 'equipment.statusLabel', render: (r) => t(`equipment.status.${r.operating_status}`) },
     { key: 'hours_used', label: 'equipment.hoursUsed', render: (r) => h(r.hours_used) },
     { key: 'idle_hours', label: 'equipment.idleHours', render: (r) => h(r.idle_hours) },

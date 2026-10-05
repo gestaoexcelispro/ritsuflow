@@ -110,7 +110,7 @@ export default function WeatherSection({ report, supabase, t, locked }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 14 }}>
         {PERIODS.map((period) => {
           const r = rows[period]
-          return <fieldset key={period} disabled={locked} style={{ border: '1px solid #d6e0e5', borderRadius: 10, padding: 14, display: 'grid', gap: 10, margin: 0 }}>
+          return <fieldset key={period} disabled={locked} style={{ border: '1px solid var(--fo-line)', borderRadius: 10, padding: 14, display: 'grid', gap: 10, margin: 0 }}>
             <legend style={{ fontWeight: 800, padding: '0 6px' }}>{t(`weather.period.${period}`)}{period === 'evening' ? ` · ${t('weather.optional')}` : ''}</legend>
             <label style={field}><b>{t('weather.condition')}</b>
               <select value={r.condition} onChange={(e) => set(period, 'condition', e.target.value)}><option value="">—</option>{CONDITIONS.map((c) => option('cond', c))}</select></label>

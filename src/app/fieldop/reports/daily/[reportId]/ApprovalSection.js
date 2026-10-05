@@ -69,14 +69,14 @@ export default function ApprovalSection({ report, supabase, t, language, approva
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>{t('tab.approval')}</h3><p>{t('approval.text')}</p></div><span className={styles.badge}>{t(`status.${report.status}`)}</span></div>
     <div style={{ display: 'grid', gap: 14, padding: 18 }}>
-      {!approvalRequired && <p style={{ margin: 0, color: '#64748b' }}>{t('approval.notRequired')}</p>}
-      {perms?.separate_approver_required && <p style={{ margin: 0, color: '#64748b' }}>{t('approval.separateRule')}</p>}
-      <div><small style={{ color: '#64748b' }}>{t('approval.current')}</small><div style={{ fontSize: 18, fontWeight: 800 }}>{t(`status.${report.status}`)}</div></div>
+      {!approvalRequired && <p style={{ margin: 0, color: 'var(--fo-muted)' }}>{t('approval.notRequired')}</p>}
+      {perms?.separate_approver_required && <p style={{ margin: 0, color: 'var(--fo-muted)' }}>{t('approval.separateRule')}</p>}
+      <div><small style={{ color: 'var(--fo-muted)' }}>{t('approval.current')}</small><div style={{ fontSize: 18, fontWeight: 800 }}>{t(`status.${report.status}`)}</div></div>
       {actions.length > 0 && <label style={{ display: 'grid', gap: 6 }}><b>{t('approval.comments')}</b><textarea rows={3} value={comments} onChange={(e) => setComments(e.target.value)} placeholder={t('approval.commentsPlaceholder')} /></label>}
       {error && <div className={styles.error}>{error}</div>}
       {message && <div className={styles.successMessage}>{message}</div>}
       {separationBlocks && perms?.approve && <div className={styles.error}>{t('approval.separateBlocked')}</div>}
-      {perms && possible.length > 0 && actions.length === 0 && !separationBlocks && <p style={{ margin: 0, color: '#64748b' }}>{t('approval.noActions')}</p>}
+      {perms && possible.length > 0 && actions.length === 0 && !separationBlocks && <p style={{ margin: 0, color: 'var(--fo-muted)' }}>{t('approval.noActions')}</p>}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {actions.map((action) => <button key={action} type="button" disabled={Boolean(busy)} className={PRIMARY.has(action) ? styles.primaryButton : styles.secondaryButton} onClick={() => run(action)}>{busy === action ? t('common.saving') : t(`approval.${action}`)}</button>)}
       </div>
