@@ -407,19 +407,7 @@ export const platformMapInventory = {
           "sourcePath": "src/app/fieldop/projects/[projectId]/FieldOpDailyReportSettings.js"
         }
       ],
-      "apis": [
-        {
-          "label": "daily-reports / pdf",
-          "href": "/api/daily-reports/[reportId]/pdf",
-          "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js",
-          "methods": [
-            "GET"
-          ],
-          "consumers": [],
-          "note": "Route exists; no caller found in the audited module files.",
-          "auth": "Signed-in user check in handler"
-        }
-      ]
+      "apis": []
     },
     "workforce-timekeeping": {
       "status": "mapped",
@@ -2805,7 +2793,15 @@ export const platformMapInventory = {
         "src/app/fieldop/reports/daily/new/page.js",
         "src/app/fieldop/reports/daily/[reportId]/page.js",
         "src/app/fieldop/projects/[projectId]/FieldOpDailyReportSettings.js",
-        "src/app/api/daily-reports/[reportId]/pdf/route.js"
+        "src/app/fieldop/reports/daily/[reportId]/WorkforceSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/InvoiceImport.js",
+        "src/app/fieldop/reports/daily/[reportId]/WeatherSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/EquipmentSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/NotesSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/SafetySection.js",
+        "src/app/fieldop/reports/daily/[reportId]/print/page.js",
+        "src/app/fieldop/reports/daily/[reportId]/ApprovalSection.js"
       ],
       "dataSources": [
         {
@@ -2838,11 +2834,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 33,
               "sourcePath": "src/app/fieldop/reports/daily/[reportId]/page.js"
-            },
-            {
-              "method": "select",
-              "line": 358,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
             }
           ]
         },
@@ -2856,11 +2847,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 15,
               "sourcePath": "src/app/fieldop/reports/daily/new/page.js"
-            },
-            {
-              "method": "select",
-              "line": 418,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
             }
           ]
         },
@@ -2897,11 +2883,6 @@ export const platformMapInventory = {
               "method": "insert",
               "line": 25,
               "sourcePath": "src/app/fieldop/reports/daily/[reportId]/page.js"
-            },
-            {
-              "method": "select",
-              "line": 464,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
             }
           ]
         },
@@ -2931,21 +2912,8 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 82,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "daily_report_workforce_roles",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 140,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 20,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/WorkforceSection.js"
             }
           ]
         },
@@ -2957,8 +2925,23 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 195,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 54,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "insert",
+              "line": 87,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "delete",
+              "line": 118,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "insert",
+              "line": 147,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/InvoiceImport.js"
             }
           ]
         },
@@ -2970,8 +2953,18 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 435,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 35,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/WeatherSection.js"
+            },
+            {
+              "method": "upsert",
+              "line": 97,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/WeatherSection.js"
+            },
+            {
+              "method": "delete",
+              "line": 102,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/WeatherSection.js"
             }
           ]
         },
@@ -2983,8 +2976,13 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 501,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 45,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/EquipmentSection.js"
+            },
+            {
+              "method": "insert",
+              "line": 49,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/EquipmentSection.js"
             }
           ]
         },
@@ -2995,9 +2993,9 @@ export const platformMapInventory = {
           "purpose": "Direct access from the audited source files.",
           "operations": [
             {
-              "method": "select",
-              "line": 532,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "method": "insert",
+              "line": 138,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/InvoiceImport.js"
             }
           ]
         },
@@ -3009,8 +3007,8 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 563,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 56,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
             }
           ]
         },
@@ -3022,8 +3020,23 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 581,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 28,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/NotesSection.js"
+            },
+            {
+              "method": "update",
+              "line": 63,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/NotesSection.js"
+            },
+            {
+              "method": "insert",
+              "line": 64,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/NotesSection.js"
+            },
+            {
+              "method": "delete",
+              "line": 73,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/NotesSection.js"
             }
           ]
         },
@@ -3035,8 +3048,23 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 610,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 36,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/SafetySection.js"
+            },
+            {
+              "method": "upsert",
+              "line": 75,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/SafetySection.js"
+            },
+            {
+              "method": "select",
+              "line": 79,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/page.js"
+            },
+            {
+              "method": "select",
+              "line": 39,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/print/page.js"
             }
           ]
         },
@@ -3048,8 +3076,13 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 641,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 34,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/ApprovalSection.js"
+            },
+            {
+              "method": "select",
+              "line": 43,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/print/page.js"
             }
           ]
         }
@@ -3059,13 +3092,27 @@ export const platformMapInventory = {
         {
           "name": "daily-report-attachments",
           "public": false,
-          "purpose": "Default bucket for report attachments. The handler uses each attachment's storage_bucket value when provided; those record-dependent targets are outside this snapshot.",
+          "purpose": "Bucket for report attachments and photos. Each attachment row records its storage_bucket; record-dependent targets other than this default are outside this snapshot.",
           "operations": [
             {
-              "method": "createSignedUrl",
-              "line": 256,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js",
-              "fallback": true
+              "method": "createSignedUrls",
+              "line": 64,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "upload",
+              "line": 85,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "remove",
+              "line": 102,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "remove",
+              "line": 117,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
             }
           ]
         }
@@ -3466,15 +3513,6 @@ export const platformMapInventory = {
       "detail": "The shared project scope page uses project_scopes and scope_activities; dashboard setup and planning still use project_services and project_work_packages. Alignment requires an implementation review.",
       "sourcePath": "src/app/projects/[projectId]/scope/page.js",
       "line": 25,
-      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
-    },
-    {
-      "id": "caller:src/app/api/daily-reports/[reportId]/pdf/route.js",
-      "moduleId": "daily-reports",
-      "title": "API caller not traced",
-      "detail": "/api/daily-reports/[reportId]/pdf exists, but no caller was found in the audited module files.",
-      "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js",
-      "line": 1,
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
     },
     {

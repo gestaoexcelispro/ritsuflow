@@ -23,32 +23,22 @@ const nextConfig = {
 
   async redirects() {
 
-    return [
-
-      {
-        source:
-          '/dashboard/projetos/lista',
-
-        destination:
-          '/dashboard/projects',
-
-        permanent:
-          false,
-      },
-
-
-      {
-        source:
-          '/dashboard/projetos/coleta',
-
-        destination:
-          '/dashboard/projects/setup?mode=new',
-
-        permanent:
-          false,
-      },
-
+    // Old PreCon-era URLs whose pages were replaced by Projects, FieldOp and Settings.
+    const moved = [
+      ['/dashboard/projetos/lista', '/projects'],
+      ['/dashboard/projetos/coleta', '/projects/new'],
+      ['/dashboard/projects', '/projects'],
+      ['/dashboard/projects/daily-reports', '/fieldop/reports/daily'],
+      ['/dashboard/projects/daily-reports/new', '/fieldop/reports/daily/new'],
+      ['/dashboard/projects/daily-reports/:reportId/:section*', '/fieldop/reports/daily/:reportId'],
+      ['/daily-report/:reportId', '/fieldop/reports/daily/:reportId'],
+      ['/dashboard/projects/operations', '/fieldop'],
+      ['/dashboard/field-management/:path*', '/workforce'],
+      ['/dashboard/administration/:path*', '/settings/users'],
+      ['/dashboard/takeoff', '/ritsuscope'],
     ]
+
+    return moved.map(([source, destination]) => ({ source, destination, permanent: false }))
 
   },
 

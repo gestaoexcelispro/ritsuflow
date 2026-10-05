@@ -997,7 +997,7 @@ export default function ProjectForm({
       }
 
       router.push(
-        '/dashboard/projects'
+        '/projects'
       )
 
       router.refresh()
@@ -2293,7 +2293,7 @@ export default function ProjectForm({
             }
           >
             <Link
-              href="/dashboard/projects"
+              href="/projects"
               className={
                 styles.secondaryButton
               }

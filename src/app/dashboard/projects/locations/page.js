@@ -2222,7 +2222,7 @@ export default function LocationBreakdownPage() {
           </div>
 
           <Link
-            href="/dashboard/projects"
+            href="/projects"
             className={styles.backLink}
           >
             ← Back to projects
@@ -2261,7 +2261,7 @@ export default function LocationBreakdownPage() {
               </p>
 
               <Link
-                href="/dashboard/projects"
+                href="/projects"
                 className={styles.primaryButton}
               >
                 Open projects

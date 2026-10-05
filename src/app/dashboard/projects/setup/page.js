@@ -517,7 +517,7 @@ export default async function ProjectSetupPage({
           </div>
 
           <Link
-            href="/dashboard/projects"
+            href="/projects"
             className={
               styles.backLink
             }
