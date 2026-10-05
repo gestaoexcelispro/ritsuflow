@@ -25,10 +25,12 @@ type Props = {
   /** Level groups hidden with the eye (this session only). */
   hiddenBranches?: Set<string>
   onToggleBranch?: (id: string) => void
+  /** Adds a "Floor" location to the Location Breakdown for every level without one. */
+  onSyncFloors?: () => void
 }
 
 /** Left sidebar: the building, roof to ground, with each level's sheets under it. */
-export default function LevelsPanel({ levels, sources, selectedSourceId, editingLevelId, onSelectSource, onEditLevel, onAddLevel, onGenerate, onAssign, onCopyLevel, renderItems, hiddenBranches, onToggleBranch }: Props) {
+export default function LevelsPanel({ levels, sources, selectedSourceId, editingLevelId, onSelectSource, onEditLevel, onAddLevel, onGenerate, onAssign, onCopyLevel, renderItems, hiddenBranches, onToggleBranch, onSyncFloors }: Props) {
   const t = useTakeoffT()
   const { formatNumber } = useLanguage()
   const [open, setOpen] = useState(true)
@@ -100,6 +102,13 @@ export default function LevelsPanel({ levels, sources, selectedSourceId, editing
         <button type="button" onClick={onGenerate} style={smallBtn(levels.length === 0)} title={t('level.generateHint')}>{t('level.generate')}</button>
         <button type="button" onClick={onAddLevel} style={smallBtn(false)} title={t('level.add')}><Icon name="plus" size={12} /></button>
       </div>
+      {open && onSyncFloors && levels.some(l => !l.location_id) && (
+        <div style={{ padding: '0 14px 8px' }}>
+          <button type="button" onClick={onSyncFloors} style={{ ...smallBtn(false), width: '100%', justifyContent: 'center', color: '#5b21b6', borderColor: '#d8c8f5', background: '#f7f3fe' }}>
+            {t('level.syncFloors', { count: levels.filter(l => !l.location_id).length })}
+          </button>
+        </div>
+      )}
       {open && (
         <div style={tree ? { padding: '0 10px 10px' } : { maxHeight: '34vh', overflow: 'auto', padding: '0 10px 10px' }}>
           {levels.length === 0 && <div style={{ fontSize: 10, color: '#6b8089', padding: '2px 4px 6px' }}>{t('level.empty')}</div>}

@@ -12,7 +12,7 @@ import { areaAt, paintOrder } from '@/lib/takeoff/pick'
 import { ICON_PATHS } from './icons'
 
 export type Suggestion = { id: string; pts: [Vec2, Vec2]; on: boolean }
-export type ZoneShape = { id: string; name: string; color: string; pts: Vec2[]; label: string; selected: boolean; suggested?: boolean; on?: boolean }
+export type ZoneShape = { id: string; name: string; color: string; pts: Vec2[]; label: string; selected: boolean; suggested?: boolean; on?: boolean; /** Block / Zone / Area: dashed outline, light fill, label at the top. */ macro?: boolean }
 
 /** Largest canvas side we render; beyond this the browser scales the bitmap. */
 const MAX_CANVAS_SIDE = 8192
@@ -280,6 +280,8 @@ export default function PdfSheet(props: Props) {
             for (const p of zpts) { cx += p[0]; cy += p[1] }
             cx /= zpts.length || 1
             cy /= zpts.length || 1
+            // Macro areas carry their name along the top edge, clear of the rooms inside them.
+            if (z.macro && zpts.length) cy = Math.min(...zpts.map(p => p[1])) + stroke(26)
             const pick = onSelectZone && !crosshair
               ? { onClick: (event: MouseEvent<SVGElement>) => { event.stopPropagation(); onSelectZone(z.id) }, style: { cursor: 'pointer' } }
               : { style: { pointerEvents: 'none' as const } }
@@ -288,7 +290,9 @@ export default function PdfSheet(props: Props) {
                 {z.suggested ? (
                   <polygon points={pts} fill={z.on ? '#16A34A' : '#C2410C'} fillOpacity={z.on ? 0.18 : 0.06} stroke={z.on ? '#16A34A' : '#C2410C'} strokeWidth={stroke(2)} strokeDasharray={`${stroke(8)} ${stroke(5)}`} {...pick} />
                 ) : (
-                  <polygon points={pts} fill={z.color} fillOpacity={z.selected ? 0.42 : 0.26} stroke={z.selected ? '#0b6b63' : z.color} strokeWidth={stroke(z.selected ? 2.5 : 1.2)} {...pick} />
+                  z.macro
+                    ? <polygon points={pts} fill={z.color} fillOpacity={z.selected ? 0.16 : 0.06} stroke={z.selected ? '#0b6b63' : z.color} strokeWidth={stroke(z.selected ? 3 : 2.2)} strokeDasharray={`${stroke(10)} ${stroke(6)}`} {...pick} />
+                    : <polygon points={pts} fill={z.color} fillOpacity={z.selected ? 0.42 : 0.26} stroke={z.selected ? '#0b6b63' : z.color} strokeWidth={stroke(z.selected ? 2.5 : 1.2)} {...pick} />
                 )}
                 <text x={cx} y={cy - stroke(3)} textAnchor="middle" fontSize={stroke(12)} fontWeight={700} fill="#173441" style={{ pointerEvents: 'none' }} fontFamily="system-ui, sans-serif">{z.name}</text>
                 <text x={cx} y={cy + stroke(12)} textAnchor="middle" fontSize={stroke(11)} fill="#294955" style={{ pointerEvents: 'none' }} fontFamily="system-ui, sans-serif">{z.label}</text>

@@ -36,10 +36,13 @@ import WallTypeCard from './WallTypeCard'
 import OpeningsEditor from './OpeningsEditor'
 import { useRecipeContext } from './useRecipeContext'
 import MaterialsCatalog from './MaterialsCatalog'
-import { ZONE_COLUMNS, scaleRatio, type ZoneRow } from '@/lib/takeoff/zones'
+import { ZONE_COLUMNS, scaleRatio, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
+import { createFloorsForLevels, createLocationsForZones, loadLocations, placeRootLocations } from '@/lib/takeoff/locationSync'
+import { importLegacyLocationMap, importableOutline, loadLegacyLocationMaps, type LegacyMap } from '@/lib/takeoff/importLocationMap'
 import type { ElementOpening, Vec2 } from '@/lib/takeoff/geometry'
 import ZoningSidebar from './ZoningSidebar'
 import ZoneProperties from './ZoneProperties'
+import { useRitsuScopeLicensed } from '../license'
 import ShareDialog, { type ShareSnapshot } from './ShareDialog'
 import { buildProjectPdf, type PrintSheet } from './printPdf'
 import { areaRole, type AreaRole } from '@/lib/takeoff/areaRole'
@@ -132,7 +135,19 @@ export default function TakeoffWorkspacePage() {
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'plan' | '3d'>('plan')
   /** Header mode: what the sidebars (or the whole page) show. */
-  const [section, setSection] = useState<'zoning' | 'takeoff' | 'estimating' | 'settings'>('takeoff')
+  /** Takeoff, estimating, 3D, reports, share links and IFC need the RitsuScope license; zoning is for everyone. */
+  const licensed = useRitsuScopeLicensed()
+  const [section, setSection] = useState<'zoning' | 'takeoff' | 'estimating' | 'settings'>(licensed ? 'takeoff' : 'zoning')
+  /** Kind given to the next zone drawn in Zoning. */
+  const [drawKind, setDrawKind] = useState<ZoneKind>('room')
+  /** Old Location Map pages not moved into RitsuScope yet. */
+  const [legacyMaps, setLegacyMaps] = useState<LegacyMap[]>([])
+  const [legacyBusy, setLegacyBusy] = useState(false)
+  useEffect(() => {
+    let alive = true
+    loadLegacyLocationMaps(createClient(), projectId).then(rows => { if (alive) setLegacyMaps(rows) }).catch(() => { if (alive) setLegacyMaps([]) })
+    return () => { alive = false }
+  }, [projectId])
   const [settingsTab, setSettingsTab] = useState<'project' | 'walltypes' | 'recipes' | 'materials'>('project')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [zones, setZones] = useState<ZoneRow[]>([])
@@ -428,6 +443,10 @@ export default function TakeoffWorkspacePage() {
       setError(t('workspace.upload.unsupported', { name: file.name }))
       return
     }
+    if (isIfc && !licensed) {
+      setError(t('license.ifc'))
+      return
+    }
     setBusy(true)
     if (isPdf) setStatus(t('workspace.uploading', { name: file.name }))
     try {
@@ -484,7 +503,8 @@ export default function TakeoffWorkspacePage() {
   })
   const isPdf = selectedSource?.kind === 'pdf_page'
   /** The drawing tool bar gets its own full-width row under the header on PDF sheets. */
-  const toolbarShown = (section === 'zoning' || section === 'takeoff') && isPdf && viewMode === 'plan'
+  const lockedSection = !licensed && (section === 'takeoff' || section === 'estimating')
+  const toolbarShown = !lockedSection && (section === 'zoning' || section === 'takeoff') && isPdf && viewMode === 'plan'
 
   if (loading || !project) {
     return (
@@ -576,6 +596,7 @@ export default function TakeoffWorkspacePage() {
       newLayerRequest={newLayerRequest}
       workMode={section === 'zoning' ? 'zoning' : 'takeoff'}
       zones={zones}
+      zoneKind={drawKind}
       selectedZoneId={selectedZoneId}
       onSelectZone={setSelectedZoneId}
       newZoneRequest={newZoneRequest}
@@ -921,6 +942,65 @@ export default function TakeoffWorkspacePage() {
     if (e) { setError(t('workspace.error', { message: e.message })); return }
     await load()
   }
+  /** Adds zones to the project's Location Breakdown (largest kinds first, each under its container). */
+  async function createZoneLocations(list: ZoneRow[]) {
+    setError('')
+    try {
+      const supabase = createClient()
+      const locations = await loadLocations(supabase, projectId)
+      const count = await createLocationsForZones(supabase, { projectId, targets: list, zones, levels, sources, locations })
+      setStatus(t('zone.createdMany', { count }))
+    } catch (e) {
+      setError(t('workspace.error', { message: e instanceof Error ? e.message : String(e) }))
+    }
+    await load()
+  }
+  /** Moves an old Location Map page into RitsuScope (sheet, scale, print area, outlines linked to the same locations). */
+  async function importLegacy(map: LegacyMap) {
+    setError('')
+    setLegacyBusy(true)
+    setStatus(t('legacy.importing'))
+    try {
+      const supabase = createClient()
+      const result = await importLegacyLocationMap(supabase, map, { projectId, sortOrder: (sources.length + 1) * 10, levels })
+      setLegacyMaps(await loadLegacyLocationMaps(supabase, projectId))
+      await load()
+      setSelectedSourceId(result.sourceId)
+      setSection('zoning')
+      const sheetName = map.fileName.replace(/\.pdf$/i, '')
+      setStatus(t('legacy.done', { sheet: sheetName, count: result.imported }) + (result.skipped.length ? ' ' + t('legacy.skipped', { names: result.skipped.join(', ') }) : ''))
+    } catch (e) {
+      setError(t('workspace.error', { message: e instanceof Error ? e.message : String(e) }))
+    } finally {
+      setLegacyBusy(false)
+    }
+  }
+  /** Moves linked locations sitting at the root under their floor or zone. */
+  async function organizeZoneLocations() {
+    setError('')
+    try {
+      const supabase = createClient()
+      const locations = await loadLocations(supabase, projectId)
+      const count = await placeRootLocations(supabase, { zones, levels, sources, locations })
+      setStatus(t('zone.organized', { count }))
+    } catch (e) {
+      setError(t('workspace.error', { message: e instanceof Error ? e.message : String(e) }))
+    }
+    await load()
+  }
+  /** A "Floor" location for every level that has none yet. */
+  async function syncFloors() {
+    setError('')
+    try {
+      const supabase = createClient()
+      const locations = await loadLocations(supabase, projectId)
+      const count = await createFloorsForLevels(supabase, { projectId, levels, locations })
+      setStatus(t('level.floorsCreated', { count }))
+    } catch (e) {
+      setError(t('workspace.error', { message: e instanceof Error ? e.message : String(e) }))
+    }
+    await load()
+  }
   async function deleteZone(z: ZoneRow) {
     if (!window.confirm(t('zone.confirmDeleteNamed', { name: z.name }))) return
     const { data, error: e } = await createClient().from('takeoff_zones').delete().eq('id', z.id).select('id')
@@ -1139,7 +1219,7 @@ export default function TakeoffWorkspacePage() {
   }
   const toggleBranch = (id: string) => setHiddenBranches(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const sheetMult = selectedSource ? sheetMultiplier(selectedSource, levels) : 1
-  const levelsPanel = (
+  const levelsPanelFor = (withItems: boolean) => (
     <LevelsPanel
       levels={levels}
       sources={sources.filter(s => s.kind === 'pdf_page')}
@@ -1151,11 +1231,13 @@ export default function TakeoffWorkspacePage() {
       onGenerate={() => setGenerateOpen(true)}
       onAssign={(sid, lid) => void assignSheetLevel(sid, lid)}
       onCopyLevel={openCopyForLevel}
-      renderItems={treeMode ? renderBranch : undefined}
+      renderItems={withItems && treeMode ? renderBranch : undefined}
       hiddenBranches={hiddenBranches}
       onToggleBranch={toggleBranch}
+      onSyncFloors={() => void syncFloors()}
     />
   )
+  const levelsPanel = levelsPanelFor(true)
   const takeoffLeft = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       {!treeMode && levelsPanel}
@@ -1237,6 +1319,16 @@ export default function TakeoffWorkspacePage() {
   )
 
   const zoningLeft = (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    {levelsPanelFor(false)}
+    {legacyMaps.map(m => (
+      <div key={m.mapId} style={{ margin: '10px 14px 0', padding: 10, border: '1px solid #d8c8f5', borderRadius: 8, background: '#f7f3fe', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <strong style={{ fontSize: 11, color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '.06em' }}>{t('legacy.title')}</strong>
+        <span style={{ fontSize: 11, color: '#3b2a63' }}>{t('legacy.found', { count: m.outlines.filter(importableOutline).length, file: m.fileName })}</span>
+        <button type="button" disabled={legacyBusy} onClick={() => void importLegacy(m)} style={{ alignSelf: 'flex-start', height: 28, padding: '0 10px', border: 0, borderRadius: 7, background: '#6d28d9', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{t('legacy.import')}</button>
+      </div>
+    ))}
+    <div style={{ flex: 1, minHeight: 0 }}>
     <ZoningSidebar
       zones={sheetZones}
       sheetName={selectedSource?.name || null}
@@ -1251,7 +1343,13 @@ export default function TakeoffWorkspacePage() {
       onDeleteMany={deleteZones}
       onSetVisibleMany={setZonesVisible}
       unavailable={zonesError ? t('zone.unavailable') : !isPdf ? t('zone.pdfOnly') : null}
+      drawKind={drawKind}
+      onDrawKind={setDrawKind}
+      onCreateLocations={createZoneLocations}
+      onOrganize={organizeZoneLocations}
     />
+    </div>
+    </div>
   )
 
   const zoningRight = selectedZone ? (
@@ -1261,6 +1359,9 @@ export default function TakeoffWorkspacePage() {
       ptPerM={ptPerM}
       items={sourceItems}
       projectId={projectId}
+      zones={zones}
+      levels={levels}
+      sources={sources}
       onSaved={async msg => { await load(); setStatus(msg) }}
       onDelete={() => void deleteZone(selectedZone)}
     />
@@ -1276,11 +1377,11 @@ export default function TakeoffWorkspacePage() {
   ) : section === 'settings' ? (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', gap: 6 }}>
-        {(['project', 'walltypes', 'recipes', 'materials'] as const).map(tab => (
+        {(licensed ? (['project', 'walltypes', 'recipes', 'materials'] as const) : (['project'] as const)).map(tab => (
           <button key={tab} type="button" style={chipBtn(settingsTab === tab)} onClick={() => setSettingsTab(tab)}>{t(settingsKey[tab])}</button>
         ))}
       </div>
-      {settingsTab === 'project' && <SettingsPanel projectId={projectId} onChanged={load} />}
+      {settingsTab === 'project' && <SettingsPanel projectId={projectId} onChanged={load} framingLocked={!licensed} />}
       {settingsTab === 'walltypes' && <WallTypesLibrary projectId={projectId} projectCountry={country} onChanged={load} />}
       {settingsTab === 'recipes' && <RecipesEditor onChanged={load} />}
       {settingsTab === 'materials' && <MaterialsCatalog projectCountry={country} onChanged={load} />}
@@ -1294,6 +1395,17 @@ export default function TakeoffWorkspacePage() {
           <span style={{ width: 14, display: 'inline-block' }}>{it.checked ? '✓' : ''}</span>{it.label}
         </button>
       ))}
+    </div>
+  )
+
+  const lockedPanel = (
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: 0, padding: 20 }}>
+      <div style={{ maxWidth: 480, background: '#fff', border: '1px solid #dfe7ea', borderRadius: 12, padding: 24, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+        <div style={{ fontSize: 30 }}>🔒</div>
+        <strong style={{ fontSize: 17, color: '#173441' }}>{t('license.lockedTitle', { feature: t(section === 'estimating' ? 'header.estimating' : 'header.takeoff') })}</strong>
+        <div style={{ fontSize: 12, color: '#536d78', lineHeight: 1.5 }}>{t('license.lockedBody')}</div>
+        <button type="button" style={ui.button} onClick={() => setSection('zoning')}>{t('license.toZoning')}</button>
+      </div>
     </div>
   )
 
@@ -1313,7 +1425,7 @@ export default function TakeoffWorkspacePage() {
             <Link key={m.key} href="/ritsuscope" style={modeBtn(false)}><Icon name={m.icon} size={17} />{t(m.label)}</Link>
           ) : (
             <button key={m.key} type="button" style={modeBtn(section === m.key)} onClick={() => setSection(m.key as typeof section)}>
-              <Icon name={m.icon} size={17} />{t(m.label)}
+              <Icon name={m.icon} size={17} />{t(m.label)}{!licensed && (m.key === 'takeoff' || m.key === 'estimating') ? <span title={t('license.locked')} style={{ fontSize: 11 }}>🔒</span> : null}
             </button>
           ))}
           <span style={vRule} />
@@ -1330,7 +1442,7 @@ export default function TakeoffWorkspacePage() {
             <button type="button" style={menuBtn(menu === 'view')} onClick={e => { e.stopPropagation(); setMenu(m => (m === 'view' ? null : 'view')) }}>{t('header.view')}<Icon name="chevron" size={13} /></button>
             {menu === 'view' && menuPanel([
               { label: t('view3d.tabPlan'), onClick: () => setViewMode('plan'), checked: viewMode === 'plan', disabled: !canvasMode },
-              { label: t('view3d.tab3d'), onClick: () => setViewMode('3d'), checked: viewMode === '3d', disabled: !canvasMode || !(ptPerM > 0) },
+              { label: licensed ? t('view3d.tab3d') : `🔒 ${t('view3d.tab3d')}`, onClick: () => setViewMode('3d'), checked: viewMode === '3d', disabled: !licensed || !canvasMode || !(ptPerM > 0) },
               { label: t('layout.leftPanel'), onClick: () => setLeftOpen(v => !v), checked: leftOpen, disabled: !canvasMode },
               { label: t('layout.rightPanel'), onClick: () => setRightOpen(v => !v), checked: rightOpen, disabled: !canvasMode },
               { label: t('menu.zoomIn'), onClick: () => run('zoomIn'), disabled: !isPdf },
@@ -1349,7 +1461,7 @@ export default function TakeoffWorkspacePage() {
             <div style={{ ...dropdown, right: 0, left: 'auto', width: 320, maxHeight: '60vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
               <label style={{ ...dropdownItem, color: '#0d7f77', fontWeight: 800, cursor: busy ? 'default' : 'pointer' }}>
                 <Icon name="upload" size={14} />{t('layout.upload')}
-                <input type="file" accept=".pdf,.ifc,application/pdf" onChange={e => { setMenu(null); void handleUpload(e) }} disabled={busy} hidden />
+                <input type="file" accept={licensed ? '.pdf,.ifc,application/pdf' : '.pdf,application/pdf'} onChange={e => { setMenu(null); void handleUpload(e) }} disabled={busy} hidden />
               </label>
               {sources.length === 0 && <div style={{ ...ui.small, padding: 10 }}>{t('workspace.sources.empty')}</div>}
               {sources.map(source => {
@@ -1379,7 +1491,7 @@ export default function TakeoffWorkspacePage() {
           </button>
           {menu === 'print' && (
             <div style={{ ...dropdown, right: 0, left: 'auto', width: 280 }} onClick={e => e.stopPropagation()}>
-              {(['locations', 'walls', 'floor', 'ceiling', 'slab', 'mep', 'struct', 'takeoff'] as PrintWhat[]).map(what => ({ what, empty: printEmpty(what) })).map(o => (
+              {(['locations', 'walls', 'floor', 'ceiling', 'slab', 'mep', 'struct', 'takeoff'] as PrintWhat[]).map(what => ({ what, locked: !licensed && what !== 'locations', empty: printEmpty(what) || (!licensed && what !== 'locations') })).map(o => (
                 <button
                   key={o.what}
                   type="button"
@@ -1388,13 +1500,13 @@ export default function TakeoffWorkspacePage() {
                   onClick={() => { setMenu(null); void printSheet(o.what) }}
                 >
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#173441' }}>{t(`print.menu.${o.what}` as TakeoffMessageKey)}</span>
-                  <span style={{ fontSize: 10, color: '#6b8089' }}>{o.empty ? t('print.menuEmpty') : t(`print.menu.${o.what}.hint` as TakeoffMessageKey)}</span>
+                  <span style={{ fontSize: 10, color: '#6b8089' }}>{o.locked ? `🔒 ${t('license.locked')}` : o.empty ? t('print.menuEmpty') : t(`print.menu.${o.what}.hint` as TakeoffMessageKey)}</span>
                 </button>
               ))}
             </div>
           )}
         </div>
-        <button type="button" style={{ ...menuBtn(false), border: '1px solid #d6e0e3', opacity: ptPerM > 0 ? 1 : 0.45 }} disabled={!(ptPerM > 0)} title={t('share.title')} onClick={e => { e.stopPropagation(); setShareOpen(true) }}>
+        <button type="button" style={{ ...menuBtn(false), border: '1px solid #d6e0e3', opacity: licensed && ptPerM > 0 ? 1 : 0.45 }} disabled={!licensed || !(ptPerM > 0)} title={licensed ? t('share.title') : t('license.locked')} onClick={e => { e.stopPropagation(); setShareOpen(true) }}>
           <Icon name="share" size={15} />{t('share.button')}
         </button>
         {country && <small style={codeChip} title={t('walltype.country')}>{COUNTRIES.find(c => c.code === country)?.name[language] || country}</small>}
@@ -1408,7 +1520,7 @@ export default function TakeoffWorkspacePage() {
       )}
 
       {/* MAIN */}
-      {canvasMode ? (
+      {lockedSection ? lockedPanel : canvasMode ? (
         <div style={{ display: 'grid', gridTemplateColumns: `${leftOpen ? '290px ' : ''}minmax(0,1fr)${rightOpen ? ' 340px' : ''}`, minHeight: 0 }}>
           {leftOpen && <aside style={sidePane}>{section === 'zoning' ? zoningLeft : takeoffLeft}</aside>}
           <main style={{ position: 'relative', minWidth: 0, minHeight: 0, padding: (isPdf && viewMode === 'plan') ? 0 : 10 }}>
@@ -1464,6 +1576,7 @@ export default function TakeoffWorkspacePage() {
           elements={elements}
           zones={zones}
           checkedItemIds={checkedIds}
+          zonesOnly={section === 'zoning' || !licensed}
           onClose={() => setCopyFromId(null)}
           onDone={async message => { await load(); setStatus(message) }}
         />

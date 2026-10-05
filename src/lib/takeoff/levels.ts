@@ -16,9 +16,11 @@ export type LevelRow = {
   /** Level this one repeats (typical floor), if any. */
   typical_of: string | null
   sort_order: number
+  /** "Floor" location this level created in the Location Breakdown, if any. */
+  location_id?: string | null
 }
 
-export const LEVEL_COLUMNS = 'id, project_id, name, elevation_m, height_m, slab_m, typical_of, sort_order'
+export const LEVEL_COLUMNS = 'id, project_id, name, elevation_m, height_m, slab_m, typical_of, sort_order, location_id'
 
 const num = (v: unknown): number | null => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v))
 
@@ -33,6 +35,7 @@ export function normalizeLevels(rows: Partial<LevelRow>[]): LevelRow[] {
     slab_m: num(r.slab_m),
     typical_of: r.typical_of ?? null,
     sort_order: num(r.sort_order) ?? 0,
+    location_id: r.location_id ?? null,
   }))
 }
 

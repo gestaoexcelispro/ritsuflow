@@ -74,5 +74,6 @@ export function copiedZones(zones: ZoneRow[], targetSourceId: string, map: (p: V
     location_id: null,
     is_visible: z.is_visible,
     sort_order: z.sort_order,
+    zone_kind: z.zone_kind,
   }))
 }
