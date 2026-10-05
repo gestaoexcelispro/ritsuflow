@@ -13,14 +13,14 @@ const WORKSPACES = [
   { key: 'projects', icon: '🏢', name: 'Projects', description: 'Core project environment for project setup, location structure, project records and organization-wide project access.', core: true },
   { key: 'precon', icon: '⚙️', name: 'PreCon', description: 'Planning environment for pre-planning, Master Plan, Lookahead, constraints, Weekly Planning and production readiness.' },
   { key: 'fieldop', icon: '👷', name: 'FieldOp', description: 'Field execution environment for Daily Reports, operational visibility, workforce and timekeeping.' },
-  { key: 'ritsucad', icon: '📐', name: 'RitsuCAD', description: 'Drawing and takeoff environment for PDF/CAD-style measurement, quantities and project visual analysis.' },
+  { key: 'ritsuscope', icon: '📏', name: 'RitsuScope', description: 'Quantity takeoff from PDF and IFC drawings: levels, walls, floors, ceilings, structure, MEP, 3D model and reports.' },
 ]
 
 function normalizedKey(value = '') {
   const key = String(value).toLowerCase().replaceAll('_', '').replaceAll('-', '').replaceAll(' ', '')
+  if (key.includes('ritsuscope') || key.includes('ritsucad') || key.includes('cad')) return 'ritsuscope'
   if (key.includes('precon')) return 'precon'
   if (key.includes('fieldop') || key.includes('field')) return 'fieldop'
-  if (key.includes('ritsucad') || key.includes('cad')) return 'ritsucad'
   if (key.includes('project')) return 'projects'
   return String(value).toLowerCase()
 }

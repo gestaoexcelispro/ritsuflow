@@ -13,14 +13,14 @@ const WORKSPACES = [
   { key: 'projects', icon: '🏢', name: 'Projects', text: 'Core project environment' },
   { key: 'precon', icon: '⚙️', name: 'PreCon', text: 'Planning and production readiness' },
   { key: 'fieldop', icon: '👷', name: 'FieldOp', text: 'Field execution and workforce' },
-  { key: 'ritsucad', icon: '📐', name: 'RitsuCAD', text: 'Drawing and takeoff environment' },
+  { key: 'ritsuscope', icon: '📏', name: 'RitsuScope', text: 'Quantity takeoff and 3D model' },
 ]
 
 function normalizedKey(value = '') {
   const key = String(value).toLowerCase().replaceAll('_', '').replaceAll('-', '').replaceAll(' ', '')
   if (key.includes('precon')) return 'precon'
   if (key.includes('fieldop') || key.includes('field')) return 'fieldop'
-  if (key.includes('ritsucad') || key.includes('cad')) return 'ritsucad'
+  if (key.includes('ritsuscope') || key.includes('ritsucad') || key.includes('cad')) return 'ritsuscope'
   if (key.includes('project')) return 'projects'
   return String(value).toLowerCase()
 }

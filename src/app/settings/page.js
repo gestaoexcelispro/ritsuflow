@@ -15,7 +15,7 @@ const groups=[
   {icon:'👥',title:'Users & Access',text:'Register users, status, roles and workspace access.',href:'/settings/users'},
   {icon:'🛡',title:'Roles & Permissions',text:'Control administrative and operational permissions.',href:'/settings/roles'}]},
  {title:'RitsuFlow Configuration',items:[
-  {icon:'🧩',title:'Workspace Access',text:'Projects, PreCon, FieldOp and RitsuCAD access.',href:'/settings/workspaces'},
+  {icon:'🧩',title:'Workspace Access',text:'Projects, PreCon, FieldOp and RitsuScope access.',href:'/settings/workspaces'},
   {icon:'🏗',title:'Project Standards',text:'Company-wide project conventions and defaults.',href:'/settings/project-standards'},
   {icon:'📚',title:'Company Standards Library',text:'Work packages, activities, crews and productivity assumptions.',href:'/settings/standards-library'},
   {icon:'📅',title:'Calendars & Holidays',text:'Working weeks, hours and regional holidays.',href:'/settings/calendars'}]},

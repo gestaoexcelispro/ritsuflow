@@ -40,8 +40,8 @@ const groups=[
   ['attendance_admin','Manage attendance exceptions',{admin:1,manager:1}],
   ['field_approve','Approve field records',{admin:1,manager:1}]
  ]},
- {name:'RitsuCAD & Reporting',items:[
-  ['ritsucad_edit','Create & edit RitsuCAD takeoffs',{admin:1,manager:1,member:1}],
+ {name:'RitsuScope & Reporting',items:[
+  ['ritsuscope_edit','Create & edit RitsuScope takeoffs',{admin:1,manager:1,member:1}],
   ['reports_view','View reports',{admin:1,manager:1,member:1,viewer:1}],
   ['reports_generate','Generate & export reports',{admin:1,manager:1,member:1,viewer:1}]
  ]}

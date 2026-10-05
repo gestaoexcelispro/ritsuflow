@@ -12,6 +12,7 @@ const supabase = createClient()
 const workspaces = [
   { key:'projects', eyebrow:'CREATE · ORGANIZE · MANAGE', name:'Projects', subtitle:'Project Portfolio', description:'Create and manage projects shared across the RitsuFlow production system.', features:['Project Information','Project Team','Locations','Module Access','Project Status'], visual:'/projects-icon.png', href:'/projects', action:'Enter Projects' },
   { key:'precon', eyebrow:'PLAN · PREPARE · CONTROL', name:'PreCon', subtitle:'Plan & Prepare', description:'Plan, sequence and make ready the work. Control constraints and prepare production flow.', features:['Pre-Planning','Master Plan','Lookahead Planning','Constraint Management','Weekly Planning','Planning Reports'], visual:'/precon-icon.png', href:'/dashboard', action:'Enter PreCon' },
+  { key:'ritsuscope', eyebrow:'MEASURE · QUANTIFY · MODEL', name:'RitsuScope', subtitle:'Takeoff & Quantities', description:'Turn PDF and IFC drawings into measured quantities, levels and a 3D model of the building.', features:['PDF & IFC Takeoff','Levels & Typical Floors','Walls, Floors & Ceilings','Structure & MEP','3D Model & Reports'], visual:'/ritsuscope-icon.svg', href:'/ritsuscope', action:'Enter RitsuScope' },
   { key:'fieldop', eyebrow:'EXECUTE · CAPTURE · MEASURE', name:'FieldOp', subtitle:'Execute & Measure', description:'Bring the plan to the field. Coordinate operations, capture production, and measure actual performance.', features:['Daily Reports','Workforce Management','Live Attendance','Timecards','Exceptions','Field Data'], visual:'/fieldop-icon.png', href:'/fieldop', action:'Enter FieldOp' },
 ]
 
@@ -50,6 +51,7 @@ export default function WorkspacesPage(){
   const router=useRouter()
   const [checking,setChecking]=useState(true)
   const [isPlatformOwner,setIsPlatformOwner]=useState(false)
+  const [hasRitsuScope,setHasRitsuScope]=useState(false)
 
   useEffect(()=>{
     let active=true
@@ -59,16 +61,21 @@ export default function WorkspacesPage(){
       const user=data?.user
       if(!user){router.replace('/login');return}
 
-      const {data:platformRole}=await supabase
-        .from('platform_user_roles')
-        .select('role,is_active')
-        .eq('user_id',user.id)
-        .eq('role','platform_owner')
-        .eq('is_active',true)
-        .maybeSingle()
+      const [{data:platformRole},{data:ritsuScopeAccess}]=await Promise.all([
+        supabase
+          .from('platform_user_roles')
+          .select('role,is_active')
+          .eq('user_id',user.id)
+          .eq('role','platform_owner')
+          .eq('is_active',true)
+          .maybeSingle(),
+        // RitsuScope is sold separately: show it only when the company's license includes it.
+        supabase.rpc('has_workspace_access',{p_workspace_key:'ritsuscope'})
+      ])
 
       if(!active)return
       setIsPlatformOwner(Boolean(platformRole))
+      setHasRitsuScope(ritsuScopeAccess===true||Boolean(platformRole))
       setChecking(false)
     }
     checkSession()
@@ -77,7 +84,8 @@ export default function WorkspacesPage(){
 
   if(checking)return <main className={styles.loading}>Loading RitsuFlow™...</main>
 
-  const visibleWorkspaces=isPlatformOwner?[...workspaces,adminWorkspace]:workspaces
+  const licensed=workspaces.filter(w=>w.key!=='ritsuscope'||hasRitsuScope)
+  const visibleWorkspaces=isPlatformOwner?[...licensed,adminWorkspace]:licensed
 
   return <main className={styles.page}>
     <div className={styles.glow}/>
@@ -89,7 +97,7 @@ export default function WorkspacesPage(){
       </div>
     </header>
     <section className={styles.hero}><div className={styles.kicker}>WELCOME TO RITSUFLOW</div><h1>Choose your workspace</h1></section>
-    <section className={`${styles.grid} ${isPlatformOwner ? styles.gridOwner : styles.gridStandard}`} aria-label="RitsuFlow workspaces">
+    <section className={`${styles.grid} ${isPlatformOwner ? styles.gridOwner : visibleWorkspaces.length===3 ? styles.gridThree : styles.gridStandard}`} aria-label="RitsuFlow workspaces">
       {visibleWorkspaces.map(workspace=><WorkspaceCard key={workspace.key} workspace={workspace}/>)}
     </section>
     <div aria-hidden="true"/>

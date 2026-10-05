@@ -7,7 +7,7 @@ import { createClient } from '../../lib/supabase/client'
 import styles from './platform-admin.module.css'
 
 const supabase=createClient()
-const WORKSPACES=[['projects','Projects'],['precon','PreCon'],['fieldop','FieldOp'],['ritsucad','RitsuCAD']]
+const WORKSPACES=[['projects','Projects'],['precon','PreCon'],['fieldop','FieldOp'],['ritsuscope','RitsuScope']]
 
 export default function PlatformAdminPage(){
  const router=useRouter()
@@ -28,7 +28,7 @@ export default function PlatformAdminPage(){
    if(error)throw error
    const w=data?.workspaces||{}
    setSelected(data)
-   setForm({commercial_status:data?.commercial_status||'active',active_project_limit:Number(data?.active_project_limit??1),contract_start:data?.contract_start||'',renewal_end_date:data?.renewal_end_date||'',commercial_reference:data?.commercial_reference||'',notes:data?.notes||'',projects:true,precon:Boolean(w.precon),fieldop:Boolean(w.fieldop),ritsucad:Boolean(w.ritsucad)})
+   setForm({commercial_status:data?.commercial_status||'active',active_project_limit:Number(data?.active_project_limit??1),contract_start:data?.contract_start||'',renewal_end_date:data?.renewal_end_date||'',commercial_reference:data?.commercial_reference||'',notes:data?.notes||'',projects:true,precon:Boolean(w.precon),fieldop:Boolean(w.fieldop),ritsuscope:Boolean(w.ritsuscope)})
   }catch(err){setError(err?.message||'Unable to load organization.')}
  }
  useEffect(()=>{let alive=true;(async()=>{try{const {data}=await supabase.auth.getUser();if(!data?.user){router.replace('/login');return}if(alive)await loadOrganizations()}catch(err){if(alive)setError(err?.message||'Platform Owner access required.')}finally{if(alive)setLoading(false)}})();return()=>{alive=false}},[router])
@@ -39,7 +39,7 @@ export default function PlatformAdminPage(){
  async function save(){
   try{
    setSaving(true);setError('');setSuccess('')
-   const {error}=await supabase.rpc('set_platform_commercial_entitlements',{p_organization_id:selected.organization_id,p_commercial_status:form.commercial_status,p_plan_name:'Commercial',p_active_project_limit:Number(form.active_project_limit),p_contract_start:form.contract_start||null,p_renewal_end_date:form.renewal_end_date||null,p_commercial_reference:form.commercial_reference||null,p_notes:form.notes||null,p_projects:true,p_precon:form.precon,p_fieldop:form.fieldop,p_ritsucad:form.ritsucad})
+   const {error}=await supabase.rpc('set_platform_commercial_entitlements',{p_organization_id:selected.organization_id,p_commercial_status:form.commercial_status,p_plan_name:'Commercial',p_active_project_limit:Number(form.active_project_limit),p_contract_start:form.contract_start||null,p_renewal_end_date:form.renewal_end_date||null,p_commercial_reference:form.commercial_reference||null,p_notes:form.notes||null,p_projects:true,p_precon:form.precon,p_fieldop:form.fieldop,p_ritsuscope:form.ritsuscope})
    if(error)throw error
    await loadOrganizations();await openOrganization(selected.organization_id);setSuccess('Organization license updated successfully.')
   }catch(err){setError(err?.message||'Unable to save organization license.')}finally{setSaving(false)}
