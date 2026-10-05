@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
-import type { AppLanguage, NumberFormat } from '@/lib/i18n/settings'
+import { LANGUAGE_OPTIONS, type AppLanguage, type NumberFormat } from '@/lib/i18n/settings'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import {
   DEFAULT_CORNER_STUDS,
@@ -190,8 +190,7 @@ export default function SettingsPanel({ projectId, onChanged, framingLocked = fa
             <label style={field}>
               {t('settings.language')}
               <select style={{ ...input, width: 200 }} value={language} onChange={e => setLanguage(e.target.value as AppLanguage)}>
-                <option value="pt-BR">Português (Brasil)</option>
-                <option value="en-US">English (US)</option>
+                {LANGUAGE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
             <label style={field}>

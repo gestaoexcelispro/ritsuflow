@@ -899,7 +899,7 @@ export default function PdfWorkspace(props: Props) {
         height_m: newLayer.kind === 'linear' && height > 0 ? height : null,
         thickness_m: newLayer.kind === 'linear' && thickness > 0 ? thickness : null,
         framing: newLayer.kind === 'linear'
-          ? applyFramingDefaults(defaultFraming({ thickness: thickness > 0 ? thickness : undefined }, language === 'en-US' ? importLabelsEnUS.framing : framingLabelsPtBR), framingDefaults)
+          ? applyFramingDefaults(defaultFraming({ thickness: thickness > 0 ? thickness : undefined }, language !== 'pt-BR' ? importLabelsEnUS.framing : framingLabelsPtBR), framingDefaults)
           : {},
         sort_order: (layers.length + 1) * 10,
       })

@@ -7,9 +7,11 @@ import takeoffEnUS from './messages/takeoff.en-US'
 import { translate } from './translate'
 import type { AppLanguage } from './settings'
 
+// RitsuScope is not translated to Spanish yet; Spanish users see it in English.
 const takeoffMessages: Record<AppLanguage, Record<TakeoffMessageKey, string>> = {
   'pt-BR': takeoffPtBR,
   'en-US': takeoffEnUS,
+  es: takeoffEnUS,
 }
 
 /** Translator for the Takeoff module: t('list.title'), t('workspace.uploading', { name }). */

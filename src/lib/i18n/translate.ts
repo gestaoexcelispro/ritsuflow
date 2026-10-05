@@ -22,9 +22,13 @@ export function translate(
   return interpolate(template, vars)
 }
 
-/** Number format is a separate setting; when not chosen it follows the language. */
+/**
+ * Number format is a separate setting; when not chosen it follows the language.
+ * Spanish uses the comma decimal (1.234,56), the same as Portuguese.
+ */
 export function resolveNumberFormat(language: AppLanguage, numberFormat: NumberFormat | null): NumberFormat {
-  return numberFormat ?? language
+  if (numberFormat) return numberFormat
+  return language === 'en-US' ? 'en-US' : 'pt-BR'
 }
 
 export function formatNumber(value: number, format: NumberFormat, maximumFractionDigits = 2): string {

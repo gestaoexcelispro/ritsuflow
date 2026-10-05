@@ -255,7 +255,7 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
                     <button type="button" style={{ ...linkBtn, alignSelf: 'flex-start' }} onClick={() => setShowVars(v => !v)}>{showVars ? '▾' : '▸'} {t('recipes.varsTitle')}</button>
                     {showVars && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2px 16px', padding: 8, border: '1px solid #e2ebf0', borderRadius: 8, background: '#f9fbfc' }}>
-                        {RECIPE_VARIABLES.map(v => <span key={v.name}><code style={{ fontWeight: 700 }}>{v.name}</code> — {language === 'en-US' ? v.en : v.pt}</span>)}
+                        {RECIPE_VARIABLES.map(v => <span key={v.name}><code style={{ fontWeight: 700 }}>{v.name}</code> — {language !== 'pt-BR' ? v.en : v.pt}</span>)}
                         <span style={{ gridColumn: '1 / -1', marginTop: 4 }}>{t('recipes.varsExamples')}</span>
                       </div>
                     )}

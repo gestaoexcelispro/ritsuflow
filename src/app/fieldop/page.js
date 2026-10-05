@@ -6,11 +6,14 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import styles from './fieldop.module.css'
+import LanguageSelector from '../../components/LanguageSelector'
+import { useT } from '../../lib/i18n/useT'
 
-const nav=[['⌂','Portfolio Overview','/fieldop'],['□','Projects','/fieldop/projects'],['♙','Workforce','#'],['⌖','Operations','#'],['△','Occurrences','#'],['▥','Reports','/fieldop/reports/daily'],['⚙','Settings','#']]
+const nav=[['⌂','nav.portfolio','/fieldop'],['□','nav.projects','/fieldop/projects'],['♙','nav.workforce','#'],['⌖','nav.operations','#'],['△','nav.occurrences','#'],['▥','nav.reports','/fieldop/reports/daily'],['⚙','nav.settings','#']]
 
 export default function FieldOpPage(){
  const router=useRouter()
+ const t=useT('fieldop')
  const [projects,setProjects]=useState([])
  const [loading,setLoading]=useState(true)
 
@@ -46,13 +49,13 @@ export default function FieldOpPage(){
 
  return <main className={styles.shell}>
   <aside className={styles.sidebar}>
-   <div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority/><div><b>FieldOp</b><span>Execute. Capture. Measure.</span></div></div>
-   <div className={styles.navTitle}>FIELD OPERATIONS</div>
-   <nav>{nav.map(([icon,label,href],i)=><Link key={label} className={i===0?styles.active:''} href={href}><i>{icon}</i>{label}</Link>)}</nav>
-   <Link href="/workspaces" className={styles.workspaceReturn}>← <span>Workspaces</span></Link>
+   <div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority/><div><b>FieldOp</b><span>{t('brand.tagline')}</span></div></div>
+   <div className={styles.navTitle}>{t('nav.section')}</div>
+   <nav>{nav.map(([icon,key,href],i)=><Link key={key} className={i===0?styles.active:''} href={href}><i>{icon}</i>{t(key)}</Link>)}</nav>
+   <Link href="/workspaces" className={styles.workspaceReturn}>← <span>{t('nav.workspaces')}</span></Link>
   </aside>
   <section className={styles.main}>
-   <header className={styles.topbar}><div className={styles.search}>⌕ <span>Search projects, locations, or people...</span><kbd>Ctrl K</kbd></div><div className={styles.user}><button>♧<em>3</em></button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div></header>
+   <header className={styles.topbar}><div className={styles.search}>⌕ <span>Search projects, locations, or people...</span><kbd>Ctrl K</kbd></div><div className={styles.user}><LanguageSelector compact/><button>♧<em>3</em></button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div></header>
    <div className={styles.content}>
     <section className={styles.kpis}>
      <div><i>▥</i><span>Ongoing Projects<strong>{ongoing.length}</strong><small>{onTrack} on track | {attention} attention</small></span></div>
