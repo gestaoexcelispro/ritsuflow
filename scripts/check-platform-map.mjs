@@ -23,7 +23,7 @@ check('Location QR has a traced API call', model.architectureEdges.some((edge) =
 check('The QR API has a verified write target', model.architectureEdges.some((edge) => edge.source === 'source:src/app/api/projects/[projectId]/locations/[locationId]/qr/route.js' && edge.target === 'db:public.locations' && edge.type === 'WRITES'))
 check('Navigation is recorded separately from data access', model.architectureEdges.some((edge) => edge.type === 'ROUTES TO' && edge.evidence.length))
 check('Storage is not represented as a table', model.getArchitectureNode('storage:project-documents')?.type === 'storage' && !model.getArchitectureNode('db:public.project-documents'))
-check('Project cover bucket constants are mapped', model.architectureEdges.some((edge) => edge.source === 'source:src/app/dashboard/planning/master-plan/page.js' && edge.target === 'storage:project-covers' && edge.type === 'READS'))
+check('Project document bucket writes are mapped', model.architectureEdges.some((edge) => edge.source === 'source:src/app/projects/[projectId]/ProjectDocuments.js' && edge.target === 'storage:project-documents' && edge.type === 'WRITES'))
 check('Attachment storage fallback is explicit', model.getArchitectureNode('storage:daily-report-attachments')?.purpose.includes('record-dependent'))
 const attendance = model.searchArchitecture('attendance', 'Database')
 check('Database search only returns database object types', attendance.length && attendance.every((node) => ['table', 'view', 'rpc', 'storage'].includes(node.type)))
