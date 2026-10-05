@@ -146,5 +146,8 @@
   "action.reviewed": "Revisado",
   "action.approved": "Aprobado",
   "action.returned": "Devuelto a borrador",
-  "action.reopened": "Reabierto"
+  "action.reopened": "Reabierto",
+  "approval.separateRule": "En este proyecto, quien aprueba debe ser una persona distinta de quien envió y de quien revisó.",
+  "approval.separateBlocked": "Usted envió o revisó este informe, así que otra persona debe aprobarlo.",
+  "approval.noActions": "Puede ver este informe, pero su rol no puede cambiar su estado en esta etapa."
 }

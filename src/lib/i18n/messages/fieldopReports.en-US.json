@@ -146,5 +146,8 @@
   "action.reviewed": "Reviewed",
   "action.approved": "Approved",
   "action.returned": "Returned to draft",
-  "action.reopened": "Reopened"
+  "action.reopened": "Reopened",
+  "approval.separateRule": "In this project, the person who approves must be different from the one who submitted and the one who reviewed.",
+  "approval.separateBlocked": "You submitted or reviewed this report, so another person must approve it.",
+  "approval.noActions": "You can view this report, but your role can't change its status at this stage."
 }

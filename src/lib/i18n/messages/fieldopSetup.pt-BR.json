@@ -207,5 +207,7 @@
   "settings.footer": "Estas configurações valem apenas para este projeto no FieldOp.",
   "settings.saveFirst": "Salvar configurações do diário de obra",
   "settings.saveChanges": "Salvar alterações",
-  "settings.saved": "Configurações do diário de obra salvas."
+  "settings.saved": "Configurações do diário de obra salvas.",
+  "settings.separateApprover": "Aprovador diferente",
+  "settings.separateApproverText": "Quem aprova deve ser uma pessoa diferente de quem enviou e de quem revisou."
 }

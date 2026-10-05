@@ -11,6 +11,8 @@ const ACTIONS = {
   approved: ['reopened'],
 }
 const PRIMARY = new Set(['submitted', 'reviewed', 'approved'])
+// Permission each action needs (same mapping as transition_daily_report_status).
+const NEEDS = { submitted: 'submit', reviewed: 'review', returned: 'review', approved: 'approve', reopened: 'reopen' }
 
 export default function ApprovalSection({ report, supabase, t, language, approvalRequired, onChanged }) {
   const [history, setHistory] = useState([])
@@ -19,6 +21,13 @@ export default function ApprovalSection({ report, supabase, t, language, approva
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [perms, setPerms] = useState(null)
+
+  const loadPerms = useCallback(async () => {
+    const { data, error: permError } = await supabase.rpc('fieldop_daily_report_permissions', { p_daily_report_id: report.id })
+    // If the check is unavailable, fall back to showing every action; the database still enforces permissions.
+    setPerms(permError || !data ? null : data)
+  }, [report.id, supabase])
 
   const loadHistory = useCallback(async () => {
     const { data } = await supabase.from('daily_report_approval_history').select('id,action,from_status,to_status,comments,performed_by,performed_at').eq('daily_report_id', report.id).order('performed_at', { ascending: false })
@@ -32,6 +41,7 @@ export default function ApprovalSection({ report, supabase, t, language, approva
   }, [report.id, supabase])
 
   useEffect(() => { loadHistory() }, [loadHistory])
+  useEffect(() => { loadPerms() }, [loadPerms, report.status])
 
   const dateTime = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'short', timeStyle: 'short' }), [language])
   const actionLabel = (action) => { const key = `action.${action}`; const text = t(key); return text === key ? action : text }
@@ -39,7 +49,7 @@ export default function ApprovalSection({ report, supabase, t, language, approva
   async function run(action) {
     setBusy(action); setMessage(''); setError('')
     const { data, error: rpcError } = await supabase.rpc('transition_daily_report_status', { p_daily_report_id: report.id, p_action: action, p_comments: comments.trim() || null })
-    if (rpcError) setError(t('common.error', { message: rpcError.message }))
+    if (rpcError) setError(rpcError.message?.includes('SEPARATE_APPROVER_REQUIRED') ? t('approval.separateBlocked') : t('common.error', { message: rpcError.message }))
     else {
       const status = (Array.isArray(data) ? data[0] : data)?.status || report.status
       setComments('')
@@ -50,16 +60,23 @@ export default function ApprovalSection({ report, supabase, t, language, approva
     setBusy('')
   }
 
-  const actions = ACTIONS[report.status] || []
+  const possible = ACTIONS[report.status] || []
+  const separationBlocks = Boolean(perms?.approve_blocked_by_separation) && possible.includes('approved')
+  const actions = perms
+    ? possible.filter((action) => perms[NEEDS[action]] && !(action === 'approved' && separationBlocks))
+    : possible
 
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>{t('tab.approval')}</h3><p>{t('approval.text')}</p></div><span className={styles.badge}>{t(`status.${report.status}`)}</span></div>
     <div style={{ display: 'grid', gap: 14, padding: 18 }}>
       {!approvalRequired && <p style={{ margin: 0, color: '#64748b' }}>{t('approval.notRequired')}</p>}
+      {perms?.separate_approver_required && <p style={{ margin: 0, color: '#64748b' }}>{t('approval.separateRule')}</p>}
       <div><small style={{ color: '#64748b' }}>{t('approval.current')}</small><div style={{ fontSize: 18, fontWeight: 800 }}>{t(`status.${report.status}`)}</div></div>
-      <label style={{ display: 'grid', gap: 6 }}><b>{t('approval.comments')}</b><textarea rows={3} value={comments} onChange={(e) => setComments(e.target.value)} placeholder={t('approval.commentsPlaceholder')} /></label>
+      {actions.length > 0 && <label style={{ display: 'grid', gap: 6 }}><b>{t('approval.comments')}</b><textarea rows={3} value={comments} onChange={(e) => setComments(e.target.value)} placeholder={t('approval.commentsPlaceholder')} /></label>}
       {error && <div className={styles.error}>{error}</div>}
       {message && <div className={styles.successMessage}>{message}</div>}
+      {separationBlocks && perms?.approve && <div className={styles.error}>{t('approval.separateBlocked')}</div>}
+      {perms && possible.length > 0 && actions.length === 0 && !separationBlocks && <p style={{ margin: 0, color: '#64748b' }}>{t('approval.noActions')}</p>}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {actions.map((action) => <button key={action} type="button" disabled={Boolean(busy)} className={PRIMARY.has(action) ? styles.primaryButton : styles.secondaryButton} onClick={() => run(action)}>{busy === action ? t('common.saving') : t(`approval.${action}`)}</button>)}
       </div>
