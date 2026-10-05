@@ -486,11 +486,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "insert",
-              "line": 1807
+              "line": 1693
             },
             {
               "method": "delete",
-              "line": 1282
+              "line": 1168
             }
           ]
         },
@@ -502,11 +502,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "insert",
-              "line": 1658
+              "line": 1544
             },
             {
               "method": "delete",
-              "line": 1310
+              "line": 1196
             }
           ]
         },
@@ -518,19 +518,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1842
-            }
-          ]
-        },
-        {
-          "name": "production_control_project_portfolio",
-          "schema": "public",
-          "kind": "view",
-          "purpose": "Project production progress summary",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1893
+              "line": 1728
             }
           ]
         },
@@ -542,7 +530,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1953
+              "line": 1781
             }
           ]
         },
@@ -554,7 +542,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1971
+              "line": 1799
             }
           ]
         },
@@ -566,36 +554,21 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1984
+              "line": 1812
             },
             {
               "method": "insert",
-              "line": 3105
+              "line": 2935
             },
             {
               "method": "update",
-              "line": 3147
+              "line": 2977
             }
           ]
         }
       ],
       "functions": [],
-      "storage": [
-        {
-          "name": "project-covers",
-          "method": "createSignedUrl",
-          "line": 1880,
-          "purpose": "Project cover images accessed through signed URLs.",
-          "public": false,
-          "operations": [
-            {
-              "method": "createSignedUrl",
-              "line": 1880,
-              "sourcePath": "src/app/dashboard/planning/master-plan/page.js"
-            }
-          ]
-        }
-      ],
+      "storage": [],
       "sourcePaths": [
         "src/app/dashboard/planning/master-plan/page.js"
       ]
