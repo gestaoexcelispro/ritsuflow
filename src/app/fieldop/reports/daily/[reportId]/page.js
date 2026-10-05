@@ -17,6 +17,7 @@ import NotesSection from './NotesSection'
 import MaterialsSection from './MaterialsSection'
 import EquipmentSection from './EquipmentSection'
 import IssuesSection from './IssuesSection'
+import AttachmentsSection from './AttachmentsSection'
 import ApprovalSection from './ApprovalSection'
 import styles from '../daily-reports.module.css'
 
@@ -35,7 +36,7 @@ const TABS = [
   ['attachments', 'capture_photos'],
   ['approval', null],
 ]
-const BUILT = ['overview', 'general', 'weather', 'workforce', 'production', 'materials', 'equipment', 'safety', 'issues', 'notes', 'approval']
+const BUILT = ['overview', 'general', 'weather', 'workforce', 'production', 'materials', 'equipment', 'safety', 'issues', 'notes', 'attachments', 'approval']
 
 export default function FieldOpDailyReportWorkspace() {
   const { reportId } = useParams()
@@ -44,20 +45,37 @@ export default function FieldOpDailyReportWorkspace() {
   const { language } = useLanguage()
   const [report, setReport] = useState(null)
   const [settings, setSettings] = useState(null)
-  const [summary, setSummary] = useState({ workers: 0, minutes: 0, production: 0 })
+  const [summary, setSummary] = useState({ workers: 0, minutes: 0, production: 0, weather: 0, materials: 0, equipment: 0, openIssues: 0, notes: 0, attachments: 0, safety: null })
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState('overview')
   const [error, setError] = useState('')
 
   const loadSummary = useCallback(async (current) => {
     if (!current) return
-    const [sessions, production] = await Promise.all([
+    const count = (table, extra) => {
+      let q = supabase.from(table).select('id', { count: 'exact', head: true }).eq('daily_report_id', current.id)
+      if (extra) q = extra(q)
+      return q
+    }
+    const [sessions, production, weather, materials, equipment, issues, notes, attachments, safety] = await Promise.all([
       supabase.from('field_attendance_sessions').select('worker_id,worked_minutes,check_in_at,check_out_at,status').eq('project_id', current.projects.id).eq('work_date', current.report_date).neq('status', 'cancelled'),
-      supabase.from('daily_report_production').select('id', { count: 'exact', head: true }).eq('daily_report_id', current.id),
+      count('daily_report_production'),
+      count('daily_report_weather'),
+      count('daily_report_materials'),
+      count('daily_report_equipment'),
+      count('daily_report_issues', (q) => q.in('status', ['open', 'in_progress'])),
+      count('daily_report_notes'),
+      count('daily_report_attachments'),
+      supabase.from('daily_report_safety').select('overall_status').eq('daily_report_id', current.id).maybeSingle(),
     ])
     const list = sessions.data || []
     const minutes = list.reduce((sum, s) => sum + (s.worked_minutes ?? Math.max(0, Math.floor((new Date(s.check_out_at || Date.now()) - new Date(s.check_in_at)) / 60000))), 0)
-    setSummary({ workers: new Set(list.map((s) => s.worker_id)).size, minutes, production: production.count || 0 })
+    setSummary({
+      workers: new Set(list.map((s) => s.worker_id)).size, minutes, production: production.count || 0,
+      weather: weather.count || 0, materials: materials.count || 0, equipment: equipment.count || 0,
+      openIssues: issues.count || 0, notes: notes.count || 0, attachments: attachments.count || 0,
+      safety: safety.data?.overall_status || null,
+    })
   }, [supabase])
 
   useEffect(() => {
@@ -74,6 +92,9 @@ export default function FieldOpDailyReportWorkspace() {
     if (reportId) load()
   }, [reportId, supabase, loadSummary])
 
+  // Refresh the overview counts whenever the user comes back to it.
+  useEffect(() => { if (active === 'overview' && report) loadSummary(report) }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const visibleTabs = useMemo(() => TABS.filter(([, setting]) => !setting || !settings || settings[setting] !== false).map(([key]) => key), [settings])
   const hiddenSomething = visibleTabs.length < TABS.length
 
@@ -84,6 +105,19 @@ export default function FieldOpDailyReportWorkspace() {
   const reportDate = new Intl.DateTimeFormat(language, { dateStyle: 'full' }).format(new Date(`${report.report_date}T12:00:00`))
   const number = `DR-${String(report.report_number || 0).padStart(4, '0')}`
   const sectionProps = { report, supabase, t, language, locked, reportDate }
+  const overviewCards = [
+    ['general', report.work_start_time ? `${report.work_start_time.slice(0, 5)} – ${report.work_end_time?.slice(0, 5) || '…'}` : t('overview.notFilled')],
+    ['weather', summary.weather ? t('overview.weather', { count: summary.weather }) : t('overview.notFilled')],
+    ['workforce', t('overview.workforce', { workers: summary.workers, hours: (summary.minutes / 60).toFixed(1) })],
+    ['production', t('overview.production', { count: summary.production })],
+    ['materials', t('overview.items', { count: summary.materials })],
+    ['equipment', t('overview.items', { count: summary.equipment })],
+    ['safety', summary.safety ? t(`safety.status.${summary.safety}`) : t('overview.notFilled')],
+    ['issues', t('overview.openIssues', { count: summary.openIssues })],
+    ['notes', t('overview.items', { count: summary.notes })],
+    ['attachments', t('overview.items', { count: summary.attachments })],
+    ['approval', t('overview.status', { status: t(`status.${report.status}`) })],
+  ]
   const refresh = (patch) => { const next = { ...report, ...(patch || {}) }; setReport(next); loadSummary(next) }
 
   return <main className={styles.page}>
@@ -109,9 +143,7 @@ export default function FieldOpDailyReportWorkspace() {
       {active === 'overview' && <>
         <div className={styles.hero}><div><h2>{t('overview.title')}</h2><p>{t('overview.text', { date: reportDate })}</p></div></div>
         <div className={styles.sectionGrid}>
-          {visibleTabs.includes('workforce') && <article className={styles.sectionCard} onClick={() => setActive('workforce')} style={{ cursor: 'pointer' }}><h3>{t('tab.workforce')}</h3><p>{t('overview.workforce', { workers: summary.workers, hours: (summary.minutes / 60).toFixed(1) })}</p><small>{t('overview.open')}</small></article>}
-          {visibleTabs.includes('production') && <article className={styles.sectionCard} onClick={() => setActive('production')} style={{ cursor: 'pointer' }}><h3>{t('tab.production')}</h3><p>{t('overview.production', { count: summary.production })}</p><small>{t('overview.open')}</small></article>}
-          <article className={styles.sectionCard} onClick={() => setActive('approval')} style={{ cursor: 'pointer' }}><h3>{t('tab.approval')}</h3><p>{t('overview.status', { status: t(`status.${report.status}`) })}</p><small>{t('overview.open')}</small></article>
+          {overviewCards.filter(([tab]) => visibleTabs.includes(tab)).map(([tab, text]) => <article key={tab} className={styles.sectionCard} onClick={() => setActive(tab)} style={{ cursor: 'pointer' }}><h3>{t(`tab.${tab}`)}</h3><p>{text}</p><small>{t('overview.open')}</small></article>)}
         </div>
         {hiddenSomething && <p style={{ color: '#64748b', marginTop: 12 }}>{t('overview.hiddenTabs')}</p>}
       </>}
@@ -124,6 +156,7 @@ export default function FieldOpDailyReportWorkspace() {
       {active === 'materials' && <MaterialsSection {...sectionProps} />}
       {active === 'equipment' && <EquipmentSection {...sectionProps} />}
       {active === 'issues' && <IssuesSection {...sectionProps} />}
+      {active === 'attachments' && <AttachmentsSection {...sectionProps} />}
       {active === 'approval' && <ApprovalSection {...sectionProps} approvalRequired={settings?.require_approval === true} onChanged={(patch) => refresh(patch)} />}
       {!BUILT.includes(active) && <section className={styles.panel}><div className={styles.panelHead}><h3>{t(`tab.${active}`)}</h3></div><div className={styles.empty}>{t('placeholder.text', { section: t(`tab.${active}`) })}</div></section>}
     </section>
