@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Script from 'next/script'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -9,11 +10,29 @@ import styles from './login.module.css'
 
 const supabase = createClient()
 const OAUTH_CALLBACK_URL = 'https://ritsuflow.com/auth/callback'
+// Google OAuth Web Client ID (public value). When set, sign-in uses Google's own
+// button on ritsuflow.com, so Google's prompt shows RitsuFlow instead of the
+// Supabase project domain. When unset, the old redirect flow is used.
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
 
 function safeNextPath(value) {
   if (!value || typeof value !== 'string') return '/workspaces'
   if (!value.startsWith('/') || value.startsWith('//')) return '/workspaces'
   return value
+}
+
+function currentNextPath() {
+  return typeof window !== 'undefined'
+    ? safeNextPath(new URLSearchParams(window.location.search).get('next'))
+    : '/workspaces'
+}
+
+// Nonce pair: Google gets the SHA-256 hash, Supabase gets the raw value.
+async function generateNonce() {
+  const raw = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
+  const hashed = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+  return { raw, hashed }
 }
 
 export default function LoginPage() {
@@ -24,14 +43,57 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
+  const googleButtonRef = useRef(null)
+  const [gisReady, setGisReady] = useState(false)
+  const [gisRendered, setGisRendered] = useState(false)
 
+  const initGoogleButton = useCallback(async () => {
+    if (!GOOGLE_CLIENT_ID || !googleButtonRef.current || !window.google?.accounts?.id) return
+    const { raw, hashed } = await generateNonce()
+
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      nonce: hashed,
+      ux_mode: 'popup',
+      use_fedcm_for_prompt: true,
+      callback: async ({ credential }) => {
+        setGoogleLoading(true)
+        setErrorMessage('')
+        const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential, nonce: raw })
+        if (error) {
+          setErrorMessage('Google sign-in failed. Please try again.')
+          setGoogleLoading(false)
+          initGoogleButton() // fresh nonce for the next attempt
+          return
+        }
+        router.replace(currentNextPath())
+        router.refresh()
+      },
+    })
+
+    googleButtonRef.current.innerHTML = ''
+    window.google.accounts.id.renderButton(googleButtonRef.current, {
+      type: 'standard',
+      theme: 'outline',
+      size: 'large',
+      shape: 'rectangular',
+      text: 'continue_with',
+      logo_alignment: 'center',
+      width: Math.min(googleButtonRef.current.offsetWidth || 400, 400),
+    })
+    setGisRendered(true)
+  }, [router])
+
+  useEffect(() => {
+    if (gisReady) initGoogleButton()
+  }, [gisReady, initGoogleButton])
+
+  // Fallback: Supabase redirect flow (shows the supabase.co domain on Google's screen).
   async function handleGoogleLogin() {
     setGoogleLoading(true)
     setErrorMessage('')
 
-    const nextPath = typeof window !== 'undefined'
-      ? safeNextPath(new URLSearchParams(window.location.search).get('next'))
-      : '/workspaces'
+    const nextPath = currentNextPath()
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -99,10 +161,19 @@ export default function LoginPage() {
 
             {errorMessage && <div role="alert" className={styles.error}>{errorMessage}</div>}
 
+            {GOOGLE_CLIENT_ID && (
+              <>
+                <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onReady={() => setGisReady(true)} />
+                <div ref={googleButtonRef} aria-busy={!gisRendered} style={{ display: gisRendered ? 'flex' : 'none', justifyContent: 'center', width: '100%', minHeight: 44, opacity: googleLoading ? .62 : 1, pointerEvents: googleLoading ? 'none' : 'auto' }} />
+              </>
+            )}
+
+            {!gisRendered && (
             <button type="button" onClick={handleGoogleLogin} disabled={googleLoading || loading} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, width:'100%', minHeight:50, padding:'0 16px', color:'#172033', border:'1px solid rgba(255,255,255,.72)', borderRadius:10, background:'#fff', cursor:(googleLoading || loading) ? 'not-allowed' : 'pointer', fontSize:'.92rem', fontWeight:700, opacity:(googleLoading || loading) ? .62 : 1 }}>
               <span aria-hidden="true" style={{ color:'#4285f4', fontSize:'1rem', fontWeight:900 }}>G</span>
               <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
             </button>
+            )}
 
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', margin:'18px 0', color:'rgba(182,195,209,.72)', fontSize:'.72rem', textTransform:'uppercase', letterSpacing:'.04em' }}>or continue with email</div>
 
