@@ -21,17 +21,6 @@ function NavIcon({ type, size = 19 }) {
   }
 
   switch (type) {
-    case 'preplanning':
-      return (
-        <svg {...commonProps}>
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <path d="M7 8h10" />
-          <path d="M7 12h4" />
-          <path d="M7 16h4" />
-          <path d="M15 12v4" />
-          <path d="M13 14h4" />
-        </svg>
-      )
     case 'masterplan':
       return (
         <svg {...commonProps}>
@@ -86,7 +75,6 @@ function NavIcon({ type, size = 19 }) {
 }
 
 const planningItems = [
-  { label: 'Pre-Planning', href: '/planning/pre-planning', icon: 'preplanning' },
   { label: 'Master Plan', href: '/dashboard/planning/master-plan', icon: 'masterplan' },
   { label: 'Lookahead Planning', href: '/dashboard/planning/lookahead', icon: 'lookahead' },
   { label: 'Constraint Management', href: '/dashboard/projects/constraints', icon: 'constraint' },

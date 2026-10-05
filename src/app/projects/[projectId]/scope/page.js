@@ -178,7 +178,7 @@ export default function ScopeRegisterPage() {
   const draftTotal = draft ? (draft.item_type === 'item' ? num(draft.quantity) * num(draft.unit_price) : rollup(draft.id)) : 0
   const selected = byId[selectedId]
 
-  return <AppShell module="projects" active="scope" projectId={projectId} bare action={<Link className={ui.btnPrimary} href={`/planning/pre-planning?projectId=${projectId}`}>{t('scope.continuePrecon')}</Link>}>
+  return <AppShell module="projects" active="scope" projectId={projectId} bare action={<Link className={ui.btnPrimary} href={`/dashboard/planning/master-plan?projectId=${projectId}`}>{t('scope.continuePrecon')}</Link>}>
     <div className={styles.page}>
       {error && <Notice>{error}</Notice>}
       <div className={styles.kpis}><Stats>

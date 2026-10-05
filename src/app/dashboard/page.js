@@ -510,7 +510,7 @@ export default async function DashboardHome() {
           </div>
 
           <Link
-            href="/dashboard/projects/setup"
+            href="/projects/new"
             className={
               styles.primaryButton
             }

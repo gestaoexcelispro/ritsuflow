@@ -8,22 +8,10 @@ const nextConfig = {
   },
 
 
-  experimental: {
-
-    outputFileTracingIncludes: {
-
-      '/api/projects/*/setup-report': [
-        './node_modules/pdfkit/**/*',
-      ],
-
-    },
-
-  },
-
-
   async redirects() {
 
-    // Old PreCon-era URLs whose pages were replaced by Projects, FieldOp and Settings.
+    // Old URLs whose pages were replaced by Projects, FieldOp and Settings, or removed from PreCon
+    // (Pre-planning and the old project setup: planning now starts in Master plan).
     const moved = [
       ['/dashboard/projetos/lista', '/projects'],
       ['/dashboard/projetos/coleta', '/projects/new'],
@@ -36,6 +24,11 @@ const nextConfig = {
       ['/dashboard/field-management/:path*', '/workforce'],
       ['/dashboard/administration/:path*', '/settings/users'],
       ['/dashboard/takeoff', '/ritsuscope'],
+      ['/dashboard/projects/setup', '/projects'],
+      ['/dashboard/projects/work-packages', '/projects'],
+      ['/dashboard/projects/locations', '/projects'],
+      ['/dashboard/planning/pre-planning', '/dashboard/planning/master-plan'],
+      ['/planning/pre-planning', '/dashboard/planning/master-plan'],
     ]
 
     return moved.map(([source, destination]) => ({ source, destination, permanent: false }))
