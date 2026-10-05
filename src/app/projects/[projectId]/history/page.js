@@ -1,26 +1,121 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../../lib/supabase'
+import { useT } from '../../../../lib/i18n/useT'
+import { useLanguage } from '../../../../lib/i18n/LanguageProvider'
+import { AppShell, PageHeader, Panel, Stats, Stat, Badge, Empty, Notice, Segments, ui } from '../../../fieldop/ui'
 import styles from './history.module.css'
-import { AppShell, ui } from '../../../fieldop/ui'
 
-const when=v=>v?new Intl.DateTimeFormat('en-US',{dateStyle:'medium',timeStyle:'short'}).format(new Date(v)):'—'
-const day=v=>v?new Intl.DateTimeFormat('en-US',{dateStyle:'medium'}).format(new Date(v)):'—'
-const moduleName=v=>{const x=String(v||'general').toLowerCase();if(x.includes('scope'))return'Scope Management';if(x.includes('document'))return'Documents';if(x.includes('team')||x.includes('member'))return'Team';if(x.includes('schedule')||x.includes('planning'))return'Schedule';if(x.includes('financial')||x.includes('contract'))return'Financials';if(x.includes('setting')||x.includes('project'))return'Project Settings';if(x.includes('report'))return'Reports';return'General'}
-const actionName=v=>{const x=String(v||'').toLowerCase();if(x.includes('delete')||x.includes('remove'))return'Deleted';if(x.includes('add')||x.includes('create')||x.includes('upload')||x.includes('invite'))return'Added';if(x.includes('generate'))return'Generated';return'Updated'}
-const detail=i=>{const c=i?.metadata?.changes;if(c&&typeof c==='object'){const first=Object.entries(c)[0];if(first){const[k,v]=first;if(v&&typeof v==='object'&&('from'in v||'to'in v))return`${k}: ${v.from??'—'} → ${v.to??'—'}`;return`${k}: ${String(v??'—')}`}}return i.description||i.entity_id||'—'}
+// Which area of the project an audited action belongs to (from the entity type).
+const MODULES = ['scope', 'documents', 'team', 'schedule', 'financials', 'settings', 'reports', 'general']
+function moduleOf(entityType) {
+  const x = String(entityType || 'general').toLowerCase()
+  if (x.includes('scope')) return 'scope'
+  if (x.includes('document')) return 'documents'
+  if (x.includes('team') || x.includes('member')) return 'team'
+  if (x.includes('schedule') || x.includes('planning')) return 'schedule'
+  if (x.includes('financial') || x.includes('contract')) return 'financials'
+  if (x.includes('setting') || x.includes('project')) return 'settings'
+  if (x.includes('report')) return 'reports'
+  return 'general'
+}
+function actionOf(value) {
+  const x = String(value || '').toLowerCase()
+  if (x.includes('delete') || x.includes('remove')) return 'deleted'
+  if (x.includes('add') || x.includes('create') || x.includes('upload') || x.includes('invite')) return 'added'
+  if (x.includes('generate')) return 'generated'
+  return 'updated'
+}
+const ACTION_TONE = { added: 'ok', deleted: 'bad', generated: 'info' }
+function detail(item) {
+  const changes = item?.metadata?.changes
+  if (changes && typeof changes === 'object') {
+    const first = Object.entries(changes)[0]
+    if (first) {
+      const [key, value] = first
+      if (value && typeof value === 'object' && ('from' in value || 'to' in value)) return `${key}: ${value.from ?? '—'} → ${value.to ?? '—'}`
+      return `${key}: ${String(value ?? '—')}`
+    }
+  }
+  return item.description || '—'
+}
 
-export default function ProjectHistoryLog(){
- const {projectId}=useParams();const[project,setProject]=useState(null),[items,setItems]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[filter,setFilter]=useState('All'),[search,setSearch]=useState('')
- useEffect(()=>{if(!projectId)return;let active=true;(async()=>{setLoading(true);const[p,h]=await Promise.all([supabase.from('projects').select('*').eq('id',projectId).maybeSingle(),supabase.from('project_history').select('*').eq('project_id',projectId).order('created_at',{ascending:false})]);if(!active)return;if(p.error||h.error)setError(p.error?.message||h.error?.message);else{setProject(p.data);setItems(h.data||[])}setLoading(false)})();return()=>{active=false}},[projectId])
- const rows=useMemo(()=>items.filter(i=>{const m=moduleName(i.entity_type);const ok=filter==='All'||m===filter;const q=search.trim().toLowerCase();return ok&&(!q||[i.action_label,i.description,i.performed_by_name,i.entity_type,detail(i)].join(' ').toLowerCase().includes(q))}),[items,filter,search])
- const counts=useMemo(()=>items.reduce((a,i)=>{const m=moduleName(i.entity_type);a[m]=(a[m]||0)+1;return a},{}),[items])
- const modules=['All','Scope Management','Documents','Team','Schedule','Financials','Project Settings','Reports','General']
- const imageUrl=project?.project_image_path?supabase.storage.from('project-images').getPublicUrl(project.project_image_path).data.publicUrl:''
- const generated=new Date(),periodStart=items.length?day(items[items.length-1].created_at):'—',periodEnd=items.length?day(items[0].created_at):'—'
- return <AppShell module="projects" active="history" projectId={projectId} bare action={<button type="button" className={ui.btnPrimary} onClick={()=>window.print()}>▤ Generate History Report</button>}><section className={styles.content}>{loading?<div className={styles.card}>Loading project history...</div>:error?<div className={styles.error}>{error}</div>:<><section className={styles.printHeader}><div className={styles.printBrand}><Image src="/logo.png" alt="RitsuFlow" width={150} height={58} priority/></div><div className={styles.printTitle}><h1>Project History Log</h1><p>Complete project audit trail and activity record</p></div><div className={styles.printMeta}><b>{project?.project_id||'—'}</b><span>{project?.name||'—'}</span></div></section><section className={styles.summary}><div className={styles.projectCard}>{imageUrl?<img src={imageUrl} alt="Project"/>:<div className={styles.placeholder}>▥</div>}<div><h1>{project?.name}</h1><strong>{project?.project_id}</strong><p>Client: {project?.client_name||'—'}</p><p>Location: {[project?.city,project?.state_region].filter(Boolean).join(', ')||'—'}</p><p>Status: <b>{project?.status||'—'}</b></p></div></div><div className={styles.activityCard}><div><span>Activity Summary</span><strong>{items.length}</strong><small>Total Actions</small></div>{['Scope Management','Documents','Team','Schedule','Financials','General'].map(m=><div key={m}><strong>{counts[m]||0}</strong><small>{m}</small></div>)}</div><div className={styles.period}><b>Report Period</b><span>{periodStart} → {periodEnd}</span><b>Generated on</b><span>{when(generated)}</span><button onClick={()=>window.print()}>↓ Export Report (PDF)</button></div></section><section className={styles.log}><div className={styles.logHead}><div><h2>☷ &nbsp; Activity Log</h2><p>Chronological record of all project actions</p></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search activity..."/></div><div className={styles.filters}>{modules.map(m=><button key={m} className={filter===m?styles.active:''} onClick={()=>setFilter(m)}>{m}</button>)}</div><div className={styles.tableWrap}><table><thead><tr><th>Date & Time</th><th>User</th><th>Module</th><th>Action</th><th>Description</th><th>Details</th></tr></thead><tbody>{rows.map(i=>{const a=actionName(i.action_type||i.action_label),m=moduleName(i.entity_type);return <tr key={i.id}><td>{when(i.created_at)}</td><td>{i.performed_by_name||'RitsuFlow User'}</td><td><span className={styles.module}>{m}</span></td><td><span className={`${styles.action} ${styles[a.toLowerCase()]||''}`}>{a}</span></td><td>{i.action_label||'Project activity'}</td><td>{detail(i)}</td></tr>})}{!rows.length&&<tr><td colSpan="6" className={styles.empty}>No actions match the selected filters.</td></tr>}</tbody></table></div><footer className={styles.footer}><span>RitsuFlow™ · Project History Log</span><span>{project?.name} · {project?.project_id} · {rows.length} actions</span></footer></section></>}</section></AppShell>
+export default function ProjectHistoryLog() {
+  const { projectId } = useParams()
+  const t = useT('projects')
+  const { language } = useLanguage()
+  const [project, setProject] = useState(null)
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    if (!projectId) return undefined
+    let active = true
+    ;(async () => {
+      setLoading(true)
+      const [p, h] = await Promise.all([
+        supabase.from('projects').select('id,name,project_id,client_name').eq('id', projectId).maybeSingle(),
+        supabase.from('project_history').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
+      ])
+      if (!active) return
+      if (p.error || h.error) setError(p.error?.message || h.error?.message)
+      else { setProject(p.data); setItems(h.data || []) }
+      setLoading(false)
+    })()
+    return () => { active = false }
+  }, [projectId])
+
+  const when = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeStyle: 'short' }), [language])
+  const counts = useMemo(() => items.reduce((acc, i) => { const m = moduleOf(i.entity_type); acc[m] = (acc[m] || 0) + 1; return acc }, {}), [items])
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return items.filter((i) => (filter === 'all' || moduleOf(i.entity_type) === filter)
+      && (!q || [i.action_label, i.description, i.performed_by_name, i.entity_type, detail(i)].join(' ').toLowerCase().includes(q)))
+  }, [items, filter, search])
+
+  const printButton = <button type="button" className={ui.btnPrimary} onClick={() => window.print()}>{t('history.print')}</button>
+
+  return <AppShell module="projects" active="history" projectId={projectId} action={printButton}>
+    <div className={styles.printHead}>
+      <div><h1>{t('history.title')}</h1><p>{[project?.project_id, project?.name, project?.client_name].filter(Boolean).join(' · ')}</p></div>
+      <p>{t('history.generated', { date: when.format(new Date()) })}</p>
+    </div>
+    <div className={styles.noPrint}>
+      <PageHeader title={t('history.title')} subtitle={[project?.project_id, project?.name].filter(Boolean).join(' · ')} />
+    </div>
+    <Notice>{error}</Notice>
+    <div className={styles.noPrint}>
+      <Stats>
+        <Stat label={t('history.total')} value={items.length} />
+        {['scope', 'documents', 'team', 'settings'].map((m) => <Stat key={m} label={t(`history.module.${m}`)} value={counts[m] || 0} />)}
+      </Stats>
+    </div>
+    <Panel body={false} title={t('history.showing', { shown: rows.length, total: items.length })}
+      actions={<span className={styles.noPrint} style={{ display: 'flex', gap: 8 }}><input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('history.search')} aria-label={t('history.search')} style={{ width: 240 }} /></span>}>
+      <div className={styles.noPrint} style={{ padding: '12px 20px', borderBottom: '1px solid var(--fo-line-soft)', overflowX: 'auto' }}>
+        <Segments value={filter} onChange={setFilter} items={['all', ...MODULES].map((m) => ({ value: m, label: m === 'all' ? t('history.all') : `${t(`history.module.${m}`)}${counts[m] ? ` · ${counts[m]}` : ''}` }))} />
+      </div>
+      {loading ? <Empty title={t('history.loading')} />
+        : rows.length === 0 ? <Empty title={items.length ? t('history.noMatch') : t('history.empty')} />
+          : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards} ${styles.printTable}`}>
+            <thead><tr><th>{t('history.colWhen')}</th><th>{t('history.colUser')}</th><th>{t('history.colModule')}</th><th>{t('history.colAction')}</th><th>{t('history.colDescription')}</th><th>{t('history.colDetails')}</th></tr></thead>
+            <tbody>{rows.map((i) => {
+              const action = actionOf(i.action_type || i.action_label)
+              return <tr key={i.id}>
+                <td data-label="" style={{ whiteSpace: 'nowrap' }}><strong>{i.action_label || t('history.activity')}</strong><span className={ui.sub}>{when.format(new Date(i.created_at))}</span></td>
+                <td data-label={t('history.colUser')}>{i.performed_by_name || 'RitsuFlow'}</td>
+                <td data-label={t('history.colModule')}><span className={styles.module}>{t(`history.module.${moduleOf(i.entity_type)}`)}</span></td>
+                <td data-label={t('history.colAction')}><Badge tone={ACTION_TONE[action]}>{t(`history.action.${action}`)}</Badge></td>
+                <td data-label={t('history.colDescription')}>{i.description || '—'}</td>
+                <td data-label={t('history.colDetails')} style={{ wordBreak: 'break-word' }}>{detail(i)}</td>
+              </tr>
+            })}</tbody>
+          </table></div>}
+    </Panel>
+  </AppShell>
 }

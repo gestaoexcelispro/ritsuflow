@@ -190,10 +190,6 @@ export const platformMapInventory = {
           "sourcePath": "src/app/projects/[projectId]/ProjectDocuments.js"
         },
         {
-          "label": "ProjectHistory",
-          "sourcePath": "src/app/projects/[projectId]/ProjectHistory.js"
-        },
-        {
           "label": "ProjectReportButton",
           "sourcePath": "src/app/projects/[projectId]/ProjectReportButton.js"
         }
@@ -1447,7 +1443,6 @@ export const platformMapInventory = {
         "src/app/projects/[projectId]/edit/page.js",
         "src/app/projects/[projectId]/history/page.js",
         "src/app/projects/[projectId]/ProjectDocuments.js",
-        "src/app/projects/[projectId]/ProjectHistory.js",
         "src/app/projects/[projectId]/ProjectReportButton.js"
       ],
       "dataSources": [
@@ -1568,11 +1563,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 18,
               "sourcePath": "src/app/projects/[projectId]/history/page.js"
-            },
-            {
-              "method": "select",
-              "line": 18,
-              "sourcePath": "src/app/projects/[projectId]/ProjectHistory.js"
             },
             {
               "method": "insert",
