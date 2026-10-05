@@ -35,7 +35,7 @@ export async function importIfcFile(
   const text = new TextDecoder('iso-8859-1').decode(await file.arrayBuffer())
   const read = readIfc(text)
   if (!read.walls.length && !read.ceilings.length) throw new IfcEmptyError()
-  const model = importIfcModel(read, language === 'en-US' ? importLabelsEnUS : importLabelsPtBR)
+  const model = importIfcModel(read, language !== 'pt-BR' ? importLabelsEnUS : importLabelsPtBR)
   for (const item of model.items) if (item.framing) item.framing = applyFramingDefaults(item.framing, defaults)
 
   const path = `${projectId}/${crypto.randomUUID()}-${safeFileName(file.name)}`

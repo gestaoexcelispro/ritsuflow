@@ -58,7 +58,7 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
     const stored = (layer.framing || {}) as Partial<FramingConfig>
     const base = typeof stored.spacing === 'number'
       ? (stored as FramingConfig)
-      : defaultFraming({ thickness: layer.thickness_m ?? undefined }, language === 'en-US' ? importLabelsEnUS.framing : framingLabelsPtBR)
+      : defaultFraming({ thickness: layer.thickness_m ?? undefined }, language !== 'pt-BR' ? importLabelsEnUS.framing : framingLabelsPtBR)
     const n = (v: number | null | undefined, d = 2) => (v == null ? '' : formatNumber(v, d))
     setForm({
       name: layer.name,

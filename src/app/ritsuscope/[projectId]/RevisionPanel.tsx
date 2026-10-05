@@ -64,7 +64,7 @@ export default function RevisionPanel({ sources, layers, elements }: Props) {
     setStatus(t('revision.reading', { name: file.name }))
     try {
       const text = new TextDecoder('iso-8859-1').decode(await file.arrayBuffer())
-      const model = importIfcModel(readIfc(text), language === 'en-US' ? importLabelsEnUS : importLabelsPtBR)
+      const model = importIfcModel(readIfc(text), language !== 'pt-BR' ? importLabelsEnUS : importLabelsPtBR)
       setDiffs(compareRevisions(stored, entitiesFromItems(model.items, model.sheet.ptPerM)))
       setStatus('')
     } catch (err) {

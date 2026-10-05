@@ -1,5 +1,5 @@
 import './globals.css'
-import { LanguageProvider } from '../contexts/LanguageContext'
+import { LanguageProvider } from '@/lib/i18n/LanguageProvider'
 
 export const metadata = {
   title: {
@@ -22,7 +22,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en-US">
       <body>
         <LanguageProvider>{children}</LanguageProvider>
       </body>

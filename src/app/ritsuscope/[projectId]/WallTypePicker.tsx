@@ -78,7 +78,7 @@ export default function WallTypePicker({ projectId, projectCountry, layerCount, 
     if (height.trim() && !(h > 0)) { setError(t('element.heightInvalid')); return }
     setBusy(true)
     setError('')
-    const labels = language === 'en-US' ? importLabelsEnUS.framing : framingLabelsPtBR
+    const labels = language !== 'pt-BR' ? importLabelsEnUS.framing : framingLabelsPtBR
     const base = applyFramingDefaults(defaultFraming({ thickness: pick.thickness_m || undefined }, labels), framingDefaults)
     const row = layerFromWallType(pick, base, {
       projectId,

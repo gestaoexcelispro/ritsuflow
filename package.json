@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run test:platform-map && next build",
+    "build": "npm run test:platform-map && npm run check:i18n && next build",
     "start": "next start",
     "lint": "next lint",
-    "test:platform-map": "node scripts/check-platform-map.mjs && node scripts/check-platform-map-layout.mjs"
+    "test:platform-map": "node scripts/check-platform-map.mjs && node scripts/check-platform-map-layout.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.1",

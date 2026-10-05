@@ -4,6 +4,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { createClient } from '@/lib/supabase/client'
 import {
   AppLanguage,
+  DEFAULT_LANGUAGE,
   NumberFormat,
   UnitSystem,
   detectLanguage,
@@ -20,6 +21,7 @@ type LanguageContextValue = {
   setLanguage: (language: AppLanguage) => void
   isPortuguese: boolean
   isEnglish: boolean
+  isSpanish: boolean
   /** Effective number format (follows the language unless the user chose one). */
   numberFormat: NumberFormat
   /** The user's explicit choice; null means "follow the language". */
@@ -30,17 +32,21 @@ type LanguageContextValue = {
   formatNumber: (value: number, maximumFractionDigits?: number) => string
 }
 
-// RitsuScope keeps display settings in the browser (RitsuFlow profiles have no columns for them).
-const STORAGE_KEY = 'ritsuscope-language'
-const NUMBER_FORMAT_KEY = 'ritsuscope-number-format'
-const UNIT_SYSTEM_KEY = 'ritsuscope-unit-system'
-const SYNC_PROFILE = false
+const STORAGE_KEY = 'ritsuflow-language'
+const NUMBER_FORMAT_KEY = 'ritsuflow-number-format'
+const UNIT_SYSTEM_KEY = 'ritsuflow-unit-system'
+// Keys RitsuScope used before the language system became app-wide; read once so nobody loses their choice.
+const LEGACY_KEYS: Record<string, string> = {
+  [STORAGE_KEY]: 'ritsuscope-language',
+  [NUMBER_FORMAT_KEY]: 'ritsuscope-number-format',
+  [UNIT_SYSTEM_KEY]: 'ritsuscope-unit-system',
+}
 
 const LanguageContext = createContext<LanguageContextValue | null>(null)
 
 function readStorage(key: string): string | null {
   try {
-    return window.localStorage.getItem(key)
+    return window.localStorage.getItem(key) ?? (LEGACY_KEYS[key] ? window.localStorage.getItem(LEGACY_KEYS[key]) : null)
   } catch {
     return null
   }
@@ -57,7 +63,6 @@ function writeStorage(key: string, value: string | null) {
 
 /** Saves settings on the signed-in user's profile. Silent no-op when signed out. */
 async function saveToProfile(fields: Record<string, string | null>) {
-  if (!SYNC_PROFILE) return
   try {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -69,8 +74,27 @@ async function saveToProfile(fields: Record<string, string | null>) {
   }
 }
 
+/** The company's default language, used when the user has not chosen one. */
+async function loadCompanyLanguage(supabase: ReturnType<typeof createClient>, userId: string): Promise<AppLanguage | null> {
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select('organizations(default_locale)')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .limit(1)
+    .maybeSingle()
+  if (error || !data) return null
+  const organization = (data as { organizations?: { default_locale?: unknown } | { default_locale?: unknown }[] | null }).organizations
+  const locale = Array.isArray(organization) ? organization[0]?.default_locale : organization?.default_locale
+  return isAppLanguage(locale) ? locale : null
+}
+
+/**
+ * Language order: the user's own choice (profile, then this browser), then the company
+ * default, then the browser language.
+ */
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<AppLanguage>('pt-BR')
+  const [language, setLanguageState] = useState<AppLanguage>(DEFAULT_LANGUAGE)
   const [numberFormatChoice, setNumberFormatChoice] = useState<NumberFormat | null>(null)
   const [unitSystem, setUnitSystemState] = useState<UnitSystem>('metric')
 
@@ -79,11 +103,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = next
   }, [])
 
-  // 1) Before login: browser storage, then browser language.
-  // 2) After login: the profile wins when it has a value.
   useEffect(() => {
     const saved = readStorage(STORAGE_KEY)
-    applyLanguage(isAppLanguage(saved) ? saved : detectLanguage(window.navigator.language))
+    const savedLanguage = isAppLanguage(saved) ? saved : null
+    applyLanguage(savedLanguage ?? detectLanguage(window.navigator.language))
 
     const savedFormat = readStorage(NUMBER_FORMAT_KEY)
     if (isNumberFormat(savedFormat)) setNumberFormatChoice(savedFormat)
@@ -93,8 +116,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false
 
-    async function loadProfileSettings() {
-      if (!SYNC_PROFILE) return
+    async function loadAccountSettings() {
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
@@ -103,26 +125,30 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
           .from('profiles')
           .select('language, number_format, unit_system')
           .eq('id', user.id)
-          .single()
-        if (error || !data || cancelled) return
-        if (isAppLanguage(data.language)) {
-          applyLanguage(data.language)
-          writeStorage(STORAGE_KEY, data.language)
+          .maybeSingle()
+        if (cancelled) return
+        const profile = error ? null : data
+        if (isAppLanguage(profile?.language)) {
+          applyLanguage(profile.language)
+          writeStorage(STORAGE_KEY, profile.language)
+        } else if (!savedLanguage) {
+          const companyLanguage = await loadCompanyLanguage(supabase, user.id)
+          if (companyLanguage && !cancelled) applyLanguage(companyLanguage)
         }
-        if (isNumberFormat(data.number_format)) {
-          setNumberFormatChoice(data.number_format)
-          writeStorage(NUMBER_FORMAT_KEY, data.number_format)
+        if (isNumberFormat(profile?.number_format)) {
+          setNumberFormatChoice(profile.number_format)
+          writeStorage(NUMBER_FORMAT_KEY, profile.number_format)
         }
-        if (isUnitSystem(data.unit_system)) {
-          setUnitSystemState(data.unit_system)
-          writeStorage(UNIT_SYSTEM_KEY, data.unit_system)
+        if (isUnitSystem(profile?.unit_system)) {
+          setUnitSystemState(profile.unit_system)
+          writeStorage(UNIT_SYSTEM_KEY, profile.unit_system)
         }
       } catch {
-        // Supabase not configured on this host (e.g. public site): keep local settings.
+        // Supabase not configured on this host (e.g. public share links): keep local settings.
       }
     }
 
-    loadProfileSettings()
+    loadAccountSettings()
     return () => { cancelled = true }
   }, [applyLanguage])
 
@@ -151,6 +177,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       setLanguage,
       isPortuguese: language === 'pt-BR',
       isEnglish: language === 'en-US',
+      isSpanish: language === 'es',
       numberFormat,
       numberFormatChoice,
       setNumberFormat,
@@ -170,7 +197,7 @@ export function useLanguage() {
   return context
 }
 
-/** Legacy two-language helper used by existing pages. New modules use message files. */
+/** Legacy two-language helper. New code uses useT() message files; Spanish falls back to English here. */
 export function localized<T>(language: AppLanguage, ptBR: T, enUS: T): T {
-  return language === 'en-US' ? enUS : ptBR
+  return language === 'pt-BR' ? ptBR : enUS
 }

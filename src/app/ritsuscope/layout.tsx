@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { LanguageProvider } from '@/lib/i18n/LanguageProvider'
 import { useRitsuScopeBody } from './useRitsuScopeBody'
 import { RitsuScopeLicenseProvider } from './license'
 
@@ -35,7 +34,7 @@ export default function RitsuScopeLayout({ children }: { children: ReactNode }) 
   if (licensed === null) return <main style={screen}>Loading RitsuScope…</main>
   return (
     <RitsuScopeLicenseProvider licensed={licensed}>
-      <LanguageProvider>{children}</LanguageProvider>
+      {children}
     </RitsuScopeLicenseProvider>
   )
 }

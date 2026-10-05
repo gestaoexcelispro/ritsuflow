@@ -111,7 +111,7 @@ export default function DetectPanel(props: Props) {
         await insertElements(activeLayer.id, picked)
       } else {
         const h = parseLocaleNumber(height)
-        const labels = language === 'en-US' ? importLabelsEnUS.framing : framingLabelsPtBR
+        const labels = language !== 'pt-BR' ? importLabelsEnUS.framing : framingLabelsPtBR
         let order = layers.length
         for (const g of groupByThickness(picked)) {
           const thicknessMm = Math.round(g.thicknessM * 1000)
