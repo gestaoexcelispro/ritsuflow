@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { pdf, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer'
 import { supabase } from '../../../lib/supabase'
+import { useT } from '../../../lib/i18n/useT'
+import { ui } from '../../fieldop/ui'
 
 const num=v=>Number(v||0)
 const money=(v,c='USD')=>{if(v===null||v===undefined||v==='')return '—';try{return new Intl.NumberFormat('en-US',{style:'currency',currency:c,maximumFractionDigits:2}).format(num(v))}catch{return String(v)}}
@@ -17,6 +19,7 @@ const roles={manager:'Project Manager',superintendent:'Superintendent',project_e
 const roleLabel=v=>roles[v]||titleCase(v)
 
 export default function ProjectReportButton({project}){
+ const t=useT('projects')
  const[busy,setBusy]=useState(false)
  async function generate(){
   if(!project||busy)return
@@ -41,7 +44,7 @@ export default function ProjectReportButton({project}){
    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=fileName;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)
   }catch(e){console.error(e);window.alert(`Unable to generate report: ${e?.message||e}`)}finally{setBusy(false)}
  }
- return <button type="button" onClick={generate} disabled={busy} style={{...button,...(busy?disabled:{})}}>{busy?'Generating...':'▤ Generate Report'}</button>
+ return <button type="button" className={ui.btn} onClick={generate} disabled={busy}>{busy?t('report.generating'):t('report.generate')}</button>
 }
 
 function scopeModel(rows){const children={};rows.forEach(r=>{const k=r.parent_scope_id||'root';(children[k]||(children[k]=[])).push(r)});const rollup=(id,seen=new Set())=>{if(seen.has(id))return 0;seen.add(id);const kids=children[id]||[];if(kids.length)return kids.reduce((s,k)=>s+rollup(k.id,new Set(seen)),0);const r=rows.find(x=>x.id===id);return num(r?.quantity)*num(r?.unit_price)};const depth=r=>{let d=0,p=r.parent_scope_id,g=0;while(p&&g++<12){d++;p=rows.find(x=>x.id===p)?.parent_scope_id}return d};const flat=[];const walk=k=>(children[k]||[]).forEach(r=>{flat.push({...r,_depth:depth(r),_total:rollup(r.id)});walk(r.id)});walk('root');return{flat,allocated:(children.root||[]).reduce((s,r)=>s+rollup(r.id),0)}}
