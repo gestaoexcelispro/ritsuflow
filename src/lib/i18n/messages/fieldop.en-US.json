@@ -73,5 +73,13 @@
   "nav.projectsModule": "Projects",
   "nav.newReport": "New Daily Report",
   "projects.openProject": "Open project",
-  "projects.showing": "Showing {shown} of {total} projects"
+  "projects.showing": "Showing {shown} of {total} projects",
+  "nav.projectsTagline": "Construction projects and their central information.",
+  "nav.allProjects": "All projects",
+  "nav.projectOverview": "Overview",
+  "nav.projectScope": "Scope",
+  "nav.projectLocations": "Locations",
+  "nav.projectHistory": "History",
+  "nav.newProject": "New Project",
+  "nav.cancel": "Cancel"
 }

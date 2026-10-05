@@ -15,13 +15,30 @@ export { ui, Icon }
 
 const cx = (...names) => names.filter(Boolean).join(' ')
 
-function navItems(projectId) {
-  return [
-    { key: 'portfolio', icon: 'portfolio', href: '/fieldop' },
-    { key: 'projects', icon: 'projects', href: '/fieldop/projects' },
-    { key: 'reports', icon: 'reports', href: '/fieldop/reports/daily' },
-    { key: 'workforce', icon: 'workforce', href: projectId ? `/fieldop/projects/${projectId}/workforce` : '/workforce' },
-  ]
+// Tabs of each RitsuFlow module that uses this shell. `labelKey` is in the fieldop namespace.
+const MODULES = {
+  fieldop: {
+    name: 'FieldOp', taglineKey: 'brand.tagline', home: '/fieldop',
+    tabs: (projectId) => [
+      { key: 'portfolio', icon: 'portfolio', href: '/fieldop' },
+      { key: 'projects', icon: 'projects', href: '/fieldop/projects' },
+      { key: 'reports', icon: 'reports', href: '/fieldop/reports/daily' },
+      { key: 'workforce', icon: 'workforce', href: projectId ? `/fieldop/projects/${projectId}/workforce` : '/workforce' },
+    ],
+  },
+  projects: {
+    nameKey: 'nav.projectsModule', taglineKey: 'nav.projectsTagline', home: '/projects',
+    // Inside a project, its own pages appear as tabs next to "All projects".
+    tabs: (projectId) => [
+      { key: 'all', icon: 'grid', href: '/projects', labelKey: 'nav.allProjects' },
+      ...(projectId ? [
+        { key: 'overview', icon: 'projects', href: `/projects/${projectId}`, labelKey: 'nav.projectOverview' },
+        { key: 'scope', icon: 'reports', href: `/projects/${projectId}/scope`, labelKey: 'nav.projectScope' },
+        { key: 'locations', icon: 'portfolio', href: `/projects/${projectId}/locations`, labelKey: 'nav.projectLocations' },
+        { key: 'history', icon: 'back', href: `/projects/${projectId}/history`, labelKey: 'nav.projectHistory' },
+      ] : []),
+    ],
+  },
 }
 
 function initials(name) {
@@ -35,50 +52,64 @@ function initials(name) {
  * workspace and module switches, user) and a tab bar with the page's main action on the right.
  * `action` replaces the default main action (New Daily Report); pass `false` to hide it.
  */
-export function FieldOpShell({ active, projectId, action, children }) {
+/**
+ * RitsuFlow app frame (same structure as the original Projects header): app header with the module,
+ * Workspaces / other-module switches and the user, then the module tab bar with the main action on the right.
+ * `action` replaces the module's default main action; pass `false` to hide it.
+ * `bare` renders the page without the content padding (for full-height workspaces).
+ */
+export function AppShell({ module = 'fieldop', active, projectId, action, bare = false, children }) {
   const t = useT('fieldop')
   const user = useFieldOpUser()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   useEffect(() => { setOpen(false) }, [pathname])
+  const config = MODULES[module]
 
   const switches = <>
     <Link href="/workspaces" className={ui.appBtn}><Icon name="back" size={16} />{t('nav.workspaces')}</Link>
     <Link href="/dashboard" className={cx(ui.appBtn, ui.appBtnPre)}>{t('nav.precon')}</Link>
-    <Link href="/projects" className={cx(ui.appBtn, ui.appBtnPrj)}>{t('nav.projectsModule')}</Link>
+    {module !== 'projects' && <Link href="/projects" className={cx(ui.appBtn, ui.appBtnPrj)}>{t('nav.projectsModule')}</Link>}
+    {module !== 'fieldop' && <Link href="/fieldop" className={cx(ui.appBtn, ui.appBtnPrj)}>FieldOp</Link>}
   </>
   const who = <div className={ui.appUser}>
     <span className={ui.avatar}>{initials(user.name)}</span>
     <div className={ui.who}><strong>{user.name || t('user.fallbackName')}</strong><span>{user.role ? t(`role.${user.role}`) : ''}</span></div>
     <LanguageSelector compact dark />
   </div>
-  const mainAction = action === undefined
-    ? <Link className={ui.btnPrimary} href={projectId ? `/fieldop/reports/daily/new?projectId=${projectId}` : '/fieldop/reports/daily/new'}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>
-    : action
+  const defaultAction = module === 'projects'
+    ? <Link className={ui.btnPrimary} href="/projects/new"><Icon name="plus" size={18} />{t('nav.newProject')}</Link>
+    : <Link className={ui.btnPrimary} href={projectId ? `/fieldop/reports/daily/new?projectId=${projectId}` : '/fieldop/reports/daily/new'}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>
+  const mainAction = action === undefined ? defaultAction : action
+  const moduleName = config.nameKey ? t(config.nameKey) : config.name
 
   return <div className={cx(ui.root, plex.variable)}>
     <header className={ui.appbar}>
       <div className={ui.appbarInner}>
         <Link href="/workspaces" className={ui.appLogo} aria-label={t('nav.workspaces')}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority /></Link>
         <span className={ui.appDivider} />
-        <Link href="/fieldop" className={ui.moduleName} style={{ color: 'inherit', textDecoration: 'none' }}><strong>FieldOp</strong><span>{t('brand.tagline')}</span></Link>
+        <Link href={config.home} className={ui.moduleName} style={{ color: 'inherit', textDecoration: 'none' }}><strong>{moduleName}</strong><span>{t(config.taglineKey)}</span></Link>
         <div className={ui.appActions}>{switches}</div>
         {who}
         <button type="button" className={ui.menuBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={t('nav.openMenu')}><Icon name={open ? 'close' : 'menu'} size={24} /></button>
       </div>
       {open && <div className={ui.menuPanel}>{switches}{who}</div>}
     </header>
-    <nav className={ui.tabbar} aria-label="FieldOp">
+    <nav className={ui.tabbar} aria-label={moduleName}>
       <div className={ui.tabbarInner}>
-        {navItems(projectId).map(({ key, icon, href }) => <Link key={key} href={href} className={cx(ui.mtab, active === key && ui.mtabOn)} aria-current={active === key ? 'page' : undefined}>
-          <Icon name={icon} size={18} />{t(`nav.${key}`)}
+        {config.tabs(projectId).map(({ key, icon, href, labelKey }) => <Link key={key} href={href} className={cx(ui.mtab, active === key && ui.mtabOn)} aria-current={active === key ? 'page' : undefined}>
+          <Icon name={icon} size={18} />{t(labelKey || `nav.${key}`)}
         </Link>)}
         {mainAction && <div className={ui.tabbarAction}>{mainAction}</div>}
       </div>
     </nav>
-    <main className={ui.main}><div className={ui.content}>{children}</div></main>
+    {/* `bare` pages manage their own full-height layout below the header (height: calc(100dvh - var(--app-chrome))). */}
+    <main className={ui.main}>{bare ? children : <div className={ui.content}>{children}</div>}</main>
   </div>
 }
+
+/** FieldOp pages: the shared app frame with the FieldOp tabs. */
+export function FieldOpShell(props) { return <AppShell module="fieldop" {...props} /> }
 
 export function PageHeader({ title, subtitle, back, meta, actions }) {
   return <div className={ui.pageHead}>

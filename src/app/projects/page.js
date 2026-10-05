@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
 import styles from './projects.module.css'
+import { AppShell } from '../fieldop/ui'
 
 export default function ProjectsPage(){
  const [projects,setProjects]=useState([])
@@ -27,29 +27,7 @@ export default function ProjectsPage(){
  function money(value){return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value||0))}
  function date(value){if(!value)return'—';const d=new Date(`${String(value).slice(0,10)}T12:00:00`);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR')}
 
- return <main className={styles.shell}>
-  <header className={styles.topbar}>
-   <Link href="/workspaces" className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority/></Link>
-   <div className={styles.titleBlock}><div className={styles.pageTitle}>Projects</div><span>Manage your construction projects and central information.</span></div>
-   <div className={styles.search}>⌕ <span>Search projects, clients, or locations...</span><kbd>Ctrl K</kbd></div>
-   <div className={styles.headerActions}>
-    <Link href="/workspaces" className={styles.returnButton}>← Return to Workspaces</Link>
-    <Link href="/precon" className={styles.preconButton}>▣ Go to PreCon</Link>
-    <Link href="/fieldop" className={styles.fieldopButton}>⌂ Go to FieldOp</Link>
-   </div>
-   <div className={styles.user}><button className={styles.alert}>♧<em>3</em></button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div>
-  </header>
-
-  <nav className={styles.workspaceNav} aria-label="Project workspace navigation">
-   <Link href="/workspaces">⌂ Overview</Link>
-   <Link href="/projects" className={styles.navActive}>▣ Projects</Link>
-   <Link href="/project-setup">⚙ Project Setup</Link>
-   <Link href="/location-structure">⌖ Location Structure</Link>
-   <span className={styles.navDivider}/>
-   <Link href="/reports">▤ Reports</Link>
-   <Link href="/projects/new" className={styles.newProject}>＋ New Project</Link>
-  </nav>
-
+ return <AppShell module="projects" active="all">
   <div className={styles.content}>
    <section className={styles.projectsPanel}>
     <div className={styles.panelHead}>
@@ -82,5 +60,5 @@ export default function ProjectsPage(){
     <footer className={styles.tableFooter}><span>Showing {projects.length} of {projects.length} {projects.length===1?'project':'projects'}</span><span>‹　<b>1</b>　›</span></footer>
    </section>
   </div>
- </main>
+ </AppShell>
 }
