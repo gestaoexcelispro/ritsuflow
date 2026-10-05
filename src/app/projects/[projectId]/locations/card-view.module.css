@@ -1,0 +1,24 @@
+/* A4 card view framing. Tokens, buttons and panels come from the FieldOp design system. */
+.page { padding: 14px 24px 24px; display: grid; gap: 12px; max-width: 1760px; margin: 0 auto; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.title { display: grid; margin-right: auto; }
+.title small { color: var(--fo-teal-ink); font-size: 12.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.title strong { font-size: 20px; }
+.pick { display: grid; gap: 4px; min-width: 200px; }
+.pick span { font-size: 13px; font-weight: 600; color: var(--fo-muted); }
+.zoom { display: flex; align-items: center; gap: 6px; }
+.zoom strong { min-width: 52px; text-align: center; }
+.grid { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(420px, 1fr); gap: 14px; align-items: start; }
+.grid[hidden] { display: none; }
+.card { padding: 16px; }
+.card h2 { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--fo-muted); }
+.sheet { position: relative; width: 100%; aspect-ratio: 210 / 297; background: #fff; overflow: hidden; box-shadow: 0 10px 30px rgba(6, 38, 55, .16); }
+.sheetImg, .fill { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fill { pointer-events: none; }
+.viewport { position: absolute; left: 50.55%; top: 33.74%; width: 44.91%; height: 26.75%; overflow: hidden; outline: 3px dashed var(--fo-bad); outline-offset: -3px; background: rgba(179, 38, 30, .06); z-index: 3; }
+.frame { position: relative; width: 100%; overflow: hidden; background: #fff; border: 3px solid var(--fo-teal); border-radius: 4px; cursor: grab; touch-action: none; }
+.frame:active { cursor: grabbing; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255, 255, 255, .8); font-weight: 600; }
+.help { margin: 10px 0 0; color: var(--fo-muted); font-size: 14px; }
+@media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .page { padding: 12px; } .pick { min-width: 0; flex: 1 1 160px; } }
