@@ -1,13 +1,248 @@
 'use client'
-import Image from 'next/image';import Link from 'next/link';import{useCallback,useEffect,useMemo,useRef,useState}from'react';import{useRouter}from'next/navigation';import{createClient}from'../../../lib/supabase/client';import styles from'./users.module.css'
-const supabase=createClient(),INCLUDED_PROJECT_CAPACITY=10,label=v=>String(v||'').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase()),blank={fullName:'',email:'',jobTitle:'',role:'user',projectAccessMode:'selected_projects',projectIds:[],workspaceAccess:['projects']},workspaces=[['projects','🏢','Projects'],['precon','⚙️','PreCon'],['fieldop','👷','FieldOp'],['ritsuscope','📏','RitsuScope']];
-export default function UsersAccess(){const router=useRouter(),fileRef=useRef(null);const[loading,setLoading]=useState(true),[org,setOrg]=useState(null),[members,setMembers]=useState([]),[projects,setProjects]=useState([]),[enabledModules,setEnabledModules]=useState([]),[message,setMessage]=useState(''),[search,setSearch]=useState(''),[modal,setModal]=useState(null),[busy,setBusy]=useState(false),[resendingId,setResendingId]=useState(null),[form,setForm]=useState(blank),[photo,setPhoto]=useState(null),[preview,setPreview]=useState(''),[currentUserId,setCurrentUserId]=useState(null),[currentUserIsPlatformOwner,setCurrentUserIsPlatformOwner]=useState(false);
-const load=useCallback(async()=>{const{data:{user}}=await supabase.auth.getUser();if(!user){router.replace('/login');return}setCurrentUserId(user.id);const[{data:isPlatformOwner,error:platformError},{data:mine,error:me}]=await Promise.all([supabase.rpc('is_platform_owner'),supabase.from('organization_members').select('organization_id,role,status').eq('user_id',user.id).eq('status','active')]);if(platformError)console.error('Platform Owner status could not be loaded.',platformError);setCurrentUserIsPlatformOwner(isPlatformOwner===true);if(me)throw me;const membership=mine?.find(x=>['owner','admin'].includes(x.role))||mine?.[0];if(!membership?.organization_id)throw new Error('No company is connected to this account.');const oid=membership.organization_id;const[{data:o,error:oe},{data:ms,error:mE},{data:ps,error:pE},{data:prs,error:prE},{data:mods}]=await Promise.all([supabase.from('organizations').select('id,name,slug,organization_number,owner_user_id').eq('id',oid).single(),supabase.from('organization_members').select('organization_id,user_id,role,status,joined_at,project_access_mode').eq('organization_id',oid).order('joined_at'),supabase.from('user_profiles').select('user_id,full_name,email,job_title,avatar_path,workspace_access'),supabase.from('projects').select('id,project_id,code,name,status').eq('organization_id',oid).order('name'),supabase.from('organization_modules').select('module_key,is_enabled').eq('organization_id',oid).eq('is_enabled',true)]);if(oe)throw oe;if(mE)throw mE;if(pE)throw pE;if(prE)throw prE;const pm=new Map((ps||[]).map(p=>[p.user_id,p]));setOrg(o);setMembers((ms||[]).map(m=>({...m,profile:pm.get(m.user_id)||null})));setProjects(prs||[]);setEnabledModules((mods||[]).map(x=>x.module_key))},[router]);useEffect(()=>{load().catch(e=>setMessage(e.message)).finally(()=>setLoading(false))},[load]);useEffect(()=>()=>{if(preview&&!preview.startsWith('http'))URL.revokeObjectURL(preview)},[preview]);
-const filtered=useMemo(()=>{const q=search.toLowerCase();return members.filter(m=>!q||[m.profile?.full_name,m.profile?.email,m.profile?.job_title,m.role,m.status].join(' ').toLowerCase().includes(q))},[members,search]),activeUsers=members.filter(m=>m.status==='active').length,activeProjects=projects.filter(p=>String(p.status||'').toLowerCase()==='active').length,projectCapacityRemaining=Math.max(0,INCLUDED_PROJECT_CAPACITY-activeProjects),allowed=k=>!enabledModules.length||k==='projects'||enabledModules.some(m=>String(m).toLowerCase().includes(k)),avatarUrl=p=>p?supabase.storage.from('user-avatars').getPublicUrl(p).data.publicUrl:'',isProtected=m=>currentUserIsPlatformOwner&&m?.user_id===currentUserId,statusLabel=s=>s==='invited'?'Pending Invitation':label(s);
-function resetPhoto(){setPhoto(null);if(preview&&!preview.startsWith('http'))URL.revokeObjectURL(preview);setPreview('')}function close(){setModal(null);resetPhoto();setForm(blank)}function add(){setForm(blank);setModal({mode:'add'})}async function edit(m){if(isProtected(m)){setMessage('The RitsuFlow Platform Owner is protected and cannot be edited from organization Users & Access.');return}const p=m.profile;let projectIds=[];if(m.project_access_mode==='selected_projects'){const{data}=await supabase.from('project_members').select('project_id').eq('user_id',m.user_id);projectIds=(data||[]).map(x=>x.project_id)}const savedWorkspaces=Array.isArray(p?.workspace_access)&&p.workspace_access.length?p.workspace_access:['projects'];setForm({fullName:p?.full_name||'',email:p?.email||'',jobTitle:p?.job_title||'',role:m.role||'user',projectAccessMode:m.project_access_mode||'selected_projects',projectIds,workspaceAccess:savedWorkspaces});setPreview(avatarUrl(p?.avatar_path));setModal({mode:'edit',member:m,protectedUser:false})}
-function choosePhoto(e){const f=e.target.files?.[0];if(!f)return;if(f.size>5*1024*1024)return setMessage('User photo must be 5 MB or smaller.');if(!['image/jpeg','image/png','image/webp'].includes(f.type))return setMessage('Use a PNG, JPG or WEBP image.');if(preview&&!preview.startsWith('http'))URL.revokeObjectURL(preview);setPhoto(f);setPreview(URL.createObjectURL(f));setMessage('')}
-async function resendInvitation(m){if(!org?.id||m.status!=='invited'||resendingId)return;setMessage('');setResendingId(m.user_id);try{const r=await fetch('/api/administration/users/resend-invitation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({organizationId:org.id,userId:m.user_id})}),result=await r.json();if(!r.ok)throw new Error(result.error||'Unable to resend invitation.');setMessage(`Invitation resent${m.profile?.email?` to ${m.profile.email}`:''}.`)}catch(e){setMessage(e.message)}finally{setResendingId(null)}}
-async function submit(e){e.preventDefault();setMessage('');if(!org?.id)return;if(!form.workspaceAccess.length)return setMessage('Select at least one workspace.');if(form.role==='admin'&&form.projectAccessMode!=='all_projects')return setMessage('Admins must have All Projects access.');if(form.role==='user'&&form.projectAccessMode!=='selected_projects')return setMessage('Users must use Selected Projects access.');if(form.projectAccessMode==='selected_projects'&&!form.projectIds.length)return setMessage('Select at least one project.');setBusy(true);try{const{data:{session}}=await supabase.auth.getSession(),ext=photo?.name.split('.').pop()?.toLowerCase();if(modal.mode==='add'){const r=await fetch('/api/settings/users/invite',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session?.access_token}`},body:JSON.stringify({...form,organizationId:org.id,avatarExt:photo?ext:null})}),result=await r.json();if(!r.ok)throw new Error(result.error||'Unable to invite user.');if(photo&&result.avatarUpload){const{error}=await supabase.storage.from('user-avatars').uploadToSignedUrl(result.avatarUpload.path,result.avatarUpload.token,photo,{contentType:photo.type,upsert:true});if(error)throw new Error(`Invitation sent, but photo upload failed: ${error.message}`)}setMessage(`Invitation sent to ${result.user.email}.`)}else{const id=modal.member.user_id,r=await fetch(`/api/settings/users/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session?.access_token}`},body:JSON.stringify({...form,organizationId:org.id,avatarExt:photo?ext:null})}),result=await r.json();if(!r.ok)throw new Error(result.error||'Unable to update user.');if(photo&&result.avatarUpload){const{error}=await supabase.storage.from('user-avatars').uploadToSignedUrl(result.avatarUpload.path,result.avatarUpload.token,photo,{contentType:photo.type,upsert:true});if(error)throw new Error(`User updated, but photo upload failed: ${error.message}`)}setMessage(`${form.fullName} updated successfully.`)}close();await load()}catch(err){setMessage(err.message)}finally{setBusy(false)}}
-async function remove(){const m=modal?.member;if(!m||!org)return;if(isProtected(m)){setMessage('The RitsuFlow Platform Owner cannot be removed from organization Users & Access.');return}const name=m.profile?.full_name||m.profile?.email||'this user';if(!confirm(`Remove ${name} from ${org.name}?\n\nThis removes organization access. The global RitsuFlow account will not be deleted.`))return;setBusy(true);try{const{data:{session}}=await supabase.auth.getSession(),r=await fetch(`/api/settings/users/${m.user_id}`,{method:'DELETE',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session?.access_token}`},body:JSON.stringify({organizationId:org.id})}),result=await r.json();if(!r.ok)throw new Error(result.error||'Unable to remove user.');close();setMessage(`${name} removed from ${org.name}.`);await load()}catch(e){setMessage(e.message)}finally{setBusy(false)}}
-if(loading)return <main className={styles.loading}>Loading users & access...</main>;return <main className={styles.page}><header className={styles.header}><div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={180} height={65}/></div><div className={styles.headerTitle}><h1>Users & Access</h1><p>Organization users, roles and access control</p></div><div className={styles.headerActions}><Link className={styles.backButton} href="/settings">← Return to Settings</Link><button className={styles.addButton} disabled={!org} onClick={add}>+ Add User</button></div></header><section className={styles.content}>{message&&<div className={styles.message}>{message}</div>}{currentUserIsPlatformOwner&&<div className={styles.message}>Platform Owner protection is active. Platform authority is managed separately from organization RBAC.</div>}<section className={styles.stats}><article><small>ORGANIZATION</small><strong className={styles.company}>{org?.name||'—'}</strong><p>{org?.organization_number||org?.slug}</p></article><article><small>ACTIVE USERS</small><strong>{activeUsers}</strong><p>Unlimited users allowed</p></article><article><small>ACTIVE PROJECTS</small><strong>{activeProjects}</strong><p>Currently consuming project capacity</p></article><article><small>PROJECT CAPACITY</small><strong>{activeProjects} / {INCLUDED_PROJECT_CAPACITY}</strong><p>{projectCapacityRemaining} included project slots available</p></article></section><section className={styles.card}><div className={styles.cardHead}><div><h3>Organization Users</h3><p>Manage who belongs to this organization and their current access status.</p></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search users..."/></div><div className={styles.tableWrap}><table><thead><tr><th>User</th><th>Email</th><th>Job Title</th><th>RitsuFlow Role</th><th>Status</th><th>Project Access</th><th>Joined</th><th>Actions</th></tr></thead><tbody>{filtered.map(m=>{const p=m.profile,a=avatarUrl(p?.avatar_path),initials=(p?.full_name||p?.email||'?').split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(),protectedUser=isProtected(m);return <tr key={m.user_id}><td><div className={styles.person}>{a?<img src={a} alt=""/>:<b>{initials}</b>}<span><strong>{p?.full_name||'RitsuFlow User'}</strong><small>{protectedUser?'Protected Platform Owner':m.user_id===org?.owner_user_id?'Primary Admin':m.status==='invited'?'Awaiting acceptance':''}</small></span></div></td><td>{p?.email||'—'}</td><td>{p?.job_title||'—'}</td><td><span className={styles.role}>{protectedUser?'Platform Owner':label(m.role)}</span></td><td><span className={`${styles.status} ${styles[m.status]||''}`}>{statusLabel(m.status)}</span></td><td>{protectedUser?'Protected':label(m.project_access_mode||'selected_projects')}</td><td>{m.joined_at?new Date(m.joined_at).toLocaleDateString():'—'}</td><td><div className={styles.rowActions}>{m.status==='invited'&&<button type="button" className={styles.resend} disabled={resendingId===m.user_id} onClick={()=>resendInvitation(m)}>{resendingId===m.user_id?'Sending...':'Resend Invitation'}</button>}{protectedUser?<span title="Platform Owner access is protected">🔒</span>:<button type="button" className={styles.edit} aria-label={`Edit ${p?.full_name||p?.email||'user'}`} title="Edit user" onClick={()=>edit(m)}>✎</button>}</div></td></tr>})}{!filtered.length&&<tr><td colSpan="8" className={styles.empty}>No users found.</td></tr>}</tbody></table></div></section><div className={styles.note}><strong>Access architecture</strong><span>Users & Access controls identity and assignments. Users are unlimited. Commercial capacity is based on concurrent active projects, while closed projects remain available for visualization and reporting.</span></div></section>{modal&&<div className={styles.overlay}><form className={styles.modal} onSubmit={submit}><div className={styles.modalHead}><div><h2>{modal.mode==='edit'?'Edit User':'Add User'}</h2><p>{modal.mode==='edit'?`Manage this user's identity and access to ${org?.name}.`:`Invite a new user to ${org?.name}.`}</p></div><button type="button" onClick={close}>×</button></div><section className={styles.photoRow}><div className={styles.avatar}>{preview?<img src={preview} alt="Preview"/>:<span>{form.fullName?form.fullName.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase():'👤'}</span>}</div><div><b>User Photo <em>(optional)</em></b><button type="button" className={styles.upload} onClick={()=>fileRef.current?.click()}>↥ Upload Photo</button><input ref={fileRef} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={choosePhoto}/><small>PNG, JPG or WEBP. Max 5 MB.<br/>A profile photo helps with identification across RitsuFlow.</small></div></section><div className={styles.formGrid}><label>Full Name *<input required value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})}/></label><label>Email *<input required type="email" disabled={modal.mode==='edit'} value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label><label>Job Title<input value={form.jobTitle} onChange={e=>setForm({...form,jobTitle:e.target.value})} placeholder="Project Manager, Superintendent..."/></label><label>RitsuFlow Role *<select disabled={modal.protectedUser} value={form.role} onChange={e=>{const role=e.target.value;setForm(f=>({...f,role,projectAccessMode:role==='admin'?'all_projects':role==='user'?'selected_projects':f.projectAccessMode,projectIds:role==='admin'?[]:f.projectIds}))}}><option value="admin">Admin</option><option value="manager">Manager</option><option value="user">User</option></select></label></div><div className={styles.accessGrid}><fieldset className={styles.fieldset}><legend>Workspace Access *</legend><p>Select which modules this user can access.</p>{workspaces.map(([k,icon,n])=><label className={`${styles.accessOption} ${!allowed(k)?styles.disabled:''}`} key={k}><input type="checkbox" checked={form.workspaceAccess.includes(k)} disabled={!allowed(k)} onChange={()=>setForm(f=>({...f,workspaceAccess:f.workspaceAccess.includes(k)?f.workspaceAccess.filter(x=>x!==k):[...f.workspaceAccess,k]}))}/><span>{icon}</span><b>{n}</b></label>)}</fieldset><fieldset className={styles.fieldset}><legend>Project Access *</legend><p>Define which projects this user can access.</p><label className={styles.radio}><input type="radio" disabled={modal.protectedUser||form.role==='user'} checked={form.projectAccessMode==='all_projects'} onChange={()=>setForm({...form,projectAccessMode:'all_projects',projectIds:[]})}/><span><b>All Projects</b><small>User can access all projects in this organization.</small></span></label><label className={styles.radio}><input type="radio" disabled={modal.protectedUser||form.role==='admin'} checked={form.projectAccessMode==='selected_projects'} onChange={()=>setForm({...form,projectAccessMode:'selected_projects'})}/><span><b>Selected Projects</b><small>User can access only selected projects.</small></span></label>{form.projectAccessMode==='selected_projects'&&<div className={styles.projectList}>{projects.map(p=><label className={styles.projectItem} key={p.id}><input type="checkbox" checked={form.projectIds.includes(p.id)} onChange={()=>setForm(f=>({...f,projectIds:f.projectIds.includes(p.id)?f.projectIds.filter(x=>x!==p.id):[...f.projectIds,p.id]}))}/><span><b>{p.name}</b><small>{p.project_id||p.code||''}</small></span></label>)}{!projects.length&&<small>No projects available.</small>}</div>}</fieldset></div>{modal.mode==='add'?<div className={styles.seatPolicy}><b>ⓘ &nbsp; User policy</b><span>RitsuFlow includes unlimited users. Adding or activating users does not consume commercial capacity; capacity is based on concurrent active projects.</span></div>:<div className={styles.seatPolicy}><b>ⓘ &nbsp; User access</b><span>Changes apply to this user's access inside {org?.name}. Removing the user does not delete the global RitsuFlow account.</span></div>}<div className={styles.modalActions}>{modal.mode==='edit'&&!modal.protectedUser&&<button type="button" className={styles.remove} disabled={busy} onClick={remove}>Remove User</button>}<span/><button type="button" className={styles.cancel} disabled={busy} onClick={close}>Cancel</button><button type="submit" className={styles.save} disabled={busy}>{busy?'Saving...':modal.mode==='edit'?'Save Changes':'✈ Send Invitation'}</button></div></form></div>}</main>
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '../../../lib/supabase/client'
+import { AppShell, Badge, Empty, Icon, Notice, Stat, Stats, ui } from '../../fieldop/ui'
+import { useT } from '../../../lib/i18n/useT'
+import { useLanguage } from '../../../lib/i18n/LanguageProvider'
+import styles from './users.module.css'
+
+const supabase = createClient()
+const INCLUDED_PROJECT_CAPACITY = 10
+const BLANK = { fullName: '', email: '', jobTitle: '', role: 'user', projectAccessMode: 'selected_projects', projectIds: [], workspaceAccess: ['projects'] }
+const WORKSPACES = ['projects', 'precon', 'fieldop', 'ritsuscope']
+const ROLES = ['admin', 'manager', 'user']
+const STATUS_TONE = { active: 'ok', invited: 'info', suspended: 'warn', disabled: 'bad', removed: 'bad' }
+const initialsOf = (text) => String(text || '?').split(/\s+/).filter(Boolean).map((x) => x[0]).slice(0, 2).join('').toUpperCase()
+const titleCase = (v) => String(v || '').replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+
+/** Label + control. Module-level so inputs keep focus while typing. */
+function Field({ label, wide, children }) {
+  return <label className={`${ui.field} ${wide ? styles.wide : ''}`}><span className={ui.fieldLabel}>{label}</span>{children}</label>
+}
+
+export default function UsersAccess() {
+  const t = useT('settings')
+  const { language } = useLanguage()
+  const router = useRouter()
+  const fileRef = useRef(null)
+  const [loading, setLoading] = useState(true)
+  const [org, setOrg] = useState(null)
+  const [members, setMembers] = useState([])
+  const [projects, setProjects] = useState([])
+  const [enabledModules, setEnabledModules] = useState([])
+  const [message, setMessage] = useState({ tone: 'ok', text: '' })
+  const [search, setSearch] = useState('')
+  const [modal, setModal] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [resendingId, setResendingId] = useState(null)
+  const [form, setForm] = useState(BLANK)
+  const [photo, setPhoto] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [modalError, setModalError] = useState('')
+  const [currentUserId, setCurrentUserId] = useState(null)
+  const [currentUserIsPlatformOwner, setCurrentUserIsPlatformOwner] = useState(false)
+  const say = (text, tone = 'ok') => setMessage({ text, tone })
+
+  const load = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { router.replace('/login'); return }
+    setCurrentUserId(user.id)
+    const [{ data: isPlatformOwner, error: platformError }, { data: mine, error: me }] = await Promise.all([
+      supabase.rpc('is_platform_owner'),
+      supabase.from('organization_members').select('organization_id,role,status').eq('user_id', user.id).eq('status', 'active'),
+    ])
+    if (platformError) console.error('Platform Owner status could not be loaded.', platformError)
+    setCurrentUserIsPlatformOwner(isPlatformOwner === true)
+    if (me) throw me
+    const membership = mine?.find((x) => ['owner', 'admin'].includes(x.role)) || mine?.[0]
+    if (!membership?.organization_id) throw new Error(t('users.errNoCompany'))
+    const oid = membership.organization_id
+    const [{ data: o, error: oe }, { data: ms, error: mE }, { data: ps, error: pE }, { data: prs, error: prE }, { data: mods }] = await Promise.all([
+      supabase.from('organizations').select('id,name,slug,organization_number,owner_user_id').eq('id', oid).single(),
+      supabase.from('organization_members').select('organization_id,user_id,role,status,joined_at,project_access_mode').eq('organization_id', oid).order('joined_at'),
+      supabase.from('user_profiles').select('user_id,full_name,email,job_title,avatar_path,workspace_access'),
+      supabase.from('projects').select('id,project_id,code,name,status').eq('organization_id', oid).order('name'),
+      supabase.from('organization_modules').select('module_key,is_enabled').eq('organization_id', oid).eq('is_enabled', true),
+    ])
+    if (oe) throw oe; if (mE) throw mE; if (pE) throw pE; if (prE) throw prE
+    const pm = new Map((ps || []).map((p) => [p.user_id, p]))
+    setOrg(o); setMembers((ms || []).map((m) => ({ ...m, profile: pm.get(m.user_id) || null }))); setProjects(prs || []); setEnabledModules((mods || []).map((x) => x.module_key))
+  }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load().catch((e) => say(e.message, 'bad')).finally(() => setLoading(false)) }, [load])
+  useEffect(() => () => { if (preview && !preview.startsWith('http')) URL.revokeObjectURL(preview) }, [preview])
+
+  const filtered = useMemo(() => { const q = search.toLowerCase(); return members.filter((m) => !q || [m.profile?.full_name, m.profile?.email, m.profile?.job_title, m.role, m.status].join(' ').toLowerCase().includes(q)) }, [members, search])
+  const activeUsers = members.filter((m) => m.status === 'active').length
+  const activeProjects = projects.filter((p) => String(p.status || '').toLowerCase() === 'active').length
+  const capacityLeft = Math.max(0, INCLUDED_PROJECT_CAPACITY - activeProjects)
+  const allowed = (k) => !enabledModules.length || k === 'projects' || enabledModules.some((m) => String(m).toLowerCase().includes(k))
+  const avatarUrl = (p) => (p ? supabase.storage.from('user-avatars').getPublicUrl(p).data.publicUrl : '')
+  const isProtected = (m) => currentUserIsPlatformOwner && m?.user_id === currentUserId
+  const roleLabel = (r) => (['owner', 'admin', 'manager', 'user', 'viewer'].includes(r) ? t(`users.role.${r}`) : titleCase(r))
+  const statusLabel = (s) => (['active', 'invited', 'suspended', 'disabled', 'removed'].includes(s) ? t(`users.status.${s}`) : titleCase(s))
+  const accessLabel = (a) => t(`users.access.${a === 'all_projects' ? 'all' : 'selected'}`)
+  const date = (v) => (v ? new Intl.DateTimeFormat(language, { dateStyle: 'medium' }).format(new Date(v)) : '—')
+
+  function resetPhoto() { setPhoto(null); if (preview && !preview.startsWith('http')) URL.revokeObjectURL(preview); setPreview('') }
+  function close() { setModal(null); resetPhoto(); setForm(BLANK); setModalError('') }
+  function add() { setForm(BLANK); setModalError(''); setModal({ mode: 'add' }) }
+  async function edit(m) {
+    if (isProtected(m)) { say(t('users.errProtectedEdit'), 'warn'); return }
+    const p = m.profile
+    let projectIds = []
+    if (m.project_access_mode === 'selected_projects') { const { data } = await supabase.from('project_members').select('project_id').eq('user_id', m.user_id); projectIds = (data || []).map((x) => x.project_id) }
+    const savedWorkspaces = Array.isArray(p?.workspace_access) && p.workspace_access.length ? p.workspace_access : ['projects']
+    setForm({ fullName: p?.full_name || '', email: p?.email || '', jobTitle: p?.job_title || '', role: m.role || 'user', projectAccessMode: m.project_access_mode || 'selected_projects', projectIds, workspaceAccess: savedWorkspaces })
+    setPreview(avatarUrl(p?.avatar_path)); setModalError(''); setModal({ mode: 'edit', member: m })
+  }
+  function choosePhoto(e) {
+    const f = e.target.files?.[0]; if (!f) return
+    if (f.size > 5 * 1024 * 1024) return setModalError(t('users.errPhotoSize'))
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) return setModalError(t('users.errPhotoType'))
+    if (preview && !preview.startsWith('http')) URL.revokeObjectURL(preview)
+    setPhoto(f); setPreview(URL.createObjectURL(f)); setModalError('')
+  }
+  async function resendInvitation(m) {
+    if (!org?.id || m.status !== 'invited' || resendingId) return
+    say(''); setResendingId(m.user_id)
+    try {
+      const r = await fetch('/api/administration/users/resend-invitation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organizationId: org.id, userId: m.user_id }) })
+      const result = await r.json()
+      if (!r.ok) throw new Error(result.error || t('users.errResend'))
+      say(m.profile?.email ? t('users.resentTo', { email: m.profile.email }) : t('users.resent'))
+    } catch (e) { say(e.message, 'bad') } finally { setResendingId(null) }
+  }
+  async function submit(e) {
+    e.preventDefault(); setModalError('')
+    if (!org?.id) return
+    if (!form.workspaceAccess.length) return setModalError(t('users.errWorkspace'))
+    if (form.role === 'admin' && form.projectAccessMode !== 'all_projects') return setModalError(t('users.errAdminAll'))
+    if (form.role === 'user' && form.projectAccessMode !== 'selected_projects') return setModalError(t('users.errUserSelected'))
+    if (form.projectAccessMode === 'selected_projects' && !form.projectIds.length) return setModalError(t('users.errProject'))
+    setBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const ext = photo?.name.split('.').pop()?.toLowerCase()
+      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` }
+      const body = JSON.stringify({ ...form, organizationId: org.id, avatarExt: photo ? ext : null })
+      let doneMessage
+      if (modal.mode === 'add') {
+        const r = await fetch('/api/settings/users/invite', { method: 'POST', headers, body }); const result = await r.json()
+        if (!r.ok) throw new Error(result.error || t('users.errInvite'))
+        if (photo && result.avatarUpload) { const { error } = await supabase.storage.from('user-avatars').uploadToSignedUrl(result.avatarUpload.path, result.avatarUpload.token, photo, { contentType: photo.type, upsert: true }); if (error) throw new Error(t('users.errInvitePhoto', { message: error.message })) }
+        doneMessage = t('users.invited', { email: result.user.email })
+      } else {
+        const r = await fetch(`/api/settings/users/${modal.member.user_id}`, { method: 'PATCH', headers, body }); const result = await r.json()
+        if (!r.ok) throw new Error(result.error || t('users.errUpdate'))
+        if (photo && result.avatarUpload) { const { error } = await supabase.storage.from('user-avatars').uploadToSignedUrl(result.avatarUpload.path, result.avatarUpload.token, photo, { contentType: photo.type, upsert: true }); if (error) throw new Error(t('users.errUpdatePhoto', { message: error.message })) }
+        doneMessage = t('users.updated', { name: form.fullName })
+      }
+      close(); say(doneMessage); await load()
+    } catch (err) { setModalError(err.message) } finally { setBusy(false) }
+  }
+  async function remove() {
+    const m = modal?.member; if (!m || !org) return
+    if (isProtected(m)) { setModalError(t('users.errProtectedRemove')); return }
+    const name = m.profile?.full_name || m.profile?.email || t('users.thisUser')
+    if (!window.confirm(t('users.confirmRemove', { name, company: org.name }))) return
+    setBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const r = await fetch(`/api/settings/users/${m.user_id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` }, body: JSON.stringify({ organizationId: org.id }) })
+      const result = await r.json()
+      if (!r.ok) throw new Error(result.error || t('users.errRemove'))
+      close(); say(t('users.removed', { name, company: org.name })); await load()
+    } catch (e) { setModalError(e.message) } finally { setBusy(false) }
+  }
+  const setRole = (role) => setForm((f) => ({ ...f, role, projectAccessMode: role === 'admin' ? 'all_projects' : role === 'user' ? 'selected_projects' : f.projectAccessMode, projectIds: role === 'admin' ? [] : f.projectIds }))
+  const toggleIn = (key, value) => setForm((f) => ({ ...f, [key]: f[key].includes(value) ? f[key].filter((x) => x !== value) : [...f[key], value] }))
+
+  return <AppShell module="settings" active="users" action={<button type="button" className={ui.btnPrimary} disabled={!org} onClick={add}><Icon name="plus" size={18} />{t('users.add')}</button>}>
+    {loading ? <p className={styles.muted}>{t('loading')}</p> : <div className={styles.stack}>
+      {message.text && <Notice tone={message.tone}>{message.text}</Notice>}
+      {currentUserIsPlatformOwner && <Notice tone="warn">{t('users.ownerProtection')}</Notice>}
+      <Stats>
+        <Stat label={t('users.statCompany')} value={<span className={styles.company}>{org?.name || '—'}</span>} hint={org?.organization_number || org?.slug} />
+        <Stat label={t('users.statActive')} value={activeUsers} hint={t('users.unlimited')} />
+        <Stat label={t('users.statProjects')} value={activeProjects} hint={t('users.projectsHint')} />
+        <Stat label={t('users.statCapacity')} value={`${activeProjects} / ${INCLUDED_PROJECT_CAPACITY}`} hint={t('users.capacityHint', { count: capacityLeft })} tone={capacityLeft === 0 ? 'warn' : undefined} />
+      </Stats>
+
+      <section className={ui.panel}>
+        <div className={styles.head}>
+          <div><h2>{t('users.listTitle')}</h2><p>{t('users.listText')}</p></div>
+          <label className={styles.search}><Icon name="search" size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('users.search')} aria-label={t('users.search')} /></label>
+        </div>
+        {!filtered.length ? <Empty title={t('users.empty')} /> : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.phoneCards}`}>
+          <thead><tr><th>{t('users.colUser')}</th><th>{t('users.colEmail')}</th><th>{t('users.colJob')}</th><th>{t('users.colRole')}</th><th>{t('users.colStatus')}</th><th>{t('users.colAccess')}</th><th>{t('users.colJoined')}</th><th /></tr></thead>
+          <tbody>{filtered.map((m) => {
+            const p = m.profile, a = avatarUrl(p?.avatar_path), protectedUser = isProtected(m)
+            const note = protectedUser ? t('users.protectedOwner') : m.user_id === org?.owner_user_id ? t('users.primaryAdmin') : m.status === 'invited' ? t('users.awaiting') : ''
+            return <tr key={m.user_id}>
+              <td data-label=""><div className={styles.person}>{a ? <img src={a} alt="" /> : <b>{initialsOf(p?.full_name || p?.email)}</b>}<span><strong>{p?.full_name || t('users.unnamed')}</strong>{note && <small>{note}</small>}</span></div></td>
+              <td data-label={t('users.colEmail')}>{p?.email || '—'}</td>
+              <td data-label={t('users.colJob')}>{p?.job_title || '—'}</td>
+              <td data-label={t('users.colRole')}>{protectedUser ? t('users.platformOwner') : roleLabel(m.role)}</td>
+              <td data-label={t('users.colStatus')}><Badge tone={STATUS_TONE[m.status]}>{statusLabel(m.status)}</Badge></td>
+              <td data-label={t('users.colAccess')}>{protectedUser ? t('users.protected') : accessLabel(m.project_access_mode)}</td>
+              <td data-label={t('users.colJoined')}>{date(m.joined_at)}</td>
+              <td data-label=""><div className={styles.rowActions}>
+                {m.status === 'invited' && <button type="button" className={`${ui.btn} ${ui.small}`} disabled={resendingId === m.user_id} onClick={() => resendInvitation(m)}>{resendingId === m.user_id ? t('users.sending') : t('users.resend')}</button>}
+                {protectedUser ? <span className={styles.lock} title={t('users.protected')}><Icon name="shield" size={18} /></span> : <button type="button" className={`${ui.btn} ${ui.small}`} onClick={() => edit(m)} aria-label={t('users.editAria', { name: p?.full_name || p?.email || '' })}>{t('users.edit')}</button>}
+              </div></td>
+            </tr>
+          })}</tbody>
+        </table></div>}
+      </section>
+      <p className={styles.note}><b>{t('users.noteTitle')}</b> {t('users.noteText')}</p>
+    </div>}
+
+    {modal && <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) close() }}>
+      <form className={styles.dialog} onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="user-dialog-title">
+        <header className={styles.dialogHead}>
+          <div><h2 id="user-dialog-title">{modal.mode === 'edit' ? t('users.editTitle') : t('users.addTitle')}</h2><p>{modal.mode === 'edit' ? t('users.editText', { company: org?.name }) : t('users.addText', { company: org?.name })}</p></div>
+          <button type="button" className={styles.close} onClick={close} aria-label={t('users.close')}><Icon name="close" /></button>
+        </header>
+        <div className={styles.dialogBody}>
+          <section className={styles.photoRow}>
+            <div className={styles.avatar}>{preview ? <img src={preview} alt="" /> : <span>{form.fullName ? initialsOf(form.fullName) : '·'}</span>}</div>
+            <div><b>{t('users.photo')} <em>{t('users.optional')}</em></b><button type="button" className={`${ui.btn} ${ui.small}`} onClick={() => fileRef.current?.click()}>{t('users.uploadPhoto')}</button><input ref={fileRef} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={choosePhoto} /><small>{t('users.photoHint')}</small></div>
+          </section>
+          <div className={styles.grid}>
+            <Field label={`${t('users.fullName')} *`}><input required value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} /></Field>
+            <Field label={`${t('users.colEmail')} *`}><input required type="email" disabled={modal.mode === 'edit'} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+            <Field label={t('users.colJob')}><input value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder={t('users.jobPlaceholder')} /></Field>
+            <Field label={`${t('users.colRole')} *`}><select value={form.role} onChange={(e) => setRole(e.target.value)}>{ROLES.map((r) => <option key={r} value={r}>{t(`users.role.${r}`)}</option>)}</select></Field>
+          </div>
+          <div className={styles.access}>
+            <fieldset className={styles.fieldset}>
+              <legend>{t('users.workspaceTitle')} *</legend>
+              <p>{t('users.workspaceText')}</p>
+              {WORKSPACES.map((k) => <label key={k} className={`${styles.option} ${!allowed(k) ? styles.optionOff : ''}`}><input type="checkbox" checked={form.workspaceAccess.includes(k)} disabled={!allowed(k)} onChange={() => toggleIn('workspaceAccess', k)} /><b>{t(`users.workspace.${k}`)}</b>{!allowed(k) && <small>{t('users.notInPlan')}</small>}</label>)}
+            </fieldset>
+            <fieldset className={styles.fieldset}>
+              <legend>{t('users.projectTitle')} *</legend>
+              <p>{t('users.projectText')}</p>
+              <label className={styles.option}><input type="radio" disabled={form.role === 'user'} checked={form.projectAccessMode === 'all_projects'} onChange={() => setForm({ ...form, projectAccessMode: 'all_projects', projectIds: [] })} /><span><b>{t('users.access.all')}</b><small>{t('users.access.allHint')}</small></span></label>
+              <label className={styles.option}><input type="radio" disabled={form.role === 'admin'} checked={form.projectAccessMode === 'selected_projects'} onChange={() => setForm({ ...form, projectAccessMode: 'selected_projects' })} /><span><b>{t('users.access.selected')}</b><small>{t('users.access.selectedHint')}</small></span></label>
+              {form.projectAccessMode === 'selected_projects' && <div className={styles.projectList}>
+                {projects.map((p) => <label key={p.id} className={styles.option}><input type="checkbox" checked={form.projectIds.includes(p.id)} onChange={() => toggleIn('projectIds', p.id)} /><span><b>{p.name}</b><small>{p.project_id || p.code || ''}</small></span></label>)}
+                {!projects.length && <small className={styles.muted}>{t('users.noProjects')}</small>}
+              </div>}
+            </fieldset>
+          </div>
+          <div className={styles.policy}><b>{modal.mode === 'add' ? t('users.policyTitle') : t('users.accessTitle')}</b><span>{modal.mode === 'add' ? t('users.policyText') : t('users.accessText', { company: org?.name })}</span></div>
+          {modalError && <Notice>{modalError}</Notice>}
+        </div>
+        <footer className={styles.dialogFoot}>
+          {modal.mode === 'edit' && <button type="button" className={ui.btnDanger} disabled={busy} onClick={remove}>{t('users.remove')}</button>}
+          <span className={styles.spacer} />
+          <button type="button" className={ui.btn} disabled={busy} onClick={close}>{t('users.cancel')}</button>
+          <button type="submit" className={ui.btnPrimary} disabled={busy}>{busy ? t('users.saving') : modal.mode === 'edit' ? t('users.save') : t('users.sendInvite')}</button>
+        </footer>
+      </form>
+    </div>}
+  </AppShell>
 }
