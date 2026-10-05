@@ -1,64 +1,305 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../../lib/supabase'
+import { AppShell, Badge, Empty, Icon, Notice, Segments, Stat, Stats, ui } from '../../../fieldop/ui'
+import { useT } from '../../../../lib/i18n/useT'
+import { useLanguage } from '../../../../lib/i18n/LanguageProvider'
 import styles from './scope.module.css'
-import { AppShell, ui } from '../../../fieldop/ui'
 
-const units=['SF','LF','EA','CY','SY','TON','HR','m²','m','m³','kg','month','LS','unit']
-const blank={item_type:'scope',parent_scope_id:null,scope_code:'',scope_name:'',description:'',exclusions:'',quantity:'',unit:'m²',unit_price:'',quantity_source:'contract',status:'defined',notes:''}
-const activityBlank={activity_name:'',wall_side:'N/A',quantity:'',unit:'m²',notes:''}
-const num=v=>Number(v||0)
-const cash=(v,c='BRL')=>{try{return new Intl.NumberFormat('pt-BR',{style:'currency',currency:c,maximumFractionDigits:2}).format(num(v))}catch{return num(v).toLocaleString('pt-BR',{minimumFractionDigits:2})}}
-const qty=v=>v===null||v===undefined||v===''?'—':num(v).toLocaleString('en-US',{maximumFractionDigits:2})
-const normalizeQuantitySource=v=>v==='takeoff'||v==='ritsucad'?'ritsuscope':(v||'contract')
+const UNITS = ['SF', 'LF', 'EA', 'CY', 'SY', 'TON', 'HR', 'm²', 'm', 'm³', 'kg', 'month', 'LS', 'unit']
+const STATUSES = ['draft', 'defined', 'pending', 'on_hold']
+const SOURCES = ['contract', 'ritsuscope', 'manual']
+const SIDES = ['N/A', 'A', 'B']
+const STATUS_TONE = { defined: 'ok', pending: 'warn', on_hold: 'bad' }
+const BLANK = { item_type: 'scope', parent_scope_id: null, scope_code: '', scope_name: '', description: '', exclusions: '', quantity: '', unit: 'm²', unit_price: '', quantity_source: 'contract', status: 'defined', notes: '' }
+const ACTIVITY_BLANK = { activity_name: '', wall_side: 'N/A', quantity: '', unit: 'm²', notes: '' }
+const num = (v) => Number(v || 0)
+const source = (v) => (v === 'takeoff' || v === 'ritsucad' ? 'ritsuscope' : v || 'contract')
 
-export default function ScopeManagementPage(){
- const params=useParams(),projectId=params?.projectId
- const[project,setProject]=useState(null),[rows,setRows]=useState([]),[selectedId,setSelectedId]=useState(null),[activities,setActivities]=useState([])
- const[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[search,setSearch]=useState(''),[collapsed,setCollapsed]=useState(new Set()),[modal,setModal]=useState(false),[editModal,setEditModal]=useState(false),[form,setForm]=useState(blank),[tab,setTab]=useState('general'),[activityForm,setActivityForm]=useState(activityBlank)
- const selected=rows.find(r=>r.id===selectedId)||null
- useEffect(()=>{if(projectId)load()},[projectId])
- useEffect(()=>{if(selectedId)loadActivities(selectedId);else setActivities([])},[selectedId])
- async function load(){setLoading(true);setError('');const[{data:p,error:pe},{data:s,error:se}]=await Promise.all([supabase.from('projects').select('*').eq('id',projectId).maybeSingle(),supabase.from('project_scopes').select('*').eq('project_id',projectId).order('scope_code').order('created_at')]);if(pe||se)setError(pe?.message||se?.message);setProject(p);setRows(s||[]);setLoading(false)}
- async function loadActivities(id){const{data,error:e}=await supabase.from('scope_activities').select('*').eq('scope_id',id).order('sequence');if(e)setError(e.message);else setActivities(data||[])}
- async function actor(){const{data:{user}}=await supabase.auth.getUser();if(!user)throw new Error('You must be signed in.');const{data:p}=await supabase.from('user_profiles').select('full_name,display_name,email').eq('user_id',user.id).maybeSingle();return{user,name:p?.full_name||p?.display_name||p?.email||user.email||'RitsuFlow User'}}
- async function history(a,type,label,description,entityId,metadata={}){await supabase.from('project_history').insert({project_id:projectId,action_type:type,action_label:label,description,entity_type:'scope',entity_id:String(entityId),performed_by:a.user.id,performed_by_name:a.name,metadata})}
- const children=useMemo(()=>{const m={};rows.forEach(r=>{const k=r.parent_scope_id||'root';(m[k]||(m[k]=[])).push(r)});return m},[rows])
- function rollup(id,seen=new Set()){if(seen.has(id))return 0;seen.add(id);const kids=children[id]||[];if(kids.length)return kids.reduce((s,k)=>s+rollup(k.id,new Set(seen)),0);const r=rows.find(x=>x.id===id);return num(r?.quantity)*num(r?.unit_price)}
- const topRows=children.root||[]
- const allocated=topRows.reduce((s,r)=>s+rollup(r.id),0),contract=num(project?.contract_value),unallocated=contract-allocated,rawProgress=contract>0?allocated/contract*100:0,progress=Math.min(100,Math.max(0,rawProgress))
- function depthOf(r){let d=0,p=r.parent_scope_id,guard=0;while(p&&guard++<10){d++;p=rows.find(x=>x.id===p)?.parent_scope_id}return d}
- function flatten(parent='root',out=[]){(children[parent]||[]).forEach(r=>{out.push(r);if(!collapsed.has(r.id))flatten(r.id,out)});return out}
- const visible=flatten().filter(r=>!search||`${r.scope_code} ${r.scope_name}`.toLowerCase().includes(search.toLowerCase()))
- function nextCode(type,parent){if(type==='scope')return String(topRows.length+1);if(!parent)return'';return `${parent.scope_code||'1'}.${(children[parent.id]||[]).length+1}`}
- function validParent(type,parent){if(!parent)return null;if(type==='group')return parent.item_type==='scope'?parent:rows.find(r=>r.id===parent.parent_scope_id&&r.item_type==='scope')||null;if(type==='item')return ['scope','group'].includes(parent.item_type)?parent:null;return null}
- function openAdd(type='scope',parent=null){const resolved=validParent(type,parent);setError('');setForm({...blank,item_type:type,parent_scope_id:resolved?.id||null,unit:resolved?.unit||'m²',scope_code:nextCode(type,resolved)});setModal(true)}
- const parentOptions=form.item_type==='group'?rows.filter(r=>r.item_type==='scope'):form.item_type==='item'?rows.filter(r=>r.item_type==='scope'||r.item_type==='group'):[]
- function changeParent(parentId){const parent=rows.find(r=>r.id===parentId)||null;setForm(f=>({...f,parent_scope_id:parent?.id||null,unit:parent?.unit||f.unit||'m²',scope_code:nextCode(f.item_type,parent)}))}
- function editParentOptions(r){if(!r)return[];return r.item_type==='group'?rows.filter(x=>x.item_type==='scope'&&x.id!==r.id):r.item_type==='item'?rows.filter(x=>['scope','group'].includes(x.item_type)&&x.id!==r.id):[]}
- function openEdit(r){setError('');setSelectedId(r.id);setTab('general');setEditModal(true)}
- async function createItem(){if(!form.scope_name.trim()||saving)return;if(form.item_type!=='scope'&&!form.parent_scope_id){setError(`Choose a parent ${form.item_type==='group'?'scope':'scope or group'} before creating this ${form.item_type}.`);return}setSaving(true);setError('');try{const a=await actor();const payload={...form,quantity_source:normalizeQuantitySource(form.quantity_source),project_id:projectId,quantity:form.quantity===''?null:num(form.quantity),unit_price:num(form.unit_price),created_by:a.user.id};const{data,error:e}=await supabase.from('project_scopes').insert(payload).select('*').single();if(e)throw e;await history(a,'scope_added','Scope register item added',data.scope_name,data.id,{item_type:data.item_type,parent_scope_id:data.parent_scope_id,quantity:data.quantity,unit:data.unit,unit_price:data.unit_price});setRows(x=>[...x,data]);setSelectedId(data.id);setModal(false)}catch(e){setError(e.message)}finally{setSaving(false)}}
- async function saveSelected(){if(!selected||saving)return;setSaving(true);setError('');try{const a=await actor();const patch={parent_scope_id:selected.item_type==='scope'?null:selected.parent_scope_id,scope_name:selected.scope_name,description:selected.description,exclusions:selected.exclusions,quantity:selected.item_type==='item'?(selected.quantity===''?null:num(selected.quantity)):null,unit:selected.unit,unit_price:selected.item_type==='item'?num(selected.unit_price):0,quantity_source:normalizeQuantitySource(selected.quantity_source),status:selected.status,notes:selected.notes};const{data,error:e}=await supabase.from('project_scopes').update(patch).eq('id',selected.id).select('*').single();if(e)throw e;await history(a,'scope_updated','Scope register item updated',data.scope_name,data.id,{parent_scope_id:data.parent_scope_id,quantity:data.quantity,unit:data.unit,unit_price:data.unit_price,quantity_source:data.quantity_source});setRows(x=>x.map(r=>r.id===data.id?data:r));setEditModal(false)}catch(e){setError(e.message)}finally{setSaving(false)}}
- function patchSelected(p){setRows(x=>x.map(r=>r.id===selectedId?{...r,...p}:r))}
- async function addActivity(){if(!selected||!activityForm.activity_name.trim()||saving)return;setSaving(true);try{const a=await actor();const payload={...activityForm,scope_id:selected.id,sequence:activities.length+1,quantity:activityForm.quantity===''?null:num(activityForm.quantity),created_by:a.user.id};const{data,error:e}=await supabase.from('scope_activities').insert(payload).select('*').single();if(e)throw e;await history(a,'scope_activity_added','Scope activity added',data.activity_name,data.id,{scope_id:selected.id});setActivities(x=>[...x,data]);setActivityForm({...activityBlank,unit:selected.unit||'m²'})}catch(e){setError(e.message)}finally{setSaving(false)}}
- function toggle(id){setCollapsed(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n})}
- const currency=project?.currency_code||'BRL'
- const editTitle=selected?`Edit ${selected.item_type==='scope'?'Scope':selected.item_type==='group'?'Group':'Item'}`:'Edit'
- const itemPreview=selected?.item_type==='item'?num(selected.quantity)*num(selected.unit_price):selected?rollup(selected.id):0
- return <AppShell module="projects" active="scope" projectId={projectId} bare action={<Link className={ui.btnPrimary} href={`/planning/pre-planning?projectId=${projectId}`}>Continue to PreCon →</Link>}><div className={styles.shell}>
-  <div className={styles.body}>
-   {error&&!editModal&&!modal&&<div className={styles.error}>{error}</div>}
-   <section className={styles.kpis}><Kpi icon="$" label="Contract Value" value={cash(contract,currency)}/><Kpi icon="◔" label="Scope Allocated Value" value={cash(allocated,currency)} extra={`${rawProgress.toFixed(1)}%`} good/><Kpi icon="△" label={unallocated<0?'Overallocated Value':'Unallocated Value'} value={cash(Math.abs(unallocated),currency)} extra={unallocated<0?'Over contract':`${Math.max(0,100-progress).toFixed(1)}%`} warn/><Kpi icon="▤" label="Total Items" value={String(rows.length)}/><div className={`${styles.kpi} ${styles.progressCard}`}><div className={styles.progressTop}><span>Scope Progress</span><b>{rawProgress.toFixed(1)}%</b></div><div className={styles.progress}><span style={{width:`${progress}%`}}/></div></div></section>
-   <section className={styles.toolbar}><button className={styles.primary} onClick={()=>openAdd('scope')}>＋ Add Scope</button><button className={styles.tool} onClick={()=>openAdd('group',selected)} disabled={!rows.some(r=>r.item_type==='scope')}>＋ Group</button><button className={styles.tool} onClick={()=>openAdd('item',selected)} disabled={!rows.some(r=>r.item_type==='scope'||r.item_type==='group')}>＋ Item</button><button className={styles.tool} onClick={()=>setCollapsed(new Set())}>Expand All</button><button className={styles.tool} onClick={()=>setCollapsed(new Set(rows.map(r=>r.id)))}>Collapse All</button><input className={styles.toolbarSearch} value={search} onChange={e=>setSearch(e.target.value)} placeholder="⌕  Search scope items..."/><button className={styles.tool}>Filter</button><button className={styles.tool}>Columns</button></section>
-   <section className={styles.workspace}><div className={styles.register}><div className={styles.tableWrap}>{loading?<div className={styles.empty}>Loading scope register...</div>:rows.length?<table className={styles.table}><thead><tr><th>ID</th><th>Description</th><th>Type</th><th>Unit</th><th>Quantity</th><th>Unit Price</th><th>Total Price</th><th>Status</th><th>Action</th></tr></thead><tbody>{visible.map(r=>{const kids=(children[r.id]||[]).length>0,d=depthOf(r),total=rollup(r.id);return <tr key={r.id} className={`${r.item_type==='scope'?styles.scopeRow:r.item_type==='group'?styles.groupRow:''}`}><td>{r.scope_code||'—'}</td><td><div className={styles.descCell} style={{paddingLeft:d*18}}>{kids?<button onClick={()=>toggle(r.id)}>{collapsed.has(r.id)?'›':'⌄'}</button>:<span style={{width:15}}/>}<span>{r.item_type!=='item'?'▰':''}</span><span className={styles.descText}>{r.scope_name}</span></div></td><td><span className={`${styles.type} ${r.item_type==='scope'?styles.scopeType:r.item_type==='group'?styles.groupType:styles.itemType}`}>{r.item_type}</span></td><td>{r.item_type==='item'?r.unit:'—'}</td><td>{r.item_type==='item'?qty(r.quantity):'—'}</td><td className={styles.money}>{r.item_type==='item'?cash(r.unit_price,currency):'—'}</td><td className={styles.money}>{cash(total,currency)}</td><td><span className={styles.status}>{r.status||'defined'}</span></td><td><button className={styles.more} onClick={()=>openEdit(r)}>Edit</button></td></tr>})}</tbody></table>:<div className={styles.empty}><div><b>No contracted scope registered yet.</b><p>Start with “Add Scope”, then create groups and measurable items beneath it.</p></div></div>}</div><footer className={styles.tableFooter}><span>Showing {visible.length} of {rows.length} items</span><span>Contracted scope register</span></footer></div></section>
-  </div>
-  {modal&&<div className={styles.modalBack} onMouseDown={e=>{if(e.target===e.currentTarget)setModal(false)}}><div className={styles.modal}><div className={styles.modalHead}><h2>Add {form.item_type==='scope'?'Scope':form.item_type==='group'?'Group':'Item'}</h2><button onClick={()=>setModal(false)}>×</button></div><div className={styles.modalBody}>{error&&<div className={styles.error}>{error}</div>}<div className={styles.modalGrid}>{form.item_type!=='scope'&&<Field label={form.item_type==='group'?'Parent Scope *':'Parent Scope / Group *'}><select className={styles.input} value={form.parent_scope_id||''} onChange={e=>changeParent(e.target.value)}><option value="">Select parent...</option>{parentOptions.map(p=><option key={p.id} value={p.id}>{p.scope_code} — {p.scope_name}</option>)}</select></Field>}<Field label="ID"><input className={styles.input} value={form.scope_code} readOnly/></Field><Field label="Description"><input className={styles.input} value={form.scope_name} onChange={e=>setForm({...form,scope_name:e.target.value})}/></Field>{form.item_type==='item'&&<><Field label="Unit"><select className={styles.input} value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})}>{units.map(u=><option key={u}>{u}</option>)}</select></Field><Field label="Quantity"><input className={styles.input} type="number" value={form.quantity} onChange={e=>setForm({...form,quantity:e.target.value})}/></Field><Field label={`Unit Price (${currency})`}><input className={styles.input} type="number" value={form.unit_price} onChange={e=>setForm({...form,unit_price:e.target.value})}/></Field><Field label="Quantity Source"><select className={styles.input} value={normalizeQuantitySource(form.quantity_source)} onChange={e=>setForm({...form,quantity_source:e.target.value})}><option value="contract">Contract / BOQ</option><option value="ritsuscope">Takeoff / RitsuScope</option><option value="manual">Manual</option></select></Field></>}<div style={{gridColumn:'1/-1'}}><Field label="Notes / Description"><textarea className={styles.textarea} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field></div></div><div className={styles.modalActions}><button className={styles.cancel} onClick={()=>setModal(false)}>Cancel</button><button className={styles.primary} onClick={createItem} disabled={saving||!form.scope_name.trim()||(form.item_type!=='scope'&&!form.parent_scope_id)}>{saving?'Creating...':'Create'}</button></div></div></div></div>}
-  {editModal&&selected&&<div className={styles.modalBack} onMouseDown={e=>{if(e.target===e.currentTarget)setEditModal(false)}}><div className={styles.details} style={{display:'flex',flexDirection:'column',width:'min(760px,94vw)',height:'min(690px,86vh)'}}><div className={styles.detailsHead}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><h2>▤ &nbsp; {editTitle}</h2><button onClick={()=>setEditModal(false)} aria-label="Close editor" style={{border:0,background:'transparent',color:'#fff',fontSize:24,cursor:'pointer'}}>×</button></div><div className={styles.detailsMeta}><span className={`${styles.type} ${selected.item_type==='scope'?styles.scopeType:selected.item_type==='group'?styles.groupType:styles.itemType}`}>{selected.item_type}</span><b>ID</b><span>{selected.scope_code||'—'} · system controlled</span></div><div className={styles.detailsName}>{selected.scope_name}</div></div><div className={styles.tabs}><button className={tab==='general'?styles.activeTab:''} onClick={()=>setTab('general')}>General</button><button className={tab==='spec'?styles.activeTab:''} onClick={()=>setTab('spec')}>Specifications</button><button className={tab==='activities'?styles.activeTab:''} onClick={()=>setTab('activities')}>Activities ({activities.length})</button><button className={tab==='files'?styles.activeTab:''} onClick={()=>setTab('files')}>Files</button></div><div className={styles.detailBody}>{error&&<div className={styles.error} style={{marginBottom:10}}>{error}</div>}{tab==='general'?<><Field label="ID"><input className={styles.input} value={selected.scope_code||''} readOnly/></Field>{selected.item_type!=='scope'&&<Field label={selected.item_type==='group'?'Parent Scope':'Parent Scope / Group'}><select className={styles.input} value={selected.parent_scope_id||''} onChange={e=>patchSelected({parent_scope_id:e.target.value||null})}>{editParentOptions(selected).map(p=><option key={p.id} value={p.id}>{p.scope_code} — {p.scope_name}</option>)}</select></Field>}<Field label="Description"><input className={styles.input} value={selected.scope_name||''} onChange={e=>patchSelected({scope_name:e.target.value})}/></Field>{selected.item_type==='item'&&<><div className={styles.two}><Field label="Unit"><select className={styles.input} value={selected.unit||'m²'} onChange={e=>patchSelected({unit:e.target.value})}>{units.map(u=><option key={u}>{u}</option>)}</select></Field><Field label="Quantity Source"><select className={styles.input} value={normalizeQuantitySource(selected.quantity_source)} onChange={e=>patchSelected({quantity_source:e.target.value})}><option value="contract">Contract / BOQ</option><option value="ritsuscope">Takeoff / RitsuScope</option><option value="manual">Manual</option></select></Field></div><div className={styles.two}><Field label="Contracted Quantity"><input className={styles.input} type="number" min="0" step="any" value={selected.quantity??''} onChange={e=>patchSelected({quantity:e.target.value})}/></Field><Field label={`Unit Price (${currency})`}><input className={styles.input} type="number" min="0" step="any" value={selected.unit_price??''} onChange={e=>patchSelected({unit_price:e.target.value})}/></Field></div></>}<div className={styles.totalBox}>Total Price &nbsp; {cash(itemPreview,currency)}{selected.item_type!=='item'&&<span style={{fontSize:10,fontWeight:500,marginLeft:8}}>Roll-up from child items</span>}</div><Field label="Status"><select className={styles.input} value={selected.status||'defined'} onChange={e=>patchSelected({status:e.target.value})}><option value="draft">Draft</option><option value="defined">Defined</option><option value="pending">Pending</option><option value="on_hold">On Hold</option></select></Field><Field label="Notes"><textarea className={styles.textarea} value={selected.notes||''} onChange={e=>patchSelected({notes:e.target.value})}/></Field><button className={styles.save} onClick={saveSelected} disabled={saving}>{saving?'Saving...':'Save Changes'}</button></>:tab==='spec'?<><Field label="Scope Definition"><textarea className={styles.textarea} value={selected.description||''} onChange={e=>patchSelected({description:e.target.value})}/></Field><Field label="Exclusions"><textarea className={styles.textarea} value={selected.exclusions||''} onChange={e=>patchSelected({exclusions:e.target.value})}/></Field><button className={styles.save} onClick={saveSelected} disabled={saving}>{saving?'Saving...':'Save Specifications'}</button></>:tab==='activities'?<><p style={{fontSize:10,color:'#647d8a'}}>Activities define HOW this scope item will be produced. They do not automatically change the contractual value.</p>{activities.map((a,i)=><div className={styles.activity} key={a.id}><strong>{i+1}. {a.activity_name}</strong><span>{a.wall_side==='N/A'?'':`Side ${a.wall_side} · `}{qty(a.quantity)} {a.unit}</span></div>)}<div className={styles.activityForm}><input className={`${styles.input} ${styles.wide}`} placeholder="Activity name" value={activityForm.activity_name} onChange={e=>setActivityForm({...activityForm,activity_name:e.target.value})}/><select className={styles.input} value={activityForm.wall_side} onChange={e=>setActivityForm({...activityForm,wall_side:e.target.value})}><option>N/A</option><option>A</option><option>B</option></select><input className={styles.input} type="number" placeholder="Quantity" value={activityForm.quantity} onChange={e=>setActivityForm({...activityForm,quantity:e.target.value})}/><select className={styles.input} value={activityForm.unit} onChange={e=>setActivityForm({...activityForm,unit:e.target.value})}>{units.map(u=><option key={u}>{u}</option>)}</select><button className={`${styles.save} ${styles.wide}`} onClick={addActivity} disabled={saving}>＋ Add Activity</button></div></>:<div className={styles.empty}>Files will be connected to this scope record.</div>}</div></div></div>}
- </div></AppShell>
+/** Label + control. Module-level so inputs keep focus while typing. */
+function Field({ label, wide, children }) {
+  return <label className={`${ui.field} ${wide ? styles.wide : ''}`}><span className={ui.fieldLabel}>{label}</span>{children}</label>
 }
-function Kpi({icon,label,value,extra,good,warn}){return <div className={styles.kpi}><div className={styles.kpiIcon}>{icon}</div><div className={styles.kpiText}><div className={styles.kpiLabel}>{label}</div><div className={styles.kpiValue}>{value}{extra&&<span className={good?styles.good:warn?styles.warn:''}>{extra}</span>}</div></div></div>}
-function Field({label,children}){return <label className={styles.field}><span>{label}</span>{children}</label>}
+
+export default function ScopeRegisterPage() {
+  const t = useT('projects')
+  const { language } = useLanguage()
+  const { projectId } = useParams()
+  const [project, setProject] = useState(null)
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [collapsed, setCollapsed] = useState(new Set())
+  const [selectedId, setSelectedId] = useState(null)
+  const [adding, setAdding] = useState(null) // form for the Add dialog
+  const [draft, setDraft] = useState(null) // copy of the row being edited
+  const [tab, setTab] = useState('general')
+  const [activities, setActivities] = useState([])
+  const [activityForm, setActivityForm] = useState(ACTIVITY_BLANK)
+  const [saving, setSaving] = useState(false)
+  const [dialogError, setDialogError] = useState('')
+
+  const currency = project?.currency_code || 'BRL'
+  const cash = (v) => { try { return new Intl.NumberFormat(language, { style: 'currency', currency, maximumFractionDigits: 2 }).format(num(v)) } catch { return num(v).toFixed(2) } }
+  const qty = (v) => (v === null || v === undefined || v === '' ? '—' : new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(num(v)))
+  const pct = (v) => new Intl.NumberFormat(language, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(v)
+
+  useEffect(() => { if (projectId) load() }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!draft?.id) { setActivities([]); return }
+    supabase.from('scope_activities').select('*').eq('scope_id', draft.id).order('sequence').then(({ data, error: e }) => { if (e) setDialogError(e.message); else setActivities(data || []) })
+  }, [draft?.id])
+
+  async function load() {
+    setLoading(true); setError('')
+    const [{ data: p, error: pe }, { data: s, error: se }] = await Promise.all([
+      supabase.from('projects').select('id, name, contract_value, currency_code').eq('id', projectId).maybeSingle(),
+      supabase.from('project_scopes').select('*').eq('project_id', projectId).order('scope_code').order('created_at'),
+    ])
+    if (pe || se) setError(t('scope.errLoad', { message: pe?.message || se?.message }))
+    setProject(p); setRows(s || []); setLoading(false)
+  }
+
+  async function actor() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error(t('scope.errSignedOut'))
+    const { data: p } = await supabase.from('user_profiles').select('full_name, display_name, email').eq('user_id', user.id).maybeSingle()
+    return { user, name: p?.full_name || p?.display_name || p?.email || user.email || 'RitsuFlow User' }
+  }
+  async function history(a, type, label, description, entityId, metadata = {}) {
+    await supabase.from('project_history').insert({ project_id: projectId, action_type: type, action_label: label, description, entity_type: 'scope', entity_id: String(entityId), performed_by: a.user.id, performed_by_name: a.name, metadata })
+  }
+
+  // ---------- Tree ----------
+  const children = useMemo(() => { const m = {}; rows.forEach((r) => { const k = r.parent_scope_id || 'root'; (m[k] || (m[k] = [])).push(r) }); return m }, [rows])
+  const byId = useMemo(() => Object.fromEntries(rows.map((r) => [r.id, r])), [rows])
+  function rollup(id, seen = new Set()) {
+    if (seen.has(id)) return 0
+    seen.add(id)
+    const kids = children[id] || []
+    if (kids.length) return kids.reduce((s, k) => s + rollup(k.id, new Set(seen)), 0)
+    const r = byId[id]
+    return r?.item_type === 'item' ? num(r.quantity) * num(r.unit_price) : 0
+  }
+  function depthOf(r) { let d = 0, p = r.parent_scope_id, guard = 0; while (p && guard++ < 10) { d++; p = byId[p]?.parent_scope_id } return d }
+  const topRows = children.root || []
+  const allocated = topRows.reduce((s, r) => s + rollup(r.id), 0)
+  const contract = num(project?.contract_value)
+  const remaining = contract - allocated
+  const rawProgress = contract > 0 ? (allocated / contract) * 100 : 0
+  const progress = Math.min(100, Math.max(0, rawProgress))
+  const counts = rows.reduce((c, r) => ({ ...c, [r.item_type]: (c[r.item_type] || 0) + 1 }), {})
+
+  const query = search.trim().toLowerCase()
+  const visible = useMemo(() => {
+    if (query) return rows.filter((r) => `${r.scope_code} ${r.scope_name}`.toLowerCase().includes(query))
+    const out = []
+    const walk = (parent) => (children[parent] || []).forEach((r) => { out.push(r); if (!collapsed.has(r.id)) walk(r.id) })
+    walk('root')
+    return out
+  }, [rows, children, collapsed, query])
+
+  // ---------- Add ----------
+  function nextCode(type, parent) {
+    if (type === 'scope') return String(topRows.length + 1)
+    if (!parent) return ''
+    return `${parent.scope_code || '1'}.${(children[parent.id] || []).length + 1}`
+  }
+  function validParent(type, parent) {
+    if (!parent) return null
+    if (type === 'group') return parent.item_type === 'scope' ? parent : (byId[parent.parent_scope_id]?.item_type === 'scope' ? byId[parent.parent_scope_id] : null)
+    if (type === 'item') return ['scope', 'group'].includes(parent.item_type) ? parent : byId[parent.parent_scope_id] || null
+    return null
+  }
+  const parentOptions = (type, selfId) => rows.filter((r) => r.id !== selfId && (type === 'group' ? r.item_type === 'scope' : type === 'item' ? ['scope', 'group'].includes(r.item_type) : false))
+  function openAdd(type) {
+    const parent = validParent(type, byId[selectedId])
+    setDialogError('')
+    setAdding({ ...BLANK, item_type: type, parent_scope_id: parent?.id || null, unit: parent?.unit || 'm²', scope_code: nextCode(type, parent) })
+  }
+  function changeParent(id) {
+    const parent = byId[id] || null
+    setAdding((f) => ({ ...f, parent_scope_id: parent?.id || null, unit: parent?.unit || f.unit || 'm²', scope_code: nextCode(f.item_type, parent) }))
+  }
+  async function create() {
+    if (!adding.scope_name.trim() || saving) return
+    if (adding.item_type !== 'scope' && !adding.parent_scope_id) { setDialogError(t(`scope.errParent.${adding.item_type}`)); return }
+    setSaving(true); setDialogError('')
+    try {
+      const a = await actor()
+      const isItem = adding.item_type === 'item'
+      const payload = { ...adding, scope_name: adding.scope_name.trim(), quantity_source: source(adding.quantity_source), project_id: projectId, quantity: isItem && adding.quantity !== '' ? num(adding.quantity) : null, unit_price: isItem ? num(adding.unit_price) : 0, created_by: a.user.id }
+      const { data, error: e } = await supabase.from('project_scopes').insert(payload).select('*').single()
+      if (e) throw e
+      await history(a, 'scope_added', 'Scope register item added', data.scope_name, data.id, { item_type: data.item_type, parent_scope_id: data.parent_scope_id, quantity: data.quantity, unit: data.unit, unit_price: data.unit_price })
+      setRows((x) => [...x, data]); setSelectedId(data.id)
+      if (data.parent_scope_id) setCollapsed((s) => { const n = new Set(s); n.delete(data.parent_scope_id); return n })
+      setAdding(null)
+    } catch (e) { setDialogError(e.message) } finally { setSaving(false) }
+  }
+
+  // ---------- Edit ----------
+  function openEdit(r) { setSelectedId(r.id); setDialogError(''); setTab('general'); setActivityForm({ ...ACTIVITY_BLANK, unit: r.unit || 'm²' }); setDraft({ ...r }) }
+  const patch = (p) => setDraft((d) => ({ ...d, ...p }))
+  async function save() {
+    if (!draft || saving) return
+    if (!String(draft.scope_name || '').trim()) { setDialogError(t('scope.errName')); return }
+    setSaving(true); setDialogError('')
+    try {
+      const a = await actor()
+      const isItem = draft.item_type === 'item'
+      const changes = { parent_scope_id: draft.item_type === 'scope' ? null : draft.parent_scope_id, scope_name: draft.scope_name.trim(), description: draft.description, exclusions: draft.exclusions, quantity: isItem && draft.quantity !== '' && draft.quantity != null ? num(draft.quantity) : null, unit: draft.unit, unit_price: isItem ? num(draft.unit_price) : 0, quantity_source: source(draft.quantity_source), status: draft.status, notes: draft.notes }
+      const { data, error: e } = await supabase.from('project_scopes').update(changes).eq('id', draft.id).select('*').single()
+      if (e) throw e
+      await history(a, 'scope_updated', 'Scope register item updated', data.scope_name, data.id, { parent_scope_id: data.parent_scope_id, quantity: data.quantity, unit: data.unit, unit_price: data.unit_price, quantity_source: data.quantity_source })
+      setRows((x) => x.map((r) => (r.id === data.id ? data : r)))
+      setDraft(null)
+    } catch (e) { setDialogError(e.message) } finally { setSaving(false) }
+  }
+  async function addActivity() {
+    if (!draft || !activityForm.activity_name.trim() || saving) return
+    setSaving(true); setDialogError('')
+    try {
+      const a = await actor()
+      const payload = { ...activityForm, activity_name: activityForm.activity_name.trim(), scope_id: draft.id, sequence: activities.length + 1, quantity: activityForm.quantity === '' ? null : num(activityForm.quantity), created_by: a.user.id }
+      const { data, error: e } = await supabase.from('scope_activities').insert(payload).select('*').single()
+      if (e) throw e
+      await history(a, 'scope_activity_added', 'Scope activity added', data.activity_name, data.id, { scope_id: draft.id })
+      setActivities((x) => [...x, data]); setActivityForm({ ...ACTIVITY_BLANK, unit: draft.unit || 'm²' })
+    } catch (e) { setDialogError(e.message) } finally { setSaving(false) }
+  }
+
+  const toggle = (id) => setCollapsed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const typeLabel = (type) => t(`scope.type.${type}`)
+  const draftTotal = draft ? (draft.item_type === 'item' ? num(draft.quantity) * num(draft.unit_price) : rollup(draft.id)) : 0
+  const selected = byId[selectedId]
+
+  return <AppShell module="projects" active="scope" projectId={projectId} bare action={<Link className={ui.btnPrimary} href={`/planning/pre-planning?projectId=${projectId}`}>{t('scope.continuePrecon')}</Link>}>
+    <div className={styles.page}>
+      {error && <Notice>{error}</Notice>}
+      <div className={styles.kpis}><Stats>
+        <Stat label={t('scope.statContract')} value={cash(contract)} hint={project?.name} />
+        <Stat label={t('scope.statAllocated')} value={cash(allocated)} hint={t('scope.ofContract', { pct: pct(rawProgress) })} tone={contract > 0 && rawProgress >= 99.95 && rawProgress <= 100.05 ? 'ok' : undefined} />
+        <Stat label={remaining < 0 ? t('scope.statOver') : t('scope.statRemaining')} value={cash(Math.abs(remaining))} hint={remaining < 0 ? t('scope.overHint') : t('scope.ofContract', { pct: pct(Math.max(0, 100 - rawProgress)) })} tone={remaining < 0 ? 'bad' : remaining > 0 ? 'warn' : undefined} />
+        <Stat label={t('scope.statItems')} value={rows.length} hint={t('scope.itemsHint', { scopes: counts.scope || 0, groups: counts.group || 0, items: counts.item || 0 })} />
+      </Stats></div>
+      <div className={styles.progress} title={t('scope.ofContract', { pct: pct(rawProgress) })}><span style={{ width: `${progress}%` }} className={remaining < 0 ? styles.progressOver : ''} /></div>
+
+      <section className={`${ui.panel} ${styles.register}`}>
+        <div className={styles.toolbar}>
+          <button type="button" className={ui.btnPrimary} onClick={() => openAdd('scope')}><Icon name="plus" size={16} strokeWidth={2.4} />{t('scope.addScope')}</button>
+          <button type="button" className={ui.btn} onClick={() => openAdd('group')} disabled={!counts.scope}><Icon name="plus" size={16} />{t('scope.addGroup')}</button>
+          <button type="button" className={ui.btn} onClick={() => openAdd('item')} disabled={!counts.scope && !counts.group}><Icon name="plus" size={16} />{t('scope.addItem')}</button>
+          <span className={styles.sep} />
+          <button type="button" className={`${ui.btnGhost} ${ui.small}`} onClick={() => setCollapsed(new Set())}>{t('scope.expandAll')}</button>
+          <button type="button" className={`${ui.btnGhost} ${ui.small}`} onClick={() => setCollapsed(new Set(rows.filter((r) => children[r.id]).map((r) => r.id)))}>{t('scope.collapseAll')}</button>
+          <label className={styles.search}><Icon name="search" size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('scope.search')} aria-label={t('scope.search')} /></label>
+        </div>
+        {selected && <div className={styles.context}>{t('scope.selected')}: <b>{selected.scope_code} — {selected.scope_name}</b><span>{t('scope.selectedHint')}</span></div>}
+
+        <div className={styles.tableArea}>
+          {loading ? <p className={styles.muted}>{t('scope.loading')}</p>
+            : !rows.length ? <Empty title={t('scope.emptyTitle')} text={t('scope.emptyText')} action={<button type="button" className={ui.btnPrimary} onClick={() => openAdd('scope')}>{t('scope.addScope')}</button>} />
+            : !visible.length ? <p className={styles.muted}>{t('scope.noMatch')}</p>
+            : <table className={`${ui.table} ${ui.phoneCards} ${styles.table}`}>
+              <thead><tr><th>{t('scope.colId')}</th><th>{t('scope.colDescription')}</th><th>{t('scope.colType')}</th><th>{t('scope.colUnit')}</th><th className={styles.num}>{t('scope.colQuantity')}</th><th className={styles.num}>{t('scope.colUnitPrice')}</th><th className={styles.num}>{t('scope.colTotal')}</th><th>{t('scope.colStatus')}</th><th /></tr></thead>
+              <tbody>{visible.map((r) => {
+                const hasKids = !!children[r.id], d = query ? 0 : depthOf(r), isItem = r.item_type === 'item'
+                return <tr key={r.id} className={`${styles[r.item_type] || ''} ${r.id === selectedId ? styles.on : ''}`} onClick={() => setSelectedId(r.id)}>
+                  <td data-label={t('scope.colId')} className={styles.code}>{r.scope_code || '—'}</td>
+                  <td data-label=""><div className={styles.desc} style={{ paddingLeft: d * 20 }}>
+                    {hasKids && !query ? <button type="button" className={styles.toggle} onClick={(e) => { e.stopPropagation(); toggle(r.id) }} aria-label={collapsed.has(r.id) ? t('scope.expand') : t('scope.collapse')}><Icon name={collapsed.has(r.id) ? 'right' : 'down'} size={16} strokeWidth={2.2} /></button> : <span className={styles.toggleSpace} />}
+                    <span>{r.scope_name}</span></div></td>
+                  <td data-label={t('scope.colType')}><span className={`${styles.type} ${styles[`type_${r.item_type}`] || ''}`}>{typeLabel(r.item_type)}</span></td>
+                  <td data-label={t('scope.colUnit')} className={isItem ? '' : styles.dash}>{isItem ? r.unit : '—'}</td>
+                  <td data-label={t('scope.colQuantity')} className={`${styles.num} ${isItem ? '' : styles.dash}`}>{isItem ? qty(r.quantity) : '—'}</td>
+                  <td data-label={t('scope.colUnitPrice')} className={`${styles.num} ${isItem ? '' : styles.dash}`}>{isItem ? cash(r.unit_price) : '—'}</td>
+                  <td data-label={t('scope.colTotal')} className={`${styles.num} ${styles.total}`}>{cash(rollup(r.id))}</td>
+                  <td data-label={t('scope.colStatus')}><Badge tone={STATUS_TONE[r.status]}>{t(`scope.status.${STATUSES.includes(r.status) ? r.status : 'defined'}`)}</Badge></td>
+                  <td data-label=""><button type="button" className={`${ui.btn} ${ui.small}`} onClick={(e) => { e.stopPropagation(); openEdit(r) }}>{t('scope.edit')}</button></td>
+                </tr>
+              })}</tbody>
+            </table>}
+        </div>
+        <footer className={styles.footer}><span>{t('scope.showing', { shown: visible.length, total: rows.length })}</span><span>{t('scope.footerAllocated', { value: cash(allocated), contract: cash(contract) })}</span></footer>
+      </section>
+    </div>
+
+    {adding && <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setAdding(null) }}>
+      <section className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="scope-add-title">
+        <header className={styles.dialogHead}><h2 id="scope-add-title">{t(`scope.addTitle.${adding.item_type}`)}</h2><button type="button" className={styles.close} onClick={() => setAdding(null)} aria-label={t('scope.close')}><Icon name="close" /></button></header>
+        <div className={styles.dialogBody}>
+          <p className={styles.help}>{t(`scope.addHelp.${adding.item_type}`)}</p>
+          <div className={styles.grid}>
+            {adding.item_type !== 'scope' && <Field wide label={t(`scope.parent.${adding.item_type}`)}><select value={adding.parent_scope_id || ''} onChange={(e) => changeParent(e.target.value)}><option value="">{t('scope.chooseParent')}</option>{parentOptions(adding.item_type).map((p) => <option key={p.id} value={p.id}>{p.scope_code} — {p.scope_name}</option>)}</select></Field>}
+            <Field label={t('scope.colId')}><input value={adding.scope_code} readOnly disabled /></Field>
+            <Field label={t('scope.colDescription')}><input value={adding.scope_name} onChange={(e) => setAdding({ ...adding, scope_name: e.target.value })} autoFocus /></Field>
+            {adding.item_type === 'item' && <>
+              <Field label={t('scope.colUnit')}><select value={adding.unit} onChange={(e) => setAdding({ ...adding, unit: e.target.value })}>{UNITS.map((u) => <option key={u}>{u}</option>)}</select></Field>
+              <Field label={t('scope.contractQuantity')}><input type="number" min="0" step="any" value={adding.quantity} onChange={(e) => setAdding({ ...adding, quantity: e.target.value })} /></Field>
+              <Field label={t('scope.unitPriceIn', { currency })}><input type="number" min="0" step="any" value={adding.unit_price} onChange={(e) => setAdding({ ...adding, unit_price: e.target.value })} /></Field>
+              <Field label={t('scope.quantitySource')}><select value={source(adding.quantity_source)} onChange={(e) => setAdding({ ...adding, quantity_source: e.target.value })}>{SOURCES.map((s) => <option key={s} value={s}>{t(`scope.source.${s}`)}</option>)}</select></Field>
+              <div className={`${styles.totalBox} ${styles.wide}`}><span>{t('scope.colTotal')}</span><b>{cash(num(adding.quantity) * num(adding.unit_price))}</b></div>
+            </>}
+            <Field wide label={t('scope.notes')}><textarea value={adding.notes} onChange={(e) => setAdding({ ...adding, notes: e.target.value })} /></Field>
+          </div>
+          {dialogError && <Notice>{dialogError}</Notice>}
+        </div>
+        <footer className={styles.dialogFoot}>
+          <button type="button" className={ui.btn} onClick={() => setAdding(null)} disabled={saving}>{t('scope.cancel')}</button>
+          <button type="button" className={ui.btnPrimary} onClick={create} disabled={saving || !adding.scope_name.trim() || (adding.item_type !== 'scope' && !adding.parent_scope_id)}>{saving ? t('scope.creating') : t('scope.create')}</button>
+        </footer>
+      </section>
+    </div>}
+
+    {draft && <div className={`${styles.overlay} ${styles.overlayRight}`} onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setDraft(null) }}>
+      <section className={styles.drawer} role="dialog" aria-modal="true" aria-labelledby="scope-edit-title">
+        <header className={styles.drawerHead}>
+          <div><span className={`${styles.type} ${styles[`type_${draft.item_type}`] || ''}`}>{typeLabel(draft.item_type)}</span><small>{draft.scope_code}</small></div>
+          <h2 id="scope-edit-title">{draft.scope_name || '—'}</h2>
+          <button type="button" className={styles.close} onClick={() => setDraft(null)} aria-label={t('scope.close')}><Icon name="close" /></button>
+        </header>
+        <div className={styles.drawerTabs}><Segments value={tab} onChange={setTab} items={[{ value: 'general', label: t('scope.tabGeneral') }, { value: 'spec', label: t('scope.tabSpec') }, { value: 'activities', label: `${t('scope.tabActivities')} · ${activities.length}` }]} /></div>
+        <div className={styles.drawerBody}>
+          {tab === 'general' && <div className={styles.grid}>
+            {draft.item_type !== 'scope' && <Field wide label={t(`scope.parent.${draft.item_type}`)}><select value={draft.parent_scope_id || ''} onChange={(e) => patch({ parent_scope_id: e.target.value || null })}>{parentOptions(draft.item_type, draft.id).map((p) => <option key={p.id} value={p.id}>{p.scope_code} — {p.scope_name}</option>)}</select></Field>}
+            <Field wide label={t('scope.colDescription')}><input value={draft.scope_name || ''} onChange={(e) => patch({ scope_name: e.target.value })} /></Field>
+            {draft.item_type === 'item' && <>
+              <Field label={t('scope.colUnit')}><select value={draft.unit || 'm²'} onChange={(e) => patch({ unit: e.target.value })}>{[...new Set([...UNITS, draft.unit || 'm²'])].map((u) => <option key={u}>{u}</option>)}</select></Field>
+              <Field label={t('scope.quantitySource')}><select value={source(draft.quantity_source)} onChange={(e) => patch({ quantity_source: e.target.value })}>{SOURCES.map((s) => <option key={s} value={s}>{t(`scope.source.${s}`)}</option>)}</select></Field>
+              <Field label={t('scope.contractQuantity')}><input type="number" min="0" step="any" value={draft.quantity ?? ''} onChange={(e) => patch({ quantity: e.target.value })} /></Field>
+              <Field label={t('scope.unitPriceIn', { currency })}><input type="number" min="0" step="any" value={draft.unit_price ?? ''} onChange={(e) => patch({ unit_price: e.target.value })} /></Field>
+            </>}
+            <div className={`${styles.totalBox} ${styles.wide}`}><span>{t('scope.colTotal')}{draft.item_type !== 'item' && <small>{t('scope.rollupHint')}</small>}</span><b>{cash(draftTotal)}</b></div>
+            <Field label={t('scope.colStatus')}><select value={STATUSES.includes(draft.status) ? draft.status : 'defined'} onChange={(e) => patch({ status: e.target.value })}>{STATUSES.map((s) => <option key={s} value={s}>{t(`scope.status.${s}`)}</option>)}</select></Field>
+            <Field wide label={t('scope.notes')}><textarea value={draft.notes || ''} onChange={(e) => patch({ notes: e.target.value })} /></Field>
+          </div>}
+          {tab === 'spec' && <div className={styles.grid}>
+            <Field wide label={t('scope.definition')}><textarea rows={7} value={draft.description || ''} onChange={(e) => patch({ description: e.target.value })} placeholder={t('scope.definitionHint')} /></Field>
+            <Field wide label={t('scope.exclusions')}><textarea rows={5} value={draft.exclusions || ''} onChange={(e) => patch({ exclusions: e.target.value })} placeholder={t('scope.exclusionsHint')} /></Field>
+          </div>}
+          {tab === 'activities' && <>
+            <p className={styles.help}>{t('scope.activitiesHelp')}</p>
+            {activities.length ? <ol className={styles.activities}>{activities.map((a) => <li key={a.id}><b>{a.activity_name}</b><span>{a.wall_side && a.wall_side !== 'N/A' ? `${t('scope.side', { side: a.wall_side })} · ` : ''}{qty(a.quantity)} {a.unit}</span></li>)}</ol> : <p className={styles.muted}>{t('scope.noActivities')}</p>}
+            <div className={styles.activityForm}>
+              <Field wide label={t('scope.activityName')}><input value={activityForm.activity_name} onChange={(e) => setActivityForm({ ...activityForm, activity_name: e.target.value })} /></Field>
+              <Field label={t('scope.wallSide')}><select value={activityForm.wall_side} onChange={(e) => setActivityForm({ ...activityForm, wall_side: e.target.value })}>{SIDES.map((s) => <option key={s} value={s}>{s === 'N/A' ? t('scope.sideNone') : s}</option>)}</select></Field>
+              <Field label={t('scope.colQuantity')}><input type="number" min="0" step="any" value={activityForm.quantity} onChange={(e) => setActivityForm({ ...activityForm, quantity: e.target.value })} /></Field>
+              <Field label={t('scope.colUnit')}><select value={activityForm.unit} onChange={(e) => setActivityForm({ ...activityForm, unit: e.target.value })}>{UNITS.map((u) => <option key={u}>{u}</option>)}</select></Field>
+              <button type="button" className={ui.btn} onClick={addActivity} disabled={saving || !activityForm.activity_name.trim()}><Icon name="plus" size={16} />{t('scope.addActivity')}</button>
+            </div>
+          </>}
+          {dialogError && <Notice>{dialogError}</Notice>}
+        </div>
+        {tab !== 'activities' && <footer className={styles.dialogFoot}>
+          <button type="button" className={ui.btn} onClick={() => setDraft(null)} disabled={saving}>{t('scope.cancel')}</button>
+          <button type="button" className={ui.btnPrimary} onClick={save} disabled={saving}>{saving ? t('scope.saving') : t('scope.save')}</button>
+        </footer>}
+      </section>
+    </div>}
+  </AppShell>
+}

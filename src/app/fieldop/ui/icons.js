@@ -10,6 +10,9 @@ const paths = {
   check: 'M5 12.5l4.5 4.5L19 7.5',
   plus: 'M12 5v14M5 12h14',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  down: 'M6 9l6 6 6-6',
+  right: 'M9 6l6 6-6 6',
+  search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
 }
 
 export default function Icon({ name, size = 20, strokeWidth = 1.8, ...rest }) {
