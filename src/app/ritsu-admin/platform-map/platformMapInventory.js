@@ -486,11 +486,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "insert",
-              "line": 1739
+              "line": 1807
             },
             {
               "method": "delete",
-              "line": 1219
+              "line": 1282
             }
           ]
         },
@@ -502,11 +502,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "insert",
-              "line": 1590
+              "line": 1658
             },
             {
               "method": "delete",
-              "line": 1247
+              "line": 1310
             }
           ]
         },
@@ -518,7 +518,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1774
+              "line": 1842
             }
           ]
         },
@@ -530,7 +530,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1825
+              "line": 1893
             }
           ]
         },
@@ -542,19 +542,19 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1886
+              "line": 1953
             }
           ]
         },
         {
-          "name": "project_services",
+          "name": "fieldop_project_activities",
           "schema": "public",
           "kind": "table",
-          "purpose": "Legacy service references used during package synchronization",
+          "purpose": "Project activities from the Projects scope, scheduled as Master Plan packages",
           "operations": [
             {
               "method": "select",
-              "line": 1922
+              "line": 1971
             }
           ]
         },
@@ -566,40 +566,31 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1938
+              "line": 1984
             },
             {
               "method": "insert",
-              "line": 3199
+              "line": 3105
             },
             {
               "method": "update",
-              "line": 3241
+              "line": 3147
             }
           ]
         }
       ],
-      "functions": [
-        {
-          "name": "get_project_work_packages",
-          "schema": "public",
-          "arguments": "target_project_id uuid",
-          "returns": "TABLE(id uuid, project_id uuid, code text, description text, color text, is_active boolean, created_at timestamp with time zone, updated_at timestamp with time zone)",
-          "line": 1905,
-          "purpose": "Load the project's work-package catalog."
-        }
-      ],
+      "functions": [],
       "storage": [
         {
           "name": "project-covers",
           "method": "createSignedUrl",
-          "line": 1812,
+          "line": 1880,
           "purpose": "Project cover images accessed through signed URLs.",
           "public": false,
           "operations": [
             {
               "method": "createSignedUrl",
-              "line": 1812,
+              "line": 1880,
               "sourcePath": "src/app/dashboard/planning/master-plan/page.js"
             }
           ]
@@ -2612,15 +2603,6 @@ export const platformMapInventory = {
       "detail": "The FieldOp portfolio loads projects and groups them by status; progress, productivity and safety metrics are not aggregated on this page.",
       "sourcePath": "src/app/fieldop/page.js",
       "line": 21,
-      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
-    },
-    {
-      "id": "parallel-scope-models",
-      "moduleId": "project-setup",
-      "title": "Parallel scope models",
-      "detail": "The Projects scope uses project_scopes and fieldop_project_activities; Master Plan still reads project_services and project_work_packages. Alignment is planned with the Master Plan rebuild.",
-      "sourcePath": "src/app/projects/[projectId]/scope/page.js",
-      "line": 25,
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
     }
   ],

@@ -4,9 +4,9 @@ import { supabase } from '../../../../lib/supabase';
 import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
 
 // ============================================================
-// MASTER PLAN - SHARED WORK PACKAGE CATALOG INTEGRATION
-// Work Package Database is authoritative for package identity,
-// description, color and selectable planning activities.
+// MASTER PLAN
+// The project's activities (Projects › Scope) are the schedulable
+// packages; locations come from the project's location structure.
 // ============================================================
 
 // ============================================================
@@ -14,13 +14,11 @@ import { readPreconProjectId, rememberPreconProjectId } from '../../preconProjec
 // ============================================================
 //
 // IMPORTANT:
-// Work Packages are NOT hard-coded in Master Plan anymore.
-//
-// All project Work Packages now come from:
-// public.project_work_packages
+// Activities are NOT hard-coded in Master Plan. They come from the
+// project's scope (see buildProjectActivityCatalog below).
 //
 // These three entries are system/calendar markers only.
-// They are not user Work Packages.
+// They are not project activities.
 // ============================================================
 const SYSTEM_CALENDAR_CODES = {
   '': {
@@ -55,16 +53,6 @@ const getContrastYIQ = (hexcolor) => {
   return (yiq >= 128) ? '#000000' : '#ffffff';
 };
 
-
-// Master Plan visual package codes must always be 1-3 characters.
-// Project service IDs/codes such as SERVICE_xxx are internal identifiers and
-// must never expand the Line of Balance date columns.
-const normalizeText = (value = '') =>
-  String(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .trim();
 
 // ----------------------------------------------------
 // MASTER PLAN LOCATION STRUCTURE INTEGRATION
@@ -188,6 +176,83 @@ const buildMasterPlanSectionsFromLocations = (locations = []) => {
         String(b.title || '')
       )
     );
+};
+
+// ============================================================
+// PROJECT ACTIVITIES (Projects › Scope)
+// ============================================================
+// Master Plan schedules the project's active activities
+// (fieldop_project_activities, each linked to a project_scopes item).
+// Each activity gets a short key shown in the grid cells: its scope
+// code when it fits in 3 characters (master_plan_packages.package_code
+// allows 1 to 3), otherwise A1, A2, ... The full scope code is kept
+// as service_code.
+const ACTIVITY_COLORS = [
+  '#2563EB', '#16A34A', '#EA580C', '#9333EA', '#0891B2', '#DC2626',
+  '#CA8A04', '#DB2777', '#4F46E5', '#059669', '#B45309', '#7C3AED',
+];
+
+const compareScopeCodes = (a, b) => {
+  const left = String(a || '').split('.');
+  const right = String(b || '').split('.');
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const x = left[index] ?? '';
+    const y = right[index] ?? '';
+    const difference = (Number(x) || 0) - (Number(y) || 0);
+    if (difference) return difference;
+    if (x !== y) return x.localeCompare(y);
+  }
+  return 0;
+};
+
+const buildProjectActivityCatalog = (activities = []) => {
+  const reserved = new Set(Object.keys(SYSTEM_CALENDAR_CODES));
+  const catalog = {};
+  let fallback = 0;
+
+  const rows = activities
+    .map((activity) => {
+      const scope = activity.scope_item || null;
+      const fromScope = activity.source === 'scope' && scope;
+      return {
+        activity,
+        scopeCode: String((fromScope && scope.scope_code) || '').trim(),
+        name: (fromScope && scope.scope_name) || activity.activity_name || '',
+        unit: (fromScope && scope.unit) || activity.unit || '',
+      };
+    })
+    .sort((a, b) =>
+      (a.scopeCode && b.scopeCode)
+        ? compareScopeCodes(a.scopeCode, b.scopeCode)
+        : (a.scopeCode ? -1 : b.scopeCode ? 1 : String(a.name).localeCompare(String(b.name)))
+    );
+
+  rows.forEach(({ activity, scopeCode, name, unit }, index) => {
+    let key = scopeCode.toUpperCase();
+    if (!key || key.length > 3 || reserved.has(key) || catalog[key]) {
+      do {
+        fallback += 1;
+        key = `A${fallback}`;
+      } while (catalog[key]);
+    }
+
+    const color = ACTIVITY_COLORS[index % ACTIVITY_COLORS.length];
+
+    catalog[key] = {
+      labelPt: name || key,
+      labelEn: name || key,
+      color,
+      text: getContrastYIQ(color),
+      activityId: activity.id,
+      projectServiceId: null,
+      projectWorkPackageId: null,
+      sourceServiceCode: scopeCode || key,
+      unit,
+      source: 'project_activities',
+    };
+  });
+
+  return catalog;
 };
 
 export default function MasterPlanPage() {
@@ -330,14 +395,12 @@ export default function MasterPlanPage() {
   const [hideWeekends, setHideWeekends] = useState(false);
 
   // ============================================================
-  // SHARED PROJECT WORK PACKAGE CATALOG
+  // PROJECT ACTIVITY CATALOG
   // ============================================================
   //
-  // project_work_packages is now the source of truth for Work Package
-  // identity, description and color.
-  //
-  // OFF / FER are calendar markers, not Work Packages, so they remain
-  // system-level visual definitions.
+  // Keyed by the short activity code shown in the grid
+  // (buildProjectActivityCatalog). OFF / FER are calendar markers,
+  // not activities, so they remain system-level visual definitions.
   //
   const [projectServices, setProjectServices] = useState({});
 
@@ -1481,6 +1544,11 @@ export default function MasterPlanPage() {
           service?.projectServiceId ||
           null,
 
+        activity_id:
+          pkg.activityId ||
+          service?.activityId ||
+          null,
+
         row_key:
           pkg.rowId ||
           null,
@@ -1878,8 +1946,7 @@ export default function MasterPlanPage() {
 
       const [
         locationsResult,
-        workPackagesResult,
-        servicesResult,
+        activitiesResult,
         scenariosResult
       ] = await Promise.all([
         supabase
@@ -1898,41 +1965,20 @@ export default function MasterPlanPage() {
           .order('name', { ascending: true }),
 
         // ----------------------------------------------------
-        // SHARED WORK PACKAGE DATABASE
+        // PROJECT ACTIVITIES (Projects › Scope)
         // ----------------------------------------------------
-        // This is the authoritative source for selectable Master Plan
-        // Work Packages, descriptions and colors.
-        supabase.rpc(
-          'get_project_work_packages',
-          {
-            target_project_id:
-              selectedProjectId
-          }
-        ),
-
-        // ----------------------------------------------------
-        // LEGACY PROJECT SERVICES
-        // ----------------------------------------------------
-        // Retained only during the migration stage because
-        // master_plan_packages.project_service_id still references
-        // public.project_services.
-        //
-        // We NEVER store a project_work_packages UUID in that old FK.
         supabase
-          .from('project_services')
+          .from('fieldop_project_activities')
           .select(`
             id,
-            project_id,
-            service_code,
-            service_name,
+            source,
+            activity_name,
             unit,
-            sequence_number,
-            is_active
+            is_active,
+            scope_item:project_scopes(id, scope_code, scope_name, unit)
           `)
           .eq('project_id', selectedProjectId)
-          .eq('is_active', true)
-          .order('sequence_number', { ascending: true })
-          .order('service_name', { ascending: true }),
+          .eq('is_active', true),
 
         supabase
           .from('master_plan_scenarios')
@@ -1955,8 +2001,7 @@ export default function MasterPlanPage() {
 
       const loadError =
         locationsResult.error ||
-        workPackagesResult.error ||
-        servicesResult.error ||
+        activitiesResult.error ||
         scenariosResult.error;
 
       if (loadError) {
@@ -2014,151 +2059,12 @@ export default function MasterPlanPage() {
         ].filter(Boolean)
       );
 
-      // ======================================================
-      // SHARED PROJECT WORK PACKAGE CATALOG
-      // ======================================================
-      //
-      // Work Package code, standard description and color now come
-      // from public.project_work_packages.
-      //
-      // project_services is consulted only to preserve the existing
-      // master_plan_packages.project_service_id foreign-key linkage
-      // while the normalized schema is migrated in a later step.
-      //
-      // A catalog Work Package that has no matching legacy
-      // project_services row remains perfectly valid in Master Plan;
-      // its project_service_id is simply persisted as NULL.
-      // ======================================================
-
-      const legacyProjectServices =
-        servicesResult.data || [];
-
-      const findLegacyProjectService = (
-        workPackage
-      ) => {
-        const packageCode =
-          normalizeText(
-            workPackage?.code ||
-            ''
-          ).replace(
-            /[^A-Z0-9]/g,
-            ''
-          );
-
-        const packageDescription =
-          normalizeText(
-            workPackage?.description ||
-            ''
-          );
-
-        return (
-          legacyProjectServices.find(
-            (service) =>
-              normalizeText(
-                service?.service_code ||
-                ''
-              ).replace(
-                /[^A-Z0-9]/g,
-                ''
-              ) === packageCode
-          ) ||
-          legacyProjectServices.find(
-            (service) =>
-              normalizeText(
-                service?.service_name ||
-                ''
-              ) === packageDescription
-          ) ||
-          null
-        );
-      };
-
-      const projectWorkPackageMap =
-        {};
-
-      (
-        workPackagesResult.data ||
-        []
-      ).forEach(
-        (workPackage) => {
-          const code =
-            normalizeText(
-              workPackage?.code ||
-              ''
-            ).replace(
-              /[^A-Z]/g,
-              ''
-            );
-
-          if (
-            code.length !== 3
-          ) {
-            console.warn(
-              'Master Plan - ignored invalid Work Package code:',
-              workPackage
-            );
-            return;
-          }
-
-          const color =
-            String(
-              workPackage?.color ||
-              '#64748b'
-            ).toUpperCase();
-
-          const legacyService =
-            findLegacyProjectService(
-              workPackage
-            );
-
-          projectWorkPackageMap[
-            code
-          ] = {
-            labelPt:
-              workPackage.description ||
-              code,
-
-            labelEn:
-              workPackage.description ||
-              code,
-
-            color,
-
-            text:
-              getContrastYIQ(
-                color
-              ),
-
-            // IMPORTANT:
-            // This remains the legacy public.project_services UUID
-            // when a compatible service exists. It is NOT the
-            // project_work_packages UUID.
-            projectServiceId:
-              legacyService?.id ||
-              null,
-
-            // Persistent shared Work Package identity. This stays
-            // available inside the Master Plan scenario snapshot and
-            // prepares the normalized schema migration.
-            projectWorkPackageId:
-              workPackage.id,
-
-            sourceServiceCode:
-              legacyService?.service_code ||
-              code,
-
-            unit:
-              legacyService?.unit ||
-              '',
-
-            source:
-              'project_work_packages'
-          };
-        }
-      );
-
+      // The project's activities from Projects › Scope are the
+      // schedulable Master Plan activities (see buildProjectActivityCatalog).
       setProjectServices(
-        projectWorkPackageMap
+        buildProjectActivityCatalog(
+          activitiesResult.data || []
+        )
       );
 
       const mappedVersions = (scenariosResult.data || []).map(mapScenarioRecord);
@@ -4296,6 +4202,7 @@ ${
           rowId: location.rowId,
           locationId: location.locationId || null,
           locationPath: location.label || '',
+          activityId: service?.activityId || null,
           projectServiceId: service?.projectServiceId || null,
           projectWorkPackageId: service?.projectWorkPackageId || null,
           packageStartType:
@@ -4473,6 +4380,10 @@ ${
         selectedPlanningRow?.locationPath ||
         selectedPlanningRow?.description ||
         '',
+      activityId:
+        selectedService?.activityId ||
+        null,
+
       projectServiceId:
         selectedService?.projectServiceId ||
         null,
