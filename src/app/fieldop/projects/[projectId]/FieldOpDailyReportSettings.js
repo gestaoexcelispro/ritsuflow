@@ -16,6 +16,7 @@ const defaults = {
   capture_general_notes: true,
   require_signature: false,
   require_approval: false,
+  require_separate_approver: false,
   report_cutoff_time: '17:00',
 }
 
@@ -109,6 +110,7 @@ export default function FieldOpDailyReportSettings({ projectId, onConfiguredChan
           <div className={styles.settingList}>
             <SettingToggle checked={form.require_signature} onChange={(value) => setValue('require_signature', value)} title={t('settings.signature')} description={t('settings.signatureText')} />
             <SettingToggle checked={form.require_approval} onChange={(value) => setValue('require_approval', value)} title={t('settings.approval')} description={t('settings.approvalText')} />
+            <SettingToggle checked={form.require_separate_approver} onChange={(value) => setValue('require_separate_approver', value)} title={t('settings.separateApprover')} description={t('settings.separateApproverText')} />
           </div>
         </article>
 
@@ -119,7 +121,7 @@ export default function FieldOpDailyReportSettings({ projectId, onConfiguredChan
 
         <article className={styles.settingsSummary}>
           <strong>{t('settings.sectionsEnabled', { count: contentOptions.filter(([key]) => form[key]).length })}</strong>
-          <span>{form.require_signature || form.require_approval ? t('settings.controlsOn') : t('settings.controlsOff')}</span>
+          <span>{form.require_signature || form.require_approval || form.require_separate_approver ? t('settings.controlsOn') : t('settings.controlsOff')}</span>
         </article>
       </div>
     </div>

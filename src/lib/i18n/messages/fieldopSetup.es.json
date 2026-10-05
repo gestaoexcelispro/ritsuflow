@@ -207,5 +207,7 @@
   "settings.footer": "Esta configuración se aplica solo a este proyecto en FieldOp.",
   "settings.saveFirst": "Guardar configuración del informe diario",
   "settings.saveChanges": "Guardar cambios",
-  "settings.saved": "Configuración del informe diario guardada."
+  "settings.saved": "Configuración del informe diario guardada.",
+  "settings.separateApprover": "Aprobador distinto",
+  "settings.separateApproverText": "Quien aprueba debe ser una persona distinta de quien envió y de quien revisó."
 }

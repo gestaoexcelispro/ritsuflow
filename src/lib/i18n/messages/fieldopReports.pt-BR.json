@@ -146,5 +146,8 @@
   "action.reviewed": "Revisado",
   "action.approved": "Aprovado",
   "action.returned": "Devolvido para rascunho",
-  "action.reopened": "Reaberto"
+  "action.reopened": "Reaberto",
+  "approval.separateRule": "Neste projeto, quem aprova deve ser uma pessoa diferente de quem enviou e de quem revisou.",
+  "approval.separateBlocked": "Você enviou ou revisou este diário, então outra pessoa precisa aprová-lo.",
+  "approval.noActions": "Você pode ver este diário, mas sua função não pode alterar o status nesta etapa."
 }
