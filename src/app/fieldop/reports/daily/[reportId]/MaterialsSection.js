@@ -1,6 +1,9 @@
 'use client'
 
+import { useRef, useState } from 'react'
 import RecordListSection from './RecordListSection'
+import InvoiceImport from './InvoiceImport'
+import styles from '../daily-reports.module.css'
 import { useLanguage } from '../../../../../lib/i18n/LanguageProvider'
 
 const MOVEMENT = [{ value: 'received', label: 'materials.move.received' }, { value: 'used', label: 'materials.move.used' }]
@@ -34,6 +37,10 @@ function toPayload(f) {
 
 export default function MaterialsSection(props) {
   const { t } = props
+  const [importing, setImporting] = useState(false)
+  const [imported, setImported] = useState('')
+  const reloadRef = useRef(null)
+  const headerActions = ({ reload, locked }) => { reloadRef.current = reload; return !locked && !importing && <button type="button" className={styles.secondaryButton} onClick={() => { setImported(''); setImporting(true) }}>{t('invoice.button')}</button> }
   const { formatNumber } = useLanguage()
   const columns = [
     { key: 'movement_type', label: 'materials.movement', render: (r) => t(`materials.move.${r.movement_type}`) },
@@ -47,6 +54,10 @@ export default function MaterialsSection(props) {
     { label: t('materials.sumReceived'), value: rows.filter((r) => r.movement_type === 'received').length },
     { label: t('materials.sumUsed'), value: rows.filter((r) => r.movement_type === 'used').length },
   ]
-  return <RecordListSection {...props} table="daily_report_materials" select={SELECT} fields={FIELDS} columns={columns} toPayload={toPayload} summary={summary}
+  return <>
+    {imported && <div className={styles.lockNote} style={{ background: 'var(--fo-ok-wash)', color: 'var(--fo-ok)' }}>{imported}</div>}
+    {importing && <InvoiceImport {...props} onClose={() => setImporting(false)} onImported={async (count) => { setImporting(false); setImported(t('invoice.done', { count })); await reloadRef.current?.() }} />}
+    <RecordListSection {...props} headerActions={headerActions} table="daily_report_materials" select={SELECT} fields={FIELDS} columns={columns} toPayload={toPayload} summary={summary}
     tabKey="tab.materials" textKey="materials.text" emptyKey="materials.empty" addKey="materials.add" saveKey="materials.save" savedKey="list.saved" deletedKey="list.deleted" confirmKey="list.confirmDelete" />
+  </>
 }
