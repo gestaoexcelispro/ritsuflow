@@ -403,5 +403,12 @@
   "print.signSubmitted": "Enviado por",
   "print.signReviewed": "Revisado por",
   "print.signApproved": "Aprobado por",
-  "print.generated": "generado el {date}"
+  "print.generated": "generado el {date}",
+  "equipment.copyPrevious": "Copiar del último informe",
+  "equipment.copied": "{count} equipos copiados del informe del {date}. Complete las horas de hoy.",
+  "equipment.copyNone": "Ningún informe anterior de este proyecto tiene equipos para copiar.",
+  "issues.sendToConstraints": "Enviar a Restricciones",
+  "issues.inConstraints": "En Restricciones",
+  "issues.inConstraintsHint": "Este problema se sigue como restricción en el módulo de Restricciones.",
+  "issues.sentToConstraints": "\"{title}\" ahora es una restricción en el módulo de Restricciones."
 }

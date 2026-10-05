@@ -15,6 +15,7 @@ const toForm = (fields, row) => Object.fromEntries(fields.map((f) => [f.key, row
 export default function RecordListSection({
   report, supabase, t, locked, table, select, order = 'created_at', tabKey, textKey,
   fields, columns, toPayload, validate, summary, emptyKey, addKey, saveKey, savedKey, deletedKey, confirmKey, onDirty,
+  headerActions, rowActions, onRows,
 }) {
   const [rows, setRows] = useState([])
   const [locations, setLocations] = useState([])
@@ -43,6 +44,7 @@ export default function RecordListSection({
   }, [report.id, report.projects?.id, supabase, t, table, select, order, needsLocations])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { onRows?.(rows) }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function set(key, value) { setForm((cur) => ({ ...cur, [key]: value })); setMessage('') }
   function startAdd() { setForm(toForm(fields)); setOpened(JSON.stringify(toForm(fields))); setEditingId(null); setOpen(true); setError(''); setMessage('') }
@@ -93,7 +95,10 @@ export default function RecordListSection({
   return <section className={styles.panel}>
     <div className={styles.panelHead}>
       <div><h3>{t(tabKey)}</h3><p>{t(textKey)}</p></div>
-      {!locked && !open && <button type="button" className={styles.primaryButton} onClick={startAdd}>{t(addKey)}</button>}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {!open && headerActions?.({ rows, reload: load, locked })}
+        {!locked && !open && <button type="button" className={styles.primaryButton} onClick={startAdd}>{t(addKey)}</button>}
+      </div>
     </div>
 
     {totals.length > 0 && <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '12px 18px', borderBottom: '1px solid var(--fo-line-soft)' }}>
@@ -117,12 +122,13 @@ export default function RecordListSection({
     {loading ? <div className={styles.empty}>{t('common.loading')}</div>
       : rows.length === 0 ? <div className={styles.empty}>{t(emptyKey)}</div>
         : <div style={{ overflowX: 'auto' }}><table className={`${styles.table} ${styles.cardsTable}`}>
-          <thead><tr>{columns.map((c) => <th key={c.key}>{t(c.label)}</th>)}{!locked && <th />}</tr></thead>
+          <thead><tr>{columns.map((c) => <th key={c.key}>{t(c.label)}</th>)}{(!locked || rowActions) && <th />}</tr></thead>
           <tbody>{rows.map((row) => <tr key={row.id}>
             {columns.map((c, i) => <td key={c.key} data-label={i === 0 ? '' : t(c.label)}>{c.render ? c.render(row) : row[c.key] ?? '—'}</td>)}
-            {!locked && <td data-label="" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-              <button type="button" className={styles.secondaryButton} style={{ minHeight: 30, marginRight: 6 }} onClick={() => startEdit(row)}>{t('list.edit')}</button>
-              <button type="button" className={styles.secondaryButton} style={{ minHeight: 30 }} disabled={busyId === row.id} onClick={() => remove(row)}>{t('list.delete')}</button>
+            {(!locked || rowActions) && <td data-label="" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+              {rowActions?.(row, { reload: load })}
+              {!locked && <><button type="button" className={styles.secondaryButton} style={{ minHeight: 30, marginRight: 6 }} onClick={() => startEdit(row)}>{t('list.edit')}</button>
+              <button type="button" className={styles.secondaryButton} style={{ minHeight: 30 }} disabled={busyId === row.id} onClick={() => remove(row)}>{t('list.delete')}</button></>}
             </td>}
           </tr>)}</tbody>
         </table></div>}

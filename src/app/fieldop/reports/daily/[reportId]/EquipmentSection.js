@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import RecordListSection from './RecordListSection'
+import styles from '../daily-reports.module.css'
 import { useLanguage } from '../../../../../lib/i18n/LanguageProvider'
 
 const STATUS = ['operating', 'idle', 'maintenance', 'out_of_service'].map((v) => ({ value: v, label: `equipment.status.${v}` }))
@@ -34,8 +36,35 @@ function toPayload(f, { location }) {
   }
 }
 
+/** Copies the equipment list of the most recent earlier report of this project (hours are left empty). */
+async function copyFromPrevious(supabase, report) {
+  const { data: previous, error } = await supabase.from('daily_reports').select('id,report_date')
+    .eq('project_id', report.projects.id).lt('report_date', report.report_date).order('report_date', { ascending: false }).limit(10)
+  if (error) return { error }
+  for (const candidate of previous || []) {
+    const { data: items } = await supabase.from('daily_report_equipment').select('equipment_name,equipment_code,company_name,quantity,operating_status,location_id').eq('daily_report_id', candidate.id)
+    if (!items?.length) continue
+    const { data: auth } = await supabase.auth.getUser()
+    const rows = items.map((item) => ({ ...item, operating_status: item.operating_status === 'out_of_service' ? 'out_of_service' : 'operating', daily_report_id: report.id, created_by: auth?.user?.id || null }))
+    const { error: insertError } = await supabase.from('daily_report_equipment').insert(rows)
+    return insertError ? { error: insertError } : { count: rows.length, date: candidate.report_date }
+  }
+  return { count: 0 }
+}
+
 export default function EquipmentSection(props) {
-  const { t } = props
+  const { t, supabase, report, language } = props
+  const [copying, setCopying] = useState(false)
+  const [copyMessage, setCopyMessage] = useState('')
+
+  const headerActions = ({ rows, reload, locked }) => !locked && rows.length === 0 && <button type="button" className={styles.secondaryButton} disabled={copying} onClick={async () => {
+    setCopying(true); setCopyMessage('')
+    const result = await copyFromPrevious(supabase, report)
+    if (result.error) setCopyMessage(t('common.error', { message: result.error.message }))
+    else if (!result.count) setCopyMessage(t('equipment.copyNone'))
+    else { setCopyMessage(t('equipment.copied', { count: result.count, date: new Intl.DateTimeFormat(language, { dateStyle: 'medium' }).format(new Date(`${result.date}T12:00:00`)) })); await reload() }
+    setCopying(false)
+  }}>{copying ? t('common.saving') : t('equipment.copyPrevious')}</button>
   const { formatNumber } = useLanguage()
   const h = (v) => (v === null || v === undefined ? '—' : `${formatNumber(Number(v))} h`)
   const columns = [
@@ -53,6 +82,6 @@ export default function EquipmentSection(props) {
       { label: t('equipment.idleHours'), value: `${formatNumber(sum('idle_hours'))} h` },
     ]
   }
-  return <RecordListSection {...props} table="daily_report_equipment" select={SELECT} fields={FIELDS} columns={columns} toPayload={toPayload} summary={summary}
-    tabKey="tab.equipment" textKey="equipment.text" emptyKey="equipment.empty" addKey="equipment.add" saveKey="equipment.save" savedKey="list.saved" deletedKey="list.deleted" confirmKey="list.confirmDelete" />
+  return <>{copyMessage && <div className={styles.lockNote} style={{ background: 'var(--fo-teal-wash)', color: 'var(--fo-teal-ink)' }}>{copyMessage}</div>}<RecordListSection {...props} headerActions={headerActions} table="daily_report_equipment" select={SELECT} fields={FIELDS} columns={columns} toPayload={toPayload} summary={summary}
+    tabKey="tab.equipment" textKey="equipment.text" emptyKey="equipment.empty" addKey="equipment.add" saveKey="equipment.save" savedKey="list.saved" deletedKey="list.deleted" confirmKey="list.confirmDelete" /></>
 }
