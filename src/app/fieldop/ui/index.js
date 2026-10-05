@@ -44,7 +44,7 @@ export function FieldOpShell({ active, projectId, action, children }) {
 
   const switches = <>
     <Link href="/workspaces" className={ui.appBtn}><Icon name="back" size={16} />{t('nav.workspaces')}</Link>
-    <Link href="/precon" className={cx(ui.appBtn, ui.appBtnPre)}>{t('nav.precon')}</Link>
+    <Link href="/dashboard" className={cx(ui.appBtn, ui.appBtnPre)}>{t('nav.precon')}</Link>
     <Link href="/projects" className={cx(ui.appBtn, ui.appBtnPrj)}>{t('nav.projectsModule')}</Link>
   </>
   const who = <div className={ui.appUser}>
