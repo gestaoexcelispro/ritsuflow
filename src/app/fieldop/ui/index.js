@@ -30,39 +30,52 @@ function initials(name) {
   return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
 }
 
-/** FieldOp page frame: sidebar on desktop, icon rail on tablet, top bar + drawer on phone. */
-export function FieldOpShell({ active, projectId, children }) {
+/**
+ * FieldOp page frame, same structure as the RitsuFlow Projects module: app header (logo, module,
+ * workspace and module switches, user) and a tab bar with the page's main action on the right.
+ * `action` replaces the default main action (New Daily Report); pass `false` to hide it.
+ */
+export function FieldOpShell({ active, projectId, action, children }) {
   const t = useT('fieldop')
   const user = useFieldOpUser()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   useEffect(() => { setOpen(false) }, [pathname])
 
+  const switches = <>
+    <Link href="/workspaces" className={ui.appBtn}><Icon name="back" size={16} />{t('nav.workspaces')}</Link>
+    <Link href="/precon" className={cx(ui.appBtn, ui.appBtnPre)}>{t('nav.precon')}</Link>
+    <Link href="/projects" className={cx(ui.appBtn, ui.appBtnPrj)}>{t('nav.projectsModule')}</Link>
+  </>
+  const who = <div className={ui.appUser}>
+    <span className={ui.avatar}>{initials(user.name)}</span>
+    <div className={ui.who}><strong>{user.name || t('user.fallbackName')}</strong><span>{user.role ? t(`role.${user.role}`) : ''}</span></div>
+    <LanguageSelector compact dark />
+  </div>
+  const mainAction = action === undefined
+    ? <Link className={ui.btnPrimary} href={projectId ? `/fieldop/reports/daily/new?projectId=${projectId}` : '/fieldop/reports/daily/new'}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>
+    : action
+
   return <div className={cx(ui.root, plex.variable)}>
-    <header className={ui.topbar}>
-      <button type="button" className={ui.menuBtn} onClick={() => setOpen(true)} aria-label={t('nav.openMenu')}><Icon name="menu" size={24} /></button>
-      <Image src="/logo-white.png" alt="RitsuFlow" width={104} height={38} priority />
-    </header>
-    {open && <div className={ui.scrim} onClick={() => setOpen(false)} />}
-    <aside className={cx(ui.sidebar, open && ui.sidebarOpen)}>
-      <Link href="/fieldop" className={ui.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority /></Link>
-      <div className={ui.module}>FieldOp</div>
-      <nav className={ui.nav} aria-label="FieldOp">
-        {navItems(projectId).map(({ key, icon, href }) => <Link key={key} href={href} title={t(`nav.${key}`)} className={cx(ui.navLink, active === key && ui.navActive)} aria-current={active === key ? 'page' : undefined}>
-          <Icon name={icon} /><span className={ui.navLabel}>{t(`nav.${key}`)}</span>
-        </Link>)}
-      </nav>
-      <div className={ui.sideFoot}>
-        <div className={ui.who}>
-          <span className={ui.avatar}>{initials(user.name)}</span>
-          <div><strong>{user.name || t('user.fallbackName')}</strong><span>{user.role ? t(`role.${user.role}`) : ''}</span></div>
-        </div>
-        <div className={ui.sideRow}>
-          <Link href="/workspaces" className={ui.workspaces} title={t('nav.workspaces')}><Icon name="grid" size={16} /><span>{t('nav.workspaces')}</span></Link>
-          <LanguageSelector compact dark />
-        </div>
+    <header className={ui.appbar}>
+      <div className={ui.appbarInner}>
+        <Link href="/workspaces" className={ui.appLogo} aria-label={t('nav.workspaces')}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority /></Link>
+        <span className={ui.appDivider} />
+        <Link href="/fieldop" className={ui.moduleName} style={{ color: 'inherit', textDecoration: 'none' }}><strong>FieldOp</strong><span>{t('brand.tagline')}</span></Link>
+        <div className={ui.appActions}>{switches}</div>
+        {who}
+        <button type="button" className={ui.menuBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={t('nav.openMenu')}><Icon name={open ? 'close' : 'menu'} size={24} /></button>
       </div>
-    </aside>
+      {open && <div className={ui.menuPanel}>{switches}{who}</div>}
+    </header>
+    <nav className={ui.tabbar} aria-label="FieldOp">
+      <div className={ui.tabbarInner}>
+        {navItems(projectId).map(({ key, icon, href }) => <Link key={key} href={href} className={cx(ui.mtab, active === key && ui.mtabOn)} aria-current={active === key ? 'page' : undefined}>
+          <Icon name={icon} size={18} />{t(`nav.${key}`)}
+        </Link>)}
+        {mainAction && <div className={ui.tabbarAction}>{mainAction}</div>}
+      </div>
+    </nav>
     <main className={ui.main}><div className={ui.content}>{children}</div></main>
   </div>
 }

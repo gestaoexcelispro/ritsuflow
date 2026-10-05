@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
-import { FieldOpShell, PageHeader, Panel, Stats, Stat, Badge, Empty, Icon, ui, reportTone } from './ui'
+import { FieldOpShell, Panel, Stats, Stat, Badge, Empty, Icon, ui, reportTone } from './ui'
 import { useT } from '../../lib/i18n/useT'
 import { useLanguage } from '../../lib/i18n/LanguageProvider'
 
@@ -137,12 +137,7 @@ export default function FieldOpPage() {
   const tone = (status) => ONGOING.find((item) => item.status === status)?.tone
   const location = (project) => [project.city, project.state_region].filter(Boolean).join(', ') || '—'
 
-  const todayLabel = new Intl.DateTimeFormat(language, { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
-
-  return <FieldOpShell active="portfolio">
-    <PageHeader title={t('portfolio.title')} subtitle={todayLabel}
-      actions={<Link className={ui.btnPrimary} href={newReportHref}><Icon name="plus" size={18} />{t('callout.button')}</Link>} />
-
+  return <FieldOpShell active="portfolio" action={<Link className={ui.btnPrimary} href={newReportHref}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>}>
     <Stats>
       <Stat label={t('kpi.ongoing')} value={projects.length} hint={t('kpi.ongoingDetail', { active: counts.active, planning: counts.planning, onHold: counts.on_hold })} />
       <Stat label={t('kpi.workers')} value={kpis.workers} hint={t('kpi.workersDetail')} tone={kpis.workers ? 'ok' : undefined} />
@@ -158,7 +153,7 @@ export default function FieldOpPage() {
           : projects.length === 0 ? <Empty title={t('projects.emptyTitle')} text={t('projects.emptyText')} action={<Link className={ui.btnPrimary} href="/fieldop/projects">{t('projects.viewAll')}</Link>} />
             : visibleProjects.length === 0 ? <Empty title={t('projects.noMatch')} />
               : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards}`}>
-                <thead><tr><th>{t('projects.colProject')}</th><th>{t('projects.colLocation')}</th><th>{t('projects.colStatus')}</th><th>{t('projects.colToday')}</th></tr></thead>
+                <thead><tr><th>{t('projects.colProject')}</th><th>{t('projects.colLocation')}</th><th>{t('projects.colStatus')}</th><th>{t('projects.colToday')}</th><th /></tr></thead>
                 <tbody>{visibleProjects.map((project) => {
                   const today = todayByProject.get(project.id)
                   return <tr key={project.id}>
@@ -168,10 +163,14 @@ export default function FieldOpPage() {
                     <td data-label={t('projects.colToday')}>{today
                       ? <Link href={`/fieldop/reports/daily/${today.id}`} style={{ textDecoration: 'none' }}><Badge tone={reportTone(today.status)}>{t(`reportStatus.${today.status}`)}</Badge></Link>
                       : <Link className={`${ui.btn} ${ui.small}`} href={`/fieldop/reports/daily/new?projectId=${project.id}`}>{t('projects.startReport')}</Link>}</td>
+                    <td data-label="" style={{ textAlign: 'right' }}><Link className={`${ui.btn} ${ui.small}`} href={`/fieldop/projects/${project.id}`}>{t('projects.openProject')}</Link></td>
                   </tr>
                 })}</tbody>
               </table></div>}
-        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--fo-line-soft)' }}><Link href="/fieldop/projects" className={ui.btnGhost}>{t('projects.viewAll')}</Link></div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 20px', borderTop: '1px solid var(--fo-line-soft)', color: 'var(--fo-muted)', fontSize: 14 }}>
+          <span>{t('projects.showing', { shown: visibleProjects.length, total: projects.length })}</span>
+          <Link href="/fieldop/projects" className={ui.btnGhost}>{t('projects.viewAll')}</Link>
+        </div>
       </Panel>
 
       <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>

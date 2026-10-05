@@ -44,9 +44,8 @@ export default function FieldOpDailyReportsPage() {
   const awaiting = count('submitted') + count('reviewed')
   const newHref = projectId === 'all' ? '/fieldop/reports/daily/new' : `/fieldop/reports/daily/new?projectId=${projectId}`
 
-  return <FieldOpShell active="reports">
-    <PageHeader title={t('list.title')} subtitle={t('list.heroText')}
-      actions={<Link className={ui.btnPrimary} href={newHref}><Icon name="plus" size={18} />{t('list.newReport')}</Link>} />
+  return <FieldOpShell active="reports" action={<Link className={ui.btnPrimary} href={newHref}><Icon name="plus" size={18} />{t('list.newReport')}</Link>}>
+    <PageHeader title={t('list.title')} subtitle={t('list.heroText')} />
 
     <Stats>
       <Stat label={t('list.cardToday')} value={inProject.filter((r) => r.report_date === today).length} hint={t('list.cardTodayHint')} />

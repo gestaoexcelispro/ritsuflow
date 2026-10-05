@@ -63,7 +63,7 @@ export default function NewFieldOpDailyReportPage() {
     router.push(`/fieldop/reports/daily/${created.id}`)
   }
 
-  return <FieldOpShell active="reports" projectId={projectId || undefined}>
+  return <FieldOpShell active="reports" projectId={projectId || undefined} action={false}>
     <PageHeader back={{ href: '/fieldop/reports/daily', label: t('common.reports') }} title={t('new.title')} subtitle={t('new.heroText')} />
     <div style={{ display: 'grid', gap: 14, maxWidth: 760 }}>
       <Notice>{error}</Notice>

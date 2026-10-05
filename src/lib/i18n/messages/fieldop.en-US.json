@@ -68,5 +68,10 @@
   "reportStatus.draft": "Draft",
   "reportStatus.submitted": "Submitted",
   "reportStatus.reviewed": "Reviewed",
-  "reportStatus.approved": "Approved"
+  "reportStatus.approved": "Approved",
+  "nav.precon": "PreCon",
+  "nav.projectsModule": "Projects",
+  "nav.newReport": "New Daily Report",
+  "projects.openProject": "Open project",
+  "projects.showing": "Showing {shown} of {total} projects"
 }
