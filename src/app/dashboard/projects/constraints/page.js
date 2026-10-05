@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 
 import { supabase } from '../../../../lib/supabase';
+import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
 
 
 // ============================================================
@@ -1284,16 +1285,8 @@ export default function ConstraintLogPage() {
           setProjects(rows);
 
 
-          const params =
-            new URLSearchParams(
-              window.location.search
-            );
-
-
           const requested =
-            params.get(
-              'projectId'
-            );
+            readPreconProjectId();
 
 
           if (
@@ -2341,6 +2334,10 @@ export default function ConstraintLogPage() {
   function handleProjectChange(
     projectId
   ) {
+
+    rememberPreconProjectId(
+      projectId
+    );
 
     autoOpenedConstraintIdRef.current =
       null;

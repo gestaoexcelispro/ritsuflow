@@ -17,6 +17,12 @@ const paths = {
   card: 'M3 6h18v12H3zM3 10h18M7 15h4',
   right: 'M9 6l6 6-6 6',
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+  // PreCon
+  masterPlan: 'M4 5h16v15H4zM8 3v4M16 3v4M4 10h16M7 14h5M10 17h6',
+  lookahead: 'M4 6h7M4 12h11M4 18h15M11 6l3 3-3 3M15 12l3 3-3 3',
+  constraint: 'M12 3.5 2.5 20h19zM12 10v4.5M12 17.5v.01',
+  weekly: 'M4 5h16v15H4zM8 3v4M16 3v4M4 10h16M7.5 14h1M11.5 14h1M15.5 14h1M7.5 17h1M11.5 17h1',
+  chart: 'M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6',
 }
 
 export default function Icon({ name, size = 20, strokeWidth = 1.8, ...rest }) {

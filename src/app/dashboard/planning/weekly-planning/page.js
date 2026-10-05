@@ -10,6 +10,7 @@ import React, {
 import { createPortal } from 'react-dom';
 
 import { supabase } from '../../../../lib/supabase';
+import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
 
 // ============================================================
 // CONSTANTS
@@ -704,6 +705,12 @@ export default function WeeklyPlanningPage() {
         setProjects(
           data || [],
         );
+
+        // Open the project chosen in the URL or last selected in PreCon.
+        const requested = readPreconProjectId();
+        if (requested && (data || []).some((project) => project.id === requested)) {
+          setSelectedProjectId((current) => current || requested);
+        }
       },
       [
         clearMessages,
@@ -2368,11 +2375,14 @@ export default function WeeklyPlanningPage() {
         >
           <select
             value={selectedProjectId}
-            onChange={(event) =>
+            onChange={(event) => {
               setSelectedProjectId(
                 event.target.value,
-              )
-            }
+              );
+              rememberPreconProjectId(
+                event.target.value,
+              );
+            }}
             style={styles.select}
           >
             <option value="">
