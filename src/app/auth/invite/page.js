@@ -3,10 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../../lib/supabase/client'
+import AuthShell, { AuthField } from '../../login/AuthShell'
+import styles from '../../login/login.module.css'
+import { useT } from '../../../lib/i18n/useT'
 
 const supabase = createClient()
 
 export default function InvitePage() {
+  const t = useT('auth')
   const router = useRouter()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -83,9 +87,7 @@ export default function InvitePage() {
         }
 
         if (!session) {
-          throw new Error(
-            'This invitation link is invalid or has expired. Please ask your organization administrator to send a new invitation.'
-          )
+          throw new Error(t('invite.errLink'))
         }
 
         if (!mounted) return
@@ -103,8 +105,8 @@ export default function InvitePage() {
 
           setErrorMessage(
             looksExpired
-              ? 'This invitation link is invalid or has expired. Please ask your organization administrator to send a new invitation.'
-              : message || 'RitsuFlow could not validate this invitation.'
+              ? t('invite.errLink')
+              : message || t('invite.errValidate')
           )
         }
       }
@@ -115,24 +117,24 @@ export default function InvitePage() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleActivateAccount(event) {
     event.preventDefault()
     setErrorMessage('')
 
     if (!sessionReady) {
-      setErrorMessage('The invitation session is not ready.')
+      setErrorMessage(t('invite.errNotReady'))
       return
     }
 
     if (password.length < 8) {
-      setErrorMessage('Password must contain at least 8 characters.')
+      setErrorMessage(t('errPasswordLength'))
       return
     }
 
     if (password !== confirmPassword) {
-      setErrorMessage('The passwords do not match.')
+      setErrorMessage(t('errPasswordMatch'))
       return
     }
 
@@ -142,7 +144,7 @@ export default function InvitePage() {
       const { error: passwordError } = await supabase.auth.updateUser({ password })
 
       if (passwordError) {
-        throw new Error(passwordError.message || 'Your password could not be created.')
+        throw new Error(passwordError.message || t('invite.errPassword'))
       }
 
       const activationResponse = await fetch('/api/auth/activate-invitation', {
@@ -156,8 +158,7 @@ export default function InvitePage() {
 
       if (!activationResponse.ok) {
         throw new Error(
-          activationResult.error ||
-            'Your password was created, but your RitsuFlow membership could not be activated.'
+          activationResult.error || t('invite.errActivate')
         )
       }
 
@@ -165,145 +166,20 @@ export default function InvitePage() {
       router.refresh()
     } catch (error) {
       console.error('Account activation failed.', error)
-      setErrorMessage(error.message || 'Your account could not be activated.')
+      setErrorMessage(error.message || t('invite.errAccount'))
       setLoading(false)
     }
   }
 
   return (
-    <main
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        padding: '24px',
-        backgroundColor: '#f4f7f8',
-        fontFamily: 'Arial, sans-serif',
-      }}
-    >
-      <section
-        style={{
-          width: '100%',
-          maxWidth: '440px',
-          padding: '40px',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          boxShadow: '0 12px 32px rgba(6, 43, 84, 0.12)',
-        }}
-      >
-        <header style={{ marginBottom: '32px', textAlign: 'center' }}>
-          <h1 style={{ margin: '0 0 8px', color: '#062b54', fontSize: '2rem' }}>
-            RitsuFlow
-          </h1>
-          <p style={{ margin: '0 0 8px', color: '#334155', fontWeight: 700 }}>
-            Activate your account
-          </p>
-          <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>
-            Create your password to complete your RitsuFlow account setup.
-          </p>
-        </header>
-
-        <form
-          onSubmit={handleActivateAccount}
-          style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
-        >
-          {errorMessage && (
-            <div
-              role="alert"
-              style={{
-                padding: '12px',
-                color: '#991b1b',
-                backgroundColor: '#fee2e2',
-                borderRadius: '8px',
-                textAlign: 'center',
-                fontSize: '0.9rem',
-                lineHeight: 1.45,
-              }}
-            >
-              {errorMessage}
-            </div>
-          )}
-
-          {!sessionReady && !errorMessage && (
-            <div
-              style={{
-                padding: '12px',
-                color: '#475569',
-                backgroundColor: '#f8fafc',
-                borderRadius: '8px',
-                textAlign: 'center',
-                fontSize: '0.9rem',
-              }}
-            >
-              Validating invitation...
-            </div>
-          )}
-
-          <label style={{ color: '#334155', fontWeight: 600 }}>
-            Create Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Create your password"
-              autoComplete="new-password"
-              required
-              disabled={!sessionReady || loading}
-              style={{
-                width: '100%',
-                marginTop: '8px',
-                padding: '12px',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                boxSizing: 'border-box',
-                fontSize: '1rem',
-                backgroundColor: !sessionReady ? '#f8fafc' : '#ffffff',
-              }}
-            />
-          </label>
-
-          <label style={{ color: '#334155', fontWeight: 600 }}>
-            Confirm Password
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Confirm your password"
-              autoComplete="new-password"
-              required
-              disabled={!sessionReady || loading}
-              style={{
-                width: '100%',
-                marginTop: '8px',
-                padding: '12px',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                boxSizing: 'border-box',
-                fontSize: '1rem',
-                backgroundColor: !sessionReady ? '#f8fafc' : '#ffffff',
-              }}
-            />
-          </label>
-
-          <button
-            type="submit"
-            disabled={!sessionReady || loading}
-            style={{
-              padding: '14px',
-              color: '#ffffff',
-              backgroundColor: !sessionReady || loading ? '#94a3b8' : '#062b54',
-              border: 0,
-              borderRadius: '8px',
-              cursor: !sessionReady || loading ? 'not-allowed' : 'pointer',
-              fontSize: '1rem',
-              fontWeight: 700,
-            }}
-          >
-            {loading ? 'Activating...' : 'Activate Account'}
-          </button>
-        </form>
-      </section>
-    </main>
+    <AuthShell title={t('invite.title')} subtitle={t('invite.subtitle')}>
+      <form onSubmit={handleActivateAccount} className={styles.form}>
+        {errorMessage && <div role="alert" className={styles.error}>{errorMessage}</div>}
+        {!sessionReady && !errorMessage && <div className={styles.info}>{t('invite.validating')}</div>}
+        <AuthField label={t('invite.createPassword')} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t('passwordRule')} autoComplete="new-password" required disabled={!sessionReady || loading} />
+        <AuthField label={t('confirmPassword')} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder={t('confirmPasswordPlaceholder')} autoComplete="new-password" required disabled={!sessionReady || loading} />
+        <button type="submit" disabled={!sessionReady || loading} className={styles.submitButton}>{loading ? t('invite.activating') : t('invite.submit')}</button>
+      </form>
+    </AuthShell>
   )
 }

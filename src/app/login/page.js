@@ -7,6 +7,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../lib/supabase/client'
 import styles from './login.module.css'
+import LanguageSelector from '../../components/LanguageSelector'
+import { useT } from '../../lib/i18n/useT'
+import { useLanguage } from '../../lib/i18n/LanguageProvider'
 
 const supabase = createClient()
 const OAUTH_CALLBACK_URL = 'https://ritsuflow.com/auth/callback'
@@ -36,6 +39,8 @@ async function generateNonce() {
 }
 
 export default function LoginPage() {
+  const t = useT('auth')
+  const { language } = useLanguage()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -61,7 +66,7 @@ export default function LoginPage() {
         setErrorMessage('')
         const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential, nonce: raw })
         if (error) {
-          setErrorMessage('Google sign-in failed. Please try again.')
+          setErrorMessage(t('login.errGoogle'))
           setGoogleLoading(false)
           initGoogleButton() // fresh nonce for the next attempt
           return
@@ -79,10 +84,11 @@ export default function LoginPage() {
       shape: 'rectangular',
       text: 'continue_with',
       logo_alignment: 'center',
+      locale: language,
       width: Math.min(googleButtonRef.current.offsetWidth || 400, 400),
     })
     setGisRendered(true)
-  }, [router])
+  }, [router, language, t])
 
   useEffect(() => {
     if (gisReady) initGoogleButton()
@@ -104,7 +110,7 @@ export default function LoginPage() {
     })
 
     if (error) {
-      setErrorMessage('Google sign-in could not be started. Please try again.')
+      setErrorMessage(t('login.errGoogleStart'))
       setGoogleLoading(false)
     }
   }
@@ -117,7 +123,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
-      setErrorMessage('Invalid email or password.')
+      setErrorMessage(t('login.errInvalid'))
       setLoading(false)
       return
     }
@@ -135,21 +141,22 @@ export default function LoginPage() {
       <div className={styles.background} />
       <div className={styles.overlay} />
       <div className={styles.flowLines}><span /><span /><span /><span /><span /></div>
+      <div className={styles.lang}><LanguageSelector dark /></div>
 
       <div className={styles.shell}>
         <section className={styles.brandPanel}>
-          <a href="/" className={styles.brand} aria-label="RitsuFlow home">
+          <a href="/" className={styles.brand} aria-label={t('login.homeAria')}>
             <Image src="/logo-white.png" alt="RitsuFlow" width={300} height={110} priority className={styles.logo} />
           </a>
 
           <div className={styles.brandContent}>
-            <h1>Plan by location.<br />Control by <span>flow.</span></h1>
+            <h1>{t('login.heroLine1')}<br />{t('login.heroLine2')} <span>{t('login.heroAccent')}</span></h1>
             <div className={styles.accentLine} />
-            <p className={styles.brandDescription}>RitsuFlow™ connects master planning, lookahead preparation, weekly commitments, and production control in one integrated construction workflow.</p>
+            <p className={styles.brandDescription}>{t('login.heroText')}</p>
             <div className={styles.principles}>
-              <div className={styles.principle}><span className={styles.principleIcon}>01</span><div><strong>Flow-Based Planning</strong><p>Align locations, sequence, and production.</p></div></div>
-              <div className={styles.principle}><span className={styles.principleIcon}>02</span><div><strong>Reliable Execution</strong><p>Make work ready before you commit.</p></div></div>
-              <div className={styles.principle}><span className={styles.principleIcon}>03</span><div><strong>Continuous Control</strong><p>Connect planning decisions to execution.</p></div></div>
+              <div className={styles.principle}><span className={styles.principleIcon}>01</span><div><strong>{t('login.p1Title')}</strong><p>{t('login.p1Text')}</p></div></div>
+              <div className={styles.principle}><span className={styles.principleIcon}>02</span><div><strong>{t('login.p2Title')}</strong><p>{t('login.p2Text')}</p></div></div>
+              <div className={styles.principle}><span className={styles.principleIcon}>03</span><div><strong>{t('login.p3Title')}</strong><p>{t('login.p3Text')}</p></div></div>
             </div>
           </div>
         </section>
@@ -157,7 +164,7 @@ export default function LoginPage() {
         <section className={styles.loginArea}>
           <div className={styles.loginCard}>
             <div className={styles.cardLogo}><Image src="/logo-white.png" alt="RitsuFlow" width={190} height={70} priority /></div>
-            <header className={styles.loginHeader}><h2>Welcome back</h2><p>Sign in to continue to RitsuFlow™</p></header>
+            <header className={styles.loginHeader}><h2>{t('login.title')}</h2><p>{t('login.subtitle')}</p></header>
 
             {errorMessage && <div role="alert" className={styles.error}>{errorMessage}</div>}
 
@@ -171,46 +178,46 @@ export default function LoginPage() {
             {!gisRendered && (
             <button type="button" onClick={handleGoogleLogin} disabled={googleLoading || loading} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, width:'100%', minHeight:50, padding:'0 16px', color:'#172033', border:'1px solid rgba(255,255,255,.72)', borderRadius:10, background:'#fff', cursor:(googleLoading || loading) ? 'not-allowed' : 'pointer', fontSize:'.92rem', fontWeight:700, opacity:(googleLoading || loading) ? .62 : 1 }}>
               <span aria-hidden="true" style={{ color:'#4285f4', fontSize:'1rem', fontWeight:900 }}>G</span>
-              <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
+              <span>{googleLoading ? t('login.googleConnecting') : t('login.google')}</span>
             </button>
             )}
 
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', margin:'18px 0', color:'rgba(182,195,209,.72)', fontSize:'.72rem', textTransform:'uppercase', letterSpacing:'.04em' }}>or continue with email</div>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', margin:'18px 0', color:'rgba(182,195,209,.72)', fontSize:'.72rem', textTransform:'uppercase', letterSpacing:'.04em' }}>{t('login.orEmail')}</div>
 
             <form onSubmit={handleLogin} className={styles.form}>
               <label className={styles.field}>
-                <span>Email</span>
+                <span>{t('email')}</span>
                 <div className={styles.inputWrapper}>
                   <span className={styles.inputIcon} aria-hidden="true">@</span>
-                  <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Enter your email" autoComplete="email" required />
+                  <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t('emailPlaceholder')} autoComplete="email" required />
                 </div>
               </label>
 
               <label className={styles.field}>
-                <span>Password</span>
+                <span>{t('password')}</span>
                 <div className={styles.inputWrapper}>
                   <span className={styles.inputIcon} aria-hidden="true">•</span>
-                  <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" required />
-                  <button type="button" className={styles.passwordToggle} onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? 'Hide' : 'Show'}</button>
+                  <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t('login.passwordPlaceholder')} autoComplete="current-password" required />
+                  <button type="button" className={styles.passwordToggle} onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}>{showPassword ? t('login.hide') : t('login.show')}</button>
                 </div>
               </label>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px' }}>
-                <Link href="/forgot-password" style={{ color: '#11c7b2', fontSize: '.9rem', fontWeight: 700, textDecoration: 'none' }}>Forgot password?</Link>
+                <Link href="/forgot-password" style={{ color: '#11c7b2', fontSize: '.9rem', fontWeight: 700, textDecoration: 'none' }}>{t('login.forgot')}</Link>
               </div>
 
-              <button type="submit" disabled={loading || googleLoading} className={styles.submitButton}>{loading ? 'Signing in...' : 'Sign in'}{!loading && <span aria-hidden="true">→</span>}</button>
+              <button type="submit" disabled={loading || googleLoading} className={styles.submitButton}>{loading ? t('login.signingIn') : t('login.signIn')}{!loading && <span aria-hidden="true">→</span>}</button>
             </form>
 
             <div style={{ marginTop: 20, textAlign: 'center', color: '#b6c3d1', fontSize: '.92rem' }}>
-              New to RitsuFlow? <Link href="/register" style={{ color: '#11c7b2', fontWeight: 700, textDecoration: 'none' }}>Create an account</Link>
+              {t('login.newHere')} <Link href="/register" style={{ color: '#11c7b2', fontWeight: 700, textDecoration: 'none' }}>{t('login.createAccount')}</Link>
             </div>
 
-            <div className={styles.privateAccess}><div className={styles.lockIcon}>🔒</div><div><strong>Private development access</strong><p>Registration creates an account only. Organization and project access require authorization.</p></div></div>
+            <div className={styles.privateAccess}><div className={styles.lockIcon}>🔒</div><div><strong>{t('login.privateTitle')}</strong><p>{t('login.privateText')}</p></div></div>
           </div>
 
-          <div className={styles.support}><span>Need help?</span><span>Contact your system administrator.</span></div>
-          <div className={styles.copyright}>© {new Date().getFullYear()} Eduardo Fernandes de Freitas. All rights reserved.</div>
+          <div className={styles.support}><span>{t('help')}</span><span>{t('helpText')}</span></div>
+          <div className={styles.copyright}>{t('copyright', { year: new Date().getFullYear() })}</div>
         </section>
       </div>
     </main>
