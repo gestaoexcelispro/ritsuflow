@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import styles from '../daily-reports.module.css'
+import { useDirty } from './useDirty'
 
 // Generic add / edit / delete list for the Daily Report sections that hold several rows
 // (Materials, Equipment, Issues). Each section passes its table, fields and columns.
@@ -13,18 +14,20 @@ const toForm = (fields, row) => Object.fromEntries(fields.map((f) => [f.key, row
 
 export default function RecordListSection({
   report, supabase, t, locked, table, select, order = 'created_at', tabKey, textKey,
-  fields, columns, toPayload, validate, summary, emptyKey, addKey, saveKey, savedKey, deletedKey, confirmKey,
+  fields, columns, toPayload, validate, summary, emptyKey, addKey, saveKey, savedKey, deletedKey, confirmKey, onDirty,
 }) {
   const [rows, setRows] = useState([])
   const [locations, setLocations] = useState([])
   const [form, setForm] = useState(() => toForm(fields))
   const [editingId, setEditingId] = useState(null)
   const [open, setOpen] = useState(false)
+  const [opened, setOpened] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  useDirty(onDirty, open && JSON.stringify(form) !== opened)
   const needsLocations = fields.some((f) => f.type === 'location')
 
   const load = useCallback(async () => {
@@ -42,8 +45,8 @@ export default function RecordListSection({
   useEffect(() => { load() }, [load])
 
   function set(key, value) { setForm((cur) => ({ ...cur, [key]: value })); setMessage('') }
-  function startAdd() { setForm(toForm(fields)); setEditingId(null); setOpen(true); setError(''); setMessage('') }
-  function startEdit(row) { setForm(toForm(fields, row)); setEditingId(row.id); setOpen(true); setError(''); setMessage('') }
+  function startAdd() { setForm(toForm(fields)); setOpened(JSON.stringify(toForm(fields))); setEditingId(null); setOpen(true); setError(''); setMessage('') }
+  function startEdit(row) { setForm(toForm(fields, row)); setOpened(JSON.stringify(toForm(fields, row))); setEditingId(row.id); setOpen(true); setError(''); setMessage('') }
   function cancel() { setOpen(false); setEditingId(null); setError('') }
 
   async function save(event) {
@@ -113,11 +116,11 @@ export default function RecordListSection({
 
     {loading ? <div className={styles.empty}>{t('common.loading')}</div>
       : rows.length === 0 ? <div className={styles.empty}>{t(emptyKey)}</div>
-        : <div style={{ overflowX: 'auto' }}><table className={styles.table}>
+        : <div style={{ overflowX: 'auto' }}><table className={`${styles.table} ${styles.cardsTable}`}>
           <thead><tr>{columns.map((c) => <th key={c.key}>{t(c.label)}</th>)}{!locked && <th />}</tr></thead>
           <tbody>{rows.map((row) => <tr key={row.id}>
-            {columns.map((c) => <td key={c.key}>{c.render ? c.render(row) : row[c.key] ?? '—'}</td>)}
-            {!locked && <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+            {columns.map((c, i) => <td key={c.key} data-label={i === 0 ? '' : t(c.label)}>{c.render ? c.render(row) : row[c.key] ?? '—'}</td>)}
+            {!locked && <td data-label="" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
               <button type="button" className={styles.secondaryButton} style={{ minHeight: 30, marginRight: 6 }} onClick={() => startEdit(row)}>{t('list.edit')}</button>
               <button type="button" className={styles.secondaryButton} style={{ minHeight: 30 }} disabled={busyId === row.id} onClick={() => remove(row)}>{t('list.delete')}</button>
             </td>}

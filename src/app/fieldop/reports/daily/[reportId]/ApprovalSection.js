@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import styles from '../daily-reports.module.css'
+import { submitReport } from './submit'
 
 // Workflow actions available from each status (enforced again by transition_daily_report_status).
 const ACTIONS = {
@@ -48,7 +49,9 @@ export default function ApprovalSection({ report, supabase, t, language, approva
 
   async function run(action) {
     setBusy(action); setMessage(''); setError('')
-    const { data, error: rpcError } = await supabase.rpc('transition_daily_report_status', { p_daily_report_id: report.id, p_action: action, p_comments: comments.trim() || null })
+    const { data, error: rpcError } = action === 'submitted'
+      ? await submitReport(supabase, report.id, comments.trim() || null)
+      : await supabase.rpc('transition_daily_report_status', { p_daily_report_id: report.id, p_action: action, p_comments: comments.trim() || null })
     if (rpcError) setError(rpcError.message?.includes('SEPARATE_APPROVER_REQUIRED') ? t('approval.separateBlocked') : t('common.error', { message: rpcError.message }))
     else {
       const status = (Array.isArray(data) ? data[0] : data)?.status || report.status
@@ -84,12 +87,12 @@ export default function ApprovalSection({ report, supabase, t, language, approva
     <div className={styles.panelHead}><h3>{t('approval.history')}</h3></div>
     {history.length === 0
       ? <div className={styles.empty}>{t('approval.historyEmpty')}</div>
-      : <table className={styles.table}>
+      : <table className={`${styles.table} ${styles.cardsTable}`}>
         <tbody>{history.map((h) => <tr key={h.id}>
-          <td style={{ whiteSpace: 'nowrap' }}>{h.performed_at ? dateTime.format(new Date(h.performed_at)) : '—'}</td>
-          <td><strong>{actionLabel(h.action)}</strong><br /><small>{t(`status.${h.from_status}`)} → {t(`status.${h.to_status}`)}</small></td>
-          <td>{people.get(h.performed_by) || '—'}</td>
-          <td>{h.comments || ''}</td>
+          <td data-label="" style={{ whiteSpace: 'nowrap' }}>{h.performed_at ? dateTime.format(new Date(h.performed_at)) : '—'}</td>
+          <td data-label=""><strong>{actionLabel(h.action)}</strong><br /><small>{t(`status.${h.from_status}`)} → {t(`status.${h.to_status}`)}</small></td>
+          <td data-label="">{people.get(h.performed_by) || '—'}</td>
+          <td data-label="">{h.comments || ''}</td>
         </tr>)}</tbody>
       </table>}
   </section>

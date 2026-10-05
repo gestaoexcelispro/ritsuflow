@@ -68,7 +68,7 @@
   "overview.hiddenTabs": "Algunas secciones están desactivadas en la configuración del informe diario de este proyecto.",
   "overview.open": "Abrir →",
   "placeholder.text": "La sección {section} se desarrollará en una etapa posterior. Su información todavía no se registra.",
-  "general.text": "Información básica de este día de campo. El proyecto y la identificación del informe se completan automáticamente.",
+  "general.text": "Horario de trabajo y notas generales del día.",
   "general.project": "Proyecto",
   "general.projectCode": "Código del proyecto",
   "general.reportDate": "Fecha del informe",
@@ -373,5 +373,16 @@
   "list.allProjects": "Todos los proyectos",
   "list.filterAll": "Todos",
   "list.emptyFiltered": "Ningún informe coincide con este filtro.",
-  "list.todayTag": "Hoy"
+  "list.todayTag": "Hoy",
+  "unsaved.confirm": "Tiene cambios sin guardar. ¿Salir de esta sección y perderlos?",
+  "unsaved.confirmSubmit": "Tiene cambios sin guardar. ¿Enviar sin ellos?",
+  "general.errTimes": "El fin del trabajo no puede ser anterior al inicio.",
+  "weather.sameAsMorning": "Igual que la mañana",
+  "weather.addEvening": "+ Agregar noche",
+  "notes.updated": "Nota actualizada.",
+  "notes.saveEdit": "Guardar nota",
+  "workforce.noCompany": "Sin empresa",
+  "workforce.textAuto": "Asistencia registrada en campo el {date}. El resumen se guarda automáticamente al enviar el informe.",
+  "workforce.companyLine": "{workers} trabajadores · {hours} h",
+  "workforce.snapshotAuto": "Registrado al enviar el informe."
 }

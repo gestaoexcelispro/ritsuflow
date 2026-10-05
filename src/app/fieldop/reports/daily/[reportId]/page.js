@@ -18,6 +18,7 @@ import IssuesSection from './IssuesSection'
 import AttachmentsSection from './AttachmentsSection'
 import ApprovalSection from './ApprovalSection'
 import styles from '../daily-reports.module.css'
+import { submitReport } from './submit'
 
 // The report is filled in four steps. Each section names the Daily Report Settings switch
 // that can hide it (null = always shown).
@@ -38,8 +39,25 @@ export default function FieldOpDailyReportWorkspace() {
   const [settings, setSettings] = useState(null)
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
-  const [active, setActive] = useState('overview')
+  const [active, setActiveTab] = useState('overview')
   const [error, setError] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const [perms, setPerms] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [notice, setNotice] = useState(null)
+
+  // Leaving a section (or the page) with unsaved changes asks first.
+  const setActive = (tab) => {
+    if (tab === active) return
+    if (dirty && !window.confirm(t('unsaved.confirm'))) return
+    setDirty(false); setNotice(null); setActiveTab(tab)
+  }
+  useEffect(() => {
+    if (!dirty) return undefined
+    const warn = (event) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
 
   const loadSummary = useCallback(async (current) => {
     if (!current) return
@@ -84,6 +102,12 @@ export default function FieldOpDailyReportWorkspace() {
     if (reportId) load()
   }, [reportId, supabase, loadSummary])
 
+  // Which workflow actions the signed-in user may take (shows the header Submit button).
+  useEffect(() => {
+    if (!report?.id) return
+    supabase.rpc('fieldop_daily_report_permissions', { p_daily_report_id: report.id }).then(({ data }) => setPerms(data || null))
+  }, [report?.id, report?.status, supabase])
+
   // Keep the checklist current: recount whenever the user moves to another section.
   useEffect(() => { if (report) loadSummary(report) }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -97,7 +121,16 @@ export default function FieldOpDailyReportWorkspace() {
   const locked = report.status === 'approved'
   const reportDate = new Intl.DateTimeFormat(language, { dateStyle: 'full' }).format(new Date(`${report.report_date}T12:00:00`))
   const number = `DR-${String(report.report_number || 0).padStart(4, '0')}`
-  const sectionProps = { report, supabase, t, language, locked, reportDate }
+  const sectionProps = { report, supabase, t, language, locked, reportDate, onDirty: setDirty }
+
+  async function submitFromHeader() {
+    if (dirty && !window.confirm(t('unsaved.confirmSubmit'))) return
+    setSubmitting(true); setNotice(null)
+    const { error: submitError } = await submitReport(supabase, report.id)
+    if (submitError) setNotice({ tone: 'bad', text: t('common.error', { message: submitError.message }) })
+    else { setDirty(false); setNotice({ tone: 'ok', text: t('approval.done', { status: t('status.submitted') }) }); refresh({ status: 'submitted' }) }
+    setSubmitting(false)
+  }
   const refresh = (patch) => { const next = { ...report, ...(patch || {}) }; setReport(next); loadSummary(next) }
 
   // What each section shows in the checklist: whether it has entries, and a short count.
@@ -148,7 +181,9 @@ export default function FieldOpDailyReportWorkspace() {
       back={{ href: '/fieldop/reports/daily', label: t('common.reports') }}
       title={`${number} · ${report.projects?.name || ''}`}
       meta={<><span>{reportDate}</span><Badge tone={reportTone(report.status)}>{t(`status.${report.status}`)}</Badge></>}
+      actions={report.status === 'draft' && perms?.submit && <button type="button" className={ui.btnPrimary} disabled={submitting} onClick={submitFromHeader}>{submitting ? t('common.saving') : t('approval.submitted')}</button>}
     />
+    {notice && <div className={notice.tone === 'ok' ? styles.lockNote : styles.error} style={notice.tone === 'ok' ? { background: 'var(--fo-ok-wash)', color: 'var(--fo-ok)' } : undefined} role="status">{notice.text}</div>}
 
     <div className={styles.workspace}>
       <nav className={styles.rail} aria-label={t('rail.label')}>

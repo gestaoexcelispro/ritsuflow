@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import styles from '../daily-reports.module.css'
+import { useDirty } from './useDirty'
 
 /** Start and end of the report day in the browser's time zone, as ISO strings. */
 function dayRange(reportDate) {
@@ -11,7 +12,7 @@ function dayRange(reportDate) {
   return [start.toISOString(), end.toISOString()]
 }
 
-export default function ProductionSection({ report, supabase, t, language, locked, onSaved }) {
+export default function ProductionSection({ report, supabase, t, language, locked, onSaved, onDirty }) {
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState([])
   const [values, setValues] = useState({})
@@ -19,6 +20,8 @@ export default function ProductionSection({ report, supabase, t, language, locke
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [baseline, setBaseline] = useState('{}')
+  useDirty(onDirty, !locked && JSON.stringify(values) !== baseline)
 
   useEffect(() => {
     let cancelled = false
@@ -73,7 +76,9 @@ export default function ProductionSection({ report, supabase, t, language, locke
           unit: scope?.unit || activity?.unit || '',
         }
       })
-      if (!cancelled) { setRows(prepared); setValues(initial); setPrefilled(fromField); setLoading(false) }
+      // Saved quantities are the baseline; quantities pre-filled from the field still need saving.
+      const saved = Object.fromEntries(Object.keys(initial).map((id) => [id, savedBy.has(id) ? initial[id] : '']))
+      if (!cancelled) { setRows(prepared); setValues(initial); setBaseline(JSON.stringify(saved)); setPrefilled(fromField); setLoading(false) }
     }
     load()
     return () => { cancelled = true }
@@ -107,7 +112,7 @@ export default function ProductionSection({ report, supabase, t, language, locke
     const items = computed.map((r) => ({ location_service_quantity_id: r.allocation.id, actual_quantity: r.today }))
     const { data, error: rpcError } = await supabase.rpc('fieldop_save_daily_production', { p_daily_report_id: report.id, p_items: items })
     if (rpcError) setError(t('common.error', { message: rpcError.message }))
-    else { setMessage(t('production.saved', { count: data ?? 0 })); setPrefilled(new Set()); onSaved?.() }
+    else { setMessage(t('production.saved', { count: data ?? 0 })); setBaseline(JSON.stringify(values)); setPrefilled(new Set()); onSaved?.() }
     setSaving(false)
   }
 

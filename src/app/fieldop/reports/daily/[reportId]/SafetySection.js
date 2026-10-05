@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import styles from '../daily-reports.module.css'
+import { useDirty } from './useDirty'
 
 const PPE = ['compliant', 'minor_issues', 'non_compliant', 'not_applicable']
 const STATUS = ['normal', 'attention', 'critical']
@@ -20,13 +21,15 @@ function suggest(f) {
   return 'normal'
 }
 
-export default function SafetySection({ report, supabase, t, locked }) {
+export default function SafetySection({ report, supabase, t, locked, onDirty }) {
   const [form, setForm] = useState(blank)
   const [exists, setExists] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [baseline, setBaseline] = useState(JSON.stringify(blank))
+  useDirty(onDirty, !locked && JSON.stringify(form) !== baseline)
 
   useEffect(() => {
     let alive = true
@@ -35,7 +38,9 @@ export default function SafetySection({ report, supabase, t, locked }) {
       if (loadError) setError(t('common.error', { message: loadError.message }))
       if (data) {
         setExists(true)
-        setForm(Object.fromEntries(Object.keys(blank).map((k) => [k, data[k] ?? blank[k]])))
+        const loaded = Object.fromEntries(Object.keys(blank).map((k) => [k, data[k] ?? blank[k]]))
+        setForm(loaded)
+        setBaseline(JSON.stringify(loaded))
       }
       setLoading(false)
     })
@@ -69,7 +74,7 @@ export default function SafetySection({ report, supabase, t, locked }) {
     }
     const { error: saveError } = await supabase.from('daily_report_safety').upsert(payload, { onConflict: 'daily_report_id' })
     if (saveError) setError(t('common.error', { message: saveError.message }))
-    else { setExists(true); setMessage(t('safety.saved')) }
+    else { setExists(true); setBaseline(JSON.stringify(form)); setMessage(t('safety.saved')) }
     setSaving(false)
   }
 

@@ -119,3 +119,16 @@
   .productionTable td[data-label=''] strong, .productionTable td[data-label=''] small { display: inline; margin-right: 6px; }
 }
 @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+
+/* Section lists (materials, equipment, issues, notes, workforce, approval history) become cards on phones.
+   The first cell (data-label="") is the card title; the others show "label  value". */
+@media (max-width: 760px) {
+  .cardsTable thead { display: none; }
+  .cardsTable, .cardsTable tbody, .cardsTable tr, .cardsTable td { display: block; width: 100%; }
+  .cardsTable tr { padding: 12px 16px; border-bottom: 1px solid var(--fo-line-soft); }
+  .cardsTable tr:last-child { border-bottom: 0; }
+  .cardsTable td { border: 0 !important; padding: 3px 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: right; }
+  .cardsTable td::before { content: attr(data-label); color: var(--fo-muted); font-size: 14px; text-align: left; flex: none; }
+  .cardsTable td[data-label=''] { display: block; text-align: left; }
+  .cardsTable td[data-label='']::before { display: none; }
+}
