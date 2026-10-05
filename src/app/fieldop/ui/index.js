@@ -39,6 +39,18 @@ const MODULES = {
       ] : []),
     ],
   },
+  settings: {
+    nameKey: 'nav.settingsModule', taglineKey: 'nav.settingsTagline', home: '/settings',
+    tabs: () => [
+      { key: 'hub', icon: 'grid', href: '/settings', labelKey: 'nav.settingsHub' },
+      { key: 'company', icon: 'building', href: '/settings/company', labelKey: 'nav.settingsCompany' },
+      { key: 'users', icon: 'workforce', href: '/settings/users', labelKey: 'nav.settingsUsers' },
+      { key: 'roles', icon: 'shield', href: '/settings/roles', labelKey: 'nav.settingsRoles' },
+      { key: 'workspaces', icon: 'portfolio', href: '/settings/workspaces', labelKey: 'nav.settingsWorkspaces' },
+      { key: 'localization', icon: 'globe', href: '/settings/localization', labelKey: 'nav.settingsLocalization' },
+      { key: 'license', icon: 'card', href: '/settings/license', labelKey: 'nav.settingsLicense' },
+    ],
+  },
 }
 
 function initials(name) {
@@ -77,7 +89,7 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
     <div className={ui.who}><strong>{user.name || t('user.fallbackName')}</strong><span>{user.role ? t(`role.${user.role}`) : ''}</span></div>
     <LanguageSelector compact dark />
   </div>
-  const defaultAction = module === 'projects'
+  const defaultAction = module === 'settings' ? null : module === 'projects'
     ? <Link className={ui.btnPrimary} href="/projects/new"><Icon name="plus" size={18} />{t('nav.newProject')}</Link>
     : <Link className={ui.btnPrimary} href={projectId ? `/fieldop/reports/daily/new?projectId=${projectId}` : '/fieldop/reports/daily/new'}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>
   const mainAction = action === undefined ? defaultAction : action

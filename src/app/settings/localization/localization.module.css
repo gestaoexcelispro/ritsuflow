@@ -1,0 +1,13 @@
+.muted { color: var(--fo-muted); }
+.stack { display: grid; gap: 16px; max-width: 860px; }
+.intro, .note { margin: 0; color: var(--fo-muted); }
+.note { font-size: 14px; }
+.options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.option { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 14px; border: 1px solid var(--fo-line); border-radius: var(--fo-radius-sm); background: var(--fo-surface); color: var(--fo-ink); font: inherit; text-align: left; cursor: pointer; }
+.option:hover { border-color: #a9bac2; }
+.option b { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 8px; background: var(--fo-sunken); font-size: 14px; }
+.optionOn, .optionOn:hover { border-color: var(--fo-teal-ink); background: var(--fo-teal-wash); box-shadow: 0 0 0 1px var(--fo-teal-ink); }
+.optionOn b { background: var(--fo-teal-ink); color: #fff; }
+.preview { margin: 12px 0 0; color: var(--fo-muted); font-size: 14px; }
+.preview strong { color: var(--fo-ink); }
+@media (max-width: 640px) { .options { grid-template-columns: 1fr; } }

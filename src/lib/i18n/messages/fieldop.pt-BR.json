@@ -81,5 +81,14 @@
   "nav.projectLocations": "Locais",
   "nav.projectHistory": "Histórico",
   "nav.newProject": "Novo projeto",
-  "nav.cancel": "Cancelar"
+  "nav.cancel": "Cancelar",
+  "nav.settingsModule": "Configurações",
+  "nav.settingsTagline": "Empresa, acessos e preferências.",
+  "nav.settingsHub": "Visão geral",
+  "nav.settingsCompany": "Empresa",
+  "nav.settingsUsers": "Usuários",
+  "nav.settingsRoles": "Perfis",
+  "nav.settingsWorkspaces": "Acesso aos espaços",
+  "nav.settingsLocalization": "Idioma e unidades",
+  "nav.settingsLicense": "Plano e uso"
 }
