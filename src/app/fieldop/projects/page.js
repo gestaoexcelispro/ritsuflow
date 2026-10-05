@@ -5,17 +5,10 @@ import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
 import { useT } from '../../../lib/i18n/useT'
 import { useLanguage } from '../../../lib/i18n/LanguageProvider'
-import { FieldOpSidebar, FieldOpUser } from '../FieldOpChrome'
-import styles from './projects.module.css'
+import { FieldOpShell, Panel, Badge, Empty, Notice, ui } from '../ui'
 
 const STATUSES = ['planning', 'active', 'on_hold', 'completed', 'archived']
-const STATUS_STYLE = {
-  active: { background: '#e2f7ed', color: '#11864c' },
-  planning: { background: '#e6f0ff', color: '#1d5fb8' },
-  on_hold: { background: '#fff4dc', color: '#946200' },
-  completed: { background: '#eef2f4', color: '#4b6170' },
-  archived: { background: '#eef2f4', color: '#7a8b95' },
-}
+const STATUS_TONE = { active: 'ok', planning: 'info', on_hold: 'warn' }
 
 /** Which of the four FieldOp setup parts each project has: activities, locations, workforce, report settings. */
 async function loadSetupProgress(projectIds) {
@@ -90,67 +83,45 @@ export default function FieldOpProjectsPage() {
     }
   }
 
+  // Setup progress: four parts (activities, locations, workforce, report settings).
   function setupCell(projectId) {
     const done = setup.get(projectId)?.size || 0
-    if (done === 4) return <span className={styles.setupPending} style={{ color: '#11864c', background: '#e2f7ed' }}>{t('list.setupReady')}</span>
-    if (done > 0) return <span className={styles.setupPending}>{t('list.setupPartial', { done })}</span>
-    return <span className={styles.setupPending}>{t('list.setupNone')}</span>
+    return <span style={{ display: 'grid', gap: 6, minWidth: 120 }}>
+      <span style={{ fontSize: 14, color: done === 4 ? 'var(--fo-ok)' : 'var(--fo-muted)', fontWeight: done === 4 ? 600 : 400 }}>{done === 4 ? t('list.setupReady') : done > 0 ? t('list.setupPartial', { done }) : t('list.setupNone')}</span>
+      <span className={ui.stack} style={{ height: 6 }}>{[0, 1, 2, 3].map((i) => <i key={i} style={{ flex: 1, background: i < done ? 'var(--fo-teal-ink)' : 'var(--fo-line-soft)' }} />)}</span>
+    </span>
   }
 
-  return <main className={styles.shell}>
-    <FieldOpSidebar styles={styles} active="projects" />
-
-    <section className={styles.main}>
-      <header className={styles.topbar}>
-        <div className={styles.pageTitle}>{t('list.title')}</div>
-        <label className={styles.search}>⌕ <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('list.search')} /></label>
-        <FieldOpUser styles={styles} />
-      </header>
-
-      <div className={styles.content}>
-        <section className={styles.projectsPanel}>
-          <div className={styles.panelHead}>
-            <div><h1>{t('list.title')}</h1><p>{t('list.text')}</p></div>
-            <div className={styles.filters}>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label={t('list.colStatus')} style={{ border: '1px solid #d5e0e6', borderRadius: 6, padding: '6px 9px', background: '#fff', color: '#425d6d', font: 'inherit' }}>
-                <option value="">{t('list.allStatuses')}</option>
-                {STATUSES.map((status) => <option key={status} value={status}>{tf(`status.${status}`)}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className={styles.tableWrap}>
-            <table>
-              <thead><tr>
-                <th>{t('list.colProjectId')}</th><th>{t('list.colProject')}</th><th>{t('list.colClient')}</th><th>{t('list.colLocation')}</th>
-                <th>{t('list.colStart')}</th><th>{t('list.colEnd')}</th><th>{t('list.colValue')}</th><th>{t('list.colStatus')}</th><th>{t('list.colSetup')}</th><th>{t('list.colActions')}</th>
-              </tr></thead>
-              <tbody>
-                {loading && <tr><td colSpan="10" className={styles.message}>{t('list.loading')}</td></tr>}
-                {!loading && error && <tr><td colSpan="10" className={styles.message}>{t('list.error', { error })}</td></tr>}
-                {!loading && !error && visibleProjects.length === 0 && <tr><td colSpan="10" className={styles.message}>{t('list.empty')}</td></tr>}
-                {!loading && !error && visibleProjects.map((project) => {
-                  const location = [project.city, project.state_region].filter(Boolean).join(', ') || '—'
-                  const status = project.status || 'planning'
-                  const configured = (setup.get(project.id)?.size || 0) > 0
-                  return <tr key={project.id}>
-                    <td><b>{project.project_id || '—'}</b></td>
-                    <td><div className={styles.projectName}><i>{(project.name || 'P').charAt(0).toUpperCase()}</i><span><b>{project.name || tf('projects.untitled')}</b><small>{project.code || '—'}</small></span></div></td>
-                    <td>{project.client_name || '—'}</td>
-                    <td>{location}</td>
-                    <td>{date(project.planned_start_date)}</td>
-                    <td>{date(project.planned_finish_date)}</td>
-                    <td>{money(project.contract_value, project.currency_code)}</td>
-                    <td><span className={styles.ok} style={STATUS_STYLE[status]}>{tf(`status.${status}`)}</span></td>
-                    <td>{setupCell(project.id)}</td>
-                    <td><Link className={styles.configureProject} href={`/fieldop/projects/${project.id}`}>{configured ? t('list.open') : t('list.configure')}</Link></td>
-                  </tr>
-                })}
-              </tbody>
-            </table>
-          </div>
-          <footer className={styles.tableFooter}><span>{t('list.showing', { shown: visibleProjects.length, total: projects.length })}</span></footer>
-        </section>
-      </div>
-    </section>
-  </main>
+  return <FieldOpShell active="projects">
+    <Notice>{error && t('list.error', { error })}</Notice>
+    <Panel body={false} title={t('list.showing', { shown: visibleProjects.length, total: projects.length })}
+      actions={<>
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('list.search')} aria-label={t('list.search')} style={{ width: 220 }} />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label={t('list.colStatus')} style={{ width: 180 }}>
+          <option value="">{t('list.allStatuses')}</option>
+          {STATUSES.map((status) => <option key={status} value={status}>{tf(`status.${status}`)}</option>)}
+        </select>
+      </>}>
+      {loading ? <Empty title={t('list.loading')} />
+        : visibleProjects.length === 0 ? <Empty title={t('list.empty')} />
+          : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards}`}>
+            <thead><tr><th>{t('list.colProject')}</th><th>{t('list.colClient')}</th><th>{t('list.colLocation')}</th><th>{t('list.colEnd')}</th><th>{t('list.colValue')}</th><th>{t('list.colStatus')}</th><th>{t('list.colSetup')}</th><th /></tr></thead>
+            <tbody>{visibleProjects.map((project) => {
+              const location = [project.city, project.state_region].filter(Boolean).join(', ') || '—'
+              const status = project.status || 'planning'
+              const configured = (setup.get(project.id)?.size || 0) > 0
+              return <tr key={project.id}>
+                <td data-label=""><span><Link className={ui.rowLink} href={`/fieldop/projects/${project.id}`}>{project.name || tf('projects.untitled')}</Link><span className={ui.sub}>{[project.project_id, project.code].filter(Boolean).join(' · ') || '—'}</span></span></td>
+                <td data-label={t('list.colClient')}>{project.client_name || '—'}</td>
+                <td data-label={t('list.colLocation')}>{location}</td>
+                <td data-label={t('list.colEnd')}><span>{date(project.planned_finish_date)}<span className={ui.sub}>{t('list.colStart')}: {date(project.planned_start_date)}</span></span></td>
+                <td data-label={t('list.colValue')} style={{ whiteSpace: 'nowrap' }}>{money(project.contract_value, project.currency_code)}</td>
+                <td data-label={t('list.colStatus')}><Badge tone={STATUS_TONE[status]}>{tf(`status.${status}`)}</Badge></td>
+                <td data-label={t('list.colSetup')}>{setupCell(project.id)}</td>
+                <td data-label=""><Link className={`${configured ? ui.btn : ui.btnPrimary} ${ui.small}`} href={`/fieldop/projects/${project.id}`}>{configured ? t('list.open') : t('list.configure')}</Link></td>
+              </tr>
+            })}</tbody>
+          </table></div>}
+    </Panel>
+  </FieldOpShell>
 }

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../../lib/supabase'
 import { useT } from '../../../../lib/i18n/useT'
-import { FieldOpSidebar, FieldOpUser } from '../../FieldOpChrome'
+import { FieldOpShell, PageHeader, Badge, Icon, ui } from '../../ui'
 import FieldOpLocationsSetup from './FieldOpLocationsSetup'
 import FieldOpWorkforceSetup from './FieldOpWorkforceSetup'
 import FieldOpDailyReportSettings from './FieldOpDailyReportSettings'
@@ -250,21 +250,19 @@ export default function FieldOpProjectSetupPage() {
     { tab: 'settings', text: t('overview.stepSettings'), status: dailyReportConfigured ? t('overview.configured') : t('overview.configure') },
   ]
 
-  return <main className={styles.shell}>
-    <FieldOpSidebar styles={styles} active="projects" projectId={projectId} />
-    <section className={styles.main}>
-      <header className={styles.topbar}>
-        <div><div className={styles.crumb}><Link href="/fieldop/projects">{t('list.title')}</Link><span>/</span>{loading ? t('common.loading') : projectName}</div><strong>{t('setup.title')}</strong></div>
-        <div className={styles.search}>⌕ <span>{t('setup.search')}</span><kbd>Ctrl K</kbd></div>
-        <FieldOpUser styles={styles} />
-      </header>
-      <div className={styles.content}>
-        <section className={styles.projectHeader}>
-          <div className={styles.projectIcon}>{projectName.charAt(0).toUpperCase()}</div>
-          <div><h1>{projectName}</h1><p>{project?.project_id || '—'} · {project?.client_name || '—'} · {location}</p></div>
-          <span className={styles.status}>{fieldOpReady ? t('setup.ready') : t('setup.inProgress')}</span>
-        </section>
-        <div className={styles.tabs}>{TABS.map((tab) => <button key={tab} className={activeTab === tab ? styles.tabActive : ''} onClick={() => setActiveTab(tab)}>{tabLabel(tab)}</button>)}</div>
+  const stepDone = { activities: activeRows.length > 0, locations: locationCount > 0, workforce: workforceCount > 0, settings: dailyReportConfigured }
+  const stepStatus = Object.fromEntries(steps.map((step) => [step.tab, step.status]))
+
+  return <FieldOpShell active="projects" projectId={projectId}>
+    <PageHeader back={{ href: '/fieldop/projects', label: t('list.title') }} title={loading ? t('common.loading') : projectName}
+      meta={<><span>{[project?.project_id, project?.client_name, location !== '—' ? location : null].filter(Boolean).join(' · ') || '—'}</span><Badge tone={fieldOpReady ? 'ok' : 'warn'}>{fieldOpReady ? t('setup.ready') : t('setup.inProgress')}</Badge></>}
+      actions={<Link className={ui.btn} href={`/fieldop/projects/${projectId}/workforce`}>{t('setup.openWorkforce')}</Link>} />
+    <div className={styles.tabs} role="tablist">{TABS.map((tab, index) => <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} className={activeTab === tab ? styles.tabActive : ''} onClick={() => setActiveTab(tab)}>
+      {tab === 'overview'
+        ? <span className={styles.stepNo} style={{ borderStyle: 'dashed' }} />
+        : <span className={`${styles.stepNo} ${stepDone[tab] ? styles.stepDone : ''}`}>{stepDone[tab] ? <Icon name="check" size={14} strokeWidth={3} /> : index}</span>}
+      <span className={styles.stepText}>{tabLabel(tab)}{tab !== 'overview' && <small>{stepStatus[tab]}</small>}</span>
+    </button>)}</div>
 
         {activeTab === 'overview' && <section className={styles.grid}>
           <article className={styles.card}>
@@ -299,17 +297,15 @@ export default function FieldOpProjectSetupPage() {
                   action={(item) => <button className={styles.removeButton} onClick={() => removeActivity(item)}>{t('common.remove')}</button>} />}
           {inactiveRows.length > 0 && <div style={{ marginTop: 22, opacity: 0.8 }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{t('activities.deactivatedTitle')}</h3>
-            <p style={{ margin: '0 0 10px', color: '#6b7e89' }}>{t('activities.deactivatedText')}</p>
+            <p style={{ margin: '0 0 10px', color: 'var(--fo-muted)' }}>{t('activities.deactivatedText')}</p>
             <ActivityTable t={t} styles={styles} rows={inactiveRows} readOnly
-              action={(item) => <button className={styles.removeButton} style={{ color: '#0a8f80', borderColor: '#a8dcd4' }} onClick={() => reactivateActivity(item.id)}>{t('activities.reactivate')}</button>} />
+              action={(item) => <button className={styles.removeButton} style={{ color: 'var(--fo-teal-ink)', borderColor: 'var(--fo-line)' }} onClick={() => reactivateActivity(item.id)}>{t('activities.reactivate')}</button>} />
           </div>}
         </section>}
 
         {activeTab === 'locations' && <FieldOpLocationsSetup projectId={projectId} onCountChange={setLocationCount} />}
         {activeTab === 'workforce' && <FieldOpWorkforceSetup projectId={projectId} onCountChange={setWorkforceCount} />}
         {activeTab === 'settings' && <FieldOpDailyReportSettings projectId={projectId} onConfiguredChange={setDailyReportConfigured} />}
-      </div>
-    </section>
 
     {scopeOpen && <div className={styles.modalBackdrop}><section className={styles.modal}>
       <header><div><h2>{t('activities.import')}</h2><p>{t('import.text')}</p></div><button onClick={() => setScopeOpen(false)}>×</button></header>
@@ -331,7 +327,7 @@ export default function FieldOpProjectSetupPage() {
       </div>
       <footer><button type="button" onClick={() => setManualOpen(false)}>{t('common.cancel')}</button><button className={styles.primary} type="submit" disabled={saving}>{saving ? t('manual.adding') : t('manual.submit')}</button></footer>
     </form></div>}
-  </main>
+  </FieldOpShell>
 }
 
 function ActivityTable({ t, styles, rows, readOnly = false, editingNoteId, noteDraft, setNoteDraft, saving, onEditNote, onSaveNote, onCancelNote, action }) {

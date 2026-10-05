@@ -23,9 +23,9 @@
   "list.loading": "Carregando projetos...",
   "list.error": "Não foi possível carregar os projetos: {error}",
   "list.empty": "Nenhum projeto encontrado.",
-  "list.setupReady": "✓ Pronto",
+  "list.setupReady": "Pronto",
   "list.setupPartial": "{done} de 4 configurados",
-  "list.setupNone": "○ Não configurado",
+  "list.setupNone": "Não configurado",
   "list.configure": "Configurar",
   "list.open": "Abrir",
   "list.showing": "Mostrando {shown} de {total} projetos",
@@ -209,5 +209,6 @@
   "settings.saveChanges": "Salvar alterações",
   "settings.saved": "Configurações do diário de obra salvas.",
   "settings.separateApprover": "Aprovador diferente",
-  "settings.separateApproverText": "Quem aprova deve ser uma pessoa diferente de quem enviou e de quem revisou."
+  "settings.separateApproverText": "Quem aprova deve ser uma pessoa diferente de quem enviou e de quem revisou.",
+  "setup.openWorkforce": "Abrir mão de obra"
 }

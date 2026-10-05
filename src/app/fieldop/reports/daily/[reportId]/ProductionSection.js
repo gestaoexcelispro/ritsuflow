@@ -135,21 +135,21 @@ export default function ProductionSection({ report, supabase, t, language, locke
             <th>{t('production.colLocation')}</th><th>{t('production.colActivity')}</th><th>{t('production.colAllocated')}</th><th>{t('production.colPrevious')}</th>
             <th>{t('production.colField')}</th><th>{t('production.colToday')}</th><th>{t('production.colCumulative')}</th><th>{t('production.colRemaining')}</th><th>{t('production.colStatus')}</th>
           </tr></thead>
-          <tbody>{computed.map((r) => <tr key={r.allocation.id} style={r.over ? { background: '#fff4f2' } : undefined}>
-            <td><strong>{r.allocation.locations?.name || '—'}</strong><small>{r.allocation.locations?.location_type || ''}</small></td>
-            <td><strong>{r.code ? `${r.code} · ` : ''}{r.name}</strong><small>{r.unit}</small></td>
-            <td>{number.format(r.allocated)}</td>
-            <td>{number.format(r.previous)}</td>
-            <td>{r.field > 0 ? number.format(r.field) : '—'}</td>
-            <td>
+          <tbody>{computed.map((r) => <tr key={r.allocation.id} style={r.over ? { background: 'var(--fo-bad-wash)' } : undefined}>
+            <td data-label=""><strong>{r.allocation.locations?.name || '—'}</strong><small>{r.allocation.locations?.location_type || ''}</small></td>
+            <td data-label=""><strong>{r.code ? `${r.code} · ` : ''}{r.name}</strong><small>{r.unit}</small></td>
+            <td data-label={t('production.colAllocated')}>{number.format(r.allocated)}</td>
+            <td data-label={t('production.colPrevious')}>{number.format(r.previous)}</td>
+            <td data-label={t('production.colField')}>{r.field > 0 ? number.format(r.field) : '—'}</td>
+            <td data-label={t('production.colToday')}>
               <input className={styles.productionInput} inputMode="decimal" value={values[r.allocation.id] ?? ''} disabled={locked}
                 onChange={(e) => { const v = e.target.value; setValues((cur) => ({ ...cur, [r.allocation.id]: v })); setPrefilled((cur) => { const n = new Set(cur); n.delete(r.allocation.id); return n }) }}
-                style={prefilled.has(r.allocation.id) ? { background: '#effaf8', borderColor: '#9fd6cf' } : undefined} />
-              {r.over && <small style={{ color: '#b42318' }}>{t('production.overRow')}</small>}
+                style={prefilled.has(r.allocation.id) ? { background: 'var(--fo-teal-wash)', borderColor: 'var(--fo-teal)' } : undefined} />
+              {r.over && <small style={{ color: 'var(--fo-bad)' }}>{t('production.overRow')}</small>}
             </td>
-            <td>{number.format(r.cumulative)}</td>
-            <td>{number.format(r.remaining)}</td>
-            <td><span className={`${styles.productionStatus} ${r.status === 'completed' ? styles.statusComplete : r.status === 'in_progress' ? styles.statusProgress : ''}`}>{t(`production.status.${r.status}`)}</span></td>
+            <td data-label={t('production.colCumulative')}>{number.format(r.cumulative)}</td>
+            <td data-label={t('production.colRemaining')}>{number.format(r.remaining)}</td>
+            <td data-label={t('production.colStatus')}><span className={`${styles.productionStatus} ${r.status === 'completed' ? styles.statusComplete : r.status === 'in_progress' ? styles.statusProgress : ''}`}>{t(`production.status.${r.status}`)}</span></td>
           </tr>)}</tbody>
         </table></div>
       </>}

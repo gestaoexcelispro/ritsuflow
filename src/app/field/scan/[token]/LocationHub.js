@@ -6,6 +6,19 @@ import { createClient } from '../../../../lib/supabase/client'
 import { useT } from '../../../../lib/i18n/useT'
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider'
 import LanguageSelector from '../../../../components/LanguageSelector'
+import { plex } from '../../../fieldop/ui/font'
+import styles from './hub.module.css'
+
+// Page frame (kept outside the component so the quantity input keeps focus while typing).
+function Frame({ children, head }) {
+  return <main className={`${styles.hub} ${plex.variable}`}>
+    <header className={styles.band}>
+      <div className={styles.bandTop}><img src="/logo-white.png" alt="RitsuFlow" className={styles.logo} /><LanguageSelector compact dark /></div>
+      {head}
+    </header>
+    <div className={styles.body}>{children}</div>
+  </main>
+}
 
 const supabase = createClient()
 
@@ -194,134 +207,73 @@ export default function LocationHub({ token }) {
     }, 'finished', { quantity: number.format(value), unit: state.active?.unit || '' })
   }
 
-  if (state.loading) return <main style={shell}><section style={card}><div style={eyebrow}>{t('eyebrow')}</div><p style={copy}>{t('loading')}</p></section></main>
+  if (state.loading) return <Frame head={<p className={styles.bandText}>{t('loading')}</p>} />
 
-  if (state.unavailable) return <main style={shell}><section style={card}>
-    <div style={topRow}><div style={eyebrow}>{t('eyebrow')}</div><LanguageSelector compact /></div>
-    <h1 style={title}>{t('unavailableTitle')}</h1>
-    <p style={copy}>{t('unavailableText')}</p>
-    {error && <div style={errorBox}>{error}</div>}
-    <Link href="/workspaces" style={primaryButton}>{t('backToRitsuFlow')}</Link>
-  </section></main>
+  if (state.unavailable) return <Frame head={<h1 className={styles.place}>{t('unavailableTitle')}</h1>}>
+    <p className={styles.text}>{t('unavailableText')}</p>
+    {error && <div className={styles.error}>{error}</div>}
+    <Link href="/workspaces" className={styles.secondary}>{t('backToRitsuFlow')}</Link>
+  </Frame>
 
   const { location, project, breadcrumb, enabled, items, checkedIn, checkInAt, active } = state
 
-  return <main style={shell}><section style={card}>
-    <div style={topRow}><div style={eyebrow}>{t('eyebrow')}</div><LanguageSelector compact /></div>
-    <div style={projectLine}>{project.project_id || project.code || ''} · {project.name}</div>
-    <h1 style={title}>{location.name}</h1>
-    <p style={breadcrumbStyle}>{breadcrumb}</p>
+  return <Frame head={<>
+    <div className={styles.project}>{[project.project_id || project.code, project.name].filter(Boolean).join(' · ')}</div>
+    <h1 className={styles.place}>{location.name}</h1>
+    <div className={styles.where}><span className={styles.qrOk}>{t('confirmed')}</span><span>{breadcrumb}</span></div>
+  </>}>
+    {error && <div className={styles.error} role="alert">{error}</div>}
+    {notice && !error && <div className={styles.notice} role="status">{notice}</div>}
 
-    <div style={identityBox}>
-      <div style={confirmedRow}><span style={confirmedDot} /><span style={identityLabel}>{t('confirmed')}</span></div>
-      <strong style={identityValue}>{location.name}</strong>
-      <span style={identityMeta}>{location.environment_type || location.location_type || t('productionLocation')}</span>
-    </div>
+    <section className={`${styles.attendance} ${checkedIn ? styles.onSite : ''}`} aria-label={t('attendanceTitle')}>
+      {checkedIn ? <>
+        <div className={styles.attLine}><span className={styles.dot} /><div><strong>{t('onSite')}</strong><span>{checkInAt ? t('onSiteSince', { time: time.format(new Date(checkInAt)) }) : ''}</span></div></div>
+        <button type="button" onClick={checkOut} disabled={Boolean(busy) || Boolean(active)} className={styles.outline}>{busy === 'checkOut' ? t('checkingOut') : t('checkOut')}</button>
+        {active && <small className={styles.hint}>{t('checkOutBlocked')}</small>}
+      </> : <>
+        <div><strong>{t('checkInTitle')}</strong><span>{t('checkInText')}</span></div>
+        <button type="button" onClick={checkIn} disabled={Boolean(busy)} className={styles.big}>{busy === 'checkIn' ? t('checkingIn') : t('checkIn')}</button>
+      </>}
+    </section>
 
-    {error && <div style={{ ...errorBox, marginTop: 16 }}>{error}</div>}
-    {notice && !error && <div style={noticeBox}>{notice}</div>}
-
-    <div style={sectionHeader}><div><span style={identityLabel}>{t('attendanceLabel')}</span><h2 style={sectionTitle}>{t('attendanceTitle')}</h2></div></div>
-    {checkedIn
-      ? <div style={attendanceActiveBox}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <strong style={attendanceTitle}>{t('onSite')}</strong>
-            <div style={identityMeta}>{checkInAt ? t('onSiteSince', { time: time.format(new Date(checkInAt)) }) : ''}</div>
-          </div>
-          <button type="button" onClick={checkOut} disabled={Boolean(busy) || Boolean(active)} title={active ? t('checkOutBlocked') : ''} style={{ ...secondaryAction, opacity: active ? 0.55 : 1 }}>{busy === 'checkOut' ? t('checkingOut') : t('checkOut')}</button>
-        </div>
-        {active && <span style={identityMeta}>{t('checkOutBlocked')}</span>}
+    {active && <section className={styles.active}>
+      <span className={styles.activeTag}>{t('activeLabel')} · {elapsed(active.started_at)}</span>
+      <strong className={styles.activeName}>{active.activityName || '—'}</strong>
+      <span className={styles.muted}>{t('activeSince', { time: time.format(new Date(active.started_at)), minutes: elapsed(active.started_at) })}{active.locationName && active.locationName !== location.name ? ` · ${active.locationName}` : ''}</span>
+      <label className={styles.qtyLabel} htmlFor="hub-qty">{t('quantityDone', { unit: active.unit || '—' })}</label>
+      <div className={styles.qtyRow}>
+        <input id="hub-qty" inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value)} className={styles.qty} placeholder="0" />
+        <button type="button" onClick={finish} disabled={Boolean(busy)} className={styles.big}>{busy === 'finish' ? t('finishing') : t('finish')}</button>
       </div>
-      : <div style={attendanceReadyBox}>
-        <div><strong style={attendanceTitle}>{t('checkInTitle')}</strong><p style={attendanceCopy}>{t('checkInText')}</p></div>
-        <button type="button" onClick={checkIn} disabled={Boolean(busy)} style={checkInButton}>{busy === 'checkIn' ? t('checkingIn') : t('checkIn')}</button>
-      </div>}
+      <small className={styles.hint}>{t('quantityHint', { remaining: number.format(active.remaining), unit: active.unit || '' })}</small>
+    </section>}
 
-    {active && <div style={activeBox}>
-      <span style={{ ...identityLabel, color: '#9a5b00' }}>{t('activeLabel')}</span>
-      <strong style={{ fontSize: 16 }}>{t('activeAt', { activity: active.activityName || '—', location: active.locationName || '—' })}</strong>
-      <span style={identityMeta}>{t('activeSince', { time: time.format(new Date(active.started_at)), minutes: elapsed(active.started_at) })}</span>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 6 }}>
-        <label style={{ display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#4d6573' }}>
-          {t('quantityDone', { unit: active.unit || '—' })}
-          <input inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value)} style={quantityInput} placeholder="0" />
-          <small style={{ fontWeight: 400 }}>{t('quantityHint', { remaining: number.format(active.remaining), unit: active.unit || '' })}</small>
-        </label>
-        <button type="button" onClick={finish} disabled={Boolean(busy)} style={finishButton}>{busy === 'finish' ? t('finishing') : t('finish')}</button>
-      </div>
-    </div>}
-
-    <div style={sectionHeader}>
-      <div><span style={identityLabel}>{t('activitiesLabel')}</span><h2 style={sectionTitle}>{t('activitiesTitle')}</h2></div>
-      <span style={countBadge}>{items.length}</span>
-    </div>
+    <h2 className={styles.heading}>{t('activitiesTitle')} <span>{items.length}</span></h2>
     {!enabled
-      ? <div style={warningBox}><strong>{t('notEnabledTitle')}</strong><span>{t('notEnabledText')}</span></div>
+      ? <div className={styles.warn}><strong>{t('notEnabledTitle')}</strong><span>{t('notEnabledText')}</span></div>
       : items.length === 0
-        ? <div style={emptyState}>{t('noActivities')}</div>
-        : <div style={activityList}>{items.map((item, index) => {
+        ? <div className={styles.empty}>{t('noActivities')}</div>
+        : <div className={styles.list}>{items.map((item) => {
           const isActiveHere = active?.location_service_quantity_id === item.allocationId
           const complete = item.remaining <= 0
+          const pct = item.allocated > 0 ? Math.min(100, Math.round((item.done / item.allocated) * 100)) : 0
           let action
-          if (isActiveHere) action = <span style={{ ...pill, background: '#fff4dc', color: '#946200' }}>{t('activeLabel')}</span>
-          else if (complete) action = <span style={{ ...pill, background: '#e2f7ed', color: '#11864c' }}>{t('completedAllocation')}</span>
-          else if (!checkedIn) action = <span style={pillMuted}>{t('checkInFirst')}</span>
-          else if (active) action = <span style={pillMuted}>{t('busyElsewhere')}</span>
-          else action = <button type="button" onClick={() => start(item.allocationId)} disabled={Boolean(busy)} style={startButton}>{busy === `start-${item.allocationId}` ? t('starting') : t('start')}</button>
-          return <div key={item.allocationId} style={{ ...activityRow, ...(index === items.length - 1 ? { borderBottom: 0 } : {}) }}>
-            <div style={{ minWidth: 0 }}>
-              <strong style={activityName}>{item.name}</strong>
-              {item.code ? <span style={activityCode}>{item.code}</span> : null}
-              <span style={activityNumbers}>{t('allocated')} {number.format(item.allocated)} · {t('done')} {number.format(item.done)} · {t('remaining')} {number.format(item.remaining)} {item.unit}</span>
+          if (isActiveHere) action = <span className={`${styles.tag} ${styles.tagWarn}`}>{t('activeLabel')}</span>
+          else if (complete) action = <span className={`${styles.tag} ${styles.tagOk}`}>{t('completedAllocation')}</span>
+          else if (!checkedIn) action = <span className={styles.tag}>{t('checkInFirst')}</span>
+          else if (active) action = <span className={styles.tag}>{t('busyElsewhere')}</span>
+          else action = <button type="button" onClick={() => start(item.allocationId)} disabled={Boolean(busy)} className={styles.big}>{busy === `start-${item.allocationId}` ? t('starting') : t('start')}</button>
+          return <article key={item.allocationId} className={styles.item}>
+            <div className={styles.itemHead}><strong>{item.name}</strong>{item.code && <small>{item.code}</small>}</div>
+            <div className={styles.progress} aria-hidden="true"><i style={{ width: `${pct}%` }} /></div>
+            <div className={styles.figures}>
+              <span><b>{number.format(item.done)}</b> / {number.format(item.allocated)} {item.unit} {t('done').toLowerCase()}</span>
+              <span>{t('remaining')} <b>{number.format(item.remaining)}</b></span>
             </div>
-            {action}
-          </div>
+            <div className={styles.itemAction}>{action}</div>
+          </article>
         })}</div>}
 
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
-      <Link href={`/projects/${project.id}/locations`} style={secondaryButton}>{t('openBreakdown')}</Link>
-    </div>
-  </section></main>
+    <Link href={`/projects/${project.id}/locations`} className={styles.secondary}>{t('openBreakdown')}</Link>
+  </Frame>
 }
-
-const shell = { minHeight: '100vh', background: '#edf4f6', padding: '28px 18px', boxSizing: 'border-box', fontFamily: 'Arial,sans-serif', color: '#082f43' }
-const card = { width: '100%', maxWidth: 760, margin: '0 auto', background: '#fff', border: '1px solid #d7e3e8', borderRadius: 18, padding: 28, boxSizing: 'border-box', boxShadow: '0 16px 40px rgba(7,47,67,.08)' }
-const topRow = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }
-const eyebrow = { fontSize: 10, fontWeight: 900, letterSpacing: '.14em', color: '#008f84' }
-const projectLine = { marginTop: 16, fontSize: 11, color: '#6d8290', fontWeight: 700 }
-const title = { margin: '6px 0 0', fontSize: 30, lineHeight: 1.1 }
-const copy = { margin: '12px 0 22px', color: '#607888', fontSize: 14, lineHeight: 1.6 }
-const breadcrumbStyle = { margin: '8px 0 22px', color: '#718594', fontSize: 12, lineHeight: 1.5 }
-const identityBox = { display: 'flex', flexDirection: 'column', gap: 5, padding: 18, borderRadius: 12, background: '#effaf8', border: '1px solid #cbe9e4' }
-const confirmedRow = { display: 'flex', alignItems: 'center', gap: 7 }
-const confirmedDot = { width: 7, height: 7, borderRadius: '50%', background: '#008f84', flex: '0 0 auto' }
-const identityLabel = { fontSize: 9, fontWeight: 900, letterSpacing: '.12em', color: '#008f84' }
-const identityValue = { fontSize: 18 }
-const identityMeta = { fontSize: 11, color: '#607888' }
-const sectionHeader = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginTop: 28, marginBottom: 12 }
-const sectionTitle = { margin: '4px 0 0', fontSize: 18 }
-const countBadge = { minWidth: 32, height: 32, borderRadius: 16, display: 'grid', placeItems: 'center', background: '#073b58', color: '#fff', fontWeight: 900, fontSize: 12 }
-const attendanceActiveBox = { display: 'flex', flexDirection: 'column', gap: 6, padding: 18, borderRadius: 12, background: '#effaf8', border: '1px solid #b9ddd8' }
-const attendanceReadyBox = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: 18, borderRadius: 12, background: '#f8fafb', border: '1px solid #dce6ea' }
-const attendanceTitle = { fontSize: 14 }
-const attendanceCopy = { maxWidth: 480, margin: '5px 0 0', color: '#607888', fontSize: 11, lineHeight: 1.5 }
-const checkInButton = { minHeight: 42, padding: '0 16px', border: 0, borderRadius: 9, background: '#008f84', color: '#fff', fontWeight: 850, fontSize: 12, cursor: 'pointer' }
-const secondaryAction = { minHeight: 38, padding: '0 14px', border: '1px solid #b9ddd8', borderRadius: 9, background: '#fff', color: '#0b4f4a', fontWeight: 800, fontSize: 12, cursor: 'pointer' }
-const activeBox = { display: 'flex', flexDirection: 'column', gap: 5, marginTop: 16, padding: 18, borderRadius: 12, background: '#fff8ea', border: '1px solid #f3d9a4' }
-const quantityInput = { width: 160, height: 40, border: '1px solid #cbd9df', borderRadius: 8, padding: '0 10px', fontSize: 16 }
-const finishButton = { minHeight: 42, padding: '0 18px', border: 0, borderRadius: 9, background: '#073b58', color: '#fff', fontWeight: 850, fontSize: 12, cursor: 'pointer' }
-const activityList = { border: '1px solid #e0e8ec', borderRadius: 12, overflow: 'hidden' }
-const activityRow = { minHeight: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '10px 14px', borderBottom: '1px solid #e8eef1' }
-const activityName = { display: 'block', fontSize: 13 }
-const activityCode = { display: 'block', marginTop: 3, fontSize: 9, color: '#718594', fontWeight: 800 }
-const activityNumbers = { display: 'block', marginTop: 4, fontSize: 11, color: '#4d6573' }
-const startButton = { minHeight: 38, padding: '0 14px', border: 0, borderRadius: 9, background: '#008f84', color: '#fff', fontWeight: 850, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }
-const pill = { padding: '6px 10px', borderRadius: 999, fontSize: 10, fontWeight: 900, whiteSpace: 'nowrap' }
-const pillMuted = { ...pill, background: '#eef2f4', color: '#5f7684' }
-const emptyState = { padding: 20, border: '1px dashed #d3e0e6', borderRadius: 10, color: '#718594', textAlign: 'center', fontSize: 12 }
-const warningBox = { display: 'flex', flexDirection: 'column', gap: 5, padding: 16, borderRadius: 10, background: '#fff8ea', border: '1px solid #f3d9a4', color: '#6b4a00', fontSize: 12, lineHeight: 1.5 }
-const errorBox = { display: 'block', padding: 14, borderRadius: 10, background: '#fff6f2', border: '1px solid #f1cfc2', color: '#7a3825', fontSize: 12, lineHeight: 1.5, marginBottom: 14 }
-const noticeBox = { marginTop: 16, padding: 14, borderRadius: 10, background: '#effaf8', border: '1px solid #cbe9e4', color: '#0b4f4a', fontSize: 12 }
-const primaryButton = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 42, padding: '0 16px', borderRadius: 9, background: '#073b58', color: '#fff', textDecoration: 'none', fontWeight: 850, fontSize: 12 }
-const secondaryButton = { ...primaryButton, background: '#edf3f6', color: '#173f53' }

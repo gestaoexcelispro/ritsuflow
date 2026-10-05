@@ -142,30 +142,30 @@ export default function FieldOpProjectWorkforcePage() {
       <Metric label={t('live.metricCheckedOut')} value={checkedOut} />
       <Metric label={t('live.metricOver')} value={over} />
     </div>
-    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff' }}>
+    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', padding: 16, border: '1px solid var(--fo-line)', borderRadius: 12, background: '#fff' }}>
       <Info label={t('common.project')} value={project?.name || project?.code || '—'} />
       <Info label={t('live.infoDaily')} value={allowed === null ? t('common.notConfigured') : f.minutes(allowed)} />
       <Info label={t('live.infoGeofence')} value={project?.geofence_enabled ? t('live.geofenceOn', { radius: project?.geofence_radius_m || '—' }) : t('live.geofenceOff')} />
       <Info label={t('live.infoGps')} value={project?.max_gps_accuracy_m == null ? t('common.notConfigured') : `${project.max_gps_accuracy_m} m`} />
     </div>
-    {error && <div style={{ padding: 12, border: '1px solid #fecaca', borderRadius: 9, background: '#fef2f2', color: '#991b1b' }}>{error}</div>}
+    {error && <div style={{ padding: 12, border: '1px solid transparent', borderRadius: 9, background: 'var(--fo-bad-wash)', color: 'var(--fo-bad)' }}>{error}</div>}
     {message && <div style={{ padding: 12, border: '1px solid #bae6fd', borderRadius: 9, background: '#f0f9ff', color: '#075985' }}>{message}</div>}
-    <section style={{ overflow: 'hidden', border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff' }}>
-      <div style={{ padding: '16px 18px', borderBottom: '1px solid #e2e8f0' }}><strong>{t('live.tableTitle')}</strong></div>
+    <section style={{ overflow: 'hidden', border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }}>
+      <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--fo-line)' }}><strong>{t('live.tableTitle')}</strong></div>
       {loading
         ? <div style={empty}>{t('live.loading')}</div>
         : rows.length === 0
           ? <div style={empty}>{t('live.empty')}</div>
           : <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', minWidth: 1050, borderCollapse: 'collapse' }}>
-            <thead><tr style={{ background: '#f8fafc' }}>{columns.map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{rows.map((row) => <tr key={row.assignment.id} style={{ borderTop: '1px solid #e2e8f0' }}>
+            <thead><tr style={{ background: 'var(--fo-sunken)' }}>{columns.map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>{rows.map((row) => <tr key={row.assignment.id} style={{ borderTop: '1px solid var(--fo-line)' }}>
               <td style={td}>{row.worker?.field_id || row.worker?.company_employee_number || '—'}</td>
               <td style={td}><strong>{f.workerName(row.worker)}</strong></td>
               <td style={td}>{row.company?.name || '—'}</td>
               <td style={td}>{row.trade?.name || '—'}</td>
-              <td style={td}><span style={{ fontWeight: 800, color: row.open ? '#047857' : '#64748b' }}>{row.open ? t('live.onSite') : t('live.offSite')}</span></td>
+              <td style={td}><span style={{ fontWeight: 800, color: row.open ? '#047857' : 'var(--fo-muted)' }}>{row.open ? t('live.onSite') : t('live.offSite')}</span></td>
               <td style={td}>{row.openFromEarlierDay
-                ? <span style={{ color: '#b45309', fontWeight: 700 }}>{f.time(row.lastCheckIn)} · {t('live.openSince', { date: f.date(row.open.work_date) })}</span>
+                ? <span style={{ color: 'var(--fo-warn)', fontWeight: 700 }}>{f.time(row.lastCheckIn)} · {t('live.openSince', { date: f.date(row.open.work_date) })}</span>
                 : f.time(row.lastCheckIn)}</td>
               <td style={td}>{row.open ? f.minutes(row.currentMinutes) : '—'}</td>
               <td style={td}><strong>{f.minutes(row.worked)}</strong></td>
@@ -178,9 +178,9 @@ export default function FieldOpProjectWorkforcePage() {
   </WorkforceFrame>
 }
 
-const th = { padding: '11px 14px', color: '#64748b', fontSize: 11, fontWeight: 800, textAlign: 'left', textTransform: 'uppercase', whiteSpace: 'nowrap' }
-const td = { padding: '13px 14px', color: '#475569', fontSize: 13, whiteSpace: 'nowrap' }
-const empty = { padding: 36, color: '#64748b', textAlign: 'center' }
-function button(primary) { return { minHeight: 38, padding: '0 14px', border: `1px solid ${primary ? '#078c7c' : '#cbd5e1'}`, borderRadius: 9, background: primary ? '#08aa96' : '#fff', color: primary ? '#fff' : '#082a4a', fontWeight: 800, cursor: 'pointer' } }
-function Metric({ label, value }) { return <div style={{ padding: 17, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff' }}><div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>{label}</div><div style={{ marginTop: 6, fontSize: 24, fontWeight: 850, color: '#061b2f' }}>{value}</div></div> }
-function Info({ label, value }) { return <div style={{ minWidth: 180, flex: '1 1 180px' }}><div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>{label}</div><div style={{ marginTop: 5, fontWeight: 750, color: '#334155' }}>{value}</div></div> }
+const th = { padding: '11px 14px', color: 'var(--fo-muted)', fontSize: 13, fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }
+const td = { padding: '13px 14px', color: 'var(--fo-ink)', fontSize: 15, whiteSpace: 'nowrap' }
+const empty = { padding: 36, color: 'var(--fo-muted)', textAlign: 'center' }
+function button(primary) { return { minHeight: 38, padding: '0 14px', border: `1px solid ${primary ? '#078c7c' : 'var(--fo-line)'}`, borderRadius: 9, background: primary ? '#08aa96' : '#fff', color: primary ? '#fff' : 'var(--fo-navy)', fontWeight: 800, cursor: 'pointer' } }
+function Metric({ label, value }) { return <div style={{ padding: 17, border: '1px solid var(--fo-line)', borderRadius: 12, background: '#fff' }}><div style={{ fontSize: 13, fontWeight: 800, color: 'var(--fo-muted)' }}>{label}</div><div style={{ marginTop: 6, fontSize: 24, fontWeight: 850, color: '#061b2f' }}>{value}</div></div> }
+function Info({ label, value }) { return <div style={{ minWidth: 180, flex: '1 1 180px' }}><div style={{ fontSize: 13, fontWeight: 800, color: 'var(--fo-muted)' }}>{label}</div><div style={{ marginTop: 5, fontWeight: 750, color: '#334155' }}>{value}</div></div> }

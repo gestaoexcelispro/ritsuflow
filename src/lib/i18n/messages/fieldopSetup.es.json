@@ -23,9 +23,9 @@
   "list.loading": "Cargando proyectos...",
   "list.error": "No se pudieron cargar los proyectos: {error}",
   "list.empty": "No se encontraron proyectos.",
-  "list.setupReady": "✓ Listo",
+  "list.setupReady": "Listo",
   "list.setupPartial": "{done} de 4 configurados",
-  "list.setupNone": "○ Sin configurar",
+  "list.setupNone": "Sin configurar",
   "list.configure": "Configurar",
   "list.open": "Abrir",
   "list.showing": "Mostrando {shown} de {total} proyectos",
@@ -209,5 +209,6 @@
   "settings.saveChanges": "Guardar cambios",
   "settings.saved": "Configuración del informe diario guardada.",
   "settings.separateApprover": "Aprobador distinto",
-  "settings.separateApproverText": "Quien aprueba debe ser una persona distinta de quien envió y de quien revisó."
+  "settings.separateApproverText": "Quien aprueba debe ser una persona distinta de quien envió y de quien revisó.",
+  "setup.openWorkforce": "Abrir mano de obra"
 }

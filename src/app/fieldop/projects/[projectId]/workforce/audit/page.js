@@ -71,7 +71,7 @@ export default function FieldOpProjectWorkforceAuditPage() {
   const columns = [t('audit.colTime'), t('col.fieldId'), t('col.worker'), t('audit.colEvent'), t('audit.colRecordedBy'), t('audit.colMethod'), t('audit.colSource'), t('audit.colNotes'), t('col.details')]
 
   return <WorkforceFrame projectId={projectId} active="audit">
-    <div><h2 style={{ margin: 0 }}>{t('audit.title')}</h2><p style={{ color: '#64748b' }}>{t('audit.text')}</p></div>
+    <div><h2 style={{ margin: 0 }}>{t('audit.title')}</h2><p style={{ color: 'var(--fo-muted)' }}>{t('audit.text')}</p></div>
     <section style={filters}>
       <div><small style={eyebrow}>{t('common.project')}</small><strong style={{ display: 'block', marginTop: 6 }}>{project ? [project.code, project.name].filter(Boolean).join(' · ') : t('common.loadingProject')}</strong></div>
       <label><small style={eyebrow}>{t('audit.eventDate')}</small><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={input} /></label>
@@ -123,7 +123,7 @@ function AuditRows({ f, event, worker, actor, open, toggle }) {
       <td style={td}>{event.notes || '—'}</td>
       <td style={td}><button onClick={toggle} style={button}>{open ? t('audit.hideDetails') : t('audit.viewDetails')}</button></td>
     </tr>
-    {open && <tr><td colSpan={9} style={{ ...td, background: '#f8fafc' }}><div style={{ display: 'grid', gap: 12 }}>
+    {open && <tr><td colSpan={9} style={{ ...td, background: 'var(--fo-sunken)' }}><div style={{ display: 'grid', gap: 12 }}>
       <div>
         <strong>{t('audit.evidence')}</strong>
         <div>{t('audit.evidenceLine', {
@@ -140,16 +140,16 @@ function AuditRows({ f, event, worker, actor, open, toggle }) {
   </>
 }
 
-const eyebrow = { fontSize: 10, fontWeight: 800, letterSpacing: '.07em', color: '#64748b', textTransform: 'uppercase' }
-const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff' }
-const filters = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 190px 220px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff' }
+const eyebrow = { fontSize: 13, fontWeight: 800, letterSpacing: '.07em', color: 'var(--fo-muted)' }
+const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff' }
+const filters = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 190px 220px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
 const metrics = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }
-const card = { padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
-const box = { border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff', overflow: 'hidden' }
+const card = { padding: 16, border: '1px solid var(--fo-line)', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
+const box = { border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff', overflow: 'hidden' }
 const table = { width: '100%', minWidth: 1350, borderCollapse: 'collapse' }
-const th = { padding: '11px 12px', textAlign: 'left', fontSize: 11, color: '#64748b', background: '#f8fafc' }
-const td = { padding: 12, borderTop: '1px solid #e2e8f0', fontSize: 13, verticalAlign: 'top' }
-const button = { padding: '8px 11px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', fontWeight: 700, cursor: 'pointer' }
-const msg = { padding: 28, textAlign: 'center', color: '#64748b' }
-const err = { padding: 12, border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 9 }
-const pre = { whiteSpace: 'pre-wrap', wordBreak: 'break-word', padding: 12, border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', fontSize: 12 }
+const th = { padding: '11px 12px', textAlign: 'left', fontSize: 13, color: 'var(--fo-muted)', background: 'var(--fo-sunken)' }
+const td = { padding: 12, borderTop: '1px solid var(--fo-line)', fontSize: 15, verticalAlign: 'top' }
+const button = { padding: '8px 11px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff', fontWeight: 700, cursor: 'pointer' }
+const msg = { padding: 28, textAlign: 'center', color: 'var(--fo-muted)' }
+const err = { padding: 12, border: '1px solid transparent', background: 'var(--fo-bad-wash)', color: 'var(--fo-bad)', borderRadius: 9 }
+const pre = { whiteSpace: 'pre-wrap', wordBreak: 'break-word', padding: 12, border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff', fontSize: 13 }

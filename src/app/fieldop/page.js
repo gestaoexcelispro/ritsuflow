@@ -1,20 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
-import styles from './fieldop.module.css'
-import { FieldOpSidebar, FieldOpUser } from './FieldOpChrome'
+import { FieldOpShell, Panel, Stats, Stat, Badge, Empty, Icon, ui, reportTone } from './ui'
 import { useT } from '../../lib/i18n/useT'
 import { useLanguage } from '../../lib/i18n/LanguageProvider'
 
 // Project statuses that count as ongoing, in chart order, with their colors.
 const ONGOING = [
-  { status: 'active', color: '#1eae61', pill: { background: '#e2f7ed', color: '#11864c' } },
-  { status: 'planning', color: '#3b82f6', pill: { background: '#e6f0ff', color: '#1d5fb8' } },
-  { status: 'on_hold', color: '#ffb31a', pill: { background: '#fff4dc', color: '#946200' } },
+  { status: 'active', color: 'var(--fo-ok)', tone: 'ok' },
+  { status: 'planning', color: 'var(--fo-info)', tone: 'info' },
+  { status: 'on_hold', color: '#e0a43a', tone: 'warn' },
 ]
 const ONGOING_STATUSES = ONGOING.map((item) => item.status)
 const SUBMITTED_STATUSES = ['submitted', 'reviewed', 'approved']
@@ -49,6 +47,7 @@ export default function FieldOpPage() {
   const { language } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState([])
+  const [todayByProject, setTodayByProject] = useState(new Map())
   const [kpis, setKpis] = useState({ workers: 0, operations: 0, occurrences: 0, reportsSubmitted: 0, reportsDraft: 0 })
   const [activity, setActivity] = useState([])
   const [search, setSearch] = useState('')
@@ -72,7 +71,7 @@ export default function FieldOpPage() {
         safe(supabase.from('field_attendance_sessions').select('worker_id').eq('status', 'open'), empty),
         safe(supabase.from('field_execution_events').select('id', { count: 'exact', head: true }).eq('status', 'in_progress'), empty),
         safe(supabase.from('daily_report_issues').select('id', { count: 'exact', head: true }).in('status', OPEN_ISSUE_STATUSES), empty),
-        safe(supabase.from('daily_reports').select('id,status').eq('report_date', localDateKey()), empty),
+        safe(supabase.from('daily_reports').select('id,status,project_id').eq('report_date', localDateKey()), empty),
         safe(supabase.from('field_attendance_events').select('id,event_type,event_at,worker_id,project_id').gte('event_at', since).order('event_at', { ascending: false }).limit(15), empty),
         safe(supabase.from('daily_reports').select('id,report_number,created_at,project_id').gte('created_at', since).order('created_at', { ascending: false }).limit(10), empty),
       ])
@@ -97,6 +96,7 @@ export default function FieldOpPage() {
 
       const todayReports = todayReportsResult.data || []
       setProjects(projectRows)
+      setTodayByProject(new Map(todayReports.map((report) => [report.project_id, report])))
       setKpis({
         workers: new Set((sessionsResult.data || []).map((session) => session.worker_id)).size,
         operations: operationsResult.count || 0,
@@ -121,21 +121,6 @@ export default function FieldOpPage() {
       .filter(Boolean).join(' ').toLowerCase().includes(query))
   }, [projects, search, t])
 
-  // Donut slices from the real status counts.
-  const donut = useMemo(() => {
-    const total = projects.length
-    if (!total) return '#e3e9ed'
-    let start = 0
-    const slices = ONGOING.map(({ status, color }) => {
-      const end = start + (counts[status] / total) * 100
-      const slice = `${color} ${start}% ${end}%`
-      start = end
-      return slice
-    })
-    return `conic-gradient(${slices.join(',')})`
-  }, [projects.length, counts])
-
-  const dateTime = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'short', timeStyle: 'short' }), [language])
   const timeOnly = useMemo(() => new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit' }), [language])
 
   function activityText(item) {
@@ -147,75 +132,63 @@ export default function FieldOpPage() {
     return t('activity.report', { number: String(item.number || 0).padStart(4, '0') })
   }
 
-  function createDailyReport() {
-    if (projects.length === 1) {
-      router.push(`/fieldop/reports/daily/new?projectId=${projects[0].id}`)
-      return
-    }
-    router.push('/fieldop/reports/daily/new')
-  }
+  const newReportHref = projects.length === 1 ? `/fieldop/reports/daily/new?projectId=${projects[0].id}` : '/fieldop/reports/daily/new'
 
-  const pill = (status) => ONGOING.find((item) => item.status === status)?.pill || {}
+  const tone = (status) => ONGOING.find((item) => item.status === status)?.tone
   const location = (project) => [project.city, project.state_region].filter(Boolean).join(', ') || '—'
 
-  return <main className={styles.shell}>
-    <FieldOpSidebar styles={styles} active="portfolio" showTagline />
-    <section className={styles.main}>
-      <header className={styles.topbar}>
-        <div className={styles.search}>⌕ <span>{t('topbar.search')}</span><kbd>Ctrl K</kbd></div>
-        <FieldOpUser styles={styles} />
-      </header>
-      <div className={styles.content}>
-        <section className={styles.kpis}>
-          <div><i>▥</i><span>{t('kpi.ongoing')}<strong>{projects.length}</strong><small>{t('kpi.ongoingDetail', { active: counts.active, planning: counts.planning, onHold: counts.on_hold })}</small></span></div>
-          <div><i>♙</i><span>{t('kpi.workers')}<strong>{kpis.workers}</strong><small>{t('kpi.workersDetail')}</small></span></div>
-          <div><i>♟</i><span>{t('kpi.operations')}<strong>{kpis.operations}</strong><small>{t('kpi.operationsDetail')}</small></span></div>
-          <div><i className={styles.red}>!</i><span>{t('kpi.occurrences')}<strong>{kpis.occurrences}</strong><small>{kpis.occurrences ? t('kpi.occurrencesDetail') : t('kpi.occurrencesNone')}</small></span></div>
-          <div><i>▤</i><span>{t('kpi.reports')}<strong>{kpis.reportsSubmitted + kpis.reportsDraft}</strong><small>{t('kpi.reportsDetail', { submitted: kpis.reportsSubmitted, drafts: kpis.reportsDraft })}</small></span></div>
-        </section>
-        <section className={styles.dashboard}>
-          <div className={styles.projectsPanel}>
-            <div className={styles.panelHead}>
-              <div><h2>{t('projects.title')}</h2><p>{t('projects.subtitle')}</p></div>
-              <label className={styles.filters}>⌕ <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('projects.search')} aria-label={t('projects.search')} style={{ border: 0, outline: 'none', background: 'transparent', font: 'inherit', color: '#203945', width: 150 }} /></label>
-            </div>
-            <div className={styles.tableWrap}><table>
-              <thead><tr><th>{t('projects.colProject')}</th><th>{t('projects.colLocation')}</th><th>{t('projects.colStatus')}</th><th>{t('projects.colUpdated')}</th></tr></thead>
-              <tbody>{visibleProjects.map((project) => <tr key={project.id} onClick={() => router.push(`/fieldop/projects/${project.id}`)} style={{ cursor: 'pointer' }}>
-                <td><Link href={`/fieldop/projects/${project.id}`} style={{ color: 'inherit', textDecoration: 'none' }}><b>{project.name || t('projects.untitled')}</b></Link><small>{project.project_id || project.code || ''}</small></td>
-                <td>{location(project)}</td>
-                <td><span className={styles.ok} style={pill(project.status)}>{t(`status.${project.status}`)}</span></td>
-                <td>{project.updated_at ? dateTime.format(new Date(project.updated_at)) : '—'}</td>
-              </tr>)}</tbody>
-            </table></div>
-            {loading && <div style={{ padding: 24, textAlign: 'center', color: '#6b7e89' }}>{t('common.loading')}</div>}
-            {!loading && projects.length === 0 && <div style={{ display: 'grid', placeItems: 'center', minHeight: 220, textAlign: 'center' }}><div><h2>{t('projects.emptyTitle')}</h2><p>{t('projects.emptyText')}</p></div></div>}
-            {!loading && projects.length > 0 && visibleProjects.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: '#6b7e89' }}>{t('projects.noMatch')}</div>}
-            <Link href="/fieldop/projects" className={styles.viewAll}>{t('projects.viewAll')}</Link>
+  return <FieldOpShell active="portfolio" action={<Link className={ui.btnPrimary} href={newReportHref}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>}>
+    <Stats>
+      <Stat label={t('kpi.ongoing')} value={projects.length} hint={t('kpi.ongoingDetail', { active: counts.active, planning: counts.planning, onHold: counts.on_hold })} />
+      <Stat label={t('kpi.workers')} value={kpis.workers} hint={t('kpi.workersDetail')} tone={kpis.workers ? 'ok' : undefined} />
+      <Stat label={t('kpi.operations')} value={kpis.operations} hint={t('kpi.operationsDetail')} />
+      <Stat label={t('kpi.occurrences')} value={kpis.occurrences} hint={kpis.occurrences ? t('kpi.occurrencesDetail') : t('kpi.occurrencesNone')} tone={kpis.occurrences ? 'bad' : undefined} />
+      <Stat label={t('kpi.reports')} value={kpis.reportsSubmitted + kpis.reportsDraft} hint={t('kpi.reportsDetail', { submitted: kpis.reportsSubmitted, drafts: kpis.reportsDraft })} />
+    </Stats>
+
+    <div className={ui.split}>
+      <Panel body={false} title={t('projects.title')} text={t('projects.subtitle')}
+        actions={<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('projects.search')} aria-label={t('projects.search')} style={{ width: 220 }} />}>
+        {loading ? <Empty title={t('common.loading')} />
+          : projects.length === 0 ? <Empty title={t('projects.emptyTitle')} text={t('projects.emptyText')} action={<Link className={ui.btnPrimary} href="/fieldop/projects">{t('projects.viewAll')}</Link>} />
+            : visibleProjects.length === 0 ? <Empty title={t('projects.noMatch')} />
+              : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards}`}>
+                <thead><tr><th>{t('projects.colProject')}</th><th>{t('projects.colLocation')}</th><th>{t('projects.colStatus')}</th><th>{t('projects.colToday')}</th><th /></tr></thead>
+                <tbody>{visibleProjects.map((project) => {
+                  const today = todayByProject.get(project.id)
+                  return <tr key={project.id}>
+                    <td data-label=""><span><Link className={ui.rowLink} href={`/fieldop/projects/${project.id}`}>{project.name || t('projects.untitled')}</Link><span className={ui.sub}>{project.project_id || project.code || ''}</span></span></td>
+                    <td data-label={t('projects.colLocation')}>{location(project)}</td>
+                    <td data-label={t('projects.colStatus')}><Badge tone={tone(project.status)}>{t(`status.${project.status}`)}</Badge></td>
+                    <td data-label={t('projects.colToday')}>{today
+                      ? <Link href={`/fieldop/reports/daily/${today.id}`} style={{ textDecoration: 'none' }}><Badge tone={reportTone(today.status)}>{t(`reportStatus.${today.status}`)}</Badge></Link>
+                      : <Link className={`${ui.btn} ${ui.small}`} href={`/fieldop/reports/daily/new?projectId=${project.id}`}>{t('projects.startReport')}</Link>}</td>
+                    <td data-label="" style={{ textAlign: 'right' }}><Link className={`${ui.btn} ${ui.small}`} href={`/fieldop/projects/${project.id}`}>{t('projects.openProject')}</Link></td>
+                  </tr>
+                })}</tbody>
+              </table></div>}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 20px', borderTop: '1px solid var(--fo-line-soft)', color: 'var(--fo-muted)', fontSize: 14 }}>
+          <span>{t('projects.showing', { shown: visibleProjects.length, total: projects.length })}</span>
+          <Link href="/fieldop/projects" className={ui.btnGhost}>{t('projects.viewAll')}</Link>
+        </div>
+      </Panel>
+
+      <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
+        <Panel title={t('chart.title')}>
+          <div className={ui.stack} role="img" aria-label={ONGOING.map(({ status }) => `${t(`status.${status}`)} ${counts[status]}`).join(', ')}>
+            {projects.length ? ONGOING.filter(({ status }) => counts[status]).map(({ status, color }) => <i key={status} style={{ flex: counts[status], background: color }} />) : <i style={{ flex: 1, background: 'var(--fo-line-soft)' }} />}
           </div>
-          <aside className={styles.rightCol}>
-            <div className={styles.statusCard}>
-              <h2>{t('chart.title')}</h2>
-              <div className={styles.statusBody}>
-                <div className={styles.donut} style={{ background: donut }}><strong>{projects.length}</strong><span>{t('chart.projects')}</span></div>
-                <ul>{ONGOING.map(({ status, color }) => <li key={status}><i style={{ background: color }} />{t(`status.${status}`)} <b>{counts[status]}</b></li>)}</ul>
-              </div>
-            </div>
-            <div className={styles.activity}>
-              <div className={styles.activityHead}><h2>{t('activity.title')} <small>{t('activity.period')}</small></h2></div>
-              {activity.length === 0
-                ? <div style={{ padding: '24px', textAlign: 'center' }}>{loading ? t('common.loading') : t('activity.empty')}</div>
-                : activity.map((item) => {
-                  const row = <><time>{timeOnly.format(new Date(item.at))}</time><i>{item.kind === 'report' ? '▤' : item.kind === 'check_out' ? '↤' : '↦'}</i><span>{activityText(item)}{item.project && <small>{item.project}</small>}</span></>
-                  return item.href
-                    ? <Link key={item.id} href={item.href} className={styles.activityRow} style={{ color: 'inherit', textDecoration: 'none' }}>{row}</Link>
-                    : <div key={item.id} className={styles.activityRow}>{row}</div>
-                })}
-            </div>
-          </aside>
-        </section>
-        <section className={styles.callout}><i>◯</i><div><b>{t('callout.title')}</b><span>{t('callout.text')}</span></div><button type="button" onClick={createDailyReport}>▤ &nbsp; {t('callout.button')}</button></section>
+          <ul className={ui.legend}>{ONGOING.map(({ status, color }) => <li key={status}><i style={{ background: color }} />{t(`status.${status}`)}<b>{counts[status]}</b></li>)}</ul>
+        </Panel>
+        <Panel body={false} title={t('activity.title')} text={t('activity.period')}>
+          {activity.length === 0
+            ? <Empty title={loading ? t('common.loading') : t('activity.empty')} />
+            : <ul className={ui.feed}>{activity.map((item) => {
+              const row = <><time>{timeOnly.format(new Date(item.at))}</time><span>{activityText(item)}{item.project && <small>{item.project}</small>}</span></>
+              return <li key={item.id}>{item.href ? <Link href={item.href}>{row}</Link> : <div>{row}</div>}</li>
+            })}</ul>}
+        </Panel>
       </div>
-    </section>
-  </main>
+    </div>
+  </FieldOpShell>
 }
