@@ -461,19 +461,7 @@ export const platformMapInventory = {
           "sourcePath": "src/app/fieldop/projects/[projectId]/FieldOpWorkforceSetup.js"
         }
       ],
-      "apis": [
-        {
-          "label": "fieldop / attendance-debug",
-          "href": "/api/fieldop/attendance-debug",
-          "sourcePath": "src/app/api/fieldop/attendance-debug/route.js",
-          "methods": [
-            "GET"
-          ],
-          "consumers": [],
-          "note": "Route exists; no caller found in the audited module files.",
-          "auth": "Signed-in user check in handler"
-        }
-      ]
+      "apis": []
     }
   },
   "database": {
@@ -3103,7 +3091,7 @@ export const platformMapInventory = {
         "src/app/fieldop/projects/[projectId]/workforce/timecards/page.js",
         "src/app/fieldop/projects/[projectId]/workforce/audit/page.js",
         "src/app/fieldop/projects/[projectId]/workforce/exceptions/page.js",
-        "src/app/api/fieldop/attendance-debug/route.js"
+        "src/app/field/scan/[token]/LocationHub.js"
       ],
       "dataSources": [
         {
@@ -3432,13 +3420,13 @@ export const platformMapInventory = {
           "schema": "public",
           "returns": "TABLE(worker_id uuid, assignment_id uuid, session_id uuid, status text, check_in_at timestamp with time zone)",
           "arguments": "p_project_id uuid",
-          "line": 22,
-          "sourcePath": "src/app/api/fieldop/attendance-debug/route.js",
+          "line": 77,
+          "sourcePath": "src/app/field/scan/[token]/LocationHub.js",
           "purpose": "RPC entry point called by the audited implementation.",
           "calls": [
             {
-              "sourcePath": "src/app/api/fieldop/attendance-debug/route.js",
-              "line": 22
+              "sourcePath": "src/app/field/scan/[token]/LocationHub.js",
+              "line": 77
             }
           ]
         }
@@ -3496,15 +3484,6 @@ export const platformMapInventory = {
       "title": "API caller not traced",
       "detail": "/api/daily-reports/[reportId]/pdf exists, but no caller was found in the audited module files.",
       "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js",
-      "line": 1,
-      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
-    },
-    {
-      "id": "caller:src/app/api/fieldop/attendance-debug/route.js",
-      "moduleId": "workforce-timekeeping",
-      "title": "API caller not traced",
-      "detail": "/api/fieldop/attendance-debug exists, but no caller was found in the audited module files.",
-      "sourcePath": "src/app/api/fieldop/attendance-debug/route.js",
       "line": 1,
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
     },
