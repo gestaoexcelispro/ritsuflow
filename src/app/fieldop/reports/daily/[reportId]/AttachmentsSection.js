@@ -113,13 +113,11 @@ export default function AttachmentsSection({ report, supabase, t, language, lock
   async function remove(item) {
     if (!window.confirm(t('attachments.confirmDelete'))) return
     setBusyId(item.id); setError(''); setMessage('')
+    // The stored file goes first: the storage rule checks the attachment row before allowing it.
+    await supabase.storage.from(BUCKET).remove([item.storage_path])
     const { error: delError } = await supabase.from('daily_report_attachments').delete().eq('id', item.id)
     if (delError) setError(t('common.error', { message: delError.message }))
-    else {
-      // Storage cleanup is best-effort: only project managers may delete stored files.
-      await supabase.storage.from(BUCKET).remove([item.storage_path])
-      setMessage(t('attachments.deleted')); await load()
-    }
+    else { setMessage(t('attachments.deleted')); await load() }
     setBusyId('')
   }
 

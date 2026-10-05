@@ -403,5 +403,12 @@
   "print.signSubmitted": "Submitted by",
   "print.signReviewed": "Reviewed by",
   "print.signApproved": "Approved by",
-  "print.generated": "generated {date}"
+  "print.generated": "generated {date}",
+  "equipment.copyPrevious": "Copy from last report",
+  "equipment.copied": "{count} items copied from the report of {date}. Fill in today's hours.",
+  "equipment.copyNone": "No earlier report of this project has equipment to copy.",
+  "issues.sendToConstraints": "Send to Constraints",
+  "issues.inConstraints": "In Constraints",
+  "issues.inConstraintsHint": "This issue is tracked as a constraint in the Constraints module.",
+  "issues.sentToConstraints": "\"{title}\" is now a constraint in the Constraints module."
 }

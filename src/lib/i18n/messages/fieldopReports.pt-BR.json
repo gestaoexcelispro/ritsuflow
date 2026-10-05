@@ -403,5 +403,12 @@
   "print.signSubmitted": "Enviado por",
   "print.signReviewed": "Revisado por",
   "print.signApproved": "Aprovado por",
-  "print.generated": "gerado em {date}"
+  "print.generated": "gerado em {date}",
+  "equipment.copyPrevious": "Copiar do último diário",
+  "equipment.copied": "{count} equipamentos copiados do diário de {date}. Preencha as horas de hoje.",
+  "equipment.copyNone": "Nenhum diário anterior deste projeto tem equipamentos para copiar.",
+  "issues.sendToConstraints": "Enviar para Restrições",
+  "issues.inConstraints": "Em Restrições",
+  "issues.inConstraintsHint": "Esta ocorrência é acompanhada como restrição no módulo de Restrições.",
+  "issues.sentToConstraints": "\"{title}\" agora é uma restrição no módulo de Restrições."
 }
