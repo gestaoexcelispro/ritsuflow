@@ -181,7 +181,10 @@ export default function FieldOpDailyReportWorkspace() {
       back={{ href: '/fieldop/reports/daily', label: t('common.reports') }}
       title={`${number} · ${report.projects?.name || ''}`}
       meta={<><span>{reportDate}</span><Badge tone={reportTone(report.status)}>{t(`status.${report.status}`)}</Badge></>}
-      actions={report.status === 'draft' && perms?.submit && <button type="button" className={ui.btnPrimary} disabled={submitting} onClick={submitFromHeader}>{submitting ? t('common.saving') : t('approval.submitted')}</button>}
+      actions={<>
+        <a className={ui.btn} href={`/fieldop/reports/daily/${report.id}/print`} target="_blank" rel="noreferrer">{t('print.open')}</a>
+        {report.status === 'draft' && perms?.submit && <button type="button" className={ui.btnPrimary} disabled={submitting} onClick={submitFromHeader}>{submitting ? t('common.saving') : t('approval.submitted')}</button>}
+      </>}
     />
     {notice && <div className={notice.tone === 'ok' ? styles.lockNote : styles.error} style={notice.tone === 'ok' ? { background: 'var(--fo-ok-wash)', color: 'var(--fo-ok)' } : undefined} role="status">{notice.text}</div>}
 
