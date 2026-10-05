@@ -45,7 +45,7 @@
   "projects.emptyTitle": "No hay proyectos en curso.",
   "projects.emptyText": "Cree un proyecto en el espacio compartido de Proyectos. Cuando esté activo, aparecerá aquí.",
   "projects.noMatch": "Ningún proyecto coincide con la búsqueda.",
-  "projects.viewAll": "Ver proyectos →",
+  "projects.viewAll": "Ver todos los proyectos",
   "projects.untitled": "Proyecto sin nombre",
   "chart.title": "Proyectos en curso por estado",
   "chart.projects": "Proyectos",
@@ -61,5 +61,12 @@
   "callout.title": "Obras más seguras. Más productividad. Proyectos más sólidos.",
   "callout.text": "La realidad de campo conectada a la planificación. Eso es RitsuFlow.",
   "callout.button": "Crear informe diario",
-  "nav.openMenu": "Abrir menú"
+  "nav.openMenu": "Abrir menú",
+  "portfolio.title": "Portafolio",
+  "projects.colToday": "Informe de hoy",
+  "projects.startReport": "Iniciar informe",
+  "reportStatus.draft": "Borrador",
+  "reportStatus.submitted": "Enviado",
+  "reportStatus.reviewed": "Revisado",
+  "reportStatus.approved": "Aprobado"
 }
