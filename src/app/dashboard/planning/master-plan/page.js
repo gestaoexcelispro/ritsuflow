@@ -1,17 +1,18 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { supabase } from '../../../../lib/supabase';
 import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
 import { useT } from '../../../../lib/i18n/useT';
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
-import { Badge, Empty, Icon, Segments, ui } from '../../../fieldop/ui';
+import { Badge, Empty, Icon, Notice, Segments, ui } from '../../../fieldop/ui';
 import { Dialog, usePreconDialogs } from '../../preconDialogs';
 import styles from '../../precon.module.css';
 
 // ============================================================
 // MASTER PLAN
-// The project's activities (Projects › Scope) are the schedulable
-// packages; locations come from the project's location structure.
+// The company's work packages (Settings › Work packages) are the
+// schedulable packages; locations come from the project's location structure.
 // ============================================================
 
 // ============================================================
@@ -19,8 +20,8 @@ import styles from '../../precon.module.css';
 // ============================================================
 //
 // IMPORTANT:
-// Activities are NOT hard-coded in Master Plan. They come from the
-// project's scope (see buildProjectActivityCatalog below).
+// Work packages are NOT hard-coded in Master Plan. They come from the
+// company catalog (see buildWorkPackageCatalog below).
 //
 // These three entries are system/calendar markers only.
 // They are not project activities.
@@ -184,78 +185,39 @@ const buildMasterPlanSectionsFromLocations = (locations = []) => {
 };
 
 // ============================================================
-// PROJECT ACTIVITIES (Projects › Scope)
+// COMPANY WORK PACKAGES (Settings › Work packages)
 // ============================================================
-// Master Plan schedules the project's active activities
-// (fieldop_project_activities, each linked to a project_scopes item).
-// Each activity gets a short key shown in the grid cells: its scope
-// code when it fits in 3 characters (master_plan_packages.package_code
-// allows 1 to 3), otherwise A1, A2, ... The full scope code is kept
-// as service_code.
-const ACTIVITY_COLORS = [
-  '#2563EB', '#16A34A', '#EA580C', '#9333EA', '#0891B2', '#DC2626',
-  '#CA8A04', '#DB2777', '#4F46E5', '#059669', '#B45309', '#7C3AED',
-];
-
-const compareScopeCodes = (a, b) => {
-  const left = String(a || '').split('.');
-  const right = String(b || '').split('.');
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const x = left[index] ?? '';
-    const y = right[index] ?? '';
-    const difference = (Number(x) || 0) - (Number(y) || 0);
-    if (difference) return difference;
-    if (x !== y) return x.localeCompare(y);
-  }
-  return 0;
-};
-
-const buildProjectActivityCatalog = (activities = []) => {
+// Every active company work package can be scheduled in any project.
+// The 3-letter code is what the grid cells show (package_code allows
+// 1 to 3 characters); its color comes from the catalog.
+const buildWorkPackageCatalog = (workPackages = []) => {
   const reserved = new Set(Object.keys(SYSTEM_CALENDAR_CODES));
   const catalog = {};
-  let fallback = 0;
 
-  const rows = activities
-    .map((activity) => {
-      const scope = activity.scope_item || null;
-      const fromScope = activity.source === 'scope' && scope;
-      return {
-        activity,
-        scopeCode: String((fromScope && scope.scope_code) || '').trim(),
-        name: (fromScope && scope.scope_name) || activity.activity_name || '',
-        unit: (fromScope && scope.unit) || activity.unit || '',
+  [...workPackages]
+    .filter((item) => item?.is_active !== false)
+    .sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')))
+    .forEach((item) => {
+      const code = String(item.code || '').trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(code) || reserved.has(code) || catalog[code]) return;
+
+      const color = /^#[0-9A-F]{6}$/i.test(item.color || '')
+        ? item.color.toUpperCase()
+        : '#64748B';
+
+      catalog[code] = {
+        labelPt: item.description || code,
+        labelEn: item.description || code,
+        color,
+        text: getContrastYIQ(color),
+        workPackageId: item.id,
+        projectServiceId: null,
+        projectWorkPackageId: null,
+        sourceServiceCode: code,
+        unit: '',
+        source: 'organization_work_packages',
       };
-    })
-    .sort((a, b) =>
-      (a.scopeCode && b.scopeCode)
-        ? compareScopeCodes(a.scopeCode, b.scopeCode)
-        : (a.scopeCode ? -1 : b.scopeCode ? 1 : String(a.name).localeCompare(String(b.name)))
-    );
-
-  rows.forEach(({ activity, scopeCode, name, unit }, index) => {
-    let key = scopeCode.toUpperCase();
-    if (!key || key.length > 3 || reserved.has(key) || catalog[key]) {
-      do {
-        fallback += 1;
-        key = `A${fallback}`;
-      } while (catalog[key]);
-    }
-
-    const color = ACTIVITY_COLORS[index % ACTIVITY_COLORS.length];
-
-    catalog[key] = {
-      labelPt: name || key,
-      labelEn: name || key,
-      color,
-      text: getContrastYIQ(color),
-      activityId: activity.id,
-      projectServiceId: null,
-      projectWorkPackageId: null,
-      sourceServiceCode: scopeCode || key,
-      unit,
-      source: 'project_activities',
-    };
-  });
+    });
 
   return catalog;
 };
@@ -285,10 +247,11 @@ export default function MasterPlanPage() {
   // ============================================================
   //
   // Keyed by the short activity code shown in the grid
-  // (buildProjectActivityCatalog). OFF / FER are calendar markers,
+  // (buildWorkPackageCatalog). OFF / FER are calendar markers,
   // not activities, so they remain system-level visual definitions.
   //
   const [projectServices, setProjectServices] = useState({});
+  const [catalogReady, setCatalogReady] = useState(false);
 
   const workPackageCatalog = {
     ...projectServices,
@@ -1430,10 +1393,6 @@ export default function MasterPlanPage() {
           service?.projectServiceId ||
           null,
 
-        activity_id:
-          pkg.activityId ||
-          service?.activityId ||
-          null,
 
         row_key:
           pkg.rowId ||
@@ -1772,9 +1731,18 @@ export default function MasterPlanPage() {
         return;
       }
 
+      setCatalogReady(false);
+
+      // The project's company owns the work package catalog.
+      const { data: projectRow } = await supabase
+        .from('projects')
+        .select('organization_id')
+        .eq('id', selectedProjectId)
+        .maybeSingle();
+
       const [
         locationsResult,
-        activitiesResult,
+        workPackagesResult,
         scenariosResult
       ] = await Promise.all([
         supabase
@@ -1793,20 +1761,13 @@ export default function MasterPlanPage() {
           .order('name', { ascending: true }),
 
         // ----------------------------------------------------
-        // PROJECT ACTIVITIES (Projects › Scope)
+        // COMPANY WORK PACKAGES (Settings › Work packages)
         // ----------------------------------------------------
-        supabase
-          .from('fieldop_project_activities')
-          .select(`
-            id,
-            source,
-            activity_name,
-            unit,
-            is_active,
-            scope_item:project_scopes(id, scope_code, scope_name, unit)
-          `)
-          .eq('project_id', selectedProjectId)
-          .eq('is_active', true),
+        projectRow?.organization_id
+          ? supabase.rpc('get_organization_work_package_catalog', {
+              target_organization_id: projectRow.organization_id
+            })
+          : Promise.resolve({ data: [], error: null }),
 
         supabase
           .from('master_plan_scenarios')
@@ -1829,7 +1790,7 @@ export default function MasterPlanPage() {
 
       const loadError =
         locationsResult.error ||
-        activitiesResult.error ||
+        workPackagesResult.error ||
         scenariosResult.error;
 
       if (loadError) {
@@ -1887,13 +1848,13 @@ export default function MasterPlanPage() {
         ].filter(Boolean)
       );
 
-      // The project's activities from Projects › Scope are the
-      // schedulable Master Plan activities (see buildProjectActivityCatalog).
+      // Company work packages are the schedulable Master Plan packages.
       setProjectServices(
-        buildProjectActivityCatalog(
-          activitiesResult.data || []
+        buildWorkPackageCatalog(
+          workPackagesResult.data || []
         )
       );
+      setCatalogReady(true);
 
       const mappedVersions = (scenariosResult.data || []).map(mapScenarioRecord);
       setScenarios(mappedVersions);
@@ -4028,7 +3989,7 @@ ${
           rowId: location.rowId,
           locationId: location.locationId || null,
           locationPath: location.label || '',
-          activityId: service?.activityId || null,
+          workPackageId: service?.workPackageId || null,
           projectServiceId: service?.projectServiceId || null,
           projectWorkPackageId: service?.projectWorkPackageId || null,
           packageStartType:
@@ -4205,8 +4166,8 @@ ${
         selectedPlanningRow?.locationPath ||
         selectedPlanningRow?.description ||
         '',
-      activityId:
-        selectedService?.activityId ||
+      workPackageId:
+        selectedService?.workPackageId ||
         null,
 
       projectServiceId:
@@ -4400,6 +4361,13 @@ ${
           </button>
         </div>
       </div>
+
+      {catalogReady && activityOptions.length === 0 && (
+        <Notice tone="warn">
+          {t.noWorkPackages}{' '}
+          <Link href="/settings/work-packages">{t.openWorkPackages}</Link>
+        </Notice>
+      )}
 
       {/* Work sequence generator */}
       {showSequenceModal && (

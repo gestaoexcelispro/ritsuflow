@@ -1,0 +1,22 @@
+.muted { color: var(--fo-muted); }
+.stack { display: grid; gap: 16px; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--fo-line-soft); }
+.head h2 { margin: 0; font-size: 17px; }
+.head p { margin: 4px 0 0; color: var(--fo-muted); font-size: 14px; max-width: 80ch; }
+.package { display: flex; align-items: center; gap: 10px; }
+.code { display: inline-grid; place-items: center; min-width: 52px; height: 30px; padding: 0 8px; border-radius: 6px; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; border: 1px solid rgba(0, 0, 0, 0.12); }
+.rowActions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.inactive td { color: var(--fo-muted); }
+.note { margin: 0; color: var(--fo-muted); font-size: 14px; max-width: 100ch; }
+
+.overlay { position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center; padding: 20px; background: rgba(6, 38, 55, .55); }
+.dialog { width: min(480px, 100%); max-height: calc(100dvh - 40px); display: flex; flex-direction: column; background: var(--fo-surface); border-radius: 12px; box-shadow: 0 24px 70px rgba(6, 38, 55, .3); overflow: hidden; }
+.dialogHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--fo-line-soft); }
+.dialogHead h2 { margin: 0; font-size: 19px; }
+.dialogHead p { margin: 4px 0 0; color: var(--fo-muted); font-size: 14px; }
+.close { width: 40px; height: 40px; display: grid; place-items: center; flex: none; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+.close:hover { background: var(--fo-line-soft); }
+.dialogBody { padding: 18px 20px; display: grid; gap: 16px; }
+.dialogFoot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--fo-line-soft); background: var(--fo-sunken); }
+.codeInput { max-width: 120px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+.hint { margin: 0; color: var(--fo-muted); font-size: 13px; }

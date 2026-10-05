@@ -486,11 +486,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "insert",
-              "line": 1693
+              "line": 1652
             },
             {
               "method": "delete",
-              "line": 1168
+              "line": 1131
             }
           ]
         },
@@ -502,11 +502,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "insert",
-              "line": 1544
+              "line": 1503
             },
             {
               "method": "delete",
-              "line": 1196
+              "line": 1159
             }
           ]
         },
@@ -518,7 +518,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1728
+              "line": 1687
+            },
+            {
+              "method": "select",
+              "line": 1737
             }
           ]
         },
@@ -530,19 +534,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1781
-            }
-          ]
-        },
-        {
-          "name": "fieldop_project_activities",
-          "schema": "public",
-          "kind": "table",
-          "purpose": "Project activities from the Projects scope, scheduled as Master Plan packages",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1799
+              "line": 1749
             }
           ]
         },
@@ -554,20 +546,29 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1812
+              "line": 1773
             },
             {
               "method": "insert",
-              "line": 2935
+              "line": 2896
             },
             {
               "method": "update",
-              "line": 2977
+              "line": 2938
             }
           ]
         }
       ],
-      "functions": [],
+      "functions": [
+        {
+          "name": "get_organization_work_package_catalog",
+          "schema": "public",
+          "arguments": "target_organization_id uuid",
+          "returns": "TABLE(id uuid, organization_id uuid, code text, description text, color text, is_active boolean, created_at timestamp with time zone, updated_at timestamp with time zone)",
+          "line": 1767,
+          "purpose": "Load the company work packages scheduled in the Master Plan."
+        }
+      ],
       "storage": [],
       "sourcePaths": [
         "src/app/dashboard/planning/master-plan/page.js"
