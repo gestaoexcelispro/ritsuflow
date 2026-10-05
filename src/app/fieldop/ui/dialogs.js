@@ -1,16 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useT } from '../../lib/i18n/useT'
-import { Icon, ui } from '../fieldop/ui'
-import styles from './precon.module.css'
+import { useT } from '../../../lib/i18n/useT'
+import Icon from './icons'
+import ui from './ui.module.css'
+import styles from './dialogs.module.css'
 
 const cx = (...names) => names.filter(Boolean).join(' ')
 const SIZE = { small: styles.dialogSmall, wide: styles.dialogWide }
 
-/** Modal dialog in the RitsuFlow style: header (title, optional text, close), scrolling body, footer. */
+/** Shared RitsuFlow modal dialog: header (title, optional text, close), scrolling body, footer. */
 export function Dialog({ title, text, onClose, footer, size, as: Tag = 'div', onSubmit, children }) {
-  const t = useT('precon')
+  const t = useT('common')
   useEffect(() => {
     if (!onClose) return undefined
     const onKey = (event) => { if (event.key === 'Escape') onClose() }
@@ -30,9 +31,9 @@ export function Dialog({ title, text, onClose, footer, size, as: Tag = 'div', on
   </div>
 }
 
-// Confirm and prompt requests rendered by usePreconDialogs(); module level so the input keeps focus.
+// Confirm and prompt requests rendered by usePageDialogs(); module level so the input keeps focus.
 function RequestDialog({ request, onDone }) {
-  const t = useT('precon')
+  const t = useT('common')
   const [value, setValue] = useState(request.value || '')
   const inputRef = useRef(null)
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -58,7 +59,7 @@ function RequestDialog({ request, onDone }) {
 }
 
 function Toast({ toast, onClose }) {
-  const t = useT('precon')
+  const t = useT('common')
   const tone = toast.tone === 'ok' ? ui.noticeOk : toast.tone === 'warn' ? ui.noticeWarn : ui.noticeBad
   return <div className={cx(ui.notice, tone, styles.toast)} role={toast.tone === 'bad' ? 'alert' : 'status'}>
     <span>{toast.message}</span>
@@ -68,13 +69,13 @@ function Toast({ toast, onClose }) {
 
 /**
  * In-page replacements for alert / confirm / prompt.
- *   const dialogs = usePreconDialogs()
+ *   const dialogs = usePageDialogs()
  *   dialogs.notify(message, 'ok' | 'warn' | 'bad')
  *   if (!(await dialogs.confirm(message, { danger: true }))) return
  *   const name = await dialogs.prompt(message)   // null when cancelled
  * Render {dialogs.element} once in the page.
  */
-export function usePreconDialogs() {
+export function usePageDialogs() {
   const [request, setRequest] = useState(null)
   const [toast, setToast] = useState(null)
   const counter = useRef(0)

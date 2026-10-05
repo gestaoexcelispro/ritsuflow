@@ -1,4 +1,5 @@
-/* Shared PreCon page parts: full-height planning frame, toolbar, dialogs and notifications.
+/* Shared PreCon page parts: full-height planning frame, toolbar and dialog contents
+   (the dialogs themselves are fieldop/ui/dialogs.js).
    Tokens (--fo-*) come from the RitsuFlow shell (fieldop/ui). */
 
 /* Full-height planning page (AppShell `bare`): toolbar on top, the grid fills the rest. */
@@ -34,21 +35,8 @@
 .legendItem { display: inline-flex; align-items: center; gap: 6px; }
 .swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.12); flex: none; }
 
-/* Dialogs */
-.overlay { position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center; padding: 20px; background: rgba(6, 38, 55, 0.55); }
-.dialog { width: min(560px, 100%); max-height: calc(100dvh - 40px); display: flex; flex-direction: column; background: var(--fo-surface); color: var(--fo-ink); border-radius: 12px; box-shadow: 0 24px 70px rgba(6, 38, 55, 0.3); overflow: hidden; }
-.dialogSmall { width: min(440px, 100%); }
-.dialogWide { width: min(1080px, 100%); }
-.dialogHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--fo-line-soft); }
-.dialogHead h2 { margin: 0; font-size: 19px; }
-.dialogHead p { margin: 4px 0 0; color: var(--fo-muted); font-size: 14px; }
-.dialogBody { flex: 1; overflow-y: auto; padding: 18px 20px; display: grid; gap: 16px; align-content: start; }
-.dialogBody > * { min-width: 0; }
-.dialogBody > p { margin: 0; line-height: 1.5; }
-.dialogFoot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--fo-line-soft); background: var(--fo-sunken); }
+/* Dialog footer note (counts, summaries) */
 .dialogFootNote { margin-right: auto; color: var(--fo-muted); font-size: 14px; }
-.close { border: 0; background: transparent; color: var(--fo-muted); cursor: pointer; padding: 4px; border-radius: 6px; display: inline-grid; place-items: center; }
-.close:hover { color: var(--fo-ink); background: var(--fo-sunken); }
 
 /* Forms inside dialogs */
 .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -72,11 +60,6 @@
 .handle { color: var(--fo-muted); cursor: grab; user-select: none; letter-spacing: -2px; font-weight: 700; }
 .listRow input[type='number'] { width: 100%; min-height: 34px; padding: 4px 8px; }
 
-/* Notifications */
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 6000; width: min(560px, calc(100vw - 24px)); display: flex; align-items: flex-start; gap: 10px; box-shadow: 0 12px 34px rgba(6, 38, 55, 0.22); white-space: pre-line; }
-.toast > span { flex: 1; }
-.toast .close { color: inherit; padding: 0; }
-
 @media (max-width: 980px) {
   .frame { padding: 12px 20px 14px; }
 }
@@ -91,6 +74,5 @@
   .group, .control { width: 100%; }
   .push { margin-left: 0; }
   .grid2 { grid-template-columns: 1fr; }
-  .dialogFoot { flex-wrap: wrap; }
   .dialogFootNote { width: 100%; }
 }

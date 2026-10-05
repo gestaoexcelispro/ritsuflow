@@ -5,13 +5,13 @@ import { readPreconProjectId, rememberPreconProjectId } from '../../preconProjec
 import { useT } from '../../../../lib/i18n/useT';
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
 import { Badge, Empty, Icon, Segments, ui } from '../../../fieldop/ui';
-import { Dialog, usePreconDialogs } from '../../preconDialogs';
+import { Dialog, usePageDialogs } from '../../../fieldop/ui/dialogs';
 import styles from '../../precon.module.css';
 
 // ============================================================
 // MASTER PLAN
-// The project's activities (Projects › Scope) are the schedulable
-// packages; locations come from the project's location structure.
+// Company work packages chosen for the project are the schedulable
+// activities; locations come from the project's location structure.
 // ============================================================
 
 // ============================================================
@@ -19,8 +19,8 @@ import styles from '../../precon.module.css';
 // ============================================================
 //
 // IMPORTANT:
-// Activities are NOT hard-coded in Master Plan. They come from the
-// project's scope (see buildProjectActivityCatalog below).
+// Work packages are NOT hard-coded in Master Plan. They come from the
+// company catalog (see buildWorkPackageCatalog below).
 //
 // These three entries are system/calendar markers only.
 // They are not project activities.
@@ -184,78 +184,35 @@ const buildMasterPlanSectionsFromLocations = (locations = []) => {
 };
 
 // ============================================================
-// PROJECT ACTIVITIES (Projects › Scope)
+// PROJECT WORK PACKAGES (company catalog)
 // ============================================================
-// Master Plan schedules the project's active activities
-// (fieldop_project_activities, each linked to a project_scopes item).
-// Each activity gets a short key shown in the grid cells: its scope
-// code when it fits in 3 characters (master_plan_packages.package_code
-// allows 1 to 3), otherwise A1, A2, ... The full scope code is kept
-// as service_code.
-const ACTIVITY_COLORS = [
-  '#2563EB', '#16A34A', '#EA580C', '#9333EA', '#0891B2', '#DC2626',
-  '#CA8A04', '#DB2777', '#4F46E5', '#059669', '#B45309', '#7C3AED',
-];
-
-const compareScopeCodes = (a, b) => {
-  const left = String(a || '').split('.');
-  const right = String(b || '').split('.');
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const x = left[index] ?? '';
-    const y = right[index] ?? '';
-    const difference = (Number(x) || 0) - (Number(y) || 0);
-    if (difference) return difference;
-    if (x !== y) return x.localeCompare(y);
-  }
-  return 0;
-};
-
-const buildProjectActivityCatalog = (activities = []) => {
+// Master Plan schedules company work packages (Settings › Work
+// packages): 3-letter codes with fixed colors, the same on every
+// project. Each project chooses the ones it uses (rows come from
+// get_project_work_package_options; only selected, active ones are
+// schedulable).
+const buildWorkPackageCatalog = (options = []) => {
   const reserved = new Set(Object.keys(SYSTEM_CALENDAR_CODES));
   const catalog = {};
-  let fallback = 0;
 
-  const rows = activities
-    .map((activity) => {
-      const scope = activity.scope_item || null;
-      const fromScope = activity.source === 'scope' && scope;
-      return {
-        activity,
-        scopeCode: String((fromScope && scope.scope_code) || '').trim(),
-        name: (fromScope && scope.scope_name) || activity.activity_name || '',
-        unit: (fromScope && scope.unit) || activity.unit || '',
+  options
+    .filter((option) => option.selected_for_project && option.organization_package_active)
+    .forEach((option) => {
+      const code = String(option.code || '').trim().toUpperCase();
+      if (!code || reserved.has(code)) return;
+      const color = String(option.color || '#64748b').toUpperCase();
+      catalog[code] = {
+        labelPt: option.description || code,
+        labelEn: option.description || code,
+        color,
+        text: getContrastYIQ(color),
+        organizationWorkPackageId: option.organization_work_package_id,
+        projectServiceId: null,
+        sourceServiceCode: code,
+        unit: '',
+        source: 'organization_work_packages',
       };
-    })
-    .sort((a, b) =>
-      (a.scopeCode && b.scopeCode)
-        ? compareScopeCodes(a.scopeCode, b.scopeCode)
-        : (a.scopeCode ? -1 : b.scopeCode ? 1 : String(a.name).localeCompare(String(b.name)))
-    );
-
-  rows.forEach(({ activity, scopeCode, name, unit }, index) => {
-    let key = scopeCode.toUpperCase();
-    if (!key || key.length > 3 || reserved.has(key) || catalog[key]) {
-      do {
-        fallback += 1;
-        key = `A${fallback}`;
-      } while (catalog[key]);
-    }
-
-    const color = ACTIVITY_COLORS[index % ACTIVITY_COLORS.length];
-
-    catalog[key] = {
-      labelPt: name || key,
-      labelEn: name || key,
-      color,
-      text: getContrastYIQ(color),
-      activityId: activity.id,
-      projectServiceId: null,
-      projectWorkPackageId: null,
-      sourceServiceCode: scopeCode || key,
-      unit,
-      source: 'project_activities',
-    };
-  });
+    });
 
   return catalog;
 };
@@ -268,7 +225,7 @@ export default function MasterPlanPage() {
     () => new Proxy({}, { get: (_, key) => translate(`masterPlan.${String(key)}`) }),
     [translate]
   );
-  const dialogs = usePreconDialogs();
+  const dialogs = usePageDialogs();
 
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -281,14 +238,57 @@ export default function MasterPlanPage() {
   const [hideWeekends, setHideWeekends] = useState(false);
 
   // ============================================================
-  // PROJECT ACTIVITY CATALOG
+  // PROJECT WORK PACKAGE CATALOG
   // ============================================================
   //
-  // Keyed by the short activity code shown in the grid
-  // (buildProjectActivityCatalog). OFF / FER are calendar markers,
-  // not activities, so they remain system-level visual definitions.
+  // Keyed by the 3-letter work package code shown in the grid
+  // (buildWorkPackageCatalog). OFF / FER are calendar markers,
+  // not work packages, so they remain system-level visual definitions.
   //
   const [projectServices, setProjectServices] = useState({});
+  const [workPackageOptions, setWorkPackageOptions] = useState([]);
+  const [showPackagesModal, setShowPackagesModal] = useState(false);
+  const [packageSavingId, setPackageSavingId] = useState('');
+
+  const applyWorkPackageOptions = (rows) => {
+    setWorkPackageOptions(rows);
+    setProjectServices(buildWorkPackageCatalog(rows));
+  };
+
+  // Add or remove a company work package from this project's plan.
+  const toggleProjectWorkPackage = async (option) => {
+    const code = String(option.code || '').toUpperCase();
+    const selecting = !option.selected_for_project;
+    const usedInPlan =
+      workPackages.some((pkg) => String(pkg.activity || '').toUpperCase() === code) ||
+      Object.values(plannedCellData).some((value) => String(value || '').toUpperCase() === code);
+
+    if (!selecting && usedInPlan) {
+      const proceed = await dialogs.confirm(
+        translate('masterPlan.confirmRemoveUsedPackage', { code }),
+        { danger: true }
+      );
+      if (!proceed) return;
+    }
+
+    setPackageSavingId(option.organization_work_package_id);
+    const { error } = await supabase.rpc('set_project_work_package_selected', {
+      target_project_id: selectedProjectId,
+      target_organization_work_package_id: option.organization_work_package_id,
+      target_selected: selecting
+    });
+
+    if (error) {
+      dialogs.notify(`${t.workPackagesSaveError}\n${error.message}`, 'bad');
+    } else {
+      const { data, error: reloadError } = await supabase.rpc('get_project_work_package_options', {
+        target_project_id: selectedProjectId
+      });
+      if (reloadError) dialogs.notify(`${t.workPackagesSaveError}\n${reloadError.message}`, 'bad');
+      else applyWorkPackageOptions(data || []);
+    }
+    setPackageSavingId('');
+  };
 
   const workPackageCatalog = {
     ...projectServices,
@@ -1430,11 +1430,6 @@ export default function MasterPlanPage() {
           service?.projectServiceId ||
           null,
 
-        activity_id:
-          pkg.activityId ||
-          service?.activityId ||
-          null,
-
         row_key:
           pkg.rowId ||
           null,
@@ -1774,7 +1769,7 @@ export default function MasterPlanPage() {
 
       const [
         locationsResult,
-        activitiesResult,
+        workPackagesResult,
         scenariosResult
       ] = await Promise.all([
         supabase
@@ -1793,20 +1788,11 @@ export default function MasterPlanPage() {
           .order('name', { ascending: true }),
 
         // ----------------------------------------------------
-        // PROJECT ACTIVITIES (Projects › Scope)
+        // PROJECT WORK PACKAGES (company catalog + selection)
         // ----------------------------------------------------
-        supabase
-          .from('fieldop_project_activities')
-          .select(`
-            id,
-            source,
-            activity_name,
-            unit,
-            is_active,
-            scope_item:project_scopes(id, scope_code, scope_name, unit)
-          `)
-          .eq('project_id', selectedProjectId)
-          .eq('is_active', true),
+        supabase.rpc('get_project_work_package_options', {
+          target_project_id: selectedProjectId
+        }),
 
         supabase
           .from('master_plan_scenarios')
@@ -1829,7 +1815,7 @@ export default function MasterPlanPage() {
 
       const loadError =
         locationsResult.error ||
-        activitiesResult.error ||
+        workPackagesResult.error ||
         scenariosResult.error;
 
       if (loadError) {
@@ -1887,12 +1873,10 @@ export default function MasterPlanPage() {
         ].filter(Boolean)
       );
 
-      // The project's activities from Projects › Scope are the
-      // schedulable Master Plan activities (see buildProjectActivityCatalog).
-      setProjectServices(
-        buildProjectActivityCatalog(
-          activitiesResult.data || []
-        )
+      // The project's selected company work packages are the
+      // schedulable Master Plan activities (see buildWorkPackageCatalog).
+      applyWorkPackageOptions(
+        workPackagesResult.data || []
       );
 
       const mappedVersions = (scenariosResult.data || []).map(mapScenarioRecord);
@@ -4028,9 +4012,8 @@ ${
           rowId: location.rowId,
           locationId: location.locationId || null,
           locationPath: location.label || '',
-          activityId: service?.activityId || null,
           projectServiceId: service?.projectServiceId || null,
-          projectWorkPackageId: service?.projectWorkPackageId || null,
+          organizationWorkPackageId: service?.organizationWorkPackageId || null,
           packageStartType:
             isFirstGeneratedPackage &&
             sequenceStartType === 'date'
@@ -4205,16 +4188,12 @@ ${
         selectedPlanningRow?.locationPath ||
         selectedPlanningRow?.description ||
         '',
-      activityId:
-        selectedService?.activityId ||
-        null,
-
       projectServiceId:
         selectedService?.projectServiceId ||
         null,
 
-      projectWorkPackageId:
-        selectedService?.projectWorkPackageId ||
+      organizationWorkPackageId:
+        selectedService?.organizationWorkPackageId ||
         null,
 
       packageStartType: packageStartType,
@@ -4371,7 +4350,10 @@ ${
       {/* Planning actions */}
       <div className={styles.toolbar}>
         <div className={styles.group}>
-          <button type="button" className={ui.btnPrimary} onClick={abrirGeradorSequencia} disabled={isBaselineFrozen}>
+          <button type="button" className={ui.btn} onClick={() => setShowPackagesModal(true)}>
+            {t.workPackagesBtn} · {activityOptions.length}
+          </button>
+          <button type="button" className={ui.btnPrimary} onClick={abrirGeradorSequencia} disabled={isBaselineFrozen || activityOptions.length === 0}>
             <Icon name="plus" size={18} />{t.generateSequence}
           </button>
           <button
@@ -4400,6 +4382,46 @@ ${
           </button>
         </div>
       </div>
+
+      {/* Company work packages used by this project */}
+      {showPackagesModal && (
+        <Dialog
+          title={t.workPackagesTitle}
+          text={t.workPackagesText}
+          onClose={() => setShowPackagesModal(false)}
+          footer={(
+            <>
+              <a className={cx(ui.btnGhost, styles.dialogFootNote)} href="/settings/work-packages">{t.manageCatalog}</a>
+              <button type="button" className={ui.btnPrimary} onClick={() => setShowPackagesModal(false)}>{t.workPackagesDone}</button>
+            </>
+          )}
+        >
+          {workPackageOptions.length === 0 ? (
+            <p className={styles.hint}>{t.workPackagesEmptyCatalog}</p>
+          ) : (
+            <div className={styles.list} style={{ maxHeight: 'none' }}>
+              {workPackageOptions.map((option) => (
+                <label
+                  key={option.organization_work_package_id}
+                  className={cx(styles.listRow, option.selected_for_project && styles.listRowOn)}
+                  style={{ gridTemplateColumns: '20px 14px 44px minmax(0, 1fr) auto', cursor: 'pointer' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(option.selected_for_project)}
+                    disabled={packageSavingId === option.organization_work_package_id || (!option.organization_package_active && !option.selected_for_project)}
+                    onChange={() => toggleProjectWorkPackage(option)}
+                  />
+                  <span className={styles.swatch} style={{ backgroundColor: option.color || '#64748b' }} />
+                  <strong>{option.code}</strong>
+                  <span className={styles.listText} title={option.description}>{option.description}</span>
+                  {!option.organization_package_active ? <Badge tone="warn">{t.workPackagesInactive}</Badge> : <span />}
+                </label>
+              ))}
+            </div>
+          )}
+        </Dialog>
+      )}
 
       {/* Work sequence generator */}
       {showSequenceModal && (
@@ -4697,6 +4719,12 @@ ${
       {dialogs.element}
 
       <div className={styles.frameBody}>
+        {activityOptions.length === 0 && (
+          <div className={cx(ui.notice, ui.noticeWarn, styles.inline)}>
+            <span style={{ flex: 1 }}>{t.noWorkPackagesNotice}</span>
+            <button type="button" className={cx(ui.btn, ui.small)} onClick={() => setShowPackagesModal(true)}>{t.chooseWorkPackages}</button>
+          </div>
+        )}
           <div className={styles.gridWrap}>
             <div id="conteudo-masterplan-pdf" style={{ minWidth: 'max-content', paddingBottom: '20px' }}>
               

@@ -96,6 +96,7 @@
   "nav.settingsUsers": "Users",
   "nav.settingsRoles": "Roles",
   "nav.settingsWorkspaces": "Workspace access",
+  "nav.settingsWorkPackages": "Work packages",
   "nav.settingsLocalization": "Language & units",
   "nav.settingsLicense": "Plan & usage"
 }

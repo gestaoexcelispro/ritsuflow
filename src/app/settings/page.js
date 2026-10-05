@@ -15,6 +15,7 @@ const GROUPS = [
   ] },
   { key: 'configuration', items: [
     { key: 'workspaces', icon: 'portfolio', href: '/settings/workspaces' },
+    { key: 'workPackages', icon: 'package', href: '/settings/work-packages' },
     { key: 'projectStandards', icon: 'projects' },
     { key: 'standardsLibrary', icon: 'reports' },
     { key: 'calendars', icon: 'grid' },
