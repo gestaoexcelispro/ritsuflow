@@ -22,6 +22,7 @@
   --fo-radius: 10px;
   --fo-radius-sm: 6px;
   --fo-focus: 0 0 0 3px rgba(32, 201, 181, 0.35);
+  --app-chrome: 137px; /* app header + tab bar height, for full-height pages */
 
   min-height: 100vh;
   min-height: 100dvh;
@@ -177,7 +178,7 @@
   .content { padding: 18px 20px 40px; }
 }
 @media (max-width: 760px) {
-  .root { font-size: 16px; }
+  .root { font-size: 16px; --app-chrome: 113px; }
   .appbarInner { height: 60px; padding: 0 12px; gap: 10px; }
   .appLogo img { width: 96px; }
   .appDivider { display: none; }
@@ -238,3 +239,6 @@
   .phoneCards td[data-label='']::before { display: none; }
   .phoneCards td[data-label=''] > div { overflow-x: auto; }
 }
+
+/* The app header and tab bar never print (pages with their own print layout, e.g. project history). */
+@media print { .appbar, .tabbar { display: none !important; } .root { background: #fff; } }

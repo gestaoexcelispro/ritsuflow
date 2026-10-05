@@ -73,5 +73,13 @@
   "nav.projectsModule": "Projetos",
   "nav.newReport": "Novo diário de obra",
   "projects.openProject": "Abrir projeto",
-  "projects.showing": "Mostrando {shown} de {total} projetos"
+  "projects.showing": "Mostrando {shown} de {total} projetos",
+  "nav.projectsTagline": "Projetos de obra e suas informações centrais.",
+  "nav.allProjects": "Todos os projetos",
+  "nav.projectOverview": "Visão geral",
+  "nav.projectScope": "Escopo",
+  "nav.projectLocations": "Locais",
+  "nav.projectHistory": "Histórico",
+  "nav.newProject": "Novo projeto",
+  "nav.cancel": "Cancelar"
 }
