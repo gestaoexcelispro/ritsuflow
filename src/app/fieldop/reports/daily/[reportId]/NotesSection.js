@@ -2,15 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import styles from '../daily-reports.module.css'
+import { useDirty } from './useDirty'
 
 const CATEGORIES = ['general', 'safety', 'quality', 'coordination', 'inspection', 'visitor', 'other']
 const empty = { category: 'general', title: '', content: '', location_id: '' }
+const toForm = (n) => ({ category: n.category || 'general', title: n.title || '', content: n.content || '', location_id: n.location_id || '' })
 
-export default function NotesSection({ report, supabase, t, language, locked }) {
+export default function NotesSection({ report, supabase, t, language, locked, onDirty }) {
   const [notes, setNotes] = useState([])
   const [locations, setLocations] = useState([])
   const [people, setPeople] = useState(new Map())
   const [form, setForm] = useState(empty)
+  const [editing, setEditing] = useState(null)
+  useDirty(onDirty, !locked && JSON.stringify(form) !== JSON.stringify(editing ? toForm(editing) : empty))
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -48,17 +52,18 @@ export default function NotesSection({ report, supabase, t, language, locked }) 
     setSaving(true); setError(''); setMessage('')
     const { data: auth } = await supabase.auth.getUser()
     const location = locations.find((l) => l.id === form.location_id)
-    const { error: saveError } = await supabase.from('daily_report_notes').insert({
-      daily_report_id: report.id,
+    const fields = {
       category: form.category,
       title: form.title.trim() || null,
       content: form.content.trim(),
       location_id: location?.id || null,
       location_name: location?.name || null,
-      created_by: auth?.user?.id || null,
-    })
+    }
+    const { error: saveError } = editing
+      ? await supabase.from('daily_report_notes').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', editing.id)
+      : await supabase.from('daily_report_notes').insert({ ...fields, daily_report_id: report.id, created_by: auth?.user?.id || null })
     if (saveError) setError(t('common.error', { message: saveError.message }))
-    else { setForm(empty); setMessage(t('notes.added')); await load() }
+    else { setMessage(t(editing ? 'notes.updated' : 'notes.added')); setForm(empty); setEditing(null); await load() }
     setSaving(false)
   }
 
@@ -85,7 +90,7 @@ export default function NotesSection({ report, supabase, t, language, locked }) 
       {error && <div className={styles.error} style={{ marginBottom: 0 }}>{error}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <span className={styles.successMessage}>{message}</span>
-        <button className={styles.primaryButton} type="submit" disabled={saving}>{saving ? t('common.saving') : t('notes.add')}</button>
+        <span style={{ display: 'flex', gap: 8 }}>{editing && <button type="button" className={styles.secondaryButton} onClick={() => { setEditing(null); setForm(empty) }}>{t('common.cancel')}</button>}<button className={styles.primaryButton} type="submit" disabled={saving}>{saving ? t('common.saving') : t(editing ? 'notes.saveEdit' : 'notes.add')}</button></span>
       </div>
     </form>}
     {locked && error && <div className={styles.error} style={{ margin: 18 }}>{error}</div>}
@@ -94,11 +99,11 @@ export default function NotesSection({ report, supabase, t, language, locked }) 
     </div>
     {loading ? <div className={styles.empty}>{t('common.loading')}</div>
       : shown.length === 0 ? <div className={styles.empty}>{t('notes.empty')}</div>
-        : <table className={styles.table}><tbody>{shown.map((n) => <tr key={n.id}>
-          <td style={{ width: 120 }}><span className={styles.badge}>{t(`notes.cat.${n.category}`)}</span></td>
-          <td>{n.title && <strong style={{ display: 'block', marginBottom: 4 }}>{n.title}</strong>}<span style={{ whiteSpace: 'pre-wrap' }}>{n.content}</span>{n.location_name && <small style={{ display: 'block', marginTop: 4, color: 'var(--fo-muted)' }}>📍 {n.location_name}</small>}</td>
-          <td style={{ whiteSpace: 'nowrap', color: 'var(--fo-muted)' }}>{people.get(n.created_by) || '—'}<br /><small>{n.created_at ? dateTime.format(new Date(n.created_at)) : ''}</small></td>
-          <td style={{ width: 90, textAlign: 'right' }}>{!locked && <button type="button" className={styles.secondaryButton} style={{ minHeight: 30 }} disabled={busyId === n.id} onClick={() => remove(n)}>{t('notes.delete')}</button>}</td>
+        : <table className={`${styles.table} ${styles.cardsTable}`}><tbody>{shown.map((n) => <tr key={n.id}>
+          <td data-label="" style={{ width: 120 }}><span className={styles.badge}>{t(`notes.cat.${n.category}`)}</span></td>
+          <td data-label="">{n.title && <strong style={{ display: 'block', marginBottom: 4 }}>{n.title}</strong>}<span style={{ whiteSpace: 'pre-wrap' }}>{n.content}</span>{n.location_name && <small style={{ display: 'block', marginTop: 4, color: 'var(--fo-muted)' }}>📍 {n.location_name}</small>}</td>
+          <td data-label="" style={{ whiteSpace: 'nowrap', color: 'var(--fo-muted)' }}>{people.get(n.created_by) || '—'}<br /><small>{n.created_at ? dateTime.format(new Date(n.created_at)) : ''}</small></td>
+          <td data-label="" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{!locked && <><button type="button" className={styles.secondaryButton} style={{ minHeight: 30, marginRight: 6 }} onClick={() => { setEditing(n); setForm(toForm(n)); setMessage(''); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>{t('list.edit')}</button><button type="button" className={styles.secondaryButton} style={{ minHeight: 30 }} disabled={busyId === n.id} onClick={() => remove(n)}>{t('notes.delete')}</button></>}</td>
         </tr>)}</tbody></table>}
   </section>
 }

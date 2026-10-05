@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import styles from '../daily-reports.module.css'
+import { useDirty } from './useDirty'
 import { useLanguage } from '../../../../../lib/i18n/LanguageProvider'
 
 const PERIODS = ['morning', 'afternoon', 'evening']
@@ -12,9 +13,11 @@ const IMPACT = ['none', 'minor', 'moderate', 'severe']
 
 const blank = (unit) => ({ id: null, condition: '', temperature_min: '', temperature_max: '', temperature_unit: unit, rainfall: '', wind_condition: '', site_condition: '', production_impact: 'none', impact_hours: '', notes: '' })
 const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v))
+// Content only (no ids), to compare with what was last saved.
+const content = (rows) => JSON.stringify(PERIODS.map((p) => ({ ...rows[p], id: undefined })))
 const filled = (row) => Boolean(row.condition || row.temperature_min !== '' || row.temperature_max !== '' || row.rainfall !== '' || row.wind_condition || row.site_condition || row.production_impact !== 'none' || row.impact_hours !== '' || row.notes.trim())
 
-export default function WeatherSection({ report, supabase, t, locked }) {
+export default function WeatherSection({ report, supabase, t, locked, onDirty }) {
   const { unitSystem } = useLanguage()
   const defaultUnit = unitSystem === 'imperial' ? 'F' : 'C'
   const [rows, setRows] = useState(() => Object.fromEntries(PERIODS.map((p) => [p, blank(defaultUnit)])))
@@ -22,6 +25,9 @@ export default function WeatherSection({ report, supabase, t, locked }) {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [baseline, setBaseline] = useState('')
+  const [showEvening, setShowEvening] = useState(false)
+  useDirty(onDirty, !locked && baseline !== '' && content(rows) !== baseline)
 
   useEffect(() => {
     let alive = true
@@ -47,6 +53,8 @@ export default function WeatherSection({ report, supabase, t, locked }) {
         }
       }
       setRows(next)
+      setBaseline(content(next))
+      setShowEvening(filled(next.evening))
       setLoading(false)
     }
     load()
@@ -95,6 +103,7 @@ export default function WeatherSection({ report, supabase, t, locked }) {
       if (delError) { setError(t('common.error', { message: delError.message })); setSaving(false); return }
       setRows((cur) => { const next = { ...cur }; for (const p of PERIODS) if (removals.includes(next[p].id)) next[p] = { ...next[p], id: null }; return next })
     }
+    setBaseline(content(rows))
     setMessage(t('weather.saved'))
     setSaving(false)
   }
@@ -108,10 +117,11 @@ export default function WeatherSection({ report, supabase, t, locked }) {
     <div className={styles.panelHead}><div><h3>{t('tab.weather')}</h3><p>{t('weather.text')}</p></div></div>
     <div style={{ display: 'grid', gap: 14, padding: 18 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 14 }}>
-        {PERIODS.map((period) => {
+        {PERIODS.filter((period) => period !== 'evening' || showEvening).map((period) => {
           const r = rows[period]
           return <fieldset key={period} disabled={locked} style={{ border: '1px solid var(--fo-line)', borderRadius: 10, padding: 14, display: 'grid', gap: 10, margin: 0 }}>
-            <legend style={{ fontWeight: 800, padding: '0 6px' }}>{t(`weather.period.${period}`)}{period === 'evening' ? ` · ${t('weather.optional')}` : ''}</legend>
+            <legend style={{ fontWeight: 700, padding: '0 6px' }}>{t(`weather.period.${period}`)}{period === 'evening' ? ` · ${t('weather.optional')}` : ''}</legend>
+            {period === 'afternoon' && !locked && filled(rows.morning) && <button type="button" className={styles.secondaryButton} style={{ minHeight: 32, justifySelf: 'start' }} onClick={() => setRows((cur) => ({ ...cur, afternoon: { ...cur.morning, id: cur.afternoon.id } }))}>{t('weather.sameAsMorning')}</button>}
             <label style={field}><b>{t('weather.condition')}</b>
               <select value={r.condition} onChange={(e) => set(period, 'condition', e.target.value)}><option value="">—</option>{CONDITIONS.map((c) => option('cond', c))}</select></label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px', gap: 8 }}>
@@ -131,11 +141,12 @@ export default function WeatherSection({ report, supabase, t, locked }) {
             <label style={field}><b>{t('weather.notes')}</b><textarea rows={2} value={r.notes} onChange={(e) => set(period, 'notes', e.target.value)} placeholder={t('weather.notesPlaceholder')} /></label>
           </fieldset>
         })}
+        {!showEvening && !locked && <button type="button" className={styles.secondaryButton} style={{ alignSelf: 'start', justifySelf: 'start' }} onClick={() => setShowEvening(true)}>{t('weather.addEvening')}</button>}
       </div>
       {error && <div className={styles.error}>{error}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <span className={styles.successMessage}>{message}</span>
-        <button className={styles.primaryButton} type="button" disabled={saving || locked} onClick={save}>{saving ? t('common.saving') : t('weather.save')}</button>
+        {!locked && <button className={styles.primaryButton} type="button" disabled={saving} onClick={save}>{saving ? t('common.saving') : t('weather.save')}</button>}
       </div>
     </div>
   </section>

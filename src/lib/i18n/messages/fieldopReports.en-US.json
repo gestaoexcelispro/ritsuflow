@@ -68,7 +68,7 @@
   "overview.hiddenTabs": "Some sections are turned off in this project's Daily Report Settings.",
   "overview.open": "Open →",
   "placeholder.text": "The {section} section will be built in a later step. Its information is not captured yet.",
-  "general.text": "Core information for this field day. Project and report identity are inherited automatically.",
+  "general.text": "Working hours and general notes for the day.",
   "general.project": "Project",
   "general.projectCode": "Project code",
   "general.reportDate": "Report date",
@@ -373,5 +373,16 @@
   "list.allProjects": "All projects",
   "list.filterAll": "All",
   "list.emptyFiltered": "No reports match this filter.",
-  "list.todayTag": "Today"
+  "list.todayTag": "Today",
+  "unsaved.confirm": "You have changes that are not saved. Leave this section and lose them?",
+  "unsaved.confirmSubmit": "You have changes that are not saved. Submit without them?",
+  "general.errTimes": "Work end can't be earlier than work start.",
+  "weather.sameAsMorning": "Same as morning",
+  "weather.addEvening": "+ Add evening",
+  "notes.updated": "Note updated.",
+  "notes.saveEdit": "Save Note",
+  "workforce.noCompany": "No company",
+  "workforce.textAuto": "Attendance recorded in the field on {date}. The summary is saved automatically when the report is submitted.",
+  "workforce.companyLine": "{workers} workers · {hours} h",
+  "workforce.snapshotAuto": "Recorded when the report was submitted."
 }

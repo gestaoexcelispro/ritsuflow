@@ -68,7 +68,7 @@
   "overview.hiddenTabs": "Algumas seções estão desativadas nas configurações do diário de obra deste projeto.",
   "overview.open": "Abrir →",
   "placeholder.text": "A seção {section} será desenvolvida em uma etapa posterior. Suas informações ainda não são registradas.",
-  "general.text": "Informações básicas deste dia de campo. O projeto e a identificação do diário são preenchidos automaticamente.",
+  "general.text": "Horário de trabalho e observações gerais do dia.",
   "general.project": "Projeto",
   "general.projectCode": "Código do projeto",
   "general.reportDate": "Data do diário",
@@ -373,5 +373,16 @@
   "list.allProjects": "Todos os projetos",
   "list.filterAll": "Todos",
   "list.emptyFiltered": "Nenhum diário corresponde a este filtro.",
-  "list.todayTag": "Hoje"
+  "list.todayTag": "Hoje",
+  "unsaved.confirm": "Há alterações não salvas. Sair desta seção e perdê-las?",
+  "unsaved.confirmSubmit": "Há alterações não salvas. Enviar sem elas?",
+  "general.errTimes": "O fim do trabalho não pode ser antes do início.",
+  "weather.sameAsMorning": "Igual à manhã",
+  "weather.addEvening": "+ Adicionar noite",
+  "notes.updated": "Observação atualizada.",
+  "notes.saveEdit": "Salvar observação",
+  "workforce.noCompany": "Sem empresa",
+  "workforce.textAuto": "Presença registrada em campo em {date}. O resumo é salvo automaticamente quando o diário é enviado.",
+  "workforce.companyLine": "{workers} trabalhadores · {hours} h",
+  "workforce.snapshotAuto": "Registrado quando o diário foi enviado."
 }
