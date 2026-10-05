@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '../../../../../../lib/supabase/client'
 import WorkforceFrame, { localDateKey, useWorkforceFormat } from '../WorkforceFrame'
+import { ui } from '../../../../ui'
 
 const supabase = createClient()
 const auditAction = (event) => event?.metadata?.audit_action || null
@@ -86,7 +87,7 @@ export default function FieldOpProjectWorkforceAuditPage() {
         ? <div style={msg}>{t('audit.loading')}</div>
         : !shown.length
           ? <div style={msg}>{t('audit.empty')}</div>
-          : <div style={{ overflowX: 'auto' }}><table style={table}>
+          : <div style={{ overflowX: 'auto' }}><table className={ui.phoneCards} style={table}>
             <thead><tr>{columns.map((x) => <th key={x} style={th}>{x}</th>)}</tr></thead>
             <tbody>{shown.map((e) => {
               const isOpen = expanded === e.id
@@ -113,17 +114,17 @@ function AuditRows({ f, event, worker, actor, open, toggle }) {
   const after = event.metadata?.after || null
   return <>
     <tr>
-      <td style={td}>{f.dateTime(event.event_at)}</td>
-      <td style={td}>{worker?.field_id || '—'}</td>
-      <td style={td}><strong>{f.workerName(worker)}</strong></td>
-      <td style={td}>{eventLabel(f, event)}</td>
-      <td style={td}>{actor?.display_name || actor?.full_name || actor?.email || (event.recorded_by ? t('audit.unknownUser') : t('audit.system'))}</td>
-      <td style={td}>{f.label('method', event.method)}</td>
-      <td style={td}>{event.source || '—'}</td>
-      <td style={td}>{event.notes || '—'}</td>
-      <td style={td}><button onClick={toggle} style={button}>{open ? t('audit.hideDetails') : t('audit.viewDetails')}</button></td>
+      <td style={td} data-label={t('audit.colTime')}>{f.dateTime(event.event_at)}</td>
+      <td style={td} data-label={t('col.fieldId')}>{worker?.field_id || '—'}</td>
+      <td style={td} data-label=""><strong>{f.workerName(worker)}</strong></td>
+      <td style={td} data-label={t('audit.colEvent')}>{eventLabel(f, event)}</td>
+      <td style={td} data-label={t('audit.colRecordedBy')}>{actor?.display_name || actor?.full_name || actor?.email || (event.recorded_by ? t('audit.unknownUser') : t('audit.system'))}</td>
+      <td style={td} data-label={t('audit.colMethod')}>{f.label('method', event.method)}</td>
+      <td style={td} data-label={t('audit.colSource')}>{event.source || '—'}</td>
+      <td style={td} data-label={t('audit.colNotes')}>{event.notes || '—'}</td>
+      <td style={td} data-label=""><button onClick={toggle} style={button}>{open ? t('audit.hideDetails') : t('audit.viewDetails')}</button></td>
     </tr>
-    {open && <tr><td colSpan={9} style={{ ...td, background: 'var(--fo-sunken)' }}><div style={{ display: 'grid', gap: 12 }}>
+    {open && <tr><td colSpan={9} data-label="" style={{ ...td, background: 'var(--fo-sunken)' }}><div style={{ display: 'grid', gap: 12 }}>
       <div>
         <strong>{t('audit.evidence')}</strong>
         <div>{t('audit.evidenceLine', {
@@ -142,7 +143,7 @@ function AuditRows({ f, event, worker, actor, open, toggle }) {
 
 const eyebrow = { fontSize: 13, fontWeight: 800, letterSpacing: '.07em', color: 'var(--fo-muted)' }
 const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff' }
-const filters = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 190px 220px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
+const filters = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
 const metrics = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }
 const card = { padding: 16, border: '1px solid var(--fo-line)', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
 const box = { border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff', overflow: 'hidden' }
