@@ -23,6 +23,8 @@ type Props = {
   checkedItemIds: string[]
   onDone: (message: string) => Promise<void> | void
   onClose: () => void
+  /** Copy only the zones (locations): in Zoning, or without the RitsuScope license. */
+  zonesOnly?: boolean
 }
 
 type Undo = { sources: string[]; elements: string[]; zones: string[]; restoreElements: Record<string, unknown>[]; restoreZones: Record<string, unknown>[] }
@@ -35,7 +37,7 @@ const BLOCK_KEY: Record<string, TakeoffMessageKey> = {
 }
 
 /** "Copy to levels": each chosen level gets its own copy of this sheet's takeoff. */
-export default function CopyToLevelsDialog({ from, levels, sources, layers, elements, zones, checkedItemIds, onDone, onClose }: Props) {
+export default function CopyToLevelsDialog({ from, levels, sources, layers, elements, zones, checkedItemIds, onDone, onClose, zonesOnly = false }: Props) {
   const t = useTakeoffT()
   const { formatNumber } = useLanguage()
   const fromLevel = from.level_id ? levels.find(l => l.id === from.level_id) || null : null
@@ -49,9 +51,9 @@ export default function CopyToLevelsDialog({ from, levels, sources, layers, elem
   const [undo, setUndo] = useState<Undo | null>(null)
   const [summary, setSummary] = useState('')
 
-  const fromElements = elements.filter(e => e.source_id === from.id && (scope === 'all' || checkedItemIds.includes(e.layer_id)))
+  const fromElements = zonesOnly ? [] : elements.filter(e => e.source_id === from.id && (scope === 'all' || checkedItemIds.includes(e.layer_id)))
   const layerIds = new Set(fromElements.map(e => e.layer_id))
-  const fromZones = withZones ? zones.filter(z => z.source_id === from.id) : []
+  const fromZones = withZones || zonesOnly ? zones.filter(z => z.source_id === from.id) : []
   const itemNames = layers.filter(l => layerIds.has(l.id)).map(l => l.name)
 
   const targets = useMemo(() => sortLevels(levels).reverse()
@@ -94,7 +96,7 @@ export default function CopyToLevelsDialog({ from, levels, sources, layers, elem
           target = made as SourceRow
         } else if (x.status.kind === 'sheet') {
           target = x.status.sheet
-          if (mode === 'replace' && x.existing > 0) {
+          if (mode === 'replace' && x.existing > 0 && layerIds.size > 0) {
             const { data: old, error: e3 } = await supabase.from('takeoff_elements').select('*').eq('source_id', target.id).in('layer_id', [...layerIds])
             if (e3) throw e3
             const { error: e4 } = await supabase.from('takeoff_elements').delete().eq('source_id', target.id).in('layer_id', [...layerIds])
@@ -184,10 +186,16 @@ export default function CopyToLevelsDialog({ from, levels, sources, layers, elem
           <>
             <div style={section}>
               <strong style={label}>{t('copy.what')}</strong>
-              <label style={row}><input type="radio" checked={scope === 'all'} onChange={() => setScope('all')} />{t('copy.scopeAll')}</label>
-              <label style={{ ...row, opacity: checkedItemIds.length ? 1 : 0.5 }}><input type="radio" disabled={!checkedItemIds.length} checked={scope === 'checked'} onChange={() => setScope('checked')} />{t('copy.scopeChecked', { count: checkedItemIds.length })}</label>
-              <span style={ui.small}>{t('copy.summary', { count: fromElements.length, items: itemNames.length })}{itemNames.length ? `: ${itemNames.slice(0, 6).join(', ')}${itemNames.length > 6 ? '…' : ''}` : ''}</span>
-              <label style={row}><input type="checkbox" checked={withZones} onChange={e => setWithZones(e.target.checked)} />{t('copy.withZones', { count: zones.filter(z => z.source_id === from.id).length })}</label>
+              {zonesOnly ? (
+                <label style={row}><input type="checkbox" checked readOnly disabled />{t('copy.withZones', { count: zones.filter(z => z.source_id === from.id).length })}</label>
+              ) : (
+                <>
+                  <label style={row}><input type="radio" checked={scope === 'all'} onChange={() => setScope('all')} />{t('copy.scopeAll')}</label>
+                  <label style={{ ...row, opacity: checkedItemIds.length ? 1 : 0.5 }}><input type="radio" disabled={!checkedItemIds.length} checked={scope === 'checked'} onChange={() => setScope('checked')} />{t('copy.scopeChecked', { count: checkedItemIds.length })}</label>
+                  <span style={ui.small}>{t('copy.summary', { count: fromElements.length, items: itemNames.length })}{itemNames.length ? `: ${itemNames.slice(0, 6).join(', ')}${itemNames.length > 6 ? '…' : ''}` : ''}</span>
+                  <label style={row}><input type="checkbox" checked={withZones} onChange={e => setWithZones(e.target.checked)} />{t('copy.withZones', { count: zones.filter(z => z.source_id === from.id).length })}</label>
+                </>
+              )}
             </div>
 
             <div style={section}>

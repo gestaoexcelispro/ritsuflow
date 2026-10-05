@@ -18,7 +18,7 @@ import { areaRole } from '@/lib/takeoff/areaRole'
 import { MEP_GROUPS, MEP_TYPES, mepType } from '@/lib/takeoff/mep'
 import { STRUCT_GROUPS, STRUCT_TYPES, structType } from '@/lib/takeoff/struct'
 import { footprintFromWalls, roomsFromWalls } from '@/lib/takeoff/detect/roomsFromWalls'
-import { centroid, nameFromTexts, nextZoneName, pointInPolygon, type SheetText, type ZoneRow } from '@/lib/takeoff/zones'
+import { KIND_COLOR, centroid, isMacroKind, nameFromTexts, nextZoneName, pointInPolygon, type SheetText, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
 import { ui } from '../ui'
 import PdfSheet from './PdfSheet'
 import DetectPanel from './DetectPanel'
@@ -56,6 +56,8 @@ type Props = {
   /** Takeoff (items) or zoning (locations). */
   workMode: 'takeoff' | 'zoning'
   zones: ZoneRow[]
+  /** Kind given to zones drawn now (Block, Zone, Area, Room). */
+  zoneKind?: ZoneKind
   selectedZoneId: string | null
   onSelectZone: (id: string | null) => void
   /** Incremented by the page to start drawing a new zone. */
@@ -91,7 +93,7 @@ function dedupe(points: Vec2[]): Vec2[] {
 }
 
 export default function PdfWorkspace(props: Props) {
-  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, levelLabel = null } = props
+  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, levelLabel = null } = props
   const barH = toolbarSlot ? 0 : TOOLBAR_H
   const t = useTakeoffT()
   const { formatNumber, language } = useLanguage()
@@ -455,6 +457,7 @@ export default function PdfWorkspace(props: Props) {
       color: LAYER_PALETTE[(zones.length + i) % LAYER_PALETTE.length],
       points: r.pts,
       sort_order: (zones.length + i + 1) * 10,
+      zone_kind: 'room',
     }))).select('id')
     setSaving(false)
     if (e) { setError(t('workspace.error', { message: e.message })); return }
@@ -607,15 +610,18 @@ export default function PdfWorkspace(props: Props) {
   }
 
   const createZone = useCallback(async (pts: Vec2[]) => {
-    const name = nameFromTexts(pts, texts) || nextZoneName(zones.map(z => z.name), t('zone.defaultWord'))
+    // Macro areas take their kind's colour and name ("Zone 1"); rooms keep the sheet label or "Room n".
+    const word = zoneKind === 'room' ? t('zone.defaultWord') : t(`zone.kind.${zoneKind}` as TakeoffMessageKey)
+    const name = (zoneKind === 'room' ? nameFromTexts(pts, texts) : null) || nextZoneName(zones.map(z => z.name), word)
     setSaving(true)
     const { data, error: e } = await createClient().from('takeoff_zones').insert({
       project_id: projectId,
       source_id: source.id,
       name,
-      color: LAYER_PALETTE[zones.length % LAYER_PALETTE.length],
+      color: isMacroKind(zoneKind) ? KIND_COLOR[zoneKind] : LAYER_PALETTE[zones.length % LAYER_PALETTE.length],
       points: pts,
       sort_order: (zones.length + 1) * 10,
+      zone_kind: zoneKind,
     }).select('id').single()
     setSaving(false)
     if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return }
@@ -624,7 +630,7 @@ export default function PdfWorkspace(props: Props) {
     setMessage(t('zone.created', { name }))
     await onChanged()
     onSelectZone(data.id)
-  }, [onChanged, onSelectZone, projectId, source.id, t, texts, zones])
+  }, [onChanged, onSelectZone, projectId, source.id, t, texts, zones, zoneKind])
 
   const finishDraft = useCallback(async (explicit?: Vec2[]) => {
     if (saving) return
@@ -932,9 +938,10 @@ export default function PdfWorkspace(props: Props) {
   }, [mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length])
 
   const zoneShapes = useMemo(() => [
-    ...sheetZones.filter(z => z.is_visible).map(z => {
+    // Largest first, so the rooms drawn inside a block or zone stay on top and clickable.
+    ...sheetZones.filter(z => z.is_visible).slice().sort((p, q) => polyArea(q.points) - polyArea(p.points)).map(z => {
       const a = scale > 0 ? polyArea(z.points) / (scale * scale) : 0
-      return { id: z.id, name: z.name, color: z.color, pts: z.points, label: scale > 0 ? `${formatNumber(a, 2)} m²` : '', selected: z.id === selectedZoneId }
+      return { id: z.id, name: z.name, color: z.color, pts: z.points, label: scale > 0 ? `${formatNumber(a, 2)} m²` : '', selected: z.id === selectedZoneId, macro: isMacroKind(z.zone_kind) }
     }),
     ...(roomSugs || []).map(r => ({ id: `sug:${r.id}`, name: r.name, color: '#16A34A', pts: r.pts, label: `${formatNumber(r.areaM2, 2)} m²`, selected: false, suggested: true, on: roomPicked.has(r.id) })),
   ], [sheetZones, scale, formatNumber, selectedZoneId, roomSugs, roomPicked])
@@ -986,7 +993,7 @@ export default function PdfWorkspace(props: Props) {
 
   const selectionActive = zoning ? !!selectedZoneId : !!selectedId
   const draftKind: LayerKind | null = zoning ? 'area' : activeLayer?.kind ?? null
-  const zoneColor = LAYER_PALETTE[zones.length % LAYER_PALETTE.length]
+  const zoneColor = isMacroKind(zoneKind) ? KIND_COLOR[zoneKind] : LAYER_PALETTE[zones.length % LAYER_PALETTE.length]
 
   return (
     <div style={{ position: 'relative', height: '100%', minHeight: 0 }}>

@@ -35,7 +35,7 @@ type Form = {
 }
 
 /** Project framing defaults and the user's display preferences; a section of the workspace. */
-export default function SettingsPanel({ projectId, onChanged }: { projectId: string; onChanged?: () => Promise<void> | void }) {
+export default function SettingsPanel({ projectId, onChanged, framingLocked = false }: { projectId: string; onChanged?: () => Promise<void> | void; /** Framing defaults are part of the RitsuScope license. */ framingLocked?: boolean }) {
   const t = useTakeoffT()
   const { language, setLanguage, numberFormatChoice, setNumberFormat, unitSystem, formatNumber } = useLanguage()
   const [form, setForm] = useState<Form | null>(null)
@@ -147,7 +147,12 @@ export default function SettingsPanel({ projectId, onChanged }: { projectId: str
         {error && <div style={ui.error}>{error}</div>}
         {message && <div style={ui.small}>{message}</div>}
 
-        <form onSubmit={save} style={{ ...ui.panel, gap: 12 }}>
+        {framingLocked ? (
+          <div style={{ ...ui.panel, gap: 6 }}>
+            <h2 style={ui.panelTitle}>{t('settings.framing')}</h2>
+            <div style={ui.small}>🔒 {t('license.locked')}</div>
+          </div>
+        ) : <form onSubmit={save} style={{ ...ui.panel, gap: 12 }}>
           <h2 style={ui.panelTitle}>{t('settings.framing')}</h2>
           <div style={ui.small}>{t('settings.framingHint')}</div>
           <div style={row}>
@@ -176,7 +181,7 @@ export default function SettingsPanel({ projectId, onChanged }: { projectId: str
             <button type="submit" style={{ ...ui.button, opacity: saving ? 0.6 : 1 }} disabled={saving}>{t('settings.save')}</button>
             <button type="button" style={{ ...ui.button, background: '#fff', color: '#294955', border: '1px solid #d3dfe2' }} onClick={() => void applyToLayers()}>{t('settings.applyToLayers')}</button>
           </div>
-        </form>
+        </form>}
 
         <div style={{ ...ui.panel, gap: 12 }}>
           <h2 style={ui.panelTitle}>{t('settings.display')}</h2>

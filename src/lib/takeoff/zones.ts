@@ -2,6 +2,16 @@
 // Geometry is in sheet points (y down); ptPerM converts to metres.
 import { perimeter, polyArea, polyLen, type TakeoffItem, type Vec2 } from './geometry'
 
+/** Macro area kinds, largest first. A zone of a smaller kind drawn inside a larger one becomes its child. */
+export const ZONE_KINDS = ['block', 'zone', 'area', 'room'] as const
+export type ZoneKind = (typeof ZONE_KINDS)[number]
+/** Location Breakdown type each kind creates (RitsuFlow `locations.location_type`). */
+export const KIND_LOCATION_TYPE: Record<ZoneKind, string> = { block: 'building', zone: 'zone', area: 'area', room: 'room' }
+/** Default colours: macro areas stand out from the rooms drawn inside them. */
+export const KIND_COLOR: Record<ZoneKind, string> = { block: '#7C3AED', zone: '#2563EB', area: '#D97706', room: '#0F9D8A' }
+export const kindRank = (k: ZoneKind | null | undefined) => Math.max(0, ZONE_KINDS.indexOf((k || 'room') as ZoneKind))
+export const isMacroKind = (k: ZoneKind | null | undefined) => kindRank(k) < kindRank('room')
+
 export type ZoneRow = {
   id: string
   project_id: string
@@ -13,10 +23,12 @@ export type ZoneRow = {
   location_id: string | null
   is_visible: boolean
   sort_order: number
+  /** Macro area kind: Block > Zone > Area > Room. */
+  zone_kind: ZoneKind
   created_by?: string | null
 }
 
-export const ZONE_COLUMNS = 'id, project_id, source_id, name, color, points, ceiling_height_m, location_id, is_visible, sort_order, created_by'
+export const ZONE_COLUMNS = 'id, project_id, source_id, name, color, points, ceiling_height_m, location_id, is_visible, sort_order, zone_kind, created_by'
 
 /** Text placed on the sheet (from the PDF), in sheet points; `size` is the font height. */
 export type SheetText = { str: string; x: number; y: number; size: number }
@@ -146,4 +158,42 @@ export function nextZoneName(existing: string[], word: string): string {
 export function scaleRatio(ptPerM: number): number | null {
   if (!(ptPerM > 0)) return null
   return (72 / 25.4) * 1000 / ptPerM
+}
+
+
+/**
+ * The zone that contains `zone` on the same sheet: of a larger kind, with the zone's centre inside
+ * it; the smallest such one wins (a room inside an area inside a zone inside a block → the area).
+ */
+export function containingZone(zone: Pick<ZoneRow, 'id' | 'source_id' | 'points' | 'zone_kind'>, zones: ZoneRow[]): ZoneRow | null {
+  if (zone.points.length < 3) return null
+  const c = centroid(zone.points)
+  const rank = kindRank(zone.zone_kind)
+  let best: ZoneRow | null = null
+  let bestArea = Infinity
+  for (const z of zones) {
+    if (z.id === zone.id || z.source_id !== zone.source_id || z.points.length < 3) continue
+    if (kindRank(z.zone_kind) >= rank) continue
+    if (!pointInPolygon(c, z.points)) continue
+    const a = polyArea(z.points)
+    if (a < bestArea) { best = z; bestArea = a }
+  }
+  return best
+}
+
+/** Zones in tree order (each container followed by what it contains), with their depth. */
+export function zoneTree(zones: ZoneRow[]): { zone: ZoneRow; depth: number }[] {
+  const parentOf = new Map(zones.map(z => [z.id, containingZone(z, zones)?.id || null] as [string, string | null]))
+  const children = new Map<string | null, ZoneRow[]>()
+  for (const z of zones) {
+    const p = parentOf.get(z.id) || null
+    children.set(p, [...(children.get(p) || []), z])
+  }
+  const out: { zone: ZoneRow; depth: number }[] = []
+  const walk = (p: string | null, depth: number) => {
+    const list = (children.get(p) || []).slice().sort((a, b) => kindRank(a.zone_kind) - kindRank(b.zone_kind) || a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+    for (const z of list) { out.push({ zone: z, depth }); walk(z.id, depth + 1) }
+  }
+  walk(null, 0)
+  return out
 }

@@ -7,6 +7,7 @@ import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { levelGroups, masterOf, sortLevels, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import type { SourceRow } from '@/lib/takeoff/rows'
+import { createFloorsForLevels, loadLocations, locationTree, type ProjectLocation } from '@/lib/takeoff/locationSync'
 import { ui } from '../ui'
 
 type Props = {
@@ -31,6 +32,37 @@ export default function LevelProperties({ level, levels, sources, onChanged, onC
   const [followers, setFollowers] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  /** The project's Location Breakdown: this level is linked to one of its floors. */
+  const [locations, setLocations] = useState<ProjectLocation[]>([])
+  useEffect(() => {
+    let alive = true
+    loadLocations(createClient(), level.project_id).then(rows => { if (alive) setLocations(rows) }).catch(() => { if (alive) setLocations([]) })
+    return () => { alive = false }
+  }, [level.project_id, level.location_id])
+  const floorOptions = locationTree(locations).filter(({ location }) => location.location_type === 'floor' || location.id === level.location_id)
+  const linkedFloor = level.location_id ? locations.find(l => l.id === level.location_id) || null : null
+
+  async function linkFloor(locationId: string) {
+    setBusy(true)
+    setError('')
+    const { error: e } = await createClient().from('takeoff_levels').update({ location_id: locationId || null }).eq('id', level.id)
+    setBusy(false)
+    if (e) { setError(t('workspace.error', { message: e.message })); return }
+    await onChanged(t('level.saved'))
+  }
+
+  async function createFloor() {
+    setBusy(true)
+    setError('')
+    try {
+      await createFloorsForLevels(createClient(), { projectId: level.project_id, levels: [level], locations })
+      await onChanged(t('level.floorCreated', { name: level.name }))
+    } catch (e) {
+      setError(t('workspace.error', { message: e instanceof Error ? e.message : String(e) }))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     setForm({ name: level.name, elevation: n(level.elevation_m), height: n(level.height_m), slab: n(level.slab_m) })
@@ -149,6 +181,15 @@ export default function LevelProperties({ level, levels, sources, onChanged, onC
         <label style={field}>{t('level.slab')}<input style={input} inputMode="decimal" value={form.slab} placeholder="0,15" onChange={e => setForm(f => ({ ...f, slab: e.target.value }))} /></label>
       </div>
       <span style={ui.small}>{wallH != null ? t('level.wallHeight', { h: formatNumber(wallH, 2) }) : t('level.wallHeightNone')}</span>
+
+      <div style={{ borderTop: '1px solid #e5ecee', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <strong style={{ fontSize: 12, color: '#173441' }}>{t('level.lbsFloor')}</strong>
+        <select style={input} value={level.location_id || ''} disabled={busy} onChange={e => void linkFloor(e.target.value)}>
+          <option value="">—</option>
+          {floorOptions.map(({ location: l, depth }) => <option key={l.id} value={l.id}>{'\u00a0\u00a0\u00a0'.repeat(depth)}{l.name}</option>)}
+        </select>
+        {!linkedFloor && <button type="button" disabled={busy} onClick={() => void createFloor()} style={{ ...btn(false), color: '#5b21b6', borderColor: '#d8c8f5' }}>{t('level.createFloor')}</button>}
+      </div>
 
       <div style={{ borderTop: '1px solid #e5ecee', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <strong style={{ fontSize: 12, color: '#173441' }}>{t('level.typicalTitle')}</strong>
