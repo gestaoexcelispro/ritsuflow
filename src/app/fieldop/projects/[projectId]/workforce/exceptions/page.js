@@ -183,7 +183,7 @@ export default function FieldOpProjectWorkforceExceptionsPage() {
           : <div style={{ overflowX: 'auto' }}><table style={table}>
             <thead><tr>{columns.map((x) => <th key={x} style={th}>{x}</th>)}</tr></thead>
             <tbody>{filtered.map((x) => <tr key={x.id}>
-              <td style={td}><strong style={{ color: x.severity === 'critical' ? '#b91c1c' : '#b45309' }}>{t(`severity.${x.severity}`)}</strong></td>
+              <td style={td}><strong style={{ color: x.severity === 'critical' ? 'var(--fo-bad)' : 'var(--fo-warn)' }}>{t(`severity.${x.severity}`)}</strong></td>
               <td style={td}>{x.worker?.field_id || '—'}</td>
               <td style={td}><strong>{f.workerName(x.worker)}</strong></td>
               <td style={td}>{title(x)}</td>
@@ -205,7 +205,7 @@ export default function FieldOpProjectWorkforceExceptionsPage() {
         {loadingEvidence
           ? <p>{t('exceptions.loadingEvidence')}</p>
           : evidence.length
-            ? evidence.map((e) => <div key={e.id} style={{ padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>{f.label('event', e.event_type)} · {f.time(e.event_at)} · {f.label('geofence', e.geofence_status, t('exceptions.noGeofence'))} · {e.distance_to_project_m != null ? `${Math.round(e.distance_to_project_m)} m` : '—'} · GPS ±{e.gps_accuracy_m ?? '—'} m</div>)
+            ? evidence.map((e) => <div key={e.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--fo-line)' }}>{f.label('event', e.event_type)} · {f.time(e.event_at)} · {f.label('geofence', e.geofence_status, t('exceptions.noGeofence'))} · {e.distance_to_project_m != null ? `${Math.round(e.distance_to_project_m)} m` : '—'} · GPS ±{e.gps_accuracy_m ?? '—'} m</div>)
             : <p>{t('exceptions.noEvidence')}</p>}
       </div>
       {selected.session.exception_resolved_by && <p><strong>{t('exceptions.resolver')}</strong> {actors.get(selected.session.exception_resolved_by)?.full_name || actors.get(selected.session.exception_resolved_by)?.email || selected.session.exception_resolved_by}</p>}
@@ -221,20 +221,20 @@ export default function FieldOpProjectWorkforceExceptionsPage() {
   </WorkforceFrame>
 }
 
-const lab = { fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '.06em', textTransform: 'uppercase' }
-const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff' }
-const filters = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 180px 180px 180px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff' }
+const lab = { fontSize: 13, fontWeight: 800, color: 'var(--fo-muted)', letterSpacing: '.06em' }
+const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff' }
+const filters = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 180px 180px 180px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
 const metrics = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }
-const card = { padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
-const box = { border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff', overflow: 'hidden' }
+const card = { padding: 16, border: '1px solid var(--fo-line)', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
+const box = { border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff', overflow: 'hidden' }
 const table = { width: '100%', minWidth: 1300, borderCollapse: 'collapse' }
-const th = { padding: '11px 12px', textAlign: 'left', fontSize: 11, color: '#64748b', background: '#f8fafc' }
-const td = { padding: 12, borderTop: '1px solid #e2e8f0', fontSize: 13, verticalAlign: 'top' }
-const button = { padding: '8px 11px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', fontWeight: 700, cursor: 'pointer' }
-const primary = { ...button, background: '#082a4a', color: '#fff', borderColor: '#082a4a' }
-const msg = { padding: 28, textAlign: 'center', color: '#64748b' }
-const err = { padding: 12, border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 9 }
-const ok = { padding: 12, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 9 }
+const th = { padding: '11px 12px', textAlign: 'left', fontSize: 13, color: 'var(--fo-muted)', background: 'var(--fo-sunken)' }
+const td = { padding: 12, borderTop: '1px solid var(--fo-line)', fontSize: 15, verticalAlign: 'top' }
+const button = { padding: '8px 11px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff', fontWeight: 700, cursor: 'pointer' }
+const primary = { ...button, background: 'var(--fo-teal)', color: '#04312c', borderColor: 'var(--fo-teal)' }
+const msg = { padding: 28, textAlign: 'center', color: 'var(--fo-muted)' }
+const err = { padding: 12, border: '1px solid transparent', background: 'var(--fo-bad-wash)', color: 'var(--fo-bad)', borderRadius: 9 }
+const ok = { padding: 12, border: '1px solid transparent', background: 'var(--fo-ok-wash)', color: 'var(--fo-ok)', borderRadius: 9 }
 const overlay = { position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(2,6,23,.55)', display: 'grid', placeItems: 'center', padding: 20 }
 const modal = { width: 'min(760px,100%)', maxHeight: '90vh', overflow: 'auto', background: '#fff', borderRadius: 14, padding: 22, display: 'grid', gap: 15 }
-const evidenceBox = { padding: 14, border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc' }
+const evidenceBox = { padding: 14, border: '1px solid var(--fo-line)', borderRadius: 10, background: 'var(--fo-sunken)' }

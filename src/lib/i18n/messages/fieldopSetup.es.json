@@ -209,5 +209,6 @@
   "settings.saveChanges": "Guardar cambios",
   "settings.saved": "Configuración del informe diario guardada.",
   "settings.separateApprover": "Aprobador distinto",
-  "settings.separateApproverText": "Quien aprueba debe ser una persona distinta de quien envió y de quien revisó."
+  "settings.separateApproverText": "Quien aprueba debe ser una persona distinta de quien envió y de quien revisó.",
+  "setup.openWorkforce": "Abrir mano de obra"
 }

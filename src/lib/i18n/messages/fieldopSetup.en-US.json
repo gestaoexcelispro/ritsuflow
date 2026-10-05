@@ -209,5 +209,6 @@
   "settings.saveChanges": "Save Changes",
   "settings.saved": "Daily Report settings saved successfully.",
   "settings.separateApprover": "Separate approver",
-  "settings.separateApproverText": "The approver must be a different person from the submitter and the reviewer."
+  "settings.separateApproverText": "The approver must be a different person from the submitter and the reviewer.",
+  "setup.openWorkforce": "Open Workforce"
 }

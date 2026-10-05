@@ -170,7 +170,7 @@ function Timecard({ c, f, expanded, toggle, correct }) {
       <td style={td}>{status}</td>
       <td style={td}><button onClick={toggle} style={button}>{expanded ? t('timecards.hideSessions') : t('timecards.viewSessions')}</button></td>
     </tr>
-    {expanded && <tr><td colSpan={10} style={{ ...td, background: '#f8fafc' }}>{c.sessions.map((s, i) => <div key={s.id} style={session}>
+    {expanded && <tr><td colSpan={10} style={{ ...td, background: 'var(--fo-sunken)' }}>{c.sessions.map((s, i) => <div key={s.id} style={session}>
       <strong>#{i + 1}</strong>
       <span>{t('timecards.sessionIn', { time: f.time(s.check_in_at) })}</span>
       <span>{t('timecards.sessionOut', { time: s.check_out_at ? f.time(s.check_out_at) : t('common.open') })}</span>
@@ -181,21 +181,21 @@ function Timecard({ c, f, expanded, toggle, correct }) {
   </>
 }
 
-const lab = { fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '.06em', textTransform: 'uppercase' }
-const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff' }
-const filter = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 190px 190px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff' }
+const lab = { fontSize: 13, fontWeight: 800, color: 'var(--fo-muted)', letterSpacing: '.06em' }
+const input = { width: '100%', boxSizing: 'border-box', padding: '9px 10px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff' }
+const filter = { display: 'grid', gridTemplateColumns: 'minmax(240px,1fr) 190px 190px auto', gap: 14, alignItems: 'end', padding: 18, border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff' }
 const metrics = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 12 }
-const card = { padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
-const box = { border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff', overflow: 'hidden' }
+const card = { padding: 16, border: '1px solid var(--fo-line)', borderRadius: 12, background: '#fff', display: 'grid', gap: 7 }
+const box = { border: '1px solid var(--fo-line)', borderRadius: 14, background: '#fff', overflow: 'hidden' }
 const table = { width: '100%', minWidth: 1050, borderCollapse: 'collapse' }
-const th = { padding: '11px 12px', textAlign: 'left', fontSize: 11, color: '#64748b', background: '#f8fafc' }
-const td = { padding: '12px', borderTop: '1px solid #e2e8f0', fontSize: 13 }
-const button = { padding: '8px 11px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', fontWeight: 700, cursor: 'pointer' }
-const primary = { ...button, background: '#082a4a', color: '#fff', borderColor: '#082a4a' }
-const session = { display: 'grid', gridTemplateColumns: '50px repeat(4,minmax(100px,1fr)) auto', gap: 10, alignItems: 'center', padding: 8, borderBottom: '1px solid #e2e8f0' }
-const msg = { padding: 28, textAlign: 'center', color: '#64748b' }
-const err = { padding: 12, border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 9 }
-const ok = { padding: 12, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 9 }
+const th = { padding: '11px 12px', textAlign: 'left', fontSize: 13, color: 'var(--fo-muted)', background: 'var(--fo-sunken)' }
+const td = { padding: '12px', borderTop: '1px solid var(--fo-line)', fontSize: 15 }
+const button = { padding: '8px 11px', border: '1px solid var(--fo-line)', borderRadius: 8, background: '#fff', fontWeight: 700, cursor: 'pointer' }
+const primary = { ...button, background: 'var(--fo-teal)', color: '#04312c', borderColor: 'var(--fo-teal)' }
+const session = { display: 'grid', gridTemplateColumns: '50px repeat(4,minmax(100px,1fr)) auto', gap: 10, alignItems: 'center', padding: 8, borderBottom: '1px solid var(--fo-line)' }
+const msg = { padding: 28, textAlign: 'center', color: 'var(--fo-muted)' }
+const err = { padding: 12, border: '1px solid transparent', background: 'var(--fo-bad-wash)', color: 'var(--fo-bad)', borderRadius: 9 }
+const ok = { padding: 12, border: '1px solid transparent', background: 'var(--fo-ok-wash)', color: 'var(--fo-ok)', borderRadius: 9 }
 const overlay = { position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(2,6,23,.55)', display: 'grid', placeItems: 'center', padding: 20 }
 const modal = { width: 'min(600px,100%)', background: '#fff', borderRadius: 14, padding: 22, display: 'grid', gap: 15 }
-const field = { display: 'grid', gap: 6, fontSize: 12, fontWeight: 700 }
+const field = { display: 'grid', gap: 6, fontSize: 13, fontWeight: 700 }

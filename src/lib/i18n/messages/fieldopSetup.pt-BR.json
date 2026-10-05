@@ -209,5 +209,6 @@
   "settings.saveChanges": "Salvar alterações",
   "settings.saved": "Configurações do diário de obra salvas.",
   "settings.separateApprover": "Aprovador diferente",
-  "settings.separateApproverText": "Quem aprova deve ser uma pessoa diferente de quem enviou e de quem revisou."
+  "settings.separateApproverText": "Quem aprova deve ser uma pessoa diferente de quem enviou e de quem revisou.",
+  "setup.openWorkforce": "Abrir mão de obra"
 }

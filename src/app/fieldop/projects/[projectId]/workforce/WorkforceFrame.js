@@ -5,11 +5,9 @@ import Link from 'next/link'
 import { supabase } from '../../../../../lib/supabase'
 import { useT } from '../../../../../lib/i18n/useT'
 import { useLanguage } from '../../../../../lib/i18n/LanguageProvider'
-import { FieldOpSidebar, FieldOpUser } from '../../../FieldOpChrome'
+import { FieldOpShell, PageHeader } from '../../../ui'
 import styles from '../setup.module.css'
 
-// Same look as the setup page tabs (which are buttons there; links here).
-const tabLink = { padding: '10px 16px', borderRadius: 7, fontWeight: 700, textDecoration: 'none' }
 
 const TABS = [
   { key: 'live', path: '' },
@@ -32,25 +30,13 @@ export default function WorkforceFrame({ projectId, active, children }) {
     return () => { alive = false }
   }, [projectId])
 
-  return <main className={styles.shell}>
-    <FieldOpSidebar styles={styles} active="workforce" projectId={projectId} />
-    <section className={styles.main}>
-      <header className={styles.topbar}>
-        <div>
-          <div className={styles.crumb}><Link href={`/fieldop/projects/${projectId}`}>{projectName || '…'}</Link><span>/</span>{t('frame.workforce')}</div>
-          <strong>{t(`tab.${active}`)}</strong>
-        </div>
-        <FieldOpUser styles={styles} />
-      </header>
-      <div className={styles.content}>
-        <div className={styles.tabs} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-          {TABS.map((tab) => <Link key={tab.key} href={`/fieldop/projects/${projectId}/workforce${tab.path}`} className={active === tab.key ? styles.tabActive : ''} style={{ ...tabLink, ...(active === tab.key ? {} : { color: '#526b79' }) }}>{t(`tab.${tab.key}`)}</Link>)}
-          <Link href={`/fieldop/projects/${projectId}`} style={{ ...tabLink, marginLeft: 'auto', color: '#526b79' }}>{t('frame.backToSetup')}</Link>
-        </div>
-        <div style={{ display: 'grid', gap: 18, marginTop: 14 }}>{children}</div>
-      </div>
-    </section>
-  </main>
+  return <FieldOpShell active="workforce" projectId={projectId}>
+    <PageHeader back={{ href: `/fieldop/projects/${projectId}`, label: projectName || t('frame.backToSetup') }} title={t(`tab.${active}`)} subtitle={projectName ? `${t('frame.workforce')} · ${projectName}` : t('frame.workforce')} />
+    <nav className={styles.tabs} style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }} aria-label={t('frame.workforce')}>
+      {TABS.map((tab) => <Link key={tab.key} href={`/fieldop/projects/${projectId}/workforce${tab.path}`} aria-current={active === tab.key ? 'page' : undefined} className={active === tab.key ? styles.tabActive : ''}>{t(`tab.${tab.key}`)}</Link>)}
+    </nav>
+    <div style={{ display: 'grid', gap: 18 }}>{children}</div>
+  </FieldOpShell>
 }
 
 /** Formatting and label helpers shared by the Workforce screens, in the chosen language. */

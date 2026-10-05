@@ -161,12 +161,12 @@ export default function FieldOpLocationsSetup({ projectId, onCountChange }) {
       return (
         <div key={item.id}>
           <label style={{ display: 'grid', gridTemplateColumns: '22px 1fr auto', alignItems: 'center', gap: 10, marginLeft: depth * 24, minHeight: 48, padding: '7px 10px', borderBottom: '1px solid #e5ebee', cursor: 'pointer', background: checked ? '#f4fbfa' : '#fff' }}>
-            <input type="checkbox" checked={checked} onChange={() => toggleLocation(item.id)} style={{ width: 16, height: 16, accentColor: '#0aa695' }} />
+            <input type="checkbox" checked={checked} onChange={() => toggleLocation(item.id)} style={{ width: 16, height: 16, accentColor: 'var(--fo-teal-ink)' }} />
             <span style={{ display: 'grid', gap: 2 }}>
-              <strong style={{ color: '#17384a' }}>{item.name}</strong>
-              <small style={{ color: '#71838e' }}>{[typeLabel(item.location_type, t('locations.typeFallback')), item.environment_type].filter(Boolean).join(' · ')}</small>
+              <strong style={{ color: 'var(--fo-ink)' }}>{item.name}</strong>
+              <small style={{ color: 'var(--fo-muted)' }}>{[typeLabel(item.location_type, t('locations.typeFallback')), item.environment_type].filter(Boolean).join(' · ')}</small>
             </span>
-            {childCount > 0 && <small style={{ color: '#71838e' }}>{t('locations.nested', { count: childCount })}</small>}
+            {childCount > 0 && <small style={{ color: 'var(--fo-muted)' }}>{t('locations.nested', { count: childCount })}</small>}
           </label>
           {renderBranch(item.id, depth + 1)}
         </div>
@@ -176,18 +176,18 @@ export default function FieldOpLocationsSetup({ projectId, onCountChange }) {
 
   return <section style={{ marginTop: 12, minHeight: 430, background: '#fff', border: '1px solid #d6e0e5', borderRadius: 10, padding: 17 }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
-      <div><h2 style={{ margin: 0, fontSize: 17 }}>{t('tab.locations')}</h2><p style={{ margin: '5px 0', color: '#6b7e89' }}>{t('locations.text')}</p></div>
+      <div><h2 style={{ margin: 0, fontSize: 17 }}>{t('tab.locations')}</h2><p style={{ margin: '5px 0', color: 'var(--fo-muted)' }}>{t('locations.text')}</p></div>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <Link href={`/projects/${projectId}/locations`} style={{ height: 32, border: '1px solid #cbd9df', borderRadius: 7, background: '#fff', padding: '0 11px', color: '#36586b', textDecoration: 'none', display: 'flex', alignItems: 'center', fontWeight: 700 }}>{t('locations.viewStructure')}</Link>
-        <button onClick={selectAll} disabled={loading || !locations.length} style={{ height: 32, border: '1px solid #cbd9df', borderRadius: 7, background: '#fff', padding: '0 11px', color: '#36586b', fontWeight: 700, cursor: 'pointer' }}>{t('locations.selectAll')}</button>
-        <button onClick={clearAll} disabled={loading || !locations.length} style={{ height: 32, border: '1px solid #cbd9df', borderRadius: 7, background: '#fff', padding: '0 11px', color: '#36586b', fontWeight: 700, cursor: 'pointer' }}>{t('locations.clear')}</button>
-        <button onClick={saveSelection} disabled={saving || loading} style={{ height: 32, border: '1px solid #0aa695', borderRadius: 7, background: '#0aa695', padding: '0 13px', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>{saving ? t('common.saving') : t('locations.save')}</button>
+        <Link href={`/projects/${projectId}/locations`} style={{ height: 32, border: '1px solid #cbd9df', borderRadius: 7, background: '#fff', padding: '0 11px', color: 'var(--fo-muted)', textDecoration: 'none', display: 'flex', alignItems: 'center', fontWeight: 700 }}>{t('locations.viewStructure')}</Link>
+        <button onClick={selectAll} disabled={loading || !locations.length} style={{ height: 32, border: '1px solid #cbd9df', borderRadius: 7, background: '#fff', padding: '0 11px', color: 'var(--fo-muted)', fontWeight: 700, cursor: 'pointer' }}>{t('locations.selectAll')}</button>
+        <button onClick={clearAll} disabled={loading || !locations.length} style={{ height: 32, border: '1px solid #cbd9df', borderRadius: 7, background: '#fff', padding: '0 11px', color: 'var(--fo-muted)', fontWeight: 700, cursor: 'pointer' }}>{t('locations.clear')}</button>
+        <button onClick={saveSelection} disabled={saving || loading} style={{ height: 32, border: '1px solid #0aa695', borderRadius: 7, background: 'var(--fo-teal-ink)', padding: '0 13px', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>{saving ? t('common.saving') : t('locations.save')}</button>
       </div>
     </div>
-    {error && <div style={{ marginTop: 18, border: '1px solid #f0c6c6', background: '#fff4f4', color: '#a43c3c', padding: '10px 12px', borderRadius: 7 }}>{error}</div>}
-    {saved && <div style={{ marginTop: 18, border: '1px solid #bfe5dd', background: '#effbf8', color: '#087c70', padding: '10px 12px', borderRadius: 7, fontWeight: 700 }}>{t('locations.saved')}</div>}
-    {loading ? <div style={{ minHeight: 300, display: 'grid', placeContent: 'center', color: '#748590' }}>{t('locations.loading')}</div> : locations.length === 0 ? <div style={{ minHeight: 300, display: 'grid', placeContent: 'center', textAlign: 'center', gap: 7, color: '#748590' }}><b style={{ fontSize: 15, color: '#385365' }}>{t('locations.emptyTitle')}</b><span>{t('locations.emptyText')}</span></div> : <>
-      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', color: '#647785' }}><span>{t('locations.selectedCount', { selected: selectedIds.length, total: locations.length })}</span><span>{t('locations.hierarchy')}</span></div>
+    {error && <div style={{ marginTop: 18, border: '1px solid #f0c6c6', background: 'var(--fo-bad-wash)', color: 'var(--fo-bad)', padding: '10px 12px', borderRadius: 7 }}>{error}</div>}
+    {saved && <div style={{ marginTop: 18, border: '1px solid #bfe5dd', background: 'var(--fo-ok-wash)', color: '#087c70', padding: '10px 12px', borderRadius: 7, fontWeight: 700 }}>{t('locations.saved')}</div>}
+    {loading ? <div style={{ minHeight: 300, display: 'grid', placeContent: 'center', color: 'var(--fo-muted)' }}>{t('locations.loading')}</div> : locations.length === 0 ? <div style={{ minHeight: 300, display: 'grid', placeContent: 'center', textAlign: 'center', gap: 7, color: 'var(--fo-muted)' }}><b style={{ fontSize: 15, color: '#385365' }}>{t('locations.emptyTitle')}</b><span>{t('locations.emptyText')}</span></div> : <>
+      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', color: 'var(--fo-muted)' }}><span>{t('locations.selectedCount', { selected: selectedIds.length, total: locations.length })}</span><span>{t('locations.hierarchy')}</span></div>
       <div style={{ marginTop: 9, border: '1px solid #dfe7eb', borderRadius: 8, overflow: 'hidden' }}>{renderBranch()}</div>
     </>}
   </section>
