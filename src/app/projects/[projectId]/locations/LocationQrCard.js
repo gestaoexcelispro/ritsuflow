@@ -6,8 +6,11 @@ import { createClient } from '../../../lib/supabase/client'
 import { locationBreadcrumb, locationQrPath } from './locationQr'
 import LocationPrintCard from './LocationPrintCard'
 import styles from './location-qr-card.module.css'
+import { ui } from '../../../fieldop/ui'
+import { useT } from '../../../../lib/i18n/useT'
 
 export default function LocationQrCard({ location, locationMap, projectName, projectCode }) {
+  const t = useT('projects')
   const supabase = useMemo(() => createClient(), [])
   const [showPrintCard, setShowPrintCard] = useState(false)
   const [printMap, setPrintMap] = useState(null)
@@ -39,7 +42,7 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
             .maybeSingle()
           if (sheet?.file_path) {
             const { data: signedSheet, error: sheetError } = await supabase.storage.from('takeoff-files').createSignedUrl(sheet.file_path, 300)
-            if (sheetError || !signedSheet?.signedUrl) throw sheetError || new Error('Unable to access the RitsuScope sheet.')
+            if (sheetError || !signedSheet?.signedUrl) throw sheetError || new Error(t('loc.qr.errSheet'))
             if (!cancelled) setPrintMap({
               geometry: { points: zoneRow.points || [], display: { color: zoneRow.color || '#008F84', fill_opacity: 0.35 } },
               coordinateSpace: 'pt',
@@ -82,7 +85,7 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
         const { data: signed, error: signedError } = await supabase.storage
           .from('project-documents')
           .createSignedUrl(documentRow.storage_path, 300)
-        if (signedError || !signed?.signedUrl) throw signedError || new Error('Unable to access the mapped drawing.')
+        if (signedError || !signed?.signedUrl) throw signedError || new Error(t('loc.qr.errDrawing'))
 
         if (!cancelled) setPrintMap({
           geometry: geometryRow.geometry,
@@ -93,7 +96,7 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
           signedUrl: signed.signedUrl,
         })
       } catch (error) {
-        if (!cancelled) setPrintMapError(error?.message || 'Unable to load the mapped location drawing.')
+        if (!cancelled) setPrintMapError(error?.message || t('loc.qr.errMap'))
       } finally {
         if (!cancelled) setPrintMapLoading(false)
       }
@@ -128,27 +131,27 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
       <section className={styles.card}>
         <div className={styles.heading}>
           <div>
-            <span>FIELDOP LOCATION QR</span>
-            <strong>Physical location identity</strong>
+            <small>{t('loc.qr.title')}</small>
+            <strong>{t('loc.qr.identity')}</strong>
           </div>
-          <span className={styles.status}>Active</span>
+          <span className={styles.status}>{t('loc.qr.active')}</span>
         </div>
 
         <div className={styles.content}>
           <div className={styles.qrWrap}>
-            <QRCodeSVG id={`location-qr-${location.id}`} value={scanUrl} size={176} level="M" marginSize={2} />
+            <QRCodeSVG id={`location-qr-${location.id}`} value={scanUrl} size={160} level="M" marginSize={2} />
           </div>
           <div className={styles.identity}>
-            <small>{projectCode || 'PROJECT'}</small>
+            <small>{projectCode || t('loc.qr.project')}</small>
             <h3>{location.name}</h3>
             <p>{breadcrumb}</p>
-            <span>Scan to open FieldOp at this location.</span>
+            <span>{t('loc.qr.scanHint')}</span>
           </div>
         </div>
 
         <div className={styles.actions}>
-          <button type="button" onClick={() => setShowPrintCard(true)}>Print Location Card</button>
-          <button type="button" onClick={downloadQr}>Download SVG</button>
+          <button type="button" className={ui.btnPrimary} onClick={() => setShowPrintCard(true)}>{t('loc.qr.print')}</button>
+          <button type="button" className={ui.btn} onClick={downloadQr}>{t('loc.qr.download')}</button>
         </div>
       </section>
 

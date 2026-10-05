@@ -1,12 +1,10 @@
-import Image from 'next/image'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import { createClient } from '../../../../lib/supabase/server'
 import StandaloneLocationWorkspace from './StandaloneLocationWorkspace'
 import { buildRitsuScopeSpatial } from './ritsuscopeSpatial'
 import { AppShell } from '../../../fieldop/ui'
-import ui from '../../../fieldop/ui/ui.module.css'
+import ContinueToPrecon from '../../ContinueToPrecon'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,52 +57,18 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
   const spatial = buildRitsuScopeSpatial({ zones: zonesResult.data || [], sources: sheetsResult.data || [], levels: levelsResult.data || [] })
 
   return (
-    <AppShell module="projects" active="locations" projectId={projectId} bare action={<Link className={ui.btnPrimary} href={`/planning/pre-planning?projectId=${projectId}`}>Continue to PreCon →</Link>}>
-    <div style={shell}>
-
-      <section style={body}>
-        {loadError ? <div style={errorBox}>Some Location Breakdown data could not be loaded: {loadError.message}</div> : null}
-        <nav style={viewTabs} aria-label="Location workspace views">
-          <Link href={`/projects/${projectId}/locations`} style={activeTab}>☷ Location Breakdown</Link>
-          <Link href={`/ritsuscope/${projectId}`} style={viewTab}>⌑ Map in RitsuScope</Link>
-          <Link href={`/projects/${projectId}/location-map/card-view`} style={viewTab}>▣ A4 Card View</Link>
-        </nav>
-        <div id="lbs-workspace" style={workspace}>
-          <StandaloneLocationWorkspace
-            projectId={project.id}
-            projectName={project.name}
-            projectCode={project.project_id || project.code || ''}
-            userId={user.id}
-            initialLocations={locations}
-            scopeItems={scopeItems}
-            allocations={allocationsResult.data || []}
-            spatial={spatial}
-          />
-        </div>
-        <style>{`
-          html, body { height: 100%; overflow: hidden !important; }
-          #lbs-workspace { overscroll-behavior: contain; }
-        `}</style>
-      </section>
-    </div>
+    <AppShell module="projects" active="locations" projectId={projectId} bare action={<ContinueToPrecon projectId={projectId} />}>
+      <StandaloneLocationWorkspace
+        projectId={project.id}
+        projectName={project.name}
+        projectCode={project.project_id || project.code || ''}
+        userId={user.id}
+        initialLocations={locations}
+        scopeItems={scopeItems}
+        allocations={allocationsResult.data || []}
+        spatial={spatial}
+        loadError={loadError?.message || ''}
+      />
     </AppShell>
   )
 }
-
-const shell={height:'calc(100dvh - var(--app-chrome, 0px))',overflow:'hidden',background:'#f4f8fa',color:'#082f43',fontFamily:'Arial,sans-serif',display:'flex',flexDirection:'column'}
-const header={height:78,flex:'0 0 78px',boxSizing:'border-box',background:'#063247',display:'flex',alignItems:'center',padding:'0 28px',gap:18,color:'#fff',zIndex:1000}
-const brand={width:210,height:78,boxSizing:'border-box',display:'flex',alignItems:'center',paddingRight:20,marginRight:0,borderRight:'1px solid rgba(255,255,255,.18)'}
-const titleBlock={minWidth:0,flex:1}
-const title={fontSize:24,fontWeight:850,lineHeight:1.05,marginTop:4}
-const subtitle={fontSize:11,opacity:.82}
-const headerActions={display:'flex',alignItems:'center',gap:9}
-const baseButton={height:44,boxSizing:'border-box',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:9,padding:'0 16px',fontWeight:800,fontSize:12,textDecoration:'none',whiteSpace:'nowrap'}
-const recordButton={...baseButton,color:'#fff',border:'1px solid rgba(255,255,255,.28)'}
-const scopeButton={...baseButton,color:'#fff',border:'1px solid #4d92dd',background:'#1b5f9f'}
-const preconButton={...baseButton,color:'#fff',border:'1px solid #2f86ee',background:'#2f86ee'}
-const body={width:'100%',maxWidth:1800,margin:'0 auto',padding:'12px 24px 22px',boxSizing:'border-box',flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}
-const viewTabs={height:42,flex:'0 0 42px',display:'flex',alignItems:'stretch',gap:4,marginBottom:8,borderBottom:'1px solid #ccdbe2'}
-const viewTab={display:'flex',alignItems:'center',padding:'0 16px',color:'#56727f',fontSize:12,fontWeight:800,textDecoration:'none',borderBottom:'3px solid transparent'}
-const activeTab={...viewTab,color:'#087f82',borderBottom:'3px solid #0aa3a0',background:'#eef9f8'}
-const workspace={flex:1,minHeight:0,overflow:'hidden'}
-const errorBox={marginBottom:12,padding:'10px 12px',border:'1px solid #efb0b0',background:'#fff3f3',color:'#a61b1b',borderRadius:7,fontWeight:700,fontSize:12,flex:'0 0 auto'}
