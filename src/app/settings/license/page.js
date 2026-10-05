@@ -1,156 +1,69 @@
 'use client'
 
-import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '../../../lib/supabase/client'
+import { useMemo } from 'react'
+import { AppShell, Badge, Notice, Panel, Stat, Stats } from '../../fieldop/ui'
+import { useT } from '../../../lib/i18n/useT'
+import { WORKSPACE_KEYS, useOrgModules, workspaceKey } from '../orgModules'
 import styles from './license.module.css'
 
-const supabase = createClient()
+/** Plan & usage: what the company is entitled to. Values are set by the RitsuFlow platform operator. */
+export default function PlanUsagePage() {
+  const t = useT('settings')
+  const { loading, organization, modules, role, error } = useOrgModules(t('ws.errNoCompany'))
+  const entitled = useMemo(() => { const s = new Set(['projects']); modules.forEach((m) => { if (m.is_enabled) s.add(workspaceKey(m.module_key)) }); return s }, [modules])
+  const roleName = (r) => (['owner', 'admin', 'manager', 'user', 'viewer'].includes(r) ? t(`users.role.${r}`) : r || '—')
 
-const WORKSPACES = [
-  { key: 'projects', icon: '🏢', name: 'Projects', text: 'Core project environment' },
-  { key: 'precon', icon: '⚙️', name: 'PreCon', text: 'Planning and production readiness' },
-  { key: 'fieldop', icon: '👷', name: 'FieldOp', text: 'Field execution and workforce' },
-  { key: 'ritsuscope', icon: '📏', name: 'RitsuScope', text: 'Quantity takeoff and 3D model' },
-]
+  return <AppShell module="settings" active="license">
+    {loading ? <p className={styles.muted}>{t('loading')}</p> : <div className={styles.stack}>
+      {error && <Notice>{error}</Notice>}
+      <Stats>
+        <Stat label={t('users.statCompany')} value={<span className={styles.company}>{organization?.name || '—'}</span>} hint={organization?.organization_number || organization?.slug} />
+        <Stat label={t('plan.status')} value={t('plan.active')} hint={t('plan.statusHint')} tone="ok" />
+        <Stat label={t('plan.basis')} value={t('plan.basisValue')} hint={t('plan.basisHint')} />
+        <Stat label={t('plan.entitlements')} value={`${entitled.size} / ${WORKSPACE_KEYS.length}`} hint={t('plan.entitlementsHint')} />
+      </Stats>
+      <p className={styles.intro}>{t('plan.intro')}</p>
 
-function normalizedKey(value = '') {
-  const key = String(value).toLowerCase().replaceAll('_', '').replaceAll('-', '').replaceAll(' ', '')
-  if (key.includes('precon')) return 'precon'
-  if (key.includes('fieldop') || key.includes('field')) return 'fieldop'
-  if (key.includes('ritsuscope') || key.includes('ritsucad') || key.includes('cad')) return 'ritsuscope'
-  if (key.includes('project')) return 'projects'
-  return String(value).toLowerCase()
-}
+      <div className={styles.columns}>
+        <Panel title={t('plan.contractTitle')} actions={<Badge tone="ok">{t('plan.active')}</Badge>}>
+          <dl className={styles.rows}>
+            <div><dt>{t('plan.plan')}</dt><dd>{t('plan.planValue')}</dd></div>
+            <div><dt>{t('plan.basis')}</dt><dd>{t('plan.basisValue')}</dd></div>
+            <div><dt>{t('plan.users')}</dt><dd>{t('plan.usersValue')}</dd></div>
+            <div><dt>{t('plan.start')}</dt><dd>—</dd></div>
+            <div><dt>{t('plan.renewal')}</dt><dd>—</dd></div>
+            <div><dt>{t('plan.reference')}</dt><dd>—</dd></div>
+          </dl>
+          <p className={styles.help}>{t('plan.contractHelp')}</p>
+        </Panel>
+        <Panel title={t('plan.capacityTitle')} actions={<span className={styles.controlled}>{t('company.platformControlled')}</span>}>
+          <dl className={styles.capacity}>
+            <div><dt>{t('users.statProjects')}</dt><dd>—</dd></div>
+            <div><dt>{t('plan.limit')}</dt><dd>—</dd></div>
+            <div><dt>{t('plan.available')}</dt><dd>—</dd></div>
+          </dl>
+          <p className={styles.rule}><b>{t('plan.capacityRuleTitle')}</b> {t('plan.capacityRule')}</p>
+          <p className={styles.help}>{t('plan.capacityHelp')}</p>
+        </Panel>
+      </div>
 
-export default function CommercialAdministrationPage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [organization, setOrganization] = useState(null)
-  const [modules, setModules] = useState([])
-  const [membershipRole, setMembershipRole] = useState('')
-  const [error, setError] = useState('')
+      <Panel title={t('plan.workspacesTitle')} text={t('plan.workspacesText')} actions={<Link className={styles.link} href="/settings/workspaces">{t('plan.viewProvisioning')}</Link>}>
+        <div className={styles.grid}>
+          {WORKSPACE_KEYS.map((k) => { const on = entitled.has(k); return <div key={k} className={`${styles.ws} ${on ? '' : styles.off}`}>
+            <b>{t(`users.workspace.${k}`)}</b><span>{t(`plan.wsText.${k}`)}</span><Badge tone={on ? 'ok' : undefined}>{on ? t('plan.entitled') : t('plan.notEntitled')}</Badge>
+          </div> })}
+        </div>
+      </Panel>
 
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const { data: auth } = await supabase.auth.getUser()
-        const user = auth?.user
-        if (!user) {
-          router.replace('/login')
-          return
-        }
-
-        const { data: memberships, error: membershipError } = await supabase
-          .from('organization_members')
-          .select('organization_id,role,status')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-        if (membershipError) throw membershipError
-
-        const membership = memberships?.find((item) => ['owner', 'admin'].includes(item.role)) || memberships?.[0]
-        if (!membership?.organization_id) throw new Error('No organization is connected to this account.')
-
-        const [{ data: org, error: orgError }, { data: orgModules, error: moduleError }] = await Promise.all([
-          supabase.from('organizations').select('id,name,slug,organization_number').eq('id', membership.organization_id).single(),
-          supabase.from('organization_modules').select('module_key,is_enabled,enabled_at,disabled_at').eq('organization_id', membership.organization_id),
-        ])
-        if (orgError) throw orgError
-        if (moduleError) throw moduleError
-        if (!alive) return
-        setMembershipRole(membership.role || '')
-        setOrganization(org)
-        setModules(orgModules || [])
-      } catch (err) {
-        if (alive) setError(err?.message || 'Unable to load commercial administration.')
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => { alive = false }
-  }, [router])
-
-  const enabledKeys = useMemo(() => {
-    const result = new Set(['projects'])
-    modules.forEach((item) => {
-      if (item.is_enabled) result.add(normalizedKey(item.module_key))
-    })
-    return result
-  }, [modules])
-
-  if (loading) return <main className={styles.loading}>Loading commercial administration...</main>
-
-  return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={180} height={65} priority /></div>
-        <div className={styles.headerTitle}><h1>Commercial Administration</h1><p>Contract, project capacity and workspace entitlements</p></div>
-        <Link className={styles.backButton} href="/settings">← Return to Settings</Link>
-      </header>
-
-      <section className={styles.content}>
-        {error && <div className={styles.error}>{error}</div>}
-
-        <section className={styles.summary}>
-          <article><small>ORGANIZATION</small><strong>{organization?.name || '—'}</strong><span>{organization?.organization_number || organization?.slug || '—'}</span></article>
-          <article><small>COMMERCIAL STATUS</small><strong className={styles.active}>Active</strong><span>Organization commercially enabled</span></article>
-          <article><small>LICENSE BASIS</small><strong>Active Projects</strong><span>Concurrent active-project capacity</span></article>
-          <article><small>WORKSPACE ENTITLEMENTS</small><strong>{enabledKeys.size}</strong><span>of {WORKSPACES.length} currently entitled</span></article>
-        </section>
-
-        <section className={styles.intro}>
-          <div><span>PLATFORM COMMERCIAL CONTROL</span><h2>Organization Commercial Entitlements</h2><p>This is the commercial source of truth for what this organization is entitled to use in RitsuFlow. Commercial entitlement is established before organization provisioning, user assignment and project access.</p></div>
-          <div className={styles.flow}><b>Commercial</b><i>→</i><b>Provisioning</b><i>→</i><b>Organization</b><i>→</i><b>User</b><i>→</i><b>Project</b></div>
-        </section>
-
-        <section className={styles.columns}>
-          <article className={styles.panel}>
-            <div className={styles.panelTitle}><div><small>COMMERCIAL AGREEMENT</small><h3>Subscription & Contract</h3></div><span className={styles.activePill}>● Active</span></div>
-            <div className={styles.rows}>
-              <div><span>Commercial Status</span><b>Active</b></div>
-              <div><span>Commercial Plan</span><b>Commercial</b></div>
-              <div><span>License Basis</span><b>Active Projects</b></div>
-              <div><span>User Licensing</span><b>Unlimited by seat</b></div>
-              <div><span>Contract Start</span><b>—</b></div>
-              <div><span>Renewal / End Date</span><b>—</b></div>
-              <div><span>Commercial Reference</span><b>—</b></div>
-            </div>
-            <p className={styles.help}>Contract dates, commercial reference and lifecycle status will be stored in the commercial provisioning record. User quantity does not determine the license charge.</p>
-          </article>
-
-          <article className={styles.panel}>
-            <div className={styles.panelTitle}><div><small>PROJECT CAPACITY</small><h3>Active Project Allowance</h3></div><span className={styles.controlled}>Platform Controlled</span></div>
-            <div className={styles.capacity}><div><span>Active Projects</span><strong>—</strong></div><div><span>Project Limit</span><strong>—</strong></div><div><span>Available</span><strong>—</strong></div></div>
-            <div className={styles.capacityRule}><b>Capacity rule</b><span>A project consumes one commercial allowance while Active. Project closeout releases that capacity. Closed projects remain permanently available in read-only mode for visualization, search, reports and exports.</span></div>
-            <p className={styles.help}>The project limit is granted commercially by the RitsuFlow Platform Operator. Organization administrators cannot increase their own allowance.</p>
-          </article>
-        </section>
-
-        <section className={styles.workspacePanel}>
-          <div className={styles.sectionTitle}><div><small>COMMERCIAL ENTITLEMENTS</small><h3>Workspace Entitlements</h3><p>These entitlements determine the maximum environments that may subsequently be provisioned to the organization.</p></div><Link href="/settings/workspaces">View Organization Provisioning →</Link></div>
-          <div className={styles.workspaceGrid}>
-            {WORKSPACES.map((workspace) => {
-              const enabled = enabledKeys.has(workspace.key)
-              return <article key={workspace.key} className={enabled ? styles.workspaceEnabled : styles.workspaceDisabled}>
-                <div className={styles.workspaceIcon}>{workspace.icon}</div>
-                <div><b>{workspace.name}</b><span>{workspace.text}</span></div>
-                <strong>{enabled ? '● Commercially Entitled' : '○ Not Entitled'}</strong>
-              </article>
-            })}
-          </div>
-        </section>
-
-        <section className={styles.controlPanel}>
-          <div><small>CONTROL AUTHORITY</small><h3>Platform Operator Control</h3><p>Commercial status, project allowance and workspace entitlements are platform-controlled values. Customer organization administrators may view their commercial configuration but cannot grant themselves additional capacity or products.</p></div>
-          <div className={styles.controlFacts}><span><b>Current organization role</b>{membershipRole || '—'}</span><span><b>Customer self-upgrade</b>Blocked</span><span><b>Provisioning authority</b>RitsuFlow Platform Operator</span></div>
-        </section>
-
-        <div className={styles.rule}><b>🔒 Commercial boundary</b><span>Commercial Administration determines what was purchased or granted. Workspace Access must never exceed these entitlements. Users & Access must never exceed Workspace Access. Project Access must never exceed the user's assigned scope.</span></div>
-        <div className={styles.architecture}><b>Governance chain</b><span><strong>Commercial Administration</strong> defines contractual entitlement → <strong>Workspace Access</strong> provisions entitled environments → <strong>Users & Access</strong> assigns environments → <strong>Project Access</strong> defines project scope → <strong>Roles & Permissions</strong> defines permitted actions.</span></div>
-      </section>
-    </main>
-  )
+      <Panel title={t('plan.controlTitle')} text={t('plan.controlText')}>
+        <dl className={styles.rows}>
+          <div><dt>{t('plan.yourRole')}</dt><dd>{roleName(role)}</dd></div>
+          <div><dt>{t('plan.selfUpgrade')}</dt><dd>{t('plan.blocked')}</dd></div>
+          <div><dt>{t('plan.authority')}</dt><dd>{t('plan.authorityValue')}</dd></div>
+        </dl>
+      </Panel>
+      <p className={styles.note}><b>{t('plan.chainTitle')}</b> {t('plan.chainText')}</p>
+    </div>}
+  </AppShell>
 }
