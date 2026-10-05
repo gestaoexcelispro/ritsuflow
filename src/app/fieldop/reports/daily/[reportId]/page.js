@@ -14,6 +14,9 @@ import WorkforceSection from './WorkforceSection'
 import WeatherSection from './WeatherSection'
 import SafetySection from './SafetySection'
 import NotesSection from './NotesSection'
+import MaterialsSection from './MaterialsSection'
+import EquipmentSection from './EquipmentSection'
+import IssuesSection from './IssuesSection'
 import ApprovalSection from './ApprovalSection'
 import styles from '../daily-reports.module.css'
 
@@ -32,7 +35,7 @@ const TABS = [
   ['attachments', 'capture_photos'],
   ['approval', null],
 ]
-const BUILT = ['overview', 'general', 'weather', 'workforce', 'production', 'safety', 'notes', 'approval']
+const BUILT = ['overview', 'general', 'weather', 'workforce', 'production', 'materials', 'equipment', 'safety', 'issues', 'notes', 'approval']
 
 export default function FieldOpDailyReportWorkspace() {
   const { reportId } = useParams()
@@ -118,6 +121,9 @@ export default function FieldOpDailyReportWorkspace() {
       {active === 'weather' && <WeatherSection {...sectionProps} />}
       {active === 'safety' && <SafetySection {...sectionProps} />}
       {active === 'notes' && <NotesSection {...sectionProps} />}
+      {active === 'materials' && <MaterialsSection {...sectionProps} />}
+      {active === 'equipment' && <EquipmentSection {...sectionProps} />}
+      {active === 'issues' && <IssuesSection {...sectionProps} />}
       {active === 'approval' && <ApprovalSection {...sectionProps} approvalRequired={settings?.require_approval === true} onChanged={(patch) => refresh(patch)} />}
       {!BUILT.includes(active) && <section className={styles.panel}><div className={styles.panelHead}><h3>{t(`tab.${active}`)}</h3></div><div className={styles.empty}>{t('placeholder.text', { section: t(`tab.${active}`) })}</div></section>}
     </section>
