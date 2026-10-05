@@ -35,6 +35,9 @@ import workspacesPtBR from './messages/workspaces.pt-BR.json'
 import settingsEnUS from './messages/settings.en-US.json'
 import settingsEs from './messages/settings.es.json'
 import settingsPtBR from './messages/settings.pt-BR.json'
+import preconEnUS from './messages/precon.en-US.json'
+import preconEs from './messages/precon.es.json'
+import preconPtBR from './messages/precon.pt-BR.json'
 
 /**
  * One message file per module and language: messages/<namespace>.<language>.json.
@@ -52,6 +55,7 @@ const namespaces = {
   auth: { 'en-US': authEnUS, es: authEs, 'pt-BR': authPtBR },
   workspaces: { 'en-US': workspacesEnUS, es: workspacesEs, 'pt-BR': workspacesPtBR },
   settings: { 'en-US': settingsEnUS, es: settingsEs, 'pt-BR': settingsPtBR },
+  precon: { 'en-US': preconEnUS, es: preconEs, 'pt-BR': preconPtBR },
 } satisfies Record<string, Record<AppLanguage, Messages>>
 
 export type Namespace = keyof typeof namespaces

@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 
 import { supabase } from '../../../../lib/supabase';
+import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
 
 
 // ============================================================
@@ -692,17 +693,8 @@ export default function LookaheadPage() {
           );
 
 
-          const params =
-            new URLSearchParams(
-              window.location
-                .search
-            );
-
-
           const projectId =
-            params.get(
-              'projectId'
-            );
+            readPreconProjectId();
 
 
           if (
@@ -2019,6 +2011,10 @@ export default function LookaheadPage() {
     (
       projectId
     ) => {
+
+      rememberPreconProjectId(
+        projectId
+      );
 
       setSelectedPlanId(
         ''
