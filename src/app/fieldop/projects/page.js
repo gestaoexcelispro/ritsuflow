@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
 import { useT } from '../../../lib/i18n/useT'
 import { useLanguage } from '../../../lib/i18n/LanguageProvider'
-import { FieldOpShell, PageHeader, Panel, Badge, Empty, Notice, ui } from '../ui'
+import { FieldOpShell, Panel, Badge, Empty, Notice, ui } from '../ui'
 
 const STATUSES = ['planning', 'active', 'on_hold', 'completed', 'archived']
 const STATUS_TONE = { active: 'ok', planning: 'info', on_hold: 'warn' }
@@ -93,7 +93,6 @@ export default function FieldOpProjectsPage() {
   }
 
   return <FieldOpShell active="projects">
-    <PageHeader title={t('list.title')} subtitle={t('list.text')} />
     <Notice>{error && t('list.error', { error })}</Notice>
     <Panel body={false} title={t('list.showing', { shown: visibleProjects.length, total: projects.length })}
       actions={<>

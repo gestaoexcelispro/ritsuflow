@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { createClient } from '../../../../lib/supabase/client'
 import { useT } from '../../../../lib/i18n/useT'
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider'
-import { FieldOpShell, PageHeader, Panel, Stats, Stat, Badge, Empty, Segments, Icon, ui, reportTone } from '../../ui'
+import { FieldOpShell, Panel, Stats, Stat, Badge, Empty, Segments, Icon, ui, reportTone } from '../../ui'
 
 const localDateKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const FILTERS = ['all', 'draft', 'submitted', 'reviewed', 'approved']
@@ -45,12 +45,10 @@ export default function FieldOpDailyReportsPage() {
   const newHref = projectId === 'all' ? '/fieldop/reports/daily/new' : `/fieldop/reports/daily/new?projectId=${projectId}`
 
   return <FieldOpShell active="reports" action={<Link className={ui.btnPrimary} href={newHref}><Icon name="plus" size={18} />{t('list.newReport')}</Link>}>
-    <PageHeader title={t('list.title')} subtitle={t('list.heroText')} />
-
     <Stats>
-      <Stat label={t('list.cardToday')} value={inProject.filter((r) => r.report_date === today).length} hint={t('list.cardTodayHint')} />
+      <Stat label={t('list.cardToday')} value={inProject.filter((r) => r.report_date === today).length} />
       <Stat label={t('list.cardDraft')} value={count('draft')} />
-      <Stat label={t('list.cardReview')} value={awaiting} tone={awaiting ? 'warn' : undefined} hint={awaiting ? t('list.cardReviewHint') : undefined} />
+      <Stat label={t('list.cardReview')} value={awaiting} tone={awaiting ? 'warn' : undefined} />
       <Stat label={t('list.cardApproved')} value={count('approved')} tone="ok" />
     </Stats>
 

@@ -4,12 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
 import { useT } from '../../lib/i18n/useT'
-import LanguageSelector from '../../components/LanguageSelector'
+import { FieldOpShell, Stats, Stat, Panel, Badge, Empty, Notice, Icon, ui } from '../fieldop/ui'
 
 const initialFormData = { companyEmployeeNumber: '', firstName: '', middleName: '', lastName: '', companyId: '', tradeId: '', roleId: '', status: 'active' }
-const card = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14 }
-const btn = { minHeight: 38, padding: '0 14px', border: '1px solid #cbd5e1', borderRadius: 9, background: '#fff', color: '#082a4a', fontWeight: 800, cursor: 'pointer', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }
-const primary = { ...btn, background: '#08aa96', borderColor: '#078c7c', color: '#fff' }
 
 export default function WorkforceRegistryPage() {
   const t = useT('fieldopWorkforce')
@@ -96,59 +93,50 @@ export default function WorkforceRegistryPage() {
   const orgRoles = roles.filter((x) => !organizationId || x.organization_id === organizationId)
   const columns = [t('registry.colFieldId'), t('registry.colWorker'), t('registry.colEmployee'), t('registry.colCompany'), t('registry.colTrade'), t('registry.colRole'), t('registry.colStatus'), t('registry.colUser')]
 
-  return <main style={{ minHeight: '100vh', background: '#f6f8fa', color: '#0f172a' }}>
-    <header style={{ padding: '20px 28px', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-      <div>
-        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.12em', color: '#64748b' }}>{t('registry.eyebrow')}</div>
-        <h1 style={{ margin: '5px 0 0', fontSize: 25, color: '#061b2f' }}>{t('registry.title')}</h1>
-        <p style={{ margin: '6px 0 0', color: '#64748b' }}>{t('registry.text')}</p>
-      </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <LanguageSelector compact />
-        <Link href="/fieldop/projects" style={btn}>{t('registry.fieldopProjects')}</Link>
-        <button style={primary} onClick={() => { setForm(initialFormData); setFormError(''); setOpen(true) }}>{t('registry.add')}</button>
-      </div>
-    </header>
-    <section style={{ padding: '26px 28px 40px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
-        <Metric label={t('registry.metricTotal')} value={workers.length} />
-        <Metric label={t('registry.metricActive')} value={active} />
-        <Metric label={t('registry.metricInactive')} value={inactive} />
-      </div>
-      {error && <div style={{ padding: 12, border: '1px solid #fecaca', borderRadius: 9, background: '#fef2f2', color: '#991b1b' }}>{error}</div>}
-      {notice && <div style={{ padding: 12, border: '1px solid #bbf7d0', borderRadius: 9, background: '#f0fdf4', color: '#166534' }}>{notice}</div>}
-      <section style={{ ...card, overflow: 'hidden' }}>
-        {loading
-          ? <div style={empty}>{t('registry.loading')}</div>
-          : workers.length === 0
-            ? <div style={empty}>{t('registry.empty')}</div>
-            : <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', minWidth: 1100, borderCollapse: 'collapse' }}>
-              <thead><tr style={{ background: '#f8fafc' }}>{columns.map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
-              <tbody>{workers.map((w) => <tr key={w.id} style={{ borderTop: '1px solid #e2e8f0' }}>
-                <td style={td}>{w.field_id || '—'}</td>
-                <td style={td}><strong>{name(w)}</strong></td>
-                <td style={td}>{w.company_employee_number || '—'}</td>
-                <td style={td}>{w.field_companies?.name || '—'}</td>
-                <td style={td}>{w.field_trades?.name || '—'}</td>
-                <td style={td}>{w.field_roles?.name || '—'}</td>
-                <td style={td}><strong style={{ color: w.status === 'active' ? '#047857' : '#64748b' }}>{w.status === 'active' ? t('registry.statusActive') : t('registry.statusInactive')}</strong></td>
-                <td style={td}>
-                  <select title={t('registry.userHint')} value={w.user_id || ''} disabled={linking === w.id} onChange={(e) => linkUser(w, e.target.value)} style={{ ...input, height: 34, maxWidth: 280 }}>
-                    <option value="">{t('registry.noUser')}</option>
-                    {w.user_id && !userLabel.has(w.user_id) && <option value={w.user_id}>{w.user_id}</option>}
-                    {users.filter((u) => u.id === w.user_id || !linkedUserIds.has(u.id)).map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
-                  </select>
-                </td>
-              </tr>)}</tbody>
-            </table></div>}
-      </section>
-    </section>
+  const addButton = <button type="button" className={ui.btnPrimary} onClick={() => { setForm(initialFormData); setFormError(''); setOpen(true) }}><Icon name="plus" size={18} />{t('registry.add')}</button>
+
+  return <FieldOpShell active="workforce" action={addButton}>
+    <Stats>
+      <Stat label={t('registry.metricTotal')} value={workers.length} />
+      <Stat label={t('registry.metricActive')} value={active} tone="ok" />
+      <Stat label={t('registry.metricInactive')} value={inactive} />
+    </Stats>
+    <div style={{ display: 'grid', gap: 12, marginBottom: error || notice ? 12 : 0 }}>
+      <Notice>{error}</Notice>
+      <Notice tone="ok">{notice}</Notice>
+    </div>
+    <Panel body={false} title={t('registry.title')}
+      actions={<Link href="/fieldop/projects" className={ui.btn}>{t('registry.fieldopProjects')}</Link>}>
+      {loading
+        ? <Empty title={t('registry.loading')} />
+        : workers.length === 0
+          ? <Empty title={t('registry.empty')} action={addButton} />
+          : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards}`}>
+            <thead><tr>{columns.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+            <tbody>{workers.map((w) => <tr key={w.id}>
+              <td data-label={columns[0]}>{w.field_id || '—'}</td>
+              <td data-label=""><strong>{name(w)}</strong></td>
+              <td data-label={columns[2]}>{w.company_employee_number || '—'}</td>
+              <td data-label={columns[3]}>{w.field_companies?.name || '—'}</td>
+              <td data-label={columns[4]}>{w.field_trades?.name || '—'}</td>
+              <td data-label={columns[5]}>{w.field_roles?.name || '—'}</td>
+              <td data-label={columns[6]}><Badge tone={w.status === 'active' ? 'ok' : undefined}>{w.status === 'active' ? t('registry.statusActive') : t('registry.statusInactive')}</Badge></td>
+              <td data-label={columns[7]}>
+                <select title={t('registry.userHint')} value={w.user_id || ''} disabled={linking === w.id} onChange={(e) => linkUser(w, e.target.value)} style={{ minWidth: 200, maxWidth: 280 }}>
+                  <option value="">{t('registry.noUser')}</option>
+                  {w.user_id && !userLabel.has(w.user_id) && <option value={w.user_id}>{w.user_id}</option>}
+                  {users.filter((u) => u.id === w.user_id || !linkedUserIds.has(u.id)).map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+                </select>
+              </td>
+            </tr>)}</tbody>
+          </table></div>}
+    </Panel>
     {open && <div style={backdrop}><form style={modal} onSubmit={addWorker}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '20px 22px', borderBottom: '1px solid #e2e8f0' }}>
-        <div><h2 style={{ margin: 0 }}>{t('registry.formTitle')}</h2><p style={{ margin: '6px 0 0', color: '#64748b' }}>{t('registry.formText')}</p></div>
+      <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '20px 22px', borderBottom: '1px solid var(--fo-line-soft)' }}>
+        <div><h2 style={{ margin: 0 }}>{t('registry.formTitle')}</h2><p style={{ margin: '6px 0 0', color: 'var(--fo-muted)' }}>{t('registry.formText')}</p></div>
         <button type="button" onClick={close} style={{ border: 0, background: 'transparent', fontSize: 24, cursor: 'pointer' }}>×</button>
       </header>
-      {formError && <div style={{ margin: '16px 22px 0', padding: 10, borderRadius: 8, background: '#fef2f2', color: '#991b1b' }}>{formError}</div>}
+      {formError && <div style={{ margin: '16px 22px 0', padding: 10, borderRadius: 8, background: 'var(--fo-bad-wash)', color: 'var(--fo-bad)' }}>{formError}</div>}
       <div style={{ padding: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Field label={t('registry.firstName')} value={form.firstName} required onChange={(v) => setForm({ ...form, firstName: v })} />
         <Field label={t('registry.middleName')} value={form.middleName} onChange={(v) => setForm({ ...form, middleName: v })} />
@@ -159,21 +147,17 @@ export default function WorkforceRegistryPage() {
         <Select label={t('registry.defaultRole')} notSet={t('registry.notSet')} value={form.roleId} onChange={(v) => setForm({ ...form, roleId: v })} options={orgRoles} />
         <label style={fieldLabel}>{t('registry.status')}<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} style={input}><option value="active">{t('registry.statusActive')}</option><option value="inactive">{t('registry.statusInactive')}</option></select></label>
       </div>
-      <footer style={{ padding: '16px 22px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button type="button" style={btn} onClick={close}>{t('registry.cancel')}</button>
-        <button style={primary} disabled={saving}>{saving ? t('registry.saving') : t('registry.submit')}</button>
+      <footer style={{ padding: '16px 22px', borderTop: '1px solid var(--fo-line-soft)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button type="button" className={ui.btn} onClick={close}>{t('registry.cancel')}</button>
+        <button className={ui.btnPrimary} disabled={saving}>{saving ? t('registry.saving') : t('registry.submit')}</button>
       </footer>
     </form></div>}
-  </main>
+  </FieldOpShell>
 }
 
-const th = { padding: '11px 14px', color: '#64748b', fontSize: 11, fontWeight: 800, textAlign: 'left', textTransform: 'uppercase', whiteSpace: 'nowrap' }
-const td = { padding: '13px 14px', color: '#475569', fontSize: 13, whiteSpace: 'nowrap' }
-const empty = { padding: 36, color: '#64748b', textAlign: 'center' }
-const backdrop = { position: 'fixed', inset: 0, background: 'rgba(6,27,47,.48)', display: 'grid', placeItems: 'center', zIndex: 50, padding: 20 }
-const modal = { width: 'min(720px,100%)', maxHeight: '90vh', overflow: 'auto', background: '#fff', borderRadius: 14, boxShadow: '0 20px 60px rgba(0,0,0,.25)' }
-const fieldLabel = { display: 'grid', gap: 6, fontSize: 12, fontWeight: 800, color: '#475569' }
-const input = { height: 40, border: '1px solid #cbd5e1', borderRadius: 8, padding: '0 10px', background: '#fff', color: '#0f172a' }
-function Metric({ label, value }) { return <div style={{ ...card, padding: 17 }}><div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>{label}</div><div style={{ marginTop: 6, fontSize: 24, fontWeight: 850, color: '#061b2f' }}>{value}</div></div> }
+const backdrop = { position: 'fixed', inset: 0, background: 'rgba(6,38,55,.55)', display: 'grid', placeItems: 'center', zIndex: 50, padding: 20 }
+const modal = { width: 'min(720px,100%)', maxHeight: '90vh', overflow: 'auto', background: 'var(--fo-surface)', borderRadius: 14, boxShadow: '0 20px 60px rgba(0,0,0,.25)' }
+const fieldLabel = { display: 'grid', gap: 6, fontSize: 14, fontWeight: 600 }
+const input = {}
 function Field({ label, value, onChange, required }) { return <label style={fieldLabel}>{label}<input style={input} value={value} required={required} onChange={(e) => onChange(e.target.value)} /></label> }
 function Select({ label, notSet, value, onChange, options }) { return <label style={fieldLabel}>{label}<select style={input} value={value} onChange={(e) => onChange(e.target.value)}><option value="">{notSet}</option>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label> }
