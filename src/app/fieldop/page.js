@@ -6,20 +6,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import styles from './fieldop.module.css'
-import LanguageSelector from '../../components/LanguageSelector'
+import { FieldOpSidebar, FieldOpUser } from './FieldOpChrome'
 import { useT } from '../../lib/i18n/useT'
 import { useLanguage } from '../../lib/i18n/LanguageProvider'
-
-// Sidebar: a null href means the page does not exist yet and is shown as "Soon".
-const nav = [
-  ['⌂', 'nav.portfolio', '/fieldop'],
-  ['□', 'nav.projects', '/fieldop/projects'],
-  ['♙', 'nav.workforce', '/workforce'],
-  ['⌖', 'nav.operations', null],
-  ['△', 'nav.occurrences', null],
-  ['▥', 'nav.reports', '/fieldop/reports/daily'],
-  ['⚙', 'nav.settings', null],
-]
 
 // Project statuses that count as ongoing, in chart order, with their colors.
 const ONGOING = [
@@ -33,12 +22,6 @@ const OPEN_ISSUE_STATUSES = ['open', 'in_progress']
 
 function localDateKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-function initials(name) {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return '·'
-  return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
 }
 
 function workerName(worker) {
@@ -66,7 +49,6 @@ export default function FieldOpPage() {
   const { language } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState([])
-  const [user, setUser] = useState({ name: '', role: '' })
   const [kpis, setKpis] = useState({ workers: 0, operations: 0, occurrences: 0, reportsSubmitted: 0, reportsDraft: 0 })
   const [activity, setActivity] = useState([])
   const [search, setSearch] = useState('')
@@ -85,10 +67,8 @@ export default function FieldOpPage() {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const empty = { data: [], count: 0 }
 
-      const [projectsResult, profileResult, memberResult, sessionsResult, operationsResult, issuesResult, todayReportsResult, eventsResult, newReportsResult] = await Promise.all([
+      const [projectsResult, sessionsResult, operationsResult, issuesResult, todayReportsResult, eventsResult, newReportsResult] = await Promise.all([
         safe(supabase.from('projects').select('id,name,code,project_id,city,state_region,status,updated_at').in('status', ONGOING_STATUSES).order('updated_at', { ascending: false }), empty),
-        safe(supabase.from('profiles').select('full_name').eq('id', authUser.id).maybeSingle(), { data: null }),
-        safe(supabase.from('organization_members').select('role').eq('user_id', authUser.id).eq('status', 'active').limit(1).maybeSingle(), { data: null }),
         safe(supabase.from('field_attendance_sessions').select('worker_id').eq('status', 'open'), empty),
         safe(supabase.from('field_execution_events').select('id', { count: 'exact', head: true }).eq('status', 'in_progress'), empty),
         safe(supabase.from('daily_report_issues').select('id', { count: 'exact', head: true }).in('status', OPEN_ISSUE_STATUSES), empty),
@@ -117,7 +97,6 @@ export default function FieldOpPage() {
 
       const todayReports = todayReportsResult.data || []
       setProjects(projectRows)
-      setUser({ name: profileResult.data?.full_name || authUser.email || '', role: memberResult.data?.role || '' })
       setKpis({
         workers: new Set((sessionsResult.data || []).map((session) => session.worker_id)).size,
         operations: operationsResult.count || 0,
@@ -180,23 +159,11 @@ export default function FieldOpPage() {
   const location = (project) => [project.city, project.state_region].filter(Boolean).join(', ') || '—'
 
   return <main className={styles.shell}>
-    <aside className={styles.sidebar}>
-      <div className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority /><div><b>FieldOp</b><span>{t('brand.tagline')}</span></div></div>
-      <div className={styles.navTitle}>{t('nav.section')}</div>
-      <nav>{nav.map(([icon, key, href], index) => href
-        ? <Link key={key} className={index === 0 ? styles.active : ''} href={href}><i>{icon}</i>{t(key)}</Link>
-        : <a key={key} aria-disabled="true" style={{ opacity: 0.55, cursor: 'default' }}><i>{icon}</i>{t(key)}<small style={{ marginLeft: 'auto', fontSize: 10, border: '1px solid currentColor', borderRadius: 999, padding: '1px 7px' }}>{t('nav.soon')}</small></a>)}
-      </nav>
-      <Link href="/workspaces" className={styles.workspaceReturn}>← <span>{t('nav.workspaces')}</span></Link>
-    </aside>
+    <FieldOpSidebar styles={styles} active="portfolio" showTagline />
     <section className={styles.main}>
       <header className={styles.topbar}>
         <div className={styles.search}>⌕ <span>{t('topbar.search')}</span><kbd>Ctrl K</kbd></div>
-        <div className={styles.user}>
-          <LanguageSelector compact />
-          <b>{initials(user.name)}</b>
-          <div><strong>{user.name || t('user.fallbackName')}</strong><span>{user.role ? t(`role.${user.role}`) : ''}</span></div>
-        </div>
+        <FieldOpUser styles={styles} />
       </header>
       <div className={styles.content}>
         <section className={styles.kpis}>

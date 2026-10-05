@@ -22,6 +22,8 @@
   "status.planning": "Planejamento",
   "status.active": "Ativo",
   "status.on_hold": "Pausado",
+  "status.completed": "Concluído",
+  "status.archived": "Arquivado",
   "kpi.ongoing": "Projetos em andamento",
   "kpi.ongoingDetail": "{active} ativos · {planning} em planejamento · {onHold} pausados",
   "kpi.workers": "Trabalhadores na obra",
