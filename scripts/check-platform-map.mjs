@@ -17,18 +17,18 @@ check('Architecture node IDs are unique', ids.size === model.architectureNodes.l
 check('Every edge has existing endpoints', model.architectureEdges.every((edge) => ids.has(edge.source) && ids.has(edge.target)))
 check('Technical relationships have source evidence', model.architectureEdges.filter((edge) => edge.type !== 'CONTAINS').every((edge) => edge.evidence.length && edge.evidence.every((item) => item.sourcePath && item.sourceRef && item.line > 0)))
 check('Team is an embedded implementation', model.getCoverageRows().some((row) => row.id === 'project-team' && row.status === 'embedded' && row.routeCount && row.componentCount))
-check('Unimplemented modules remain explicit gaps', ['pull-planning', 'precon-reports'].every((id) => model.getCoverageRows().some((row) => row.id === id && row.status === 'no-route' && row.gaps.length)))
+check('Unimplemented modules remain explicit gaps', ['pre-planning', 'pull-planning', 'precon-reports'].every((id) => model.getCoverageRows().some((row) => row.id === id && row.status === 'no-route' && row.gaps.length)))
 check('Lookahead RPC uses the audited overload', model.getArchitectureNode('rpc:public.delete_lookahead_manual_sheet_row').arguments === 'target_lookahead_plan_id uuid, target_sheet_row_id uuid')
-check('Pre-Planning has a traced API call', model.architectureEdges.some((edge) => edge.source === 'source:src/app/dashboard/planning/pre-planning/PrePlanningWorkspace.js' && edge.target === 'source:src/app/api/pre-planning/sequence/route.js' && edge.type === 'CONSUMES'))
-check('The sequence API has a verified write target', model.architectureEdges.some((edge) => edge.source === 'source:src/app/api/pre-planning/sequence/route.js' && edge.target === 'db:public.project_pre_planning_activity_sequence' && edge.type === 'WRITES'))
+check('Location QR has a traced API call', model.architectureEdges.some((edge) => edge.source === 'source:src/app/projects/[projectId]/locations/StandaloneLocationWorkspace.js' && edge.target === 'source:src/app/api/projects/[projectId]/locations/[locationId]/qr/route.js' && edge.type === 'CONSUMES'))
+check('The QR API has a verified write target', model.architectureEdges.some((edge) => edge.source === 'source:src/app/api/projects/[projectId]/locations/[locationId]/qr/route.js' && edge.target === 'db:public.locations' && edge.type === 'WRITES'))
 check('Navigation is recorded separately from data access', model.architectureEdges.some((edge) => edge.type === 'ROUTES TO' && edge.evidence.length))
 check('Storage is not represented as a table', model.getArchitectureNode('storage:project-documents')?.type === 'storage' && !model.getArchitectureNode('db:public.project-documents'))
-check('Project cover bucket constants are mapped', model.architectureEdges.some((edge) => edge.source === 'source:src/app/dashboard/projects/setup/ProjectForm.js' && edge.target === 'storage:project-covers' && edge.type === 'WRITES'))
+check('Project cover bucket constants are mapped', model.architectureEdges.some((edge) => edge.source === 'source:src/app/dashboard/planning/master-plan/page.js' && edge.target === 'storage:project-covers' && edge.type === 'READS'))
 check('Attachment storage fallback is explicit', model.getArchitectureNode('storage:daily-report-attachments')?.purpose.includes('record-dependent'))
 const attendance = model.searchArchitecture('attendance', 'Database')
 check('Database search only returns database object types', attendance.length && attendance.every((node) => ['table', 'view', 'rpc', 'storage'].includes(node.type)))
 check('Workspace filters retain only matching module ownership', model.getDependencyRows('fieldop').every((node) => node.moduleIds.every((id) => model.getArchitectureNode(id).workspace === 'fieldop')))
-check('A focused handler survives type filtering', model.getTechnicalGraph('pre-planning', 'source:src/app/api/pre-planning/sequence/route.js', 'Database').nodes.some((node) => node.id === 'source:src/app/api/pre-planning/sequence/route.js'))
+check('A focused handler survives type filtering', model.getTechnicalGraph('location-structure', 'source:src/app/api/projects/[projectId]/locations/[locationId]/qr/route.js', 'Database').nodes.some((node) => node.id === 'source:src/app/api/projects/[projectId]/locations/[locationId]/qr/route.js'))
 
 for (const module of model.architectureModules) {
   for (const filter of ['All', 'Pages', 'Database', 'APIs']) {

@@ -53,26 +53,26 @@ function verifyGraph(name, graph, positions) {
 }
 
 for (const node of platformMapNodes) verifyGraph('Flow ' + node.id, getVisibleGraph(node.id))
-const prePlanning = getVisibleGraph('pre-planning')
-check('The screenshot flow retains all seven relationships', prePlanning.edges.length === 7 && prePlanning.edges.some((edge) => edge.source === 'pre-planning-pages' && edge.target === 'pre-planning-process') && prePlanning.edges.some((edge) => edge.source === 'pre-planning-process' && edge.target === 'pre-planning-data'))
+const flowExample = getVisibleGraph('master-plan')
+check('The screenshot flow retains all seven relationships', flowExample.edges.length === 7 && flowExample.edges.some((edge) => edge.source === 'master-plan-pages' && edge.target === 'master-plan-process') && flowExample.edges.some((edge) => edge.source === 'master-plan-process' && edge.target === 'master-plan-data'))
 for (const module of platformMapNodes.filter((node) => node.type === 'module')) {
   for (const filter of ['All', 'Pages', 'Database', 'APIs']) {
     const first = getTechnicalGraph(module.id, module.id, filter, 0, 8)
     for (const page of new Set([0, first.pages - 1])) verifyGraph('Technical ' + module.id + ' ' + filter + ' ' + page, getTechnicalGraph(module.id, module.id, filter, page, 8))
   }
 }
-const original = verifyGraph('Before dragging', prePlanning)
-const dragged = original.rects.map((rect) => rect.id === 'pre-planning-process' ? { ...rect, ...original.placement.get('pre-planning-pages') } : rect)
-const settled = separateCards(dragged, 'pre-planning-process')
-assert.deepEqual(settled.get('pre-planning-process'), original.placement.get('pre-planning-pages'), 'The dragged card keeps the requested position')
-verifyGraph('After dragging onto a card', prePlanning, settled)
+const original = verifyGraph('Before dragging', flowExample)
+const dragged = original.rects.map((rect) => rect.id === 'master-plan-process' ? { ...rect, ...original.placement.get('master-plan-pages') } : rect)
+const settled = separateCards(dragged, 'master-plan-process')
+assert.deepEqual(settled.get('master-plan-process'), original.placement.get('master-plan-pages'), 'The dragged card keeps the requested position')
+verifyGraph('After dragging onto a card', flowExample, settled)
 checks += 1
 const obstaclePositions = new Map(original.placement)
-obstaclePositions.set('pre-planning-pages', { x: original.placement.get('pre-planning-process').x + 250, y: original.placement.get('pre-planning-process').y - 20 })
-const moved = geometry(prePlanning, separateCards(geometry(prePlanning, obstaclePositions).rects, 'pre-planning-pages'))
+obstaclePositions.set('master-plan-pages', { x: original.placement.get('master-plan-process').x + 250, y: original.placement.get('master-plan-process').y - 20 })
+const moved = geometry(flowExample, separateCards(geometry(flowExample, obstaclePositions).rects, 'master-plan-pages'))
 const rerouted = routeConnections(moved.rects, moved.connections)
-check('Moving a card also reroutes unrelated connections', JSON.stringify(original.routes.get('pre-planning-outputs')) !== JSON.stringify(rerouted.get('pre-planning-outputs')))
-verifyGraph('After obstructing another connection', prePlanning, separateCards(geometry(prePlanning, obstaclePositions).rects, 'pre-planning-pages'))
+check('Moving a card also reroutes unrelated connections', JSON.stringify(original.routes.get('master-plan-outputs')) !== JSON.stringify(rerouted.get('master-plan-outputs')))
+verifyGraph('After obstructing another connection', flowExample, separateCards(geometry(flowExample, obstaclePositions).rects, 'master-plan-pages'))
 const cyclic = { nodes: [{ id: 'a', type: 'module' }, { id: 'b', type: 'page' }, { id: 'c', type: 'component' }], edges: [{ id: 'ab', source: 'a', target: 'b' }, { id: 'bc', source: 'b', target: 'c' }, { id: 'cb', source: 'c', target: 'b' }] }
 verifyGraph('Cyclic technical navigation', cyclic)
 const bridges = connectionPaths(new Map([['horizontal', [{ x: 0, y: 50 }, { x: 100, y: 50 }]], ['vertical', [{ x: 50, y: 0 }, { x: 50, y: 100 }]]]))

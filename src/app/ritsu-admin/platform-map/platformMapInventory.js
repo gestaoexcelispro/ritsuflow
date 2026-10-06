@@ -7,86 +7,10 @@ export const platformMapInventory = {
   },
   "implementation": {
     "pre-planning": {
-      "status": "mapped",
-      "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
-      "note": "The PreCon navigation opens the standalone entry, which reuses the dashboard page implementation.",
-      "routes": [
-        {
-          "label": "Standalone entry",
-          "href": "/planning/pre-planning",
-          "sourcePath": "src/app/planning/pre-planning/page.js"
-        },
-        {
-          "label": "Shared dashboard page",
-          "href": "/dashboard/planning/pre-planning",
-          "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-        }
-      ],
-      "components": [
-        {
-          "label": "PrePlanningWorkspace",
-          "sourcePath": "src/app/dashboard/planning/pre-planning/PrePlanningWorkspace.js"
-        },
-        {
-          "label": "PrePlanningWbsEditor",
-          "sourcePath": "src/app/dashboard/planning/pre-planning/PrePlanningWbsEditor.js"
-        },
-        {
-          "label": "ActivityPreSequence",
-          "sourcePath": "src/app/dashboard/planning/pre-planning/ActivityPreSequence.js"
-        }
-      ],
-      "apis": [
-        {
-          "label": "pre-planning / sequence",
-          "href": "/api/pre-planning/sequence",
-          "sourcePath": "src/app/api/pre-planning/sequence/route.js",
-          "methods": [
-            "POST"
-          ],
-          "consumers": [
-            {
-              "sourcePath": "src/app/dashboard/planning/pre-planning/PrePlanningWorkspace.js",
-              "line": 2520
-            }
-          ],
-          "note": "Call site found in the audited module.",
-          "auth": "Signed-in user check in handler"
-        },
-        {
-          "label": "pre-planning / wbs",
-          "href": "/api/pre-planning/wbs",
-          "sourcePath": "src/app/api/pre-planning/wbs/route.js",
-          "methods": [
-            "GET",
-            "POST"
-          ],
-          "consumers": [
-            {
-              "sourcePath": "src/app/dashboard/planning/pre-planning/PrePlanningWbsEditor.js",
-              "line": 229
-            }
-          ],
-          "note": "Call site found in the audited module.",
-          "auth": "Signed-in user check in handler"
-        },
-        {
-          "label": "pre-planning / activity-sequence",
-          "href": "/api/pre-planning/activity-sequence",
-          "sourcePath": "src/app/api/pre-planning/activity-sequence/route.js",
-          "methods": [
-            "POST"
-          ],
-          "consumers": [
-            {
-              "sourcePath": "src/app/dashboard/planning/pre-planning/ActivityPreSequence.js",
-              "line": 183
-            }
-          ],
-          "note": "Call site found in the audited module.",
-          "auth": "Signed-in user check in handler"
-        }
-      ]
+      "status": "no-route",
+      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b",
+      "note": "Removed from PreCon on 2026-10-05; planning starts in Master Plan. This module remains in the architecture map.",
+      "routes": []
     },
     "master-plan": {
       "status": "mapped",
@@ -217,7 +141,7 @@ export const platformMapInventory = {
     "location-structure": {
       "status": "mapped",
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b",
-      "note": "Standalone location hierarchy and drawing map, plus the dashboard location workflow.",
+      "note": "Location hierarchy, drawing map, card view and quantity allocation by location.",
       "routes": [
         {
           "label": "Location structure",
@@ -236,12 +160,6 @@ export const platformMapInventory = {
           "href": "/projects/[projectId]/location-map/card-view",
           "sourcePath": "src/app/projects/[projectId]/location-map/card-view/page.js",
           "dynamic": true
-        },
-        {
-          "label": "Dashboard locations",
-          "href": "/dashboard/projects/locations",
-          "sourcePath": "src/app/dashboard/projects/locations/page.js",
-          "dynamic": false
         }
       ],
       "components": [
@@ -256,10 +174,6 @@ export const platformMapInventory = {
         {
           "label": "LocationCardViewEditor",
           "sourcePath": "src/app/projects/[projectId]/locations/LocationCardViewEditor.js"
-        },
-        {
-          "label": "LocationWorkspace",
-          "sourcePath": "src/app/dashboard/projects/setup/LocationWorkspace.js"
         }
       ],
       "apis": [
@@ -284,67 +198,17 @@ export const platformMapInventory = {
     "project-setup": {
       "status": "mapped",
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b",
-      "note": "Shared project scope register and dashboard setup, allocation, production parameters and work-package catalog.",
+      "note": "Shared project scope register (project_scopes and scope_activities).",
       "routes": [
         {
           "label": "Scope management",
           "href": "/projects/[projectId]/scope",
           "sourcePath": "src/app/projects/[projectId]/scope/page.js",
           "dynamic": true
-        },
-        {
-          "label": "Dashboard project setup",
-          "href": "/dashboard/projects/setup",
-          "sourcePath": "src/app/dashboard/projects/setup/page.js",
-          "dynamic": false
-        },
-        {
-          "label": "Work-package catalog",
-          "href": "/dashboard/projects/work-packages",
-          "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-          "dynamic": false
         }
       ],
-      "components": [
-        {
-          "label": "ProjectForm",
-          "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
-        },
-        {
-          "label": "ScopeWorkspace",
-          "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js"
-        },
-        {
-          "label": "QuantityAllocationMatrix",
-          "sourcePath": "src/app/dashboard/projects/setup/QuantityAllocationMatrix.js"
-        },
-        {
-          "label": "ProductionParametersWorkspace",
-          "sourcePath": "src/app/dashboard/projects/setup/ProductionParametersWorkspace.js"
-        },
-        {
-          "label": "ProjectSetupReportButton",
-          "sourcePath": "src/app/dashboard/projects/setup/report/ProjectSetupReportButton.js"
-        }
-      ],
-      "apis": [
-        {
-          "label": "projects / setup-report",
-          "href": "/api/projects/[projectId]/setup-report",
-          "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js",
-          "methods": [
-            "POST"
-          ],
-          "consumers": [
-            {
-              "sourcePath": "src/app/dashboard/projects/setup/report/ProjectSetupReportButton.js",
-              "line": 426
-            }
-          ],
-          "note": "Call site found in the audited module.",
-          "auth": "Signed-in user check in handler"
-        }
-      ]
+      "components": [],
+      "apis": []
     },
     "operational-dashboard": {
       "status": "mapped",
@@ -407,19 +271,7 @@ export const platformMapInventory = {
           "sourcePath": "src/app/fieldop/projects/[projectId]/FieldOpDailyReportSettings.js"
         }
       ],
-      "apis": [
-        {
-          "label": "daily-reports / pdf",
-          "href": "/api/daily-reports/[reportId]/pdf",
-          "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js",
-          "methods": [
-            "GET"
-          ],
-          "consumers": [],
-          "note": "Route exists; no caller found in the audited module files.",
-          "auth": "Signed-in user check in handler"
-        }
-      ]
+      "apis": []
     },
     "workforce-timekeeping": {
       "status": "mapped",
@@ -1165,273 +1017,6 @@ export const platformMapInventory = {
         "src/app/dashboard/projects/constraints/page.js"
       ]
     },
-    "pre-planning": {
-      "sourcePath": "src/app/dashboard/planning/pre-planning/page.js",
-      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b",
-      "verifiedOn": "2026-10-03",
-      "sourcePaths": [
-        "src/app/dashboard/planning/pre-planning/page.js",
-        "src/app/dashboard/planning/pre-planning/PrePlanningWorkspace.js",
-        "src/app/dashboard/planning/pre-planning/PrePlanningWbsEditor.js",
-        "src/app/dashboard/planning/pre-planning/ActivityPreSequence.js",
-        "src/app/api/pre-planning/sequence/route.js",
-        "src/app/api/pre-planning/wbs/route.js",
-        "src/app/api/pre-planning/activity-sequence/route.js"
-      ],
-      "dataSources": [
-        {
-          "kind": "table",
-          "name": "projects",
-          "schema": "public",
-          "purpose": "Shared project identity and configuration.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 945,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_work_packages",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1021,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_services",
-          "schema": "public",
-          "purpose": "Service scope used by the dashboard planning model.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1046,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            },
-            {
-              "method": "select",
-              "line": 118,
-              "sourcePath": "src/app/api/pre-planning/activity-sequence/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "locations",
-          "schema": "public",
-          "purpose": "Location hierarchy and production areas.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1073,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "location_service_quantities",
-          "schema": "public",
-          "purpose": "Quantities allocated to locations.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1098,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_service_production_parameters",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1120,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_pre_planning_settings",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1140,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_pre_planning_versions",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1160,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            },
-            {
-              "method": "select",
-              "line": 881,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            },
-            {
-              "method": "insert",
-              "line": 1029,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            },
-            {
-              "method": "update",
-              "line": 1091,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            },
-            {
-              "method": "delete",
-              "line": 1340,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            },
-            {
-              "method": "select",
-              "line": 143,
-              "sourcePath": "src/app/api/pre-planning/wbs/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_pre_planning_activity_sequence",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1289,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            },
-            {
-              "method": "insert",
-              "line": 362,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            },
-            {
-              "method": "select",
-              "line": 392,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            },
-            {
-              "method": "delete",
-              "line": 430,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_pre_planning_activity_strategy",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1312,
-              "sourcePath": "src/app/dashboard/planning/pre-planning/page.js"
-            },
-            {
-              "method": "select",
-              "line": 570,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            },
-            {
-              "method": "insert",
-              "line": 654,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            },
-            {
-              "method": "delete",
-              "line": 691,
-              "sourcePath": "src/app/api/pre-planning/sequence/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_pre_planning_wbs_items",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 222,
-              "sourcePath": "src/app/api/pre-planning/wbs/route.js"
-            },
-            {
-              "method": "insert",
-              "line": 546,
-              "sourcePath": "src/app/api/pre-planning/wbs/route.js"
-            },
-            {
-              "method": "update",
-              "line": 716,
-              "sourcePath": "src/app/api/pre-planning/wbs/route.js"
-            },
-            {
-              "method": "delete",
-              "line": 1113,
-              "sourcePath": "src/app/api/pre-planning/wbs/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_pre_planning_wbs_dependencies",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 271,
-              "sourcePath": "src/app/api/pre-planning/wbs/route.js"
-            },
-            {
-              "method": "delete",
-              "line": 1089,
-              "sourcePath": "src/app/api/pre-planning/wbs/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_scope_activity_pre_sequence",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "upsert",
-              "line": 190,
-              "sourcePath": "src/app/api/pre-planning/activity-sequence/route.js"
-            }
-          ]
-        }
-      ],
-      "functions": [],
-      "storage": []
-    },
     "project-information": {
       "sourcePath": "src/app/projects/page.js",
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b",
@@ -1769,8 +1354,6 @@ export const platformMapInventory = {
         "src/app/projects/[projectId]/locations/LocationMapWorkspace.js",
         "src/app/projects/[projectId]/location-map/card-view/page.js",
         "src/app/projects/[projectId]/locations/LocationCardViewEditor.js",
-        "src/app/dashboard/projects/locations/page.js",
-        "src/app/dashboard/projects/setup/LocationWorkspace.js",
         "src/app/api/projects/[projectId]/locations/[locationId]/qr/route.js"
       ],
       "dataSources": [
@@ -1794,11 +1377,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 14,
               "sourcePath": "src/app/projects/[projectId]/location-map/card-view/page.js"
-            },
-            {
-              "method": "select",
-              "line": 285,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
             }
           ]
         },
@@ -1837,36 +1415,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 15,
               "sourcePath": "src/app/projects/[projectId]/location-map/card-view/page.js"
-            },
-            {
-              "method": "select",
-              "line": 348,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "update",
-              "line": 1561,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "insert",
-              "line": 1579,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "update",
-              "line": 458,
-              "sourcePath": "src/app/dashboard/projects/setup/LocationWorkspace.js"
-            },
-            {
-              "method": "insert",
-              "line": 476,
-              "sourcePath": "src/app/dashboard/projects/setup/LocationWorkspace.js"
-            },
-            {
-              "method": "delete",
-              "line": 604,
-              "sourcePath": "src/app/dashboard/projects/setup/LocationWorkspace.js"
             },
             {
               "method": "select",
@@ -1923,26 +1471,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 152,
               "sourcePath": "src/app/projects/[projectId]/locations/StandaloneLocationWorkspace.js"
-            },
-            {
-              "method": "select",
-              "line": 399,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "delete",
-              "line": 2015,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "update",
-              "line": 2085,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "insert",
-              "line": 2129,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
             }
           ]
         },
@@ -2065,96 +1593,6 @@ export const platformMapInventory = {
               "sourcePath": "src/app/projects/[projectId]/locations/LocationCardViewEditor.js"
             }
           ]
-        },
-        {
-          "kind": "table",
-          "name": "scope_items",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 365,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_services",
-          "schema": "public",
-          "purpose": "Service scope used by the dashboard planning model.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 381,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "insert",
-              "line": 1952,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "productivity_library",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 413,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "insert",
-              "line": 1259,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_service_productivity",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 432,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "upsert",
-              "line": 1166,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_division_takt_targets",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 449,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "delete",
-              "line": 1414,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            },
-            {
-              "method": "upsert",
-              "line": 1464,
-              "sourcePath": "src/app/dashboard/projects/locations/page.js"
-            }
-          ]
         }
       ],
       "functions": [
@@ -2170,29 +1608,6 @@ export const platformMapInventory = {
             {
               "sourcePath": "src/app/projects/[projectId]/locations/StandaloneLocationWorkspace.js",
               "line": 123
-            },
-            {
-              "sourcePath": "src/app/dashboard/projects/locations/page.js",
-              "line": 1696
-            },
-            {
-              "sourcePath": "src/app/dashboard/projects/setup/LocationWorkspace.js",
-              "line": 556
-            }
-          ]
-        },
-        {
-          "name": "delete_project_location",
-          "schema": "public",
-          "returns": "jsonb",
-          "arguments": "target_location_id uuid",
-          "line": 1810,
-          "sourcePath": "src/app/dashboard/projects/locations/page.js",
-          "purpose": "RPC entry point called by the audited implementation.",
-          "calls": [
-            {
-              "sourcePath": "src/app/dashboard/projects/locations/page.js",
-              "line": 1810
             }
           ]
         }
@@ -2232,15 +1647,7 @@ export const platformMapInventory = {
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b",
       "verifiedOn": "2026-10-03",
       "sourcePaths": [
-        "src/app/projects/[projectId]/scope/page.js",
-        "src/app/dashboard/projects/setup/page.js",
-        "src/app/dashboard/projects/setup/ProjectForm.js",
-        "src/app/dashboard/projects/setup/ScopeWorkspace.js",
-        "src/app/dashboard/projects/setup/QuantityAllocationMatrix.js",
-        "src/app/dashboard/projects/setup/ProductionParametersWorkspace.js",
-        "src/app/dashboard/projects/work-packages/page.js",
-        "src/app/dashboard/projects/setup/report/ProjectSetupReportButton.js",
-        "src/app/api/projects/[projectId]/setup-report/route.js"
+        "src/app/projects/[projectId]/scope/page.js"
       ],
       "dataSources": [
         {
@@ -2253,26 +1660,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 25,
               "sourcePath": "src/app/projects/[projectId]/scope/page.js"
-            },
-            {
-              "method": "select",
-              "line": 357,
-              "sourcePath": "src/app/dashboard/projects/setup/page.js"
-            },
-            {
-              "method": "update",
-              "line": 456,
-              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
-            },
-            {
-              "method": "insert",
-              "line": 941,
-              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
-            },
-            {
-              "method": "select",
-              "line": 191,
-              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
             }
           ]
         },
@@ -2342,300 +1729,10 @@ export const platformMapInventory = {
               "sourcePath": "src/app/projects/[projectId]/scope/page.js"
             }
           ]
-        },
-        {
-          "kind": "table",
-          "name": "organizations",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 287,
-              "sourcePath": "src/app/dashboard/projects/setup/page.js"
-            },
-            {
-              "method": "select",
-              "line": 229,
-              "sourcePath": "src/app/dashboard/projects/work-packages/page.js"
-            },
-            {
-              "method": "select",
-              "line": 258,
-              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_work_packages",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 831,
-              "sourcePath": "src/app/dashboard/projects/setup/page.js"
-            },
-            {
-              "method": "insert",
-              "line": 744,
-              "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js"
-            },
-            {
-              "method": "delete",
-              "line": 882,
-              "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js"
-            },
-            {
-              "method": "select",
-              "line": 264,
-              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_services",
-          "schema": "public",
-          "purpose": "Service scope used by the dashboard planning model.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 854,
-              "sourcePath": "src/app/dashboard/projects/setup/page.js"
-            },
-            {
-              "method": "update",
-              "line": 1156,
-              "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js"
-            },
-            {
-              "method": "insert",
-              "line": 1257,
-              "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js"
-            },
-            {
-              "method": "select",
-              "line": 277,
-              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "locations",
-          "schema": "public",
-          "purpose": "Location hierarchy and production areas.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 881,
-              "sourcePath": "src/app/dashboard/projects/setup/page.js"
-            },
-            {
-              "method": "select",
-              "line": 294,
-              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "location_service_quantities",
-          "schema": "public",
-          "purpose": "Quantities allocated to locations.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 907,
-              "sourcePath": "src/app/dashboard/projects/setup/page.js"
-            },
-            {
-              "method": "delete",
-              "line": 803,
-              "sourcePath": "src/app/dashboard/projects/setup/QuantityAllocationMatrix.js"
-            },
-            {
-              "method": "update",
-              "line": 984,
-              "sourcePath": "src/app/dashboard/projects/setup/QuantityAllocationMatrix.js"
-            },
-            {
-              "method": "insert",
-              "line": 1094,
-              "sourcePath": "src/app/dashboard/projects/setup/QuantityAllocationMatrix.js"
-            },
-            {
-              "method": "select",
-              "line": 310,
-              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_service_production_parameters",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 926,
-              "sourcePath": "src/app/dashboard/projects/setup/page.js"
-            },
-            {
-              "method": "delete",
-              "line": 317,
-              "sourcePath": "src/app/dashboard/projects/setup/ProductionParametersWorkspace.js"
-            },
-            {
-              "method": "upsert",
-              "line": 407,
-              "sourcePath": "src/app/dashboard/projects/setup/ProductionParametersWorkspace.js"
-            },
-            {
-              "method": "select",
-              "line": 324,
-              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "project_members",
-          "schema": "public",
-          "purpose": "Project team assignments and roles.",
-          "operations": [
-            {
-              "method": "upsert",
-              "line": 969,
-              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
-            }
-          ]
         }
       ],
-      "functions": [
-        {
-          "name": "get_next_project_work_package_color",
-          "schema": "public",
-          "returns": "text",
-          "arguments": "target_project_id uuid",
-          "line": 711,
-          "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js",
-          "purpose": "RPC entry point called by the audited implementation.",
-          "calls": [
-            {
-              "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js",
-              "line": 711
-            }
-          ]
-        },
-        {
-          "name": "assign_scope_item_work_package",
-          "schema": "public",
-          "returns": "void",
-          "arguments": "target_project_service_id uuid, target_project_work_package_id uuid",
-          "line": 1374,
-          "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js",
-          "purpose": "RPC entry point called by the audited implementation.",
-          "calls": [
-            {
-              "sourcePath": "src/app/dashboard/projects/setup/ScopeWorkspace.js",
-              "line": 1374
-            }
-          ]
-        },
-        {
-          "name": "get_organization_work_package_catalog",
-          "schema": "public",
-          "returns": "TABLE(id uuid, organization_id uuid, code text, description text, color text, is_active boolean, created_at timestamp with time zone, updated_at timestamp with time zone)",
-          "arguments": "target_organization_id uuid",
-          "line": 345,
-          "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-          "purpose": "RPC entry point called by the audited implementation.",
-          "calls": [
-            {
-              "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-              "line": 345
-            }
-          ]
-        },
-        {
-          "name": "register_organization_work_package",
-          "schema": "public",
-          "returns": "TABLE(id uuid, organization_id uuid, code text, description text, color text, is_active boolean, created_at timestamp with time zone, updated_at timestamp with time zone)",
-          "arguments": "target_organization_id uuid, target_code text, target_description text",
-          "line": 492,
-          "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-          "purpose": "RPC entry point called by the audited implementation.",
-          "calls": [
-            {
-              "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-              "line": 492
-            }
-          ]
-        },
-        {
-          "name": "update_organization_work_package",
-          "schema": "public",
-          "returns": "TABLE(id uuid, organization_id uuid, code text, description text, color text, is_active boolean, created_at timestamp with time zone, updated_at timestamp with time zone)",
-          "arguments": "target_work_package_id uuid, target_code text, target_description text",
-          "line": 659,
-          "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-          "purpose": "RPC entry point called by the audited implementation.",
-          "calls": [
-            {
-              "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-              "line": 659
-            }
-          ]
-        },
-        {
-          "name": "set_organization_work_package_active",
-          "schema": "public",
-          "returns": "TABLE(id uuid, organization_id uuid, code text, description text, color text, is_active boolean)",
-          "arguments": "target_work_package_id uuid, target_is_active boolean",
-          "line": 773,
-          "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-          "purpose": "RPC entry point called by the audited implementation.",
-          "calls": [
-            {
-              "sourcePath": "src/app/dashboard/projects/work-packages/page.js",
-              "line": 773
-            }
-          ]
-        }
-      ],
-      "storage": [
-        {
-          "name": "project-covers",
-          "public": false,
-          "purpose": "Project cover images, resolved from the PROJECT_COVER_BUCKET source constant.",
-          "operations": [
-            {
-              "method": "createSignedUrl",
-              "line": 285,
-              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
-            },
-            {
-              "method": "upload",
-              "line": 430,
-              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
-            },
-            {
-              "method": "remove",
-              "line": 468,
-              "sourcePath": "src/app/dashboard/projects/setup/ProjectForm.js"
-            },
-            {
-              "method": "createSignedUrl",
-              "line": 375,
-              "sourcePath": "src/app/api/projects/[projectId]/setup-report/route.js"
-            }
-          ]
-        }
-      ]
+      "functions": [],
+      "storage": []
     },
     "operational-dashboard": {
       "sourcePath": "src/app/fieldop/page.js",
@@ -2805,7 +1902,15 @@ export const platformMapInventory = {
         "src/app/fieldop/reports/daily/new/page.js",
         "src/app/fieldop/reports/daily/[reportId]/page.js",
         "src/app/fieldop/projects/[projectId]/FieldOpDailyReportSettings.js",
-        "src/app/api/daily-reports/[reportId]/pdf/route.js"
+        "src/app/fieldop/reports/daily/[reportId]/WorkforceSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/InvoiceImport.js",
+        "src/app/fieldop/reports/daily/[reportId]/WeatherSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/EquipmentSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/NotesSection.js",
+        "src/app/fieldop/reports/daily/[reportId]/SafetySection.js",
+        "src/app/fieldop/reports/daily/[reportId]/print/page.js",
+        "src/app/fieldop/reports/daily/[reportId]/ApprovalSection.js"
       ],
       "dataSources": [
         {
@@ -2838,11 +1943,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 33,
               "sourcePath": "src/app/fieldop/reports/daily/[reportId]/page.js"
-            },
-            {
-              "method": "select",
-              "line": 358,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
             }
           ]
         },
@@ -2856,11 +1956,6 @@ export const platformMapInventory = {
               "method": "select",
               "line": 15,
               "sourcePath": "src/app/fieldop/reports/daily/new/page.js"
-            },
-            {
-              "method": "select",
-              "line": 418,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
             }
           ]
         },
@@ -2897,11 +1992,6 @@ export const platformMapInventory = {
               "method": "insert",
               "line": 25,
               "sourcePath": "src/app/fieldop/reports/daily/[reportId]/page.js"
-            },
-            {
-              "method": "select",
-              "line": 464,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
             }
           ]
         },
@@ -2931,21 +2021,8 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 82,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
-            }
-          ]
-        },
-        {
-          "kind": "table",
-          "name": "daily_report_workforce_roles",
-          "schema": "public",
-          "purpose": "Direct access from the audited source files.",
-          "operations": [
-            {
-              "method": "select",
-              "line": 140,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 20,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/WorkforceSection.js"
             }
           ]
         },
@@ -2957,8 +2034,23 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 195,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 54,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "insert",
+              "line": 87,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "delete",
+              "line": 118,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "insert",
+              "line": 147,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/InvoiceImport.js"
             }
           ]
         },
@@ -2970,8 +2062,18 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 435,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 35,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/WeatherSection.js"
+            },
+            {
+              "method": "upsert",
+              "line": 97,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/WeatherSection.js"
+            },
+            {
+              "method": "delete",
+              "line": 102,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/WeatherSection.js"
             }
           ]
         },
@@ -2983,8 +2085,13 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 501,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 45,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/EquipmentSection.js"
+            },
+            {
+              "method": "insert",
+              "line": 49,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/EquipmentSection.js"
             }
           ]
         },
@@ -2995,9 +2102,9 @@ export const platformMapInventory = {
           "purpose": "Direct access from the audited source files.",
           "operations": [
             {
-              "method": "select",
-              "line": 532,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "method": "insert",
+              "line": 138,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/InvoiceImport.js"
             }
           ]
         },
@@ -3009,8 +2116,8 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 563,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 56,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
             }
           ]
         },
@@ -3022,8 +2129,23 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 581,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 28,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/NotesSection.js"
+            },
+            {
+              "method": "update",
+              "line": 63,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/NotesSection.js"
+            },
+            {
+              "method": "insert",
+              "line": 64,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/NotesSection.js"
+            },
+            {
+              "method": "delete",
+              "line": 73,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/NotesSection.js"
             }
           ]
         },
@@ -3035,8 +2157,23 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 610,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 36,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/SafetySection.js"
+            },
+            {
+              "method": "upsert",
+              "line": 75,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/SafetySection.js"
+            },
+            {
+              "method": "select",
+              "line": 79,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/page.js"
+            },
+            {
+              "method": "select",
+              "line": 39,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/print/page.js"
             }
           ]
         },
@@ -3048,8 +2185,13 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 641,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js"
+              "line": 34,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/ApprovalSection.js"
+            },
+            {
+              "method": "select",
+              "line": 43,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/print/page.js"
             }
           ]
         }
@@ -3059,13 +2201,27 @@ export const platformMapInventory = {
         {
           "name": "daily-report-attachments",
           "public": false,
-          "purpose": "Default bucket for report attachments. The handler uses each attachment's storage_bucket value when provided; those record-dependent targets are outside this snapshot.",
+          "purpose": "Bucket for report attachments and photos. Each attachment row records its storage_bucket; record-dependent targets other than this default are outside this snapshot.",
           "operations": [
             {
-              "method": "createSignedUrl",
-              "line": 256,
-              "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js",
-              "fallback": true
+              "method": "createSignedUrls",
+              "line": 64,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "upload",
+              "line": 85,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "remove",
+              "line": 102,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
+            },
+            {
+              "method": "remove",
+              "line": 117,
+              "sourcePath": "src/app/fieldop/reports/daily/[reportId]/AttachmentsSection.js"
             }
           ]
         }
@@ -3434,6 +2590,14 @@ export const platformMapInventory = {
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
     },
     {
+      "id": "pre-planning-page",
+      "moduleId": "pre-planning",
+      "title": "Dedicated page absent",
+      "detail": "Pre-Planning was removed from PreCon; Master Plan is the first planning step.",
+      "line": 1,
+      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
+    },
+    {
       "id": "precon-report-page",
       "moduleId": "precon-reports",
       "title": "Dedicated page absent",
@@ -3451,61 +2615,16 @@ export const platformMapInventory = {
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
     },
     {
-      "id": "preplanning-transaction",
-      "moduleId": "pre-planning",
-      "title": "Sequence replacement uses multiple writes",
-      "detail": "The sequence API deletes and inserts rows with best-effort restoration. Its source notes that a future RPC could make replacement transactional.",
-      "sourcePath": "src/app/api/pre-planning/sequence/route.js",
-      "line": 484,
-      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
-    },
-    {
       "id": "parallel-scope-models",
       "moduleId": "project-setup",
       "title": "Parallel scope models",
-      "detail": "The shared project scope page uses project_scopes and scope_activities; dashboard setup and planning still use project_services and project_work_packages. Alignment requires an implementation review.",
+      "detail": "The Projects scope uses project_scopes and fieldop_project_activities; Master Plan still reads project_services and project_work_packages. Alignment is planned with the Master Plan rebuild.",
       "sourcePath": "src/app/projects/[projectId]/scope/page.js",
       "line": 25,
-      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
-    },
-    {
-      "id": "caller:src/app/api/daily-reports/[reportId]/pdf/route.js",
-      "moduleId": "daily-reports",
-      "title": "API caller not traced",
-      "detail": "/api/daily-reports/[reportId]/pdf exists, but no caller was found in the audited module files.",
-      "sourcePath": "src/app/api/daily-reports/[reportId]/pdf/route.js",
-      "line": 1,
-      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
-    },
-    {
-      "id": "activity-sequence-integration",
-      "moduleId": "pre-planning",
-      "title": "Activity pre-sequence component not connected",
-      "detail": "ActivityPreSequence and its API exist; no import of this component was found in the audited Pre-Planning page and workspace.",
-      "sourcePath": "src/app/dashboard/planning/pre-planning/ActivityPreSequence.js",
-      "line": 1,
       "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
     }
   ],
   "sourceLinks": [
-    {
-      "sourcePath": "src/app/planning/pre-planning/page.js",
-      "targetPath": "src/app/dashboard/planning/pre-planning/page.js",
-      "type": "DEPENDS ON",
-      "line": 1
-    },
-    {
-      "sourcePath": "src/app/dashboard/planning/pre-planning/page.js",
-      "targetPath": "src/app/dashboard/planning/pre-planning/PrePlanningWorkspace.js",
-      "type": "DEPENDS ON",
-      "line": 7
-    },
-    {
-      "sourcePath": "src/app/dashboard/planning/pre-planning/PrePlanningWorkspace.js",
-      "targetPath": "src/app/dashboard/planning/pre-planning/PrePlanningWbsEditor.js",
-      "type": "DEPENDS ON",
-      "line": 18
-    },
     {
       "sourcePath": "src/app/projects/[projectId]/page.js",
       "targetPath": "src/app/projects/[projectId]/ProjectDocuments.js",
@@ -3541,36 +2660,6 @@ export const platformMapInventory = {
       "targetPath": "src/app/projects/[projectId]/locations/LocationCardViewEditor.js",
       "type": "DEPENDS ON",
       "line": 3
-    },
-    {
-      "sourcePath": "src/app/dashboard/projects/setup/page.js",
-      "targetPath": "src/app/dashboard/projects/setup/ProjectForm.js",
-      "type": "DEPENDS ON",
-      "line": 6
-    },
-    {
-      "sourcePath": "src/app/dashboard/projects/setup/page.js",
-      "targetPath": "src/app/dashboard/projects/setup/ScopeWorkspace.js",
-      "type": "DEPENDS ON",
-      "line": 7
-    },
-    {
-      "sourcePath": "src/app/dashboard/projects/setup/page.js",
-      "targetPath": "src/app/dashboard/projects/setup/LocationWorkspace.js",
-      "type": "DEPENDS ON",
-      "line": 8
-    },
-    {
-      "sourcePath": "src/app/dashboard/projects/setup/page.js",
-      "targetPath": "src/app/dashboard/projects/setup/QuantityAllocationMatrix.js",
-      "type": "DEPENDS ON",
-      "line": 9
-    },
-    {
-      "sourcePath": "src/app/dashboard/projects/setup/page.js",
-      "targetPath": "src/app/dashboard/projects/setup/ProductionParametersWorkspace.js",
-      "type": "DEPENDS ON",
-      "line": 10
     },
     {
       "sourcePath": "src/app/fieldop/projects/[projectId]/page.js",
@@ -3694,12 +2783,6 @@ export const platformMapInventory = {
     },
     {
       "sourcePath": "src/app/projects/[projectId]/locations/page.js",
-      "targetPath": "src/app/planning/pre-planning/page.js",
-      "type": "ROUTES TO",
-      "line": 63
-    },
-    {
-      "sourcePath": "src/app/projects/[projectId]/locations/page.js",
       "targetPath": "src/app/projects/[projectId]/location-map/page.js",
       "type": "ROUTES TO",
       "line": 71
@@ -3724,21 +2807,9 @@ export const platformMapInventory = {
     },
     {
       "sourcePath": "src/app/projects/[projectId]/location-map/page.js",
-      "targetPath": "src/app/planning/pre-planning/page.js",
-      "type": "ROUTES TO",
-      "line": 39
-    },
-    {
-      "sourcePath": "src/app/projects/[projectId]/location-map/page.js",
       "targetPath": "src/app/projects/[projectId]/locations/page.js",
       "type": "ROUTES TO",
       "line": 46
-    },
-    {
-      "sourcePath": "src/app/dashboard/projects/locations/page.js",
-      "targetPath": "src/app/dashboard/projects/setup/page.js",
-      "type": "ROUTES TO",
-      "line": 2380
     },
     {
       "sourcePath": "src/app/projects/[projectId]/locations/LocationCardViewEditor.js",
@@ -3749,12 +2820,6 @@ export const platformMapInventory = {
     {
       "sourcePath": "src/app/projects/[projectId]/scope/page.js",
       "targetPath": "src/app/projects/[projectId]/page.js",
-      "type": "ROUTES TO",
-      "line": 52
-    },
-    {
-      "sourcePath": "src/app/projects/[projectId]/scope/page.js",
-      "targetPath": "src/app/planning/pre-planning/page.js",
       "type": "ROUTES TO",
       "line": 52
     },
@@ -3829,12 +2894,6 @@ export const platformMapInventory = {
       "targetPath": "src/app/projects/[projectId]/scope/page.js",
       "type": "ROUTES TO",
       "line": 151
-    },
-    {
-      "sourcePath": "src/app/fieldop/projects/[projectId]/FieldOpLocationsSetup.js",
-      "targetPath": "src/app/dashboard/projects/locations/page.js",
-      "type": "ROUTES TO",
-      "line": 179
     },
     {
       "sourcePath": "src/app/fieldop/reports/daily/page.js",
