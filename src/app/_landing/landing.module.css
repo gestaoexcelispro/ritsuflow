@@ -17,7 +17,8 @@
   --on-dark: #c5d6dd;
 
   min-height: 100vh;
-  overflow-x: hidden;
+  /* clip, not hidden: hidden would make .page a scroll container and break the sticky header */
+  overflow-x: clip;
   background: #ffffff;
   color: var(--text);
   font-family: var(--font-body), 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -32,6 +33,7 @@
 .page h1, .page h2, .page h3 { font-family: var(--font-display), 'Manrope', system-ui, sans-serif; color: var(--ink); margin: 0; }
 .page :focus-visible { outline: 3px solid #1677d2; outline-offset: 2px; border-radius: 4px; }
 
+.page section[id], .page main { scroll-margin-top: 80px; }
 .skip { position: absolute; left: -9999px; top: 8px; z-index: 100; padding: 8px 12px; background: #fff; border-radius: 8px; }
 .skip:focus { left: 8px; }
 
