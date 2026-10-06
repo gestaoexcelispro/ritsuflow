@@ -40,5 +40,11 @@
   "ritsuadmin.subtitle": "Administração da plataforma",
   "ritsuadmin.description": "Explore a plataforma: arquitetura, módulos, páginas, relações de dados e status do sistema.",
   "ritsuadmin.features": "Mapa da plataforma|Espaços e módulos|Relações de dados|Diagnóstico do sistema|Recursos|Configurações da plataforma",
-  "ritsuadmin.action": "Abrir Ritsu Admin"
+  "ritsuadmin.action": "Abrir Ritsu Admin",
+  "commercial.eyebrow": "ORÇAR · PRECIFICAR · GANHAR",
+  "commercial.name": "Comercial",
+  "commercial.subtitle": "Propostas e orçamentos",
+  "commercial.description": "Orce o levantamento com sua biblioteca, envie propostas e transforme propostas ganhas em projetos.",
+  "commercial.features": "Propostas e funil|Preços de insumos e mão de obra|Modelos de BDI / markup|Propostas em PDF|Conversão em projeto",
+  "commercial.action": "Entrar no Comercial"
 }

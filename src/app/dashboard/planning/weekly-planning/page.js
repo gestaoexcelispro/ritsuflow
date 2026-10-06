@@ -731,7 +731,7 @@ export default function WeeklyPlanningPage() {
             .from('projects')
             .select(
               'id, code, name, organization_id',
-            )
+            ).eq('stage', 'contract')
             .order('code', {
               ascending: true,
             })

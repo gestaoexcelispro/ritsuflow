@@ -26,7 +26,7 @@ export default function PreconOverviewPage() {
     let alive = true
     async function load() {
       const [projects, scenarios, lookaheads, constraints, weeks] = await Promise.all([
-        supabase.from('projects').select('id, project_id, code, name, status').neq('status', 'archived').order('name'),
+        supabase.from('projects').select('id, project_id, code, name, status').eq('stage', 'contract').neq('status', 'archived').order('name'),
         supabase.from('master_plan_scenarios').select('project_id, is_baseline'),
         supabase.from('lookahead_plans').select('project_id'),
         supabase.from('constraints').select('project_id, blocking').in('status', OPEN_CONSTRAINT),

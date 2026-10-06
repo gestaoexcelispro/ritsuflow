@@ -1142,7 +1142,7 @@ export default function ConstraintLogPage() {
                 name,
                 status,
                 created_at
-              `)
+              `).eq('stage', 'contract')
               .neq(
                 'status',
                 'archived'

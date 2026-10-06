@@ -17,6 +17,7 @@ const workspaces = [
   { key:'precon', visual:'/precon-icon.png', href:'/dashboard' },
   { key:'ritsuscope', visual:'/ritsuscope-icon.svg', href:'/ritsuscope' },
   { key:'fieldop', visual:'/fieldop-icon.png', href:'/fieldop' },
+  { key:'commercial', visual:'/commercial-icon.svg', href:'/commercial' },
 ]
 
 const adminWorkspace = { key:'ritsuadmin', href:'/ritsu-admin' }

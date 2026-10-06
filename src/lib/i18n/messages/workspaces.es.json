@@ -40,5 +40,11 @@
   "ritsuadmin.subtitle": "Administración de la plataforma",
   "ritsuadmin.description": "Explore la plataforma: arquitectura, módulos, páginas, relaciones de datos y estado del sistema.",
   "ritsuadmin.features": "Mapa de la plataforma|Espacios y módulos|Relaciones de datos|Diagnóstico del sistema|Funciones|Configuración de la plataforma",
-  "ritsuadmin.action": "Abrir Ritsu Admin"
+  "ritsuadmin.action": "Abrir Ritsu Admin",
+  "commercial.eyebrow": "COTIZAR · VALORAR · GANAR",
+  "commercial.name": "Comercial",
+  "commercial.subtitle": "Licitaciones y presupuestos",
+  "commercial.description": "Valore el cómputo con su biblioteca, envíe propuestas y convierta las ganadas en proyectos.",
+  "commercial.features": "Licitaciones y embudo|Precios y mano de obra|Plantillas de BDI / markup|Propuestas en PDF|Conversión en proyecto",
+  "commercial.action": "Entrar en Comercial"
 }
