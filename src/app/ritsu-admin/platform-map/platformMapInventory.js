@@ -323,7 +323,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 689
+              "line": 713
             }
           ],
           "schema": "public",
@@ -335,15 +335,15 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 751
+              "line": 775
             },
             {
               "method": "insert",
-              "line": 1064
+              "line": 1088
             },
             {
               "method": "update",
-              "line": 1434
+              "line": 1456
             }
           ],
           "schema": "public",
@@ -355,19 +355,19 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 797
+              "line": 821
             },
             {
               "method": "insert",
-              "line": 1203
+              "line": 1227
             },
             {
               "method": "update",
-              "line": 1336
+              "line": 1360
             },
             {
               "method": "delete",
-              "line": 1379
+              "line": 1401
             }
           ],
           "schema": "public",
@@ -379,7 +379,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 814
+              "line": 838
             }
           ],
           "schema": "public",
@@ -391,7 +391,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 825
+              "line": 849
             }
           ],
           "schema": "public",
@@ -403,7 +403,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 836
+              "line": 860
             }
           ],
           "schema": "public",
@@ -415,7 +415,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 922
+              "line": 946
             }
           ],
           "schema": "public",
@@ -427,7 +427,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 985
+              "line": 1009
             }
           ],
           "schema": "public",
@@ -441,7 +441,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_project_id uuid",
           "returns": "uuid",
-          "line": 1041,
+          "line": 1065,
           "purpose": "Locate the active Lookahead plan before creating a weekly plan."
         },
         {
@@ -449,7 +449,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_weekly_plan_id uuid",
           "returns": "void",
-          "line": 1481,
+          "line": 1501,
           "purpose": "Cancel a draft weekly plan."
         },
         {
@@ -457,7 +457,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_weekly_plan_id uuid",
           "returns": "void",
-          "line": 1542,
+          "line": 1560,
           "purpose": "Commit the plan using the Make Ready validation entry point."
         },
         {
@@ -465,7 +465,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_weekly_plan_id uuid",
           "returns": "void",
-          "line": 2139,
+          "line": 2155,
           "purpose": "Close the weekly plan."
         }
       ],
