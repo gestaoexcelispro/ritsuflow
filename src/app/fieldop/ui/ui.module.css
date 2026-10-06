@@ -36,7 +36,9 @@
 }
 .root *, .root *::before, .root *::after { box-sizing: border-box; }
 /* AppBar used on its own (full-screen tools, the Workspaces hub): the header's look without the page frame. */
-.barRoot { min-height: 0; background: transparent; }
+.barRoot { min-height: 0; background: transparent; position: sticky; top: 0; z-index: 30; }
+/* App header + module tabs: fixed at the top while the page scrolls. */
+.chrome { position: sticky; top: 0; z-index: 30; }
 .root :focus-visible { outline: none; box-shadow: var(--fo-focus); border-radius: 4px; }
 .root input, .root select, .root textarea, .root button { font-family: inherit; }
 .root :where(input, select, textarea) { color: inherit; }

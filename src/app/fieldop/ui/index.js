@@ -162,6 +162,8 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
   const tabs = config.tabs(projectId)
 
   return <div className={cx(ui.root, plex.variable)}>
+    {/* Header and module tabs stay at the top while the page scrolls. */}
+    <div className={ui.chrome}>
     <AppBar module={module} />
     {(tabs.length > 0 || mainAction) && <nav className={ui.tabbar} aria-label={moduleName}>
       <div className={ui.tabbarInner}>
@@ -173,6 +175,7 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
         {mainAction && <div className={ui.tabbarAction}>{mainAction}</div>}
       </div>
     </nav>}
+    </div>
     {/* `bare` pages manage their own full-height layout below the header (height: calc(100dvh - var(--app-chrome))). */}
     <main className={ui.main}>{bare ? children : <div className={ui.content}>{children}</div>}</main>
   </div>
