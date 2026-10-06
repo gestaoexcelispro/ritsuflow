@@ -25,8 +25,10 @@ export default function PreconLayout({ children }) {
   // Weekly plan still renders its project and week controls into this container (until its own
   // step); it sits above the page so the controls stay visible on phones too.
   const weekly = pathname.startsWith('/dashboard/planning/weekly-planning')
+  // Full-height planning pages manage their own frame (precon.module.css .frame).
+  const bare = pathname.startsWith('/dashboard/planning/master-plan')
 
-  return <AppShell module="precon" active={activeTab(pathname)} projectId={projectId} action={false}>
+  return <AppShell module="precon" active={activeTab(pathname)} projectId={projectId} action={false} bare={bare}>
     {weekly && <div id="dashboard-topbar-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }} />}
     {children}
   </AppShell>
