@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
@@ -30,6 +30,8 @@ export default function BidWorkspace() {
   const [estimates, setEstimates] = useState<EstimateSummary[]>([])
   const [counts, setCounts] = useState<Counts>({ sheets: 0, items: 0, elements: 0 })
   const [tab, setTab] = useState<Tab>('estimate')
+  // A converted project opens on Estimate vs. actual (once, so a later reload keeps the user's tab).
+  const tabChosen = useRef(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [converting, setConverting] = useState(false)
@@ -46,7 +48,12 @@ export default function BidWorkspace() {
     ])
     setLoading(false)
     if (b.error || e.error) { setError(t('error.load', { message: (b.error || e.error)!.message })); return }
-    setBid((b.data as unknown as BidRow) || null)
+    const row = (b.data as unknown as BidRow) || null
+    setBid(row)
+    if (!tabChosen.current && row) {
+      tabChosen.current = true
+      if (row.projects?.stage === 'contract') setTab('actuals')
+    }
     setEstimates((e.data || []) as EstimateSummary[])
     setCounts({ sheets: s.count || 0, items: l.count || 0, elements: el.count || 0 })
   }, [projectId, t])
