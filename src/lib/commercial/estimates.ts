@@ -1,6 +1,6 @@
 // Estimate revisions and their items (Supabase rows), and the refresh from takeoff.
 import type { createClient } from '@/lib/supabase/client'
-import { applyPricing, directOf, money, priceLabor, priceNeedGroups, unitCost, type LaborRate, type PricedLine, type PriceItem, type PricingLine } from './pricing'
+import { priceWithLines, directOf, money, priceLabor, priceNeedGroups, unitCost, type LaborRate, type PricedLine, type PriceItem, type PricingLine } from './pricing'
 import type { TakeoffLine } from './takeoffEstimate'
 
 type Supabase = ReturnType<typeof createClient>
@@ -27,7 +27,7 @@ export type EstimateRow = {
 
 export const ESTIMATE_COLUMNS = 'id, project_id, revision, name, status, is_baseline, currency_code, priced_on, pricing_lines, proposal, direct_material, direct_labor, direct_equipment, direct_subcontract, direct_total, price_total, issued_at'
 
-export type Breakdown = { materials?: PricedLine[]; labor?: PricedLine[]; missing?: string[]; takeoffQuantity?: number; framed?: boolean }
+export type Breakdown = { materials?: PricedLine[]; labor?: PricedLine[]; equipment?: PricedLine[]; subcontract?: PricedLine[]; missing?: string[]; takeoffQuantity?: number; framed?: boolean }
 
 export type ItemRow = {
   id: string
@@ -58,7 +58,7 @@ export function totalsOf(items: ItemRow[], lines: PricingLine[]) {
   let markupPct: number | null = null
   let problem = ''
   try {
-    const r = applyPricing(d, lines)
+    const r = priceWithLines(d, lines)
     price = r.price
     markupPct = r.markupPct
   } catch (e) {
@@ -80,11 +80,16 @@ export function totalsOf(items: ItemRow[], lines: PricingLine[]) {
 export function priceTakeoffLine(line: TakeoffLine, book: PriceItem[], rates: LaborRate[], onDate: string) {
   const mats = priceNeedGroups(line.materialGroups, book, onDate)
   const labor = priceLabor(line.laborLines, line.base, rates, onDate)
+  const equip = priceNeedGroups(line.equipmentGroups, book, onDate)
+  const sub = priceNeedGroups(line.subcontractGroups, book, onDate)
   return {
     material_unit_cost: unitCost(mats.total, line.quantity),
     labor_unit_cost: unitCost(labor.total, line.quantity),
+    equipment_unit_cost: unitCost(equip.total, line.quantity),
+    subcontract_unit_cost: unitCost(sub.total, line.quantity),
     breakdown: {
-      materials: mats.lines, labor: labor.lines, missing: [...mats.missing, ...labor.missing.map(t => `${t} (h)`)],
+      materials: mats.lines, labor: labor.lines, equipment: equip.lines, subcontract: sub.lines,
+      missing: [...mats.missing, ...labor.missing.map(t => `${t} (h)`), ...equip.missing, ...sub.missing],
       takeoffQuantity: line.quantity, framed: line.framed,
     } satisfies Breakdown,
   }
@@ -110,7 +115,8 @@ export async function refreshFromTakeoff(
     const existing = byLayer.get(line.layerId)
     const patch = {
       description: line.description, unit: line.unit, recipe_id: line.recipeId,
-      material_unit_cost: priced.material_unit_cost, labor_unit_cost: priced.labor_unit_cost, breakdown: priced.breakdown,
+      material_unit_cost: priced.material_unit_cost, labor_unit_cost: priced.labor_unit_cost,
+      equipment_unit_cost: priced.equipment_unit_cost, subcontract_unit_cost: priced.subcontract_unit_cost, breakdown: priced.breakdown,
     }
     if (existing) {
       const { error } = await supabase.from('commercial_estimate_items')

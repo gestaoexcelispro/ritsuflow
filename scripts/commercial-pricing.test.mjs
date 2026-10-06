@@ -135,3 +135,54 @@ test('proposal: lines, defaults and the selling factor', async () => {
   assert.equal(money(294365.11 * sellingFactor(294365.11, 381320.54)), 381320.54)
   assert.equal(sellingFactor(0, 10), 1)
 })
+
+test('CSV import: Portuguese Excel file with semicolons', async () => {
+  const { readPriceCsv, parseMoney, parseDate, priceTemplateCsv } = await import('../src/lib/commercial/csvImport.ts')
+  const csv = '﻿Código;Nome;Unidade;Preço unitário;Fornecedor;Tipo;Vigência\nCH-1;Chapa ST 12,5 mm;m2;R$ 1.022,90;Forn A;Material;01/10/2026\n;"Montante 48; galv.";m;6,10;;Equipamento;\n;Sem preço;un;abc;;;\n'
+  const r = readPriceCsv(csv, true)
+  assert.deepEqual(r.missingColumns, [])
+  assert.equal(r.rows.length, 2)
+  assert.equal(r.rows[0].unitCost, 1022.9); assert.equal(r.rows[0].validFrom, '2026-10-01'); assert.equal(r.rows[0].code, 'CH-1')
+  assert.equal(r.rows[1].name, 'Montante 48; galv.'); assert.equal(r.rows[1].kind, 'equipment'); assert.equal(r.rows[1].validFrom, null)
+  assert.deepEqual(r.errors, [{ line: 4, reason: 'cost' }])
+  assert.equal(parseMoney('$1,234.50'), 1234.5)
+  assert.equal(parseDate('10/01/2026', false), '2026-10-01')
+  assert.equal(parseDate('31/02/2026x', true), null)
+  for (const lang of ['pt-BR', 'en-US', 'es']) {
+    const t = readPriceCsv(priceTemplateCsv(lang), lang !== 'en-US')
+    assert.equal(t.rows.length, 2, lang); assert.deepEqual(t.errors, [], lang)
+  }
+})
+
+test('CSV import: reports missing required columns', async () => {
+  const { readPriceCsv } = await import('../src/lib/commercial/csvImport.ts')
+  assert.deepEqual(readPriceCsv('Name,Price\nA,1\n', false).missingColumns, ['unit'])
+})
+
+test('BDI diferenciado: material priced with its own lines, the rest with the main lines', async () => {
+  const { priceWithLines } = await import('../src/lib/commercial/pricing.ts')
+  const d = { material: 60000, labor: 40000, equipment: 0, subcontract: 0 }
+  const lines = [
+    { key: 'ac', label: 'AC', applies_to: 'direct', method: 'percent', rate: 4 },
+    { key: 'l', label: 'L', applies_to: 'subtotal', method: 'percent', rate: 7.4 },
+    { key: 'iss', label: 'ISS', applies_to: 'subtotal', method: 'divisor', rate: 5 },
+    { key: 'mac', label: 'AC mat', applies_to: 'direct', method: 'percent', rate: 2, group: 'material' },
+    { key: 'ml', label: 'L mat', applies_to: 'subtotal', method: 'percent', rate: 3, group: 'material' },
+  ]
+  const r = priceWithLines(d, lines)
+  const mat = 60000 * 1.02 * 1.03
+  const svc = (40000 * 1.04 * 1.074) / 0.95
+  assert.equal(money(r.price), money(mat + svc))
+  assert.deepEqual(r.steps.map(s => s.key), ['ac', 'l', 'iss', 'mac', 'ml'])
+  // Without material lines it is the plain engine.
+  assert.equal(priceWithLines(d, lines.slice(0, 3)).price, applyPricing(d, lines.slice(0, 3)).price)
+})
+
+test('sellingFactors(): unit prices add up to the selling price, with and without material BDI', async () => {
+  const { sellingFactors, priceWithLines } = await import('../src/lib/commercial/pricing.ts')
+  const d = { material: 60000, labor: 30000, equipment: 6000, subcontract: 4000 }
+  for (const lines of [BR_TCU, [...BR_TCU, { key: 'm', label: 'M', applies_to: 'direct', method: 'percent', rate: 12, group: 'material' }]]) {
+    const f = sellingFactors(d, lines)
+    assert.equal(money(d.material * f.material + (d.labor + d.equipment + d.subcontract) * f.services), money(priceWithLines(d, lines).price))
+  }
+})

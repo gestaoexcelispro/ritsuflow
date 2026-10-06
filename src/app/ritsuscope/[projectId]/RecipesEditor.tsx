@@ -28,7 +28,18 @@ type Row = {
   lines: RecipeLine[]
   mode?: 'fixed' | 'system' | null
   country_code?: string | null
+  labor?: (LaborLine | CostLine)[] | null
 }
+
+/** Labor productivity: hours of a trade per m², m or unit (priced in Commercial with the trade's rate). */
+type LaborLine = { trade: string; hours: number; base: RecipeBase; note?: string | null }
+type LaborForm = { trade: string; hours: string; base: RecipeBase; note: string }
+const blankLabor = (): LaborForm => ({ trade: '', hours: '', base: 'm2', note: '' })
+/** Equipment rental and subcontracted services per m², m or unit, priced in Commercial from its price book. */
+type CostLine = { bucket: 'equipment' | 'subcontract'; name: string; unit: string; coef: number; base: RecipeBase }
+type CostForm = { bucket: 'equipment' | 'subcontract'; name: string; unit: string; coef: string; base: RecipeBase }
+const blankCost = (): CostForm => ({ bucket: 'equipment', name: '', unit: '', coef: '', base: 'm2' })
+const isCost = (l: unknown): l is CostLine => !!l && typeof l === 'object' && ((l as CostLine).bucket === 'equipment' || (l as CostLine).bucket === 'subcontract')
 
 type Form = {
   name: string
@@ -42,6 +53,8 @@ type Form = {
   mode: 'fixed' | 'system'
   country: string
   lines: RecipeLineForm[]
+  labor: LaborForm[]
+  costs: CostForm[]
 }
 
 const blankLine = (): RecipeLineForm => ({ mat: '', code: '', unit: '', coef: '', base: 'm2', waste: '', packSize: '', packName: '', materialId: '', slot: '', qty: '', layoutCovered: false })
@@ -64,6 +77,7 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [trades, setTrades] = useState<{ trade: string; name: string }[]>([])
 
   // No thousands separators, so the text parses back exactly (1234,5 not 1.234,5).
   const num = useCallback((v: number) => String(v).replace('.', numberFormat === 'pt-BR' ? ',' : '.'), [numberFormat])
@@ -71,7 +85,7 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
   const load = useCallback(async () => {
     const { data, error: e } = await createClient()
       .from('takeoff_recipes')
-      .select('id, name, maker, system, kind, height_basis_m, waste_included_pct, status, source, notes, lines, mode, country_code')
+      .select('id, name, maker, system, kind, height_basis_m, waste_included_pct, status, source, notes, lines, mode, country_code, labor')
       .order('name')
     if (e) setError(t('workspace.error', { message: e.message }))
     setRows((data || []) as Row[])
@@ -96,6 +110,8 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
       mode: selected.mode === 'system' ? 'system' : 'fixed',
       country: selected.country_code || 'BR',
       lines: [...(selected.lines || []).map(l => lineToForm({ ...l, coef: Number(l.coef) || 0 }, num)), blankLine()],
+      labor: [...(Array.isArray(selected.labor) ? selected.labor : []).filter((l): l is LaborLine => !isCost(l)).map(l => ({ trade: l.trade, hours: num(Number(l.hours) || 0), base: l.base, note: l.note || '' })), blankLabor()],
+      costs: [...(Array.isArray(selected.labor) ? selected.labor : []).filter(isCost).map(l => ({ bucket: l.bucket, name: l.name, unit: l.unit, coef: num(Number(l.coef) || 0), base: l.base })), blankCost()],
     })
     setError('')
     // How many wall types use this recipe (impact of a change).
@@ -111,6 +127,20 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
       .then(({ data }) => setCatalog((data || []) as MaterialRow[]))
   }, [recipeCountry])
   const productById = new Map<string, MaterialRow>(catalog.map((m: MaterialRow) => [m.id, m]))
+
+  // Trades of the company's labor rates (Commercial), offered as suggestions for the labor lines.
+  useEffect(() => {
+    createClient().from('commercial_labor_rates').select('trade, name').eq('country_code', recipeCountry).order('name').limit(500)
+      .then(({ data }) => {
+        const seen = new Map<string, string>()
+        for (const r of (data || []) as { trade: string; name: string }[]) if (!seen.has(r.trade)) seen.set(r.trade, r.name)
+        setTrades([...seen.entries()].map(([trade, name]) => ({ trade, name })))
+      })
+  }, [recipeCountry])
+  const setCost = (i: number, patch: Partial<CostForm>) =>
+    setForm(f => (f ? { ...f, costs: f.costs.map((l, k) => (k === i ? { ...l, ...patch } : l)) } : f))
+  const setLabor = (i: number, patch: Partial<LaborForm>) =>
+    setForm(f => (f ? { ...f, labor: f.labor.map((l, k) => (k === i ? { ...l, ...patch } : l)) } : f))
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm(f => (f ? { ...f, [key]: value } : f))
   const setLine = (i: number, patch: Partial<RecipeLineForm>) =>
@@ -138,6 +168,23 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
     if (!form.name.trim()) { setError(t('layer.nameRequired')); return }
     const { lines, invalidRow } = formToLines(form.lines, parseLocaleNumber, form.mode, id => productById.get(id)?.unit || null)
     if (invalidRow) { setError(t('recipes.invalidLine', { n: invalidRow })); return }
+    const labor: LaborLine[] = []
+    for (let i = 0; i < form.labor.length; i++) {
+      const l = form.labor[i]
+      if (!l.trade.trim() && !l.hours.trim()) continue
+      const hours = parseLocaleNumber(l.hours)
+      const trade = l.trade.trim()
+      if (!trade || !/^[a-z0-9_]+$/.test(trade) || !(hours > 0)) { setError(t('recipes.labor.invalid', { n: i + 1 })); return }
+      labor.push({ trade, hours, base: l.base, note: l.note.trim() || null })
+    }
+    const costs: CostLine[] = []
+    for (let i = 0; i < form.costs.length; i++) {
+      const c = form.costs[i]
+      if (!c.name.trim() && !c.unit.trim() && !c.coef.trim()) continue
+      const coef = parseLocaleNumber(c.coef)
+      if (!c.name.trim() || !c.unit.trim() || !(coef > 0)) { setError(t('recipes.costs.invalid', { n: i + 1 })); return }
+      costs.push({ bucket: c.bucket, name: c.name.trim(), unit: c.unit.trim(), coef, base: c.base })
+    }
     const heightBasis = parseLocaleNumber(form.heightBasis)
     const wasteIncluded = parseLocaleNumber(form.wasteIncluded)
     setSaving(true)
@@ -155,6 +202,7 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
         mode: form.mode,
         country_code: form.country,
         lines,
+        labor: [...labor, ...costs],
       })
       .eq('id', selected.id)
     setSaving(false)
@@ -347,6 +395,92 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button type="button" style={{ ...ui.button, background: '#fff', color: '#294955', border: '1px solid #d3dfe2' }} onClick={() => set('lines', [...form.lines, blankLine()])}>+ {t('recipes.addLine')}</button>
+                </div>
+
+                <h2 style={ui.panelTitle}>{t('recipes.labor.title')}</h2>
+                <div style={ui.small}>{t('recipes.labor.hint')}</div>
+                <datalist id="recipe-trades">{trades.map(tr => <option key={tr.trade} value={tr.trade}>{tr.name}</option>)}</datalist>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 640, fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ background: '#f2f7f8', color: '#536d78', textAlign: 'left' }}>
+                        <th style={th}>{t('recipes.labor.trade')}</th>
+                        <th style={th}>{t('recipes.labor.hours')}</th>
+                        <th style={th}>{t('recipes.labor.base')}</th>
+                        <th style={th}>{t('recipes.labor.note')}</th>
+                        <th style={th} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.labor.map((l, i) => {
+                        const known = trades.find(tr => tr.trade === l.trade.trim())
+                        return (
+                          <tr key={i} style={{ borderTop: '1px solid #edf1f2', verticalAlign: 'top' }}>
+                            <td style={td}>
+                              <input style={{ ...cell, width: 220, fontFamily: 'ui-monospace, monospace' }} list="recipe-trades" value={l.trade} placeholder="drywall_installer" onChange={e => setLabor(i, { trade: e.target.value.toLowerCase().replace(/\s+/g, '_') })} />
+                              <div style={{ fontSize: 10, color: known ? '#0b7c73' : '#9a6700', marginTop: 2, minHeight: 12 }}>{l.trade.trim() ? (known ? known.name : t('recipes.labor.noRate')) : ''}</div>
+                            </td>
+                            <td style={td}><input style={{ ...cell, width: 90 }} inputMode="decimal" value={l.hours} onChange={e => setLabor(i, { hours: e.target.value })} /></td>
+                            <td style={td}>
+                              <select style={{ ...cell, width: 110 }} value={l.base} onChange={e => setLabor(i, { base: e.target.value as RecipeBase })}>
+                                <option value="m2">{t('recipes.base.m2')}</option>
+                                <option value="m">{t('recipes.base.m')}</option>
+                                <option value="un">{t('recipes.base.un')}</option>
+                              </select>
+                            </td>
+                            <td style={td}><input style={{ ...cell, width: 220 }} value={l.note} onChange={e => setLabor(i, { note: e.target.value })} /></td>
+                            <td style={td}><button type="button" title={t('recipes.removeLine')} style={removeBtn} onClick={() => set('labor', form.labor.filter((_, k) => k !== i))}>×</button></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" style={{ ...ui.button, background: '#fff', color: '#294955', border: '1px solid #d3dfe2' }} onClick={() => set('labor', [...form.labor, blankLabor()])}>+ {t('recipes.labor.add')}</button>
+                </div>
+
+                <h2 style={ui.panelTitle}>{t('recipes.costs.title')}</h2>
+                <div style={ui.small}>{t('recipes.costs.hint')}</div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 680, fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ background: '#f2f7f8', color: '#536d78', textAlign: 'left' }}>
+                        <th style={th}>{t('recipes.costs.bucket')}</th>
+                        <th style={th}>{t('recipes.costs.name')}</th>
+                        <th style={th}>{t('recipes.line.unit')}</th>
+                        <th style={th}>{t('recipes.line.coef')}</th>
+                        <th style={th}>{t('recipes.labor.base')}</th>
+                        <th style={th} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.costs.map((c, i) => (
+                        <tr key={i} style={{ borderTop: '1px solid #edf1f2' }}>
+                          <td style={td}>
+                            <select style={{ ...cell, width: 140 }} value={c.bucket} onChange={e => setCost(i, { bucket: e.target.value === 'subcontract' ? 'subcontract' : 'equipment' })}>
+                              <option value="equipment">{t('recipes.costs.equipment')}</option>
+                              <option value="subcontract">{t('recipes.costs.subcontract')}</option>
+                            </select>
+                          </td>
+                          <td style={td}><input style={{ ...cell, width: 240 }} value={c.name} onChange={e => setCost(i, { name: e.target.value })} /></td>
+                          <td style={td}><input style={{ ...cell, width: 60 }} value={c.unit} onChange={e => setCost(i, { unit: e.target.value })} /></td>
+                          <td style={td}><input style={{ ...cell, width: 80 }} inputMode="decimal" value={c.coef} onChange={e => setCost(i, { coef: e.target.value })} /></td>
+                          <td style={td}>
+                            <select style={{ ...cell, width: 110 }} value={c.base} onChange={e => setCost(i, { base: e.target.value as RecipeBase })}>
+                              <option value="m2">{t('recipes.base.m2')}</option>
+                              <option value="m">{t('recipes.base.m')}</option>
+                              <option value="un">{t('recipes.base.un')}</option>
+                            </select>
+                          </td>
+                          <td style={td}><button type="button" title={t('recipes.removeLine')} style={removeBtn} onClick={() => set('costs', form.costs.filter((_, k) => k !== i))}>×</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" style={{ ...ui.button, background: '#fff', color: '#294955', border: '1px solid #d3dfe2' }} onClick={() => set('costs', [...form.costs, blankCost()])}>+ {t('recipes.costs.add')}</button>
                   <button type="submit" style={{ ...ui.button, opacity: saving ? 0.6 : 1 }} disabled={saving}>{t('recipes.save')}</button>
                 </div>
               </form>

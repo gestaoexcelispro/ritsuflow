@@ -2,8 +2,8 @@
 // returns one estimate line per takeoff item (layer): its quantity, the materials its recipe
 // consumes and the labor hours its recipe calls for. Prices are applied afterwards (pricing.ts).
 import type { createClient } from '@/lib/supabase/client'
-import { framingTotals, packBars, packSheets } from '@/lib/takeoff/framing/framing'
-import { layerQuantities, type TakeoffItem } from '@/lib/takeoff/geometry'
+import { DEFAULT_LA_PER_STUD_END, DEFAULT_SCREW_SPACING, findJunctions, framingLabelsPtBR, framingTotals, packBars, packSheets, screwsAlong, type Junction } from '@/lib/takeoff/framing/framing'
+import { layerQuantities, shapeHeight, type TakeoffItem } from '@/lib/takeoff/geometry'
 import { LEVEL_COLUMNS, fillLevelHeights, normalizeLevels, wallHeightOf, withTypicalCopies, type LevelRow } from '@/lib/takeoff/levels'
 import { recipeMaterials, rowToRecipe, type Recipe, type RecipeContext, type RecipeRow } from '@/lib/takeoff/recipes'
 import { projectItemsInMetres, type ElementRow, type LayerRow, type SourceRow } from '@/lib/takeoff/rows'
@@ -24,12 +24,19 @@ export type TakeoffLine = {
   /** Each group = one product, in the units it can be bought in (first priced wins). */
   materialGroups: MaterialNeed[][]
   laborLines: LaborLine[]
+  /** Equipment and subcontract lines of the recipe (priced by name and unit from the price book). */
+  equipmentGroups: MaterialNeed[][]
+  subcontractGroups: MaterialNeed[][]
   framed: boolean
 }
 
+/** Commercial cost lines kept with the labor lines on the recipe (takeoff_recipes.labor). */
+type CostLine = { bucket: 'equipment' | 'subcontract'; name: string; unit: string; coef: number; base: 'm2' | 'm' | 'un' }
+const isCost = (l: unknown): l is CostLine => !!l && typeof l === 'object' && ((l as CostLine).bucket === 'equipment' || (l as CostLine).bucket === 'subcontract')
+
 export type TakeoffRead = { lines: TakeoffLine[]; uncalibrated: number; noRecipe: number }
 
-type RecipeRowWithLabor = RecipeRow & { labor?: LaborLine[] | null }
+type RecipeRowWithLabor = RecipeRow & { labor?: (LaborLine | CostLine)[] | null }
 
 /** Wall types and catalog products the recipes need (same as RitsuScope's useRecipeContext). */
 async function recipeContext(supabase: Supabase, items: TakeoffItem[], recipeOf: (it: TakeoffItem) => Recipe | null | undefined): Promise<RecipeContext> {
@@ -51,11 +58,28 @@ async function recipeContext(supabase: Supabase, items: TakeoffItem[], recipeOf:
 }
 
 /**
- * Studs, tracks, boards and screws of a framed wall, from RitsuScope's framing engine. Each item is
- * laid out on its own, so junction studs between two different items are not counted.
+ * Studs, tracks, boards and screws of a framed wall, from RitsuScope's framing engine. The item is
+ * laid out on its own (junctions between its own walls included); `shared` are the L and T
+ * junctions where this item hosts the extra studs for a wall of another item, added the same way
+ * RitsuScope's framingTotals adds them.
  */
-function framingNeeds(item: TakeoffItem): MaterialNeed[][] {
+function framingNeeds(item: TakeoffItem, shared: Junction[]): MaterialNeed[][] {
   const totals = framingTotals([item], 1)
+  const F = item.framing!
+  for (const j of shared) {
+    const H = shapeHeight(j.host.item, j.host.shape) - F.studGap
+    const group = totals.prof.get(F.studName)
+    if (!group || !(H > 0)) continue
+    for (let n = 0; n < j.studs; n++) group.pieces.push(H)
+    if (F.screwsFromLayout !== false) {
+      const spacing = F.screwSpacing && F.screwSpacing > 0 ? F.screwSpacing : DEFAULT_SCREW_SPACING
+      const layers = Math.max(1, (F.layersA || 0) + (F.layersB || 0))
+      const ta = F.taName || framingLabelsPtBR.taScrew!
+      const la = F.laName || framingLabelsPtBR.laScrew!
+      totals.screws.set(ta, (totals.screws.get(ta) || 0) + j.studs * screwsAlong(H, spacing) * layers / 2)
+      totals.screws.set(la, (totals.screws.get(la) || 0) + j.studs * 2 * (F.laPerStudEnd ?? DEFAULT_LA_PER_STUD_END))
+    }
+  }
   const groups: MaterialNeed[][] = []
   for (const g of totals.prof.values()) {
     const pk = packBars(g.pieces, g.bars)
@@ -67,6 +91,10 @@ function framingNeeds(item: TakeoffItem): MaterialNeed[][] {
   }
   for (const [name, n] of totals.screws) groups.push([{ mat: name, unit: 'un', qty: Math.ceil(n) }])
   return groups
+}
+
+function costGroups(lines: CostLine[], bucket: CostLine['bucket'], base: Record<'m2' | 'm' | 'un', number>): MaterialNeed[][] {
+  return lines.filter(c => c.bucket === bucket).map(c => [{ mat: c.name, unit: c.unit, qty: (Number(c.coef) || 0) * (base[c.base] || 0) }])
 }
 
 export async function readTakeoff(supabase: Supabase, projectId: string): Promise<TakeoffRead> {
@@ -98,7 +126,8 @@ export async function readTakeoff(supabase: Supabase, projectId: string): Promis
     recipeRows.push(...((data || []) as RecipeRowWithLabor[]))
   }
   const recipeById = new Map(recipeRows.map(r => [r.id, rowToRecipe(r)] as [string, Recipe]))
-  const laborById = new Map(recipeRows.map(r => [r.id, Array.isArray(r.labor) ? r.labor : []] as [string, LaborLine[]]))
+  const laborById = new Map(recipeRows.map(r => [r.id, (Array.isArray(r.labor) ? r.labor : []).filter((x): x is LaborLine => !isCost(x) && typeof (x as LaborLine).trade === 'string')] as [string, LaborLine[]]))
+  const costsById = new Map(recipeRows.map(r => [r.id, (Array.isArray(r.labor) ? r.labor : []).filter(isCost)] as [string, CostLine[]]))
   const recipeOf = (it: TakeoffItem) => (it.recipeId ? recipeById.get(it.recipeId) : null)
 
   // Same pipeline as RitsuScope's purchase list: metres, typical floors, level heights.
@@ -111,6 +140,13 @@ export async function readTakeoff(supabase: Supabase, projectId: string): Promis
   }
   const items = fillLevelHeights(r.items, pg => hOfPage.get(pg) ?? null).filter(it => it.shapes.length > 0)
   const ctx = await recipeContext(supabase, items, recipeOf)
+  // Junctions between different framed items (same sheet): the host item gets the extra studs.
+  const framedItems = items.filter(it => it.kind === 'linear' && !!it.framing?.on)
+  const sharedOf = new Map<TakeoffItem, Junction[]>()
+  for (const j of findJunctions(framedItems, 1)) {
+    if (j.host.item === j.other.item) continue
+    sharedOf.set(j.host.item, [...(sharedOf.get(j.host.item) || []), j])
+  }
 
   const lines: TakeoffLine[] = []
   let noRecipe = 0
@@ -136,8 +172,10 @@ export async function readTakeoff(supabase: Supabase, projectId: string): Promis
       unit,
       quantity,
       base,
-      materialGroups: [...fromRecipe, ...(framed ? framingNeeds(it) : [])],
+      materialGroups: [...fromRecipe, ...(framed ? framingNeeds(it, sharedOf.get(it) || []) : [])],
       laborLines: recipe ? laborById.get(recipe.id) || [] : [],
+      equipmentGroups: costGroups(recipe ? costsById.get(recipe.id) || [] : [], 'equipment', base),
+      subcontractGroups: costGroups(recipe ? costsById.get(recipe.id) || [] : [], 'subcontract', base),
       framed,
     })
   }

@@ -23,6 +23,11 @@ export type PricingLine = {
   method: LineMethod
   /** Percent: 4 = 4%. */
   rate: number
+  /**
+   * 'material': part of a separate BDI applied to material only (Brazil, "BDI diferenciado").
+   * When any line has it, the other lines apply to labor, equipment and subcontract only.
+   */
+  group?: 'material' | null
 }
 
 export type DirectCost = Record<CostBucket, number>
@@ -98,6 +103,46 @@ export function applyPricing(direct: DirectCost, lines: PricingLine[]): PricingR
     price,
     markupPct: base > 0 ? (price / base - 1) * 100 : null,
   }
+}
+
+/**
+ * Applies the add-on lines, with a separate set for materials when some lines are marked
+ * group 'material' (BDI diferenciado): material is priced with those lines, everything else with
+ * the rest, and the two prices are added. Steps come back in the order of `lines`.
+ */
+export function priceWithLines(direct: DirectCost, lines: PricingLine[]): PricingResult {
+  const matLines = lines.filter(l => l.group === 'material')
+  if (!matLines.length) return applyPricing(direct, lines)
+  const svcLines = lines.filter(l => l.group !== 'material')
+  const m = applyPricing({ ...EMPTY_DIRECT, material: direct.material }, matLines)
+  const s = applyPricing({ ...direct, material: 0 }, svcLines)
+  const byKey = new Map([...m.steps, ...s.steps].map(x => [x.key, x]))
+  const base = directTotal(direct)
+  const price = m.price + s.price
+  return {
+    direct: base,
+    steps: lines.map(l => byKey.get(l.key)!).filter(Boolean),
+    subtotal: m.subtotal + s.subtotal,
+    taxOnPricePct: s.taxOnPricePct,
+    price,
+    markupPct: base > 0 ? (price / base - 1) * 100 : null,
+  }
+}
+
+/**
+ * Selling factors for unit prices with BDI: material and services (labor, equipment, subcontract)
+ * get their own factor when there is a material BDI; otherwise both are price ÷ direct.
+ */
+export function sellingFactors(direct: DirectCost, lines: PricingLine[]): { material: number; services: number } {
+  const total = directTotal(direct)
+  if (!lines.some(l => l.group === 'material')) {
+    const f = total > 0 ? applyPricing(direct, lines).price / total : 1
+    return { material: f, services: f }
+  }
+  const services = direct.labor + direct.equipment + direct.subcontract
+  const m = applyPricing({ ...EMPTY_DIRECT, material: direct.material }, lines.filter(l => l.group === 'material'))
+  const s = applyPricing({ ...direct, material: 0 }, lines.filter(l => l.group !== 'material'))
+  return { material: direct.material > 0 ? m.price / direct.material : 1, services: services > 0 ? s.price / services : 1 }
 }
 
 // ---------------------------------------------------------------- price book and labor rates

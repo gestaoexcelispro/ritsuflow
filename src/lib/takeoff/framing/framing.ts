@@ -291,7 +291,7 @@ export type ItemFramingSummary = { studs: number; studM: number; trackM: number;
 export type ScrewCount = { ta: number; la: number }
 
 /** Screws along one straight line of steel that a board covers: one every `spacing`, ends included. */
-function screwsAlong(overlap: number, spacing: number): number {
+export function screwsAlong(overlap: number, spacing: number): number {
   if (!(overlap > 0.005)) return 0
   return Math.floor(overlap / spacing + 1e-9) + 1
 }
