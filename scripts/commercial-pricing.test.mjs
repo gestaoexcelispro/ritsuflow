@@ -186,3 +186,23 @@ test('sellingFactors(): unit prices add up to the selling price, with and withou
     assert.equal(money(d.material * f.material + (d.labor + d.equipment + d.subcontract) * f.services), money(priceWithLines(d, lines).price))
   }
 })
+
+test('ABC curve: classes, cumulative share and totals', async () => {
+  const { abcOfItems, abcOfInputs } = await import('../src/lib/commercial/abc.ts')
+  const item = (id, desc, q, m, l, breakdown = {}) => ({ id, description: desc, unit: 'm2', quantity: q, material_unit_cost: m, labor_unit_cost: l, equipment_unit_cost: 0, subcontract_unit_cost: 0, breakdown })
+  const items = [item('a', 'Walls', 100, 50, 20), item('b', 'Ceilings', 50, 30, 10), item('c', 'Trims', 10, 5, 5), item('d', 'Doors', 2, 100, 0)]
+  const r = abcOfItems(items)
+  assert.deepEqual(r.map(x => x.label), ['Walls', 'Ceilings', 'Doors', 'Trims'])
+  assert.deepEqual(r.map(x => x.cls), ['A', 'A', 'C', 'C']) // Ceilings starts at 75% (crosses 80%), so it is still A
+  assert.equal(Math.round(r.at(-1).cumulative), 100)
+  const withDetail = [item('w', 'Walls', 200, 50, 20, {
+    takeoffQuantity: 100,
+    materials: [{ label: 'Board', unit: 'm2', qty: 210, unitCost: 20, amount: 4200 }, { label: 'Stud', unit: 'm', qty: 300, unitCost: 2, amount: 600 }],
+    labor: [{ label: 'Installer', unit: 'h', qty: 40, unitCost: 50, amount: 2000 }],
+  })]
+  const inputs = abcOfInputs(withDetail)
+  const total = inputs.reduce((s, x) => s + x.amount, 0)
+  assert.equal(money(total), money(200 * (50 + 20)))
+  assert.equal(inputs[0].label, 'Board'); assert.equal(inputs[0].amount, 8400)
+  assert.ok(inputs.some(x => x.label === 'Walls' && x.bucket === 'material'))
+})
