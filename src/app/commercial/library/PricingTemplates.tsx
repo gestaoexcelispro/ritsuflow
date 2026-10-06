@@ -7,12 +7,12 @@ import { useT } from '@/lib/i18n/useT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { COUNTRIES } from '@/lib/takeoff/wallTypes'
 import { APPLIES_TO, METHODS, TEMPLATE_COLUMNS, currencyOf, newLine, type TemplateRow } from '@/lib/commercial/library'
-import { applyPricing, PricingError, type AppliesTo, type LineMethod, type PricingLine } from '@/lib/commercial/pricing'
+import { priceWithLines, PricingError, type AppliesTo, type LineMethod, type PricingLine } from '@/lib/commercial/pricing'
 import { formatMoney, formatPct, toInput } from '@/lib/commercial/format'
 import { useCommercialAccess } from '../license'
 import { ui } from '../ui'
 
-type EditLine = { key: string; label: string; applies_to: AppliesTo; method: LineMethod; rate: string }
+type EditLine = { key: string; label: string; applies_to: AppliesTo; method: LineMethod; rate: string; group: 'material' | '' }
 type Draft = { id: string | null; name: string; isDefault: boolean; notes: string; lines: EditLine[]; standard: boolean }
 
 /** Sample direct cost for the preview: 100,000 split 60% material, 40% labor. */
@@ -49,18 +49,18 @@ export default function PricingTemplates() {
       isDefault: copy ? companyRows.length === 0 : r.is_default,
       notes: r.notes || '',
       standard: !copy && !r.organization_id,
-      lines: r.lines.map(l => ({ key: l.key, label: l.label, applies_to: l.applies_to, method: l.method, rate: toInput(l.rate, numberFormat) })),
+      lines: r.lines.map(l => ({ key: l.key, label: l.label, applies_to: l.applies_to, method: l.method, rate: toInput(l.rate, numberFormat), group: l.group === 'material' ? 'material' : '' })),
     })
   }
 
   const canEdit = !!draft && licensed && (!draft.standard || isPlatformOwner)
 
   const parsed: PricingLine[] = useMemo(() => (draft?.lines || []).map(l => ({
-    key: l.key, label: l.label, applies_to: l.applies_to, method: l.method, rate: l.rate.trim() ? parseLocaleNumber(l.rate) : 0,
+    key: l.key, label: l.label, applies_to: l.applies_to, method: l.method, rate: l.rate.trim() ? parseLocaleNumber(l.rate) : 0, ...(l.group === 'material' ? { group: 'material' as const } : {}),
   })), [draft])
 
   const preview = useMemo(() => {
-    try { return { result: applyPricing(SAMPLE, parsed.map(l => ({ ...l, rate: Number.isFinite(l.rate) ? l.rate : 0 }))), problem: '' } }
+    try { return { result: priceWithLines(SAMPLE, parsed.map(l => ({ ...l, rate: Number.isFinite(l.rate) ? l.rate : 0 }))), problem: '' } }
     catch (e) { return { result: null, problem: e instanceof PricingError ? e.message : String(e) } }
   }, [parsed])
 
@@ -141,7 +141,7 @@ export default function PricingTemplates() {
           </select>
         </label>
         <span style={{ flex: 1 }} />
-        {licensed && <button type="button" style={ui.button} onClick={() => { setMessage(''); setDraft({ id: null, name: '', isDefault: companyRows.length === 0, notes: '', standard: false, lines: [{ ...newLine(0), rate: '' }] }) }}>{t('templates.add')}</button>}
+        {licensed && <button type="button" style={ui.button} onClick={() => { setMessage(''); setDraft({ id: null, name: '', isDefault: companyRows.length === 0, notes: '', standard: false, lines: [{ ...newLine(0), rate: '', group: '' }] }) }}>{t('templates.add')}</button>}
       </div>
 
       {error && <div role="alert" style={ui.error}>{error}</div>}
@@ -176,7 +176,7 @@ export default function PricingTemplates() {
               </div>
 
               <div style={ui.tableWrap}>
-                <table style={{ ...ui.table, minWidth: 640 }}>
+                <table style={{ ...ui.table, minWidth: 780 }}>
                   <thead>
                     <tr>
                       <th style={ui.th}>#</th>
@@ -184,6 +184,7 @@ export default function PricingTemplates() {
                       <th style={ui.th}>{t('templates.appliesTo')}</th>
                       <th style={ui.th}>{t('templates.method')}</th>
                       <th style={{ ...ui.th, ...ui.num }}>{t('templates.rate')}</th>
+                      <th style={ui.th}>{t('templates.set')}</th>
                       <th style={ui.th} />
                     </tr>
                   </thead>
@@ -203,6 +204,12 @@ export default function PricingTemplates() {
                           </select>
                         </td>
                         <td style={{ ...ui.td, ...ui.num }}><input aria-label={t('templates.rate')} inputMode="decimal" value={l.rate} disabled={!canEdit} onChange={e => setLine(i, { rate: e.target.value })} style={{ ...ui.input, width: 90, textAlign: 'right' }} /></td>
+                        <td style={ui.td}>
+                          <select aria-label={t('templates.set')} value={l.group} disabled={!canEdit} onChange={e => setLine(i, { group: e.target.value === 'material' ? 'material' : '' })} style={ui.input}>
+                            <option value="">{t('group.all')}</option>
+                            <option value="material">{t('group.material')}</option>
+                          </select>
+                        </td>
                         <td style={{ ...ui.td, whiteSpace: 'nowrap' }}>
                           {canEdit && <>
                             <button type="button" aria-label={t('templates.moveUp')} style={{ ...ui.buttonSmall, marginRight: 4 }} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
@@ -215,8 +222,9 @@ export default function PricingTemplates() {
                   </tbody>
                 </table>
               </div>
-              {canEdit && <button type="button" style={{ ...ui.buttonGhost, alignSelf: 'flex-start' }} onClick={() => setDraft({ ...draft, lines: [...draft.lines, { ...newLine(draft.lines.length), rate: '' }] })}>{t('templates.addLine')}</button>}
+              {canEdit && <button type="button" style={{ ...ui.buttonGhost, alignSelf: 'flex-start' }} onClick={() => setDraft({ ...draft, lines: [...draft.lines, { ...newLine(draft.lines.length), rate: '', group: '' }] })}>{t('templates.addLine')}</button>}
               <p style={{ ...ui.small, margin: 0 }}>{t('templates.rulesNote')}</p>
+              <p style={{ ...ui.small, margin: 0 }}>{t('templates.setNote')}</p>
               <label style={ui.label}>{t('field.notes')}<input value={draft.notes} disabled={!canEdit} onChange={e => setDraft({ ...draft, notes: e.target.value })} style={ui.input} /></label>
               {canEdit && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

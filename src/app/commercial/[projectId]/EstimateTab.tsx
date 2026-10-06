@@ -7,7 +7,7 @@ import { useT } from '@/lib/i18n/useT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { ESTIMATE_COLUMNS, ITEM_COLUMNS, newRevision, refreshFromTakeoff, totalsOf, type EstimateRow, type ItemRow } from '@/lib/commercial/estimates'
 import { LABOR_RATE_COLUMNS, PRICE_ITEM_COLUMNS, today, type LaborRateRow, type PriceItemRow } from '@/lib/commercial/library'
-import { applyPricing, type AppliesTo, type PricingLine } from '@/lib/commercial/pricing'
+import { priceWithLines, type AppliesTo, type PricingLine } from '@/lib/commercial/pricing'
 import { readTakeoff } from '@/lib/commercial/takeoffEstimate'
 import { formatDate, formatMoney, formatPct, formatQty, formatUnitCost, toInput } from '@/lib/commercial/format'
 import { ui } from '../ui'
@@ -58,7 +58,7 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
 
   const totals = useMemo(() => totalsOf(items, estimate?.pricing_lines || []), [items, estimate?.pricing_lines])
   const steps = useMemo(() => {
-    try { return applyPricing(totals.direct, estimate?.pricing_lines || []) } catch { return null }
+    try { return priceWithLines(totals.direct, estimate?.pricing_lines || []) } catch { return null }
   }, [totals.direct, estimate?.pricing_lines])
 
   /** Saves the cached totals on the revision when they changed, then tells the bid header. */
@@ -148,7 +148,7 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
     const v = raw.trim() === '' ? 0 : parseLocaleNumber(raw)
     if (!(v >= 0) || v === estimate.pricing_lines[i]?.rate) return
     const lines = estimate.pricing_lines.map((l, n) => (n === i ? { ...l, rate: v } : l))
-    try { applyPricing(totals.direct, lines) } catch { setError(t('templates.errTaxes')); return }
+    try { priceWithLines(totals.direct, lines) } catch { setError(t('templates.errTaxes')); return }
     await run(async () => {
       const { error: e } = await createClient().from('commercial_estimates').update({ pricing_lines: lines }).eq('id', estimate.id)
       if (e) throw new Error(e.message)
@@ -231,7 +231,7 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
                 {items.map(item => {
                   const unitTotal = COST_FIELDS.reduce((s, f) => s + (Number(item[f]) || 0), 0)
                   const missing = item.breakdown?.missing || []
-                  const hasDetail = !!(item.breakdown?.materials?.length || item.breakdown?.labor?.length || missing.length)
+                  const hasDetail = !!(item.breakdown?.materials?.length || item.breakdown?.labor?.length || item.breakdown?.equipment?.length || item.breakdown?.subcontract?.length || missing.length)
                   return [
                     <tr key={item.id}>
                       <td style={ui.td}>
@@ -266,7 +266,7 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
                       <tr key={`${item.id}-detail`} style={{ background: '#f9fbfc' }}>
                         <td colSpan={9} style={{ ...ui.td, paddingLeft: 24 }}>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, fontSize: 12 }}>
-                            {(['materials', 'labor'] as const).map(kind => (
+                            {(['materials', 'labor', 'equipment', 'subcontract'] as const).filter(kind => kind === 'materials' || kind === 'labor' || (item.breakdown?.[kind] || []).length > 0).map(kind => (
                               <div key={kind}>
                                 <strong style={{ display: 'block', marginBottom: 4 }}>{t(`estimate.detail.${kind}`)}</strong>
                                 {(item.breakdown?.[kind] || []).length === 0 ? <span style={ui.small}>—</span> : (item.breakdown?.[kind] || []).map((l, n) => (
@@ -313,7 +313,7 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
             const step = steps?.steps[i]
             return (
               <div key={l.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 80px', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                <span title={`${label(l.applies_to)} · ${t(`method.${l.method}`)}`}>{l.label}<small style={{ display: 'block', color: '#4f6670' }}>{step ? formatMoney(step.amount, cur, numberFormat) : ''} · {l.method === 'divisor' ? t('method.divisor') : label(l.applies_to)}</small></span>
+                <span title={`${label(l.applies_to)} · ${t(`method.${l.method}`)}`}>{l.label}<small style={{ display: 'block', color: '#4f6670' }}>{step ? formatMoney(step.amount, cur, numberFormat) : ''} · {l.method === 'divisor' ? t('method.divisor') : label(l.applies_to)}{l.group === 'material' ? ` · ${t('group.material')}` : ''}</small></span>
                 {canEdit
                   ? <input key={`${estimate.id}-${l.key}-${l.rate}`} aria-label={`${l.label} %`} inputMode="decimal" defaultValue={toInput(l.rate, numberFormat)} onBlur={e => setRate(i, e.target.value)} style={{ ...ui.input, height: 32, textAlign: 'right', width: '100%' }} />
                   : <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatPct(l.rate, numberFormat)}</span>}

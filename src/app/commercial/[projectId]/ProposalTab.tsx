@@ -6,8 +6,8 @@ import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { ESTIMATE_COLUMNS, ITEM_COLUMNS, totalsOf, type EstimateRow, type ItemRow } from '@/lib/commercial/estimates'
-import { applyPricing } from '@/lib/commercial/pricing'
-import { lines, readProposal, sellingFactor, type Proposal } from '@/lib/commercial/proposal'
+import { priceWithLines, sellingFactors } from '@/lib/commercial/pricing'
+import { lines, readProposal, type Proposal } from '@/lib/commercial/proposal'
 import { formatDate, formatMoney, formatPct, formatQty } from '@/lib/commercial/format'
 import type { BidRow } from '@/lib/commercial/bids'
 import { ui } from '../ui'
@@ -86,10 +86,10 @@ export default function ProposalTab({ bid, editable }: Props) {
     if (!estimate || !draft) return
     setBusy(true); setError(''); setMessage('')
     try {
-      const factor = sellingFactor(totals.row.direct_total, totals.row.price_total)
+      const factor = sellingFactors(totals.direct, estimate.pricing_lines)
       let buildUp: ProposalPdfData['buildUp'] = null
       if (draft.showBuildUp) {
-        const r = applyPricing(totals.direct, estimate.pricing_lines)
+        const r = priceWithLines(totals.direct, estimate.pricing_lines)
         buildUp = r.steps.filter(s => s.rate > 0).map(s => ({ label: s.label, rate: formatPct(s.rate, numberFormat), amount: formatMoney(s.amount, cur, numberFormat) }))
       }
       const created = new Date()
@@ -122,10 +122,10 @@ export default function ProposalTab({ bid, editable }: Props) {
         paymentTerms: draft.paymentTerms.trim(),
         notes: draft.notes.trim(),
         items: draft.showItems ? items.map(it => {
-          const unitDirect = it.material_unit_cost + it.labor_unit_cost + it.equipment_unit_cost + it.subcontract_unit_cost
+          const unitPrice = it.material_unit_cost * factor.material + (it.labor_unit_cost + it.equipment_unit_cost + it.subcontract_unit_cost) * factor.services
           return {
             description: it.description, qty: formatQty(it.quantity, numberFormat), unit: it.unit,
-            unitPrice: formatMoney(unitDirect * factor, cur, numberFormat), total: formatMoney(it.quantity * unitDirect * factor, cur, numberFormat),
+            unitPrice: formatMoney(unitPrice, cur, numberFormat), total: formatMoney(it.quantity * unitPrice, cur, numberFormat),
           }
         }) : null,
         buildUp,

@@ -158,3 +158,31 @@ test('CSV import: reports missing required columns', async () => {
   const { readPriceCsv } = await import('../src/lib/commercial/csvImport.ts')
   assert.deepEqual(readPriceCsv('Name,Price\nA,1\n', false).missingColumns, ['unit'])
 })
+
+test('BDI diferenciado: material priced with its own lines, the rest with the main lines', async () => {
+  const { priceWithLines } = await import('../src/lib/commercial/pricing.ts')
+  const d = { material: 60000, labor: 40000, equipment: 0, subcontract: 0 }
+  const lines = [
+    { key: 'ac', label: 'AC', applies_to: 'direct', method: 'percent', rate: 4 },
+    { key: 'l', label: 'L', applies_to: 'subtotal', method: 'percent', rate: 7.4 },
+    { key: 'iss', label: 'ISS', applies_to: 'subtotal', method: 'divisor', rate: 5 },
+    { key: 'mac', label: 'AC mat', applies_to: 'direct', method: 'percent', rate: 2, group: 'material' },
+    { key: 'ml', label: 'L mat', applies_to: 'subtotal', method: 'percent', rate: 3, group: 'material' },
+  ]
+  const r = priceWithLines(d, lines)
+  const mat = 60000 * 1.02 * 1.03
+  const svc = (40000 * 1.04 * 1.074) / 0.95
+  assert.equal(money(r.price), money(mat + svc))
+  assert.deepEqual(r.steps.map(s => s.key), ['ac', 'l', 'iss', 'mac', 'ml'])
+  // Without material lines it is the plain engine.
+  assert.equal(priceWithLines(d, lines.slice(0, 3)).price, applyPricing(d, lines.slice(0, 3)).price)
+})
+
+test('sellingFactors(): unit prices add up to the selling price, with and without material BDI', async () => {
+  const { sellingFactors, priceWithLines } = await import('../src/lib/commercial/pricing.ts')
+  const d = { material: 60000, labor: 30000, equipment: 6000, subcontract: 4000 }
+  for (const lines of [BR_TCU, [...BR_TCU, { key: 'm', label: 'M', applies_to: 'direct', method: 'percent', rate: 12, group: 'material' }]]) {
+    const f = sellingFactors(d, lines)
+    assert.equal(money(d.material * f.material + (d.labor + d.equipment + d.subcontract) * f.services), money(priceWithLines(d, lines).price))
+  }
+})

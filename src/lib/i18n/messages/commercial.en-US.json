@@ -313,5 +313,11 @@
   "import.note": "Each line is added as a new price. Products with the same name and unit as a RitsuScope catalog material are linked to it. Lines without a date are valid from today.",
   "import.confirm": "Import {count} prices",
   "import.done": "{count} prices imported ({linked} linked to the RitsuScope catalog).",
-  "import.failedAt": "Import stopped after {done} prices: {message}"
+  "import.failedAt": "Import stopped after {done} prices: {message}",
+  "estimate.detail.equipment": "Equipment",
+  "estimate.detail.subcontract": "Subcontracts",
+  "templates.set": "BDI set",
+  "group.all": "Main (services, or everything)",
+  "group.material": "Material BDI",
+  "templates.setNote": "Mark lines as \"Material BDI\" to price materials with their own, lower BDI (BDI diferenciado). The other lines then apply to labor, equipment and subcontracts only."
 }
