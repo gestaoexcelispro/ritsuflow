@@ -135,3 +135,26 @@ test('proposal: lines, defaults and the selling factor', async () => {
   assert.equal(money(294365.11 * sellingFactor(294365.11, 381320.54)), 381320.54)
   assert.equal(sellingFactor(0, 10), 1)
 })
+
+test('CSV import: Portuguese Excel file with semicolons', async () => {
+  const { readPriceCsv, parseMoney, parseDate, priceTemplateCsv } = await import('../src/lib/commercial/csvImport.ts')
+  const csv = '﻿Código;Nome;Unidade;Preço unitário;Fornecedor;Tipo;Vigência\nCH-1;Chapa ST 12,5 mm;m2;R$ 1.022,90;Forn A;Material;01/10/2026\n;"Montante 48; galv.";m;6,10;;Equipamento;\n;Sem preço;un;abc;;;\n'
+  const r = readPriceCsv(csv, true)
+  assert.deepEqual(r.missingColumns, [])
+  assert.equal(r.rows.length, 2)
+  assert.equal(r.rows[0].unitCost, 1022.9); assert.equal(r.rows[0].validFrom, '2026-10-01'); assert.equal(r.rows[0].code, 'CH-1')
+  assert.equal(r.rows[1].name, 'Montante 48; galv.'); assert.equal(r.rows[1].kind, 'equipment'); assert.equal(r.rows[1].validFrom, null)
+  assert.deepEqual(r.errors, [{ line: 4, reason: 'cost' }])
+  assert.equal(parseMoney('$1,234.50'), 1234.5)
+  assert.equal(parseDate('10/01/2026', false), '2026-10-01')
+  assert.equal(parseDate('31/02/2026x', true), null)
+  for (const lang of ['pt-BR', 'en-US', 'es']) {
+    const t = readPriceCsv(priceTemplateCsv(lang), lang !== 'en-US')
+    assert.equal(t.rows.length, 2, lang); assert.deepEqual(t.errors, [], lang)
+  }
+})
+
+test('CSV import: reports missing required columns', async () => {
+  const { readPriceCsv } = await import('../src/lib/commercial/csvImport.ts')
+  assert.deepEqual(readPriceCsv('Name,Price\nA,1\n', false).missingColumns, ['unit'])
+})

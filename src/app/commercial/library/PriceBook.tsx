@@ -8,6 +8,7 @@ import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { COUNTRIES } from '@/lib/takeoff/wallTypes'
 import { CURRENCIES, PRICE_ITEM_COLUMNS, PRICE_KINDS, currencyOf, groupPrices, today, type PriceItemRow, type PriceKind } from '@/lib/commercial/library'
 import { formatDate, formatUnitCost, toInput } from '@/lib/commercial/format'
+import { priceTemplateCsv, readPriceCsv, type ImportResult } from '@/lib/commercial/csvImport'
 import { useCommercialAccess } from '../license'
 import { ui } from '../ui'
 
@@ -43,6 +44,7 @@ export default function PriceBook() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
+  const [imported, setImported] = useState<(ImportResult & { fileName: string }) | null>(null)
   const onDate = today()
 
   const load = useCallback(async () => {
@@ -122,6 +124,39 @@ export default function PriceBook() {
     setForm(null); setMessage(t('prices.deleted')); void load()
   }
 
+  async function pickCsv(file: File) {
+    setError(''); setMessage('')
+    const text = await file.text()
+    setImported({ ...readPriceCsv(text, language !== 'en-US'), fileName: file.name })
+  }
+
+  function downloadTemplate() {
+    const blob = new Blob([priceTemplateCsv(language)], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob); a.download = `${t('import.templateName')}.csv`
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+
+  async function runImport() {
+    if (!imported || !organizationId) { if (!organizationId) setError(t('error.noCompany')); return }
+    setSaving(true); setError('')
+    const byName = new Map(materials.map(m => [`${m.name.trim().toLowerCase()}|${m.unit.trim().toLowerCase()}`, m.id]))
+    const payload = imported.rows.map(r => ({
+      organization_id: organizationId, country_code: country, currency_code: r.currency || currencyOf(country), kind: r.kind,
+      material_id: r.kind === 'material' ? byName.get(`${r.name.trim().toLowerCase()}|${r.unit.trim().toLowerCase()}`) ?? null : null,
+      code: r.code, name: r.name, unit: r.unit, unit_cost: r.unitCost, supplier: r.supplier, valid_from: r.validFrom || onDate,
+    }))
+    const supabase = createClient()
+    for (let i = 0; i < payload.length; i += 500) {
+      const { error: e } = await supabase.from('commercial_price_items').insert(payload.slice(i, i + 500))
+      if (e) { setSaving(false); setError(t('import.failedAt', { done: i, message: e.message })); void load(); return }
+    }
+    setSaving(false)
+    setMessage(t('import.done', { count: payload.length, linked: payload.filter(p => p.material_id).length }))
+    setImported(null); void load()
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={ui.toolbar}>
@@ -137,11 +172,53 @@ export default function PriceBook() {
           </select>
         </label>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('prices.search')} aria-label={t('prices.search')} style={{ ...ui.input, flex: '1 1 220px' }} />
-        {licensed && <button type="button" style={ui.button} onClick={() => { setForm(blank()); setMessage('') }}>{t('prices.add')}</button>}
+        {licensed && <>
+          <button type="button" style={ui.buttonGhost} onClick={downloadTemplate}>{t('import.template')}</button>
+          <label style={{ ...ui.buttonGhost, display: 'inline-flex', alignItems: 'center' }}>
+            {t('import.button')}
+            <input type="file" accept=".csv,text/csv,text/plain" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void pickCsv(f) }} />
+          </label>
+          <button type="button" style={ui.button} onClick={() => { setForm(blank()); setMessage('') }}>{t('prices.add')}</button>
+        </>}
       </div>
 
       {error && <div role="alert" style={ui.error}>{error}</div>}
       {message && <div role="status" style={ui.notice}>{message}</div>}
+
+      {imported && (
+        <div style={{ ...ui.card, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <strong style={{ fontSize: 14, color: '#173441' }}>{t('import.previewTitle', { file: imported.fileName })}</strong>
+          {imported.missingColumns.length > 0 ? (
+            <div role="alert" style={ui.error}>{t('import.missingColumns', { columns: imported.missingColumns.map(c => t(`import.col.${c}`)).join(', ') })}</div>
+          ) : <>
+            <span style={{ fontSize: 13, color: '#294955' }}>{t('import.summary', { ok: imported.rows.length, bad: imported.errors.length })}</span>
+            {imported.errors.length > 0 && (
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#8a4413', maxHeight: 120, overflowY: 'auto' }}>
+                {imported.errors.slice(0, 50).map(er => <li key={er.line}>{t('import.errLine', { line: er.line, reason: t(`import.reason.${er.reason}`) })}</li>)}
+              </ul>
+            )}
+            {imported.rows.length > 0 && (
+              <div style={{ ...ui.tableWrap, maxHeight: 220, overflowY: 'auto' }}>
+                <table style={{ ...ui.table, minWidth: 560 }}>
+                  <thead><tr><th style={ui.th}>{t('field.name')}</th><th style={ui.th}>{t('field.unit')}</th><th style={{ ...ui.th, ...ui.num }}>{t('field.unitCost')}</th><th style={ui.th}>{t('field.validFrom')}</th></tr></thead>
+                  <tbody>{imported.rows.slice(0, 8).map(r => (
+                    <tr key={r.line}><td style={ui.td}>{r.name}</td><td style={ui.td}>{r.unit}</td>
+                      <td style={{ ...ui.td, ...ui.num }}>{formatUnitCost(r.unitCost, r.currency || currencyOf(country), numberFormat)}</td>
+                      <td style={ui.td}>{formatDate(r.validFrom || onDate, language)}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+            <span style={ui.small}>{t('import.note')}</span>
+          </>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {imported.rows.length > 0 && imported.missingColumns.length === 0 && (
+              <button type="button" disabled={saving} onClick={runImport} style={ui.button}>{saving ? t('action.saving') : t('import.confirm', { count: imported.rows.length })}</button>
+            )}
+            <button type="button" onClick={() => setImported(null)} style={ui.buttonGhost}>{t('action.cancel')}</button>
+          </div>
+        </div>
+      )}
 
       {form && (
         <form onSubmit={save} style={{ ...ui.card, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
