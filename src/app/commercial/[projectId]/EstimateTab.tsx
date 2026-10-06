@@ -181,8 +181,11 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
   if (!estimate) return <div style={ui.empty}>{t('revisions.empty')}</div>
 
   const latest = revisions[0]
+  const currencySymbol = (() => {
+    try { return new Intl.NumberFormat(numberFormat, { style: 'currency', currency: cur }).formatToParts(0).find(x => x.type === 'currency')?.value || cur } catch { return cur }
+  })()
   const costInput = (item: ItemRow, field: CostField) => canEdit
-    ? <input key={`${item.id}-${field}-${item[field]}`} aria-label={t(`estimate.col.${field}`)} inputMode="decimal" defaultValue={toInput(Math.round(item[field] * 10000) / 10000, numberFormat)}
+    ? <input key={`${item.id}-${field}-${item[field]}`} aria-label={t(`estimate.col.${field}`, { currency: currencySymbol })} inputMode="decimal" defaultValue={toInput(Math.round(item[field] * 10000) / 10000, numberFormat)}
         onBlur={e => numberPatch(item, field, e.target.value)} style={{ ...ui.input, width: 96, height: 32, textAlign: 'right' }} />
     : <span>{item[field] ? formatUnitCost(item[field], cur, numberFormat) : '—'}</span>
   const label = (a: AppliesTo) => t(`applies.${a}`)
@@ -219,8 +222,8 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
                   <th style={ui.th}>{t('estimate.col.item')}</th>
                   <th style={{ ...ui.th, ...ui.num }}>{t('estimate.col.quantity')}</th>
                   <th style={ui.th}>{t('field.unit')}</th>
-                  {COST_FIELDS.map(f => <th key={f} style={{ ...ui.th, ...ui.num }}>{t(`estimate.col.${f}`)}</th>)}
-                  <th style={{ ...ui.th, ...ui.num }}>{t('estimate.col.total')}</th>
+                  {COST_FIELDS.map(f => <th key={f} style={{ ...ui.th, ...ui.num }}>{t(`estimate.col.${f}`, { currency: currencySymbol })}</th>)}
+                  <th style={{ ...ui.th, ...ui.num }}>{t('estimate.col.total', { currency: currencySymbol })}</th>
                   <th style={ui.th} />
                 </tr>
               </thead>
