@@ -561,5 +561,10 @@
   "constraints.currentStatusValue": "Estado actual: {status}",
   "constraints.linkedWorkOne": "1 trabajo vinculado",
   "constraints.linkedWork": "{count} trabajos vinculados",
-  "constraints.unassignedLocation": "Ubicación sin asignar"
+  "constraints.unassignedLocation": "Ubicación sin asignar",
+  "constraints.project": "Proyecto",
+  "constraints.selectProject": "Selecciona un proyecto",
+  "constraints.refresh": "Actualizar",
+  "constraints.noProject": "Ningún proyecto seleccionado",
+  "constraints.noProjectText": "Elige un proyecto para ver y gestionar sus restricciones."
 }

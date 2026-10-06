@@ -12,6 +12,8 @@ import { supabase } from '../../../../lib/supabase';
 import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
 import { useT } from '../../../../lib/i18n/useT';
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
+import { Empty, Icon, Notice, Panel, Stat, ui } from '../../../fieldop/ui';
+import styles from '../../precon.module.css';
 
 
 // ============================================================
@@ -2002,121 +2004,6 @@ export default function ConstraintLogPage() {
   // ==========================================================
   // EFFECTS
   // ==========================================================
-
-  useEffect(
-    () => {
-
-      const publishHeaderState =
-        () => {
-
-          window.dispatchEvent(
-            new CustomEvent(
-              'ritsuflow:constraint-header-state',
-              {
-                detail: {
-                  projects,
-                  selectedProjectId,
-                  loading,
-                },
-              }
-            )
-          );
-
-        };
-
-
-      publishHeaderState();
-
-    },
-    [
-      projects,
-      selectedProjectId,
-      loading,
-    ]
-  );
-
-
-  useEffect(
-    () => {
-
-      function handleHeaderProjectChange(
-        event
-      ) {
-
-        handleProjectChange(
-          event.detail?.projectId ||
-          ''
-        );
-
-      }
-
-
-      function handleHeaderRefresh() {
-
-        if (
-          selectedProjectId
-        ) {
-          loadConstraintLog(
-            selectedProjectId
-          );
-        }
-
-      }
-
-
-      function handleHeaderAddConstraint() {
-
-        if (
-          selectedProjectId
-        ) {
-          openCreateModal();
-        }
-
-      }
-
-
-      window.addEventListener(
-        'ritsuflow:constraint-project-change',
-        handleHeaderProjectChange
-      );
-
-      window.addEventListener(
-        'ritsuflow:constraint-refresh',
-        handleHeaderRefresh
-      );
-
-      window.addEventListener(
-        'ritsuflow:constraint-add',
-        handleHeaderAddConstraint
-      );
-
-
-      return () => {
-
-        window.removeEventListener(
-          'ritsuflow:constraint-project-change',
-          handleHeaderProjectChange
-        );
-
-        window.removeEventListener(
-          'ritsuflow:constraint-refresh',
-          handleHeaderRefresh
-        );
-
-        window.removeEventListener(
-          'ritsuflow:constraint-add',
-          handleHeaderAddConstraint
-        );
-
-      };
-
-    },
-    [
-      selectedProjectId,
-      loadConstraintLog,
-    ]
-  );
-
 
   useEffect(
     () => {
@@ -4508,6 +4395,33 @@ export default function ConstraintLogPage() {
 
   return (
     <div style={pageStyle}>
+      <div className={styles.toolbar} style={{ marginBottom: 12 }}>
+        <div className={styles.group}>
+          <label className={styles.control}>
+            <span>{t.project}</span>
+            <select className={styles.projectSelect} value={selectedProjectId} onChange={(event) => handleProjectChange(event.target.value)}>
+              <option value="">{t.selectProject}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.code ? `${project.code} – ` : ''}{project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className={ui.btnGhost} disabled={!selectedProjectId || loading} onClick={() => loadConstraintLog(selectedProjectId)}>
+            {t.refresh}
+          </button>
+        </div>
+        <div className={`${styles.group} ${styles.push}`}>
+          <button type="button" className={ui.btnPrimary} disabled={!selectedProjectId} onClick={openCreateModal}>
+            <Icon name="plus" size={18} />{t.addConstraint}
+          </button>
+        </div>
+      </div>
+
+      {!selectedProjectId && (
+        <Empty title={t.noProject} text={t.noProjectText} />
+      )}
 
       {errorMessage && (
         <MessageBox type="error">
@@ -7373,30 +7287,10 @@ function SectionCard({
   subtitle,
   children,
 }) {
-
   return (
-    <section style={sectionCardStyle}>
-
-      <div style={sectionHeaderStyle}>
-
-        <div style={sectionHeadingStyle}>
-          {title}
-        </div>
-
-        {subtitle && (
-          <div style={sectionSupportingTextStyle}>
-            {subtitle}
-          </div>
-        )}
-
-      </div>
-
-
-      <div style={sectionContentStyle}>
-        {children}
-      </div>
-
-    </section>
+    <Panel title={title} text={subtitle} style={{ marginBottom: 12 }}>
+      {children}
+    </Panel>
   );
 }
 
@@ -7408,52 +7302,13 @@ function SummaryCard({
   alert,
   positive,
 }) {
-
   return (
-    <div
-      style={{
-        ...summaryCardStyle,
-
-        borderColor:
-          alert
-            ? '#fecaca'
-            : positive
-              ? '#bbf7d0'
-              : '#e2e8f0',
-
-        background:
-          alert
-            ? '#fff7f7'
-            : positive
-              ? '#f7fef9'
-              : '#ffffff',
-      }}
-    >
-
-      <div style={summaryLabelStyle}>
-        {label}
-      </div>
-
-      <div
-        style={{
-          ...summaryValueStyle,
-
-          color:
-            alert
-              ? '#b91c1c'
-              : positive
-                ? '#166534'
-                : '#0f172a',
-        }}
-      >
-        {value}
-      </div>
-
-      <div style={summaryDescriptionStyle}>
-        {description}
-      </div>
-
-    </div>
+    <Stat
+      label={label}
+      value={value}
+      hint={description}
+      tone={alert ? 'warn' : positive ? 'ok' : undefined}
+    />
   );
 }
 
@@ -8614,17 +8469,9 @@ function MessageBox({
   type,
   children,
 }) {
-
   return (
-    <div
-      style={
-        type ===
-        'error'
-          ? errorMessageStyle
-          : successMessageStyle
-      }
-    >
-      {children}
+    <div style={{ marginBottom: 12 }}>
+      <Notice tone={type === 'error' ? 'bad' : 'ok'}>{children}</Notice>
     </div>
   );
 }
@@ -8635,17 +8482,8 @@ function MessageBox({
 // ============================================================
 
 const pageStyle = {
-  minHeight:
-    '100%',
-
-  padding:
-    '0 24px 36px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#0f172a',
+  minWidth: 0,
+  color: 'var(--fo-ink)',
 };
 
 
@@ -8653,36 +8491,10 @@ const pageStyle = {
 // STANDARD PAGE SECTIONS
 // ============================================================
 
-const sectionCardStyle = {
-  marginBottom:
-    '10px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '9px',
-
-  background:
-    '#ffffff',
-
-  overflow:
-    'hidden',
-};
-
-
-const sectionHeaderStyle = {
-  minHeight:
-    '62px',
-
-  padding:
-    '13px 14px 0',
-};
-
 
 const sectionHeadingStyle = {
   color:
-    '#0f172a',
+    'var(--fo-ink)',
 
   fontSize:
     '18px',
@@ -8700,7 +8512,7 @@ const sectionSupportingTextStyle = {
     '4px',
 
   color:
-    '#94a3b8',
+    'var(--fo-muted)',
 
   fontSize:
     '13px',
@@ -8710,82 +8522,14 @@ const sectionSupportingTextStyle = {
 };
 
 
-const sectionContentStyle = {
-  padding:
-    '10px 14px 12px',
-};
-
-
 // ============================================================
 // SUMMARY
 // ============================================================
 
 const summaryGridStyle = {
-  display:
-    'grid',
-
-  gridTemplateColumns:
-    'repeat(4,minmax(0,1fr))',
-
-  gap:
-    '10px',
-
-  margin:
-    0,
-};
-
-
-const summaryCardStyle = {
-  padding:
-    '14px',
-
-  border:
-    '1px solid #e2e8f0',
-
-  borderRadius:
-    '8px',
-
-  background:
-    '#ffffff',
-};
-
-
-const summaryLabelStyle = {
-  color:
-    '#64748b',
-
-  fontSize:
-    '13px',
-
-  fontWeight:
-    900,
-
-  textTransform:
-    'uppercase',
-};
-
-
-const summaryValueStyle = {
-  marginTop:
-    '5px',
-
-  fontSize:
-    '36px',
-
-  fontWeight:
-    900,
-};
-
-
-const summaryDescriptionStyle = {
-  marginTop:
-    '6px',
-
-  color:
-    '#94a3b8',
-
-  fontSize:
-    '13px',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+  gap: '10px',
 };
 
 
@@ -8794,20 +8538,11 @@ const summaryDescriptionStyle = {
 // ============================================================
 
 const filterLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '5px',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    800,
+  display: 'block',
+  marginBottom: '4px',
+  color: 'var(--fo-muted)',
+  fontSize: '12px',
+  fontWeight: 600,
 };
 
 
@@ -8827,29 +8562,8 @@ const registerFiltersStyle = {
 
 
 const registerFilterInputStyle = {
-  width:
-    '100%',
-
-  height:
-    '34px',
-
-  padding:
-    '0 8px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '5px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '11px',
+  width: '100%',
+  minHeight: '40px',
 };
 
 
@@ -8874,13 +8588,13 @@ const registerPanelStyle = {
     'hidden',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '9px',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 };
 
 
@@ -8889,10 +8603,10 @@ const registerHeaderStyle = {
     '12px 14px 10px',
 
   borderBottom:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 };
 
 
@@ -8913,7 +8627,7 @@ const registerHeaderTopStyle = {
 
 const registerCountStyle = {
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '12px',
@@ -8957,56 +8671,26 @@ const tableStyle = {
 
 
 const headerCellStyle = {
-  position:
-    'sticky',
-
-  top:
-    0,
-
-  zIndex:
-    5,
-
-  padding:
-    '11px 10px',
-
-  borderBottom:
-    '1px solid #cbd5e1',
-
-  background:
-    '#f8fafc',
-
-  boxShadow:
-    '0 1px 0 #cbd5e1',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
-
-  textAlign:
-    'center',
+  position: 'sticky',
+  top: 0,
+  zIndex: 5,
+  padding: '10px 12px',
+  borderBottom: '1px solid var(--fo-line-soft)',
+  background: 'var(--fo-sunken)',
+  color: 'var(--fo-muted)',
+  fontSize: '13px',
+  fontWeight: 600,
+  textAlign: 'center',
+  whiteSpace: 'nowrap',
 };
 
 
 const bodyCellStyle = {
-  padding:
-    '13px 11px',
-
-  borderBottom:
-    '1px solid #e2e8f0',
-
-  fontSize:
-    '13px',
-
-  textAlign:
-    'center',
-
-  verticalAlign:
-    'middle',
+  padding: '12px',
+  borderBottom: '1px solid var(--fo-line-soft)',
+  fontSize: '14px',
+  textAlign: 'center',
+  verticalAlign: 'middle',
 };
 
 
@@ -9026,7 +8710,7 @@ const constraintTitleStyle = {
     '4px',
 
   color:
-    '#475569',
+    'var(--fo-muted)',
 
   fontSize:
     '13px',
@@ -9059,10 +8743,10 @@ const blockingInlineStyle = {
     '999px',
 
   background:
-    '#fef2f2',
+    'var(--fo-bad-wash)',
 
   color:
-    '#b91c1c',
+    'var(--fo-bad)',
 
   fontSize:
     '10px',
@@ -9080,10 +8764,10 @@ const sourceInlineStyle = {
     '999px',
 
   background:
-    '#eff6ff',
+    'var(--fo-info-wash)',
 
   color:
-    '#1d4ed8',
+    'var(--fo-info)',
 
   fontSize:
     '10px',
@@ -9098,40 +8782,10 @@ const secondaryTextStyle = {
     '3px',
 
   color:
-    '#94a3b8',
+    'var(--fo-muted)',
 
   fontSize:
     '12px',
-};
-
-
-const effectivePriorityStackStyle = {
-  display:
-    'inline-flex',
-
-  flexDirection:
-    'column',
-
-  alignItems:
-    'center',
-
-  gap:
-    '3px',
-};
-
-
-const autoLabelStyle = {
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    900,
-
-  letterSpacing:
-    '0.08em',
 };
 
 
@@ -9206,10 +8860,10 @@ const blockingPillStyle = {
     '1px solid #fecaca',
 
   background:
-    '#fef2f2',
+    'var(--fo-bad-wash)',
 
   color:
-    '#b91c1c',
+    'var(--fo-bad)',
 };
 
 
@@ -9218,32 +8872,19 @@ const blockingPillStyle = {
 // ============================================================
 
 const primaryButtonStyle = {
-  height:
-    '42px',
-
-  padding:
-    '0 12px',
-
-  border:
-    '1px solid #2563eb',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#2563eb',
-
-  color:
-    '#ffffff',
-
-  fontSize:
-    '14px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '6px',
+  minHeight: '40px',
+  padding: '0 14px',
+  borderRadius: '8px',
+  fontSize: '14px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  border: '1px solid var(--fo-teal)',
+  background: 'var(--fo-teal)',
+  color: '#04312c',
 };
 
 
@@ -9281,32 +8922,19 @@ const dangerPrimaryButtonStyle = {
 
 
 const secondaryButtonStyle = {
-  height:
-    '42px',
-
-  padding:
-    '0 11px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '14px',
-
-  fontWeight:
-    800,
-
-  cursor:
-    'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '6px',
+  minHeight: '40px',
+  padding: '0 14px',
+  borderRadius: '8px',
+  fontSize: '14px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  border: '1px solid var(--fo-line)',
+  background: 'var(--fo-surface)',
+  color: 'var(--fo-ink)',
 };
 
 
@@ -9317,40 +8945,29 @@ const secondaryActionButtonStyle = {
     '1px solid #bfdbfe',
 
   background:
-    '#eff6ff',
+    'var(--fo-info-wash)',
 
   color:
-    '#1d4ed8',
+    'var(--fo-info)',
 };
 
 
 const manageButtonStyle = {
-  height:
-    '34px',
-
-  padding:
-    '0 9px',
-
-  border:
-    '1px solid #93c5fd',
-
-  borderRadius:
-    '5px',
-
-  background:
-    '#eff6ff',
-
-  color:
-    '#1d4ed8',
-
-  fontSize:
-    '12px',
-
-  fontWeight:
-    900,
-
-  cursor:
-    'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '6px',
+  minHeight: '40px',
+  padding: '0 14px',
+  borderRadius: '8px',
+  fontSize: '14px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  minHeight: '34px',
+  padding: '0 12px',
+  border: '1px solid var(--fo-line)',
+  background: 'var(--fo-surface)',
+  color: 'var(--fo-teal-ink)',
 };
 
 
@@ -9359,32 +8976,14 @@ const manageButtonStyle = {
 // ============================================================
 
 const managementModalOverlayStyle = {
-  position:
-    'fixed',
-
-  inset:
-    0,
-
-  zIndex:
-    9800,
-
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  padding:
-    '24px',
-
-  background:
-    'rgba(15,23,42,0.58)',
-
-  backdropFilter:
-    'blur(2px)',
+  position: 'fixed',
+  inset: 0,
+  zIndex: 9800,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '24px',
+  background: 'rgba(6, 38, 55, 0.55)',
 };
 
 
@@ -9411,13 +9010,13 @@ const drawerStyle = {
     'hidden',
 
   border:
-    '1px solid #cbd5e1',
+    '1px solid var(--fo-line)',
 
   borderRadius:
     '14px',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 
   boxShadow:
     '0 28px 80px rgba(15,23,42,0.32)',
@@ -9438,10 +9037,10 @@ const drawerHeaderStyle = {
     '16px 18px',
 
   borderBottom:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 
   flexShrink:
     0,
@@ -9450,7 +9049,7 @@ const drawerHeaderStyle = {
 
 const drawerEyebrowStyle = {
   color:
-    '#2563eb',
+    'var(--fo-info)',
 
   fontSize:
     '11px',
@@ -9498,7 +9097,7 @@ const drawerConstraintTitleStyle = {
     '5px',
 
   color:
-    '#475569',
+    'var(--fo-muted)',
 
   fontSize:
     '14px',
@@ -9534,7 +9133,7 @@ const drawerMetaLabelStyle = {
     '4px',
 
   color:
-    '#94a3b8',
+    'var(--fo-muted)',
 
   fontSize:
     '10px',
@@ -9555,16 +9154,16 @@ const closeButtonStyle = {
     '31px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '6px',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '22px',
@@ -9588,10 +9187,10 @@ const drawerSummaryStyle = {
     '10px 18px',
 
   borderBottom:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 
   flexShrink:
     0,
@@ -9603,7 +9202,7 @@ const drawerMetricStyle = {
     '8px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '6px',
@@ -9618,7 +9217,7 @@ const drawerTabsStyle = {
     'repeat(5,minmax(0,1fr))',
 
   borderBottom:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   flexShrink:
     0,
@@ -9660,7 +9259,7 @@ const drawerBodyStyle = {
     '16px 18px',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 };
 
 
@@ -9681,10 +9280,10 @@ const drawerFooterStyle = {
     '10px 18px',
 
   borderTop:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 
   flexShrink:
     0,
@@ -9693,7 +9292,7 @@ const drawerFooterStyle = {
 
 const footerMetaStyle = {
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '11px',
@@ -9711,19 +9310,19 @@ const drawerSectionStyle = {
     '11px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '8px',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 };
 
 
 const drawerSectionHeadingStyle = {
   color:
-    '#0f172a',
+    'var(--fo-ink)',
 
   fontSize:
     '16px',
@@ -9738,7 +9337,7 @@ const drawerSectionSupportingTextStyle = {
     '3px',
 
   color:
-    '#94a3b8',
+    'var(--fo-muted)',
 
   fontSize:
     '12px',
@@ -9761,47 +9360,17 @@ const fieldStyle = {
 
 
 const modalLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '5px',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '13px',
-
-  fontWeight:
-    800,
+  display: 'block',
+  marginBottom: '6px',
+  color: 'var(--fo-ink)',
+  fontSize: '14px',
+  fontWeight: 600,
 };
 
 
 const modalInputStyle = {
-  width:
-    '100%',
-
-  height:
-    '42px',
-
-  padding:
-    '0 8px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '14px',
+  width: '100%',
+  minHeight: '42px',
 };
 
 
@@ -9816,16 +9385,16 @@ const modalTextareaStyle = {
     '8px',
 
   border:
-    '1px solid #cbd5e1',
+    '1px solid var(--fo-line)',
 
   borderRadius:
     '6px',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 
   color:
-    '#0f172a',
+    'var(--fo-ink)',
 
   fontFamily:
     'inherit',
@@ -9863,13 +9432,13 @@ const checkboxStyle = {
     '9px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '6px',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 
   fontSize:
     '12px',
@@ -9891,33 +9460,6 @@ const rightActionsStyle = {
 
   flexWrap:
     'wrap',
-};
-
-
-const autoPriorityNoticeStyle = {
-  marginBottom:
-    '11px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#991b1b',
-
-  fontSize:
-    '11px',
-
-  lineHeight:
-    1.45,
 };
 
 
@@ -9948,7 +9490,7 @@ const lifecycleStageStyle = {
     '4px 6px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '999px',
@@ -9960,7 +9502,7 @@ const lifecycleStageStyle = {
 
 const lifecycleArrowStyle = {
   color:
-    '#cbd5e1',
+    'var(--fo-line)',
 
   fontSize:
     '12px',
@@ -10011,7 +9553,7 @@ const lifecycleDescriptionStyle = {
     '3px',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '11px',
@@ -10036,7 +9578,7 @@ const actionPanelStyle = {
     '7px',
 
   background:
-    '#f8fbff',
+    'var(--fo-sunken)',
 };
 
 
@@ -10054,7 +9596,7 @@ const actionPanelDescriptionStyle = {
     '3px',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '12px',
@@ -10091,7 +9633,7 @@ const forecastCardStyle = {
     '10px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '7px',
@@ -10103,7 +9645,7 @@ const forecastDescriptionStyle = {
     '3px',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '12px',
@@ -10115,7 +9657,7 @@ const forecastDescriptionStyle = {
 
 const metaLabelStyle = {
   color:
-    '#94a3b8',
+    'var(--fo-muted)',
 
   fontSize:
     '10px',
@@ -10189,10 +9731,10 @@ const delayAssessmentStyle = {
     '6px',
 
   background:
-    '#fef2f2',
+    'var(--fo-bad-wash)',
 
   color:
-    '#b91c1c',
+    'var(--fo-bad)',
 
   fontSize:
     '12px',
@@ -10213,10 +9755,10 @@ const safeAssessmentStyle = {
     '6px',
 
   background:
-    '#f0fdf4',
+    'var(--fo-ok-wash)',
 
   color:
-    '#166534',
+    'var(--fo-ok)',
 
   fontSize:
     '12px',
@@ -10228,58 +9770,10 @@ const helperTextStyle = {
     '4px',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '11px',
-};
-
-
-const criticalEscalationStyle = {
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'space-between',
-
-  gap:
-    '8px',
-
-  marginBottom:
-    '10px',
-
-  padding:
-    '10px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '7px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#991b1b',
-
-  fontSize:
-    '12px',
-};
-
-
-const noticeTextStyle = {
-  marginTop:
-    '3px',
-
-  fontSize:
-    '11px',
-
-  lineHeight:
-    1.4,
 };
 
 
@@ -10339,7 +9833,7 @@ const inlineValidationStyle = {
     '5px',
 
   color:
-    '#b91c1c',
+    'var(--fo-bad)',
 
   fontSize:
     '11px',
@@ -10369,13 +9863,13 @@ const reopenTransitionStyle = {
     '9px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '6px',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 
   fontSize:
     '12px',
@@ -10384,7 +9878,7 @@ const reopenTransitionStyle = {
 
 const reopenArrowStyle = {
   color:
-    '#cbd5e1',
+    'var(--fo-line)',
 
   fontSize:
     '20px',
@@ -10418,13 +9912,13 @@ const miniSummaryStyle = {
     '8px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '6px',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 };
 
 
@@ -10454,10 +9948,10 @@ const addRecoveryButtonStyle = {
     '6px',
 
   background:
-    '#eff6ff',
+    'var(--fo-info-wash)',
 
   color:
-    '#1d4ed8',
+    'var(--fo-info)',
 
   fontSize:
     '12px',
@@ -10478,16 +9972,16 @@ const actionPlanEmptyStyle = {
     '14px',
 
   border:
-    '1px dashed #cbd5e1',
+    '1px dashed var(--fo-line)',
 
   borderRadius:
     '7px',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '12px',
@@ -10523,13 +10017,13 @@ const recoveryActionCardStyle = {
     '10px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '7px',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 };
 
 
@@ -10571,7 +10065,7 @@ const recoveryActionApproachStyle = {
     '4px',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '11px',
@@ -10583,7 +10077,7 @@ const recoveryActionApproachStyle = {
 
 const recoveryActionDueStyle = {
   color:
-    '#475569',
+    'var(--fo-muted)',
 
   fontSize:
     '11px',
@@ -10595,7 +10089,7 @@ const recoveryActionDescriptionStyle = {
     '8px',
 
   color:
-    '#475569',
+    'var(--fo-muted)',
 
   fontSize:
     '12px',
@@ -10631,16 +10125,16 @@ const effectivenessNotesStyle = {
     '7px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '5px',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 
   color:
-    '#475569',
+    'var(--fo-muted)',
 
   fontSize:
     '11px',
@@ -10676,10 +10170,10 @@ const smallActionButtonStyle = {
     '5px',
 
   background:
-    '#eff6ff',
+    'var(--fo-info-wash)',
 
   color:
-    '#1d4ed8',
+    'var(--fo-info)',
 
   fontSize:
     '11px',
@@ -10699,10 +10193,10 @@ const smallPositiveButtonStyle = {
     '1px solid #86efac',
 
   background:
-    '#f0fdf4',
+    'var(--fo-ok-wash)',
 
   color:
-    '#166534',
+    'var(--fo-ok)',
 };
 
 
@@ -10727,10 +10221,10 @@ const smallDangerButtonStyle = {
     '1px solid #fecaca',
 
   background:
-    '#fef2f2',
+    'var(--fo-bad-wash)',
 
   color:
-    '#b91c1c',
+    'var(--fo-bad)',
 };
 
 
@@ -10746,13 +10240,13 @@ const affectedCardStyle = {
     '10px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '7px',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 };
 
 
@@ -10782,10 +10276,10 @@ const sourceBadgeStyle = {
     '999px',
 
   background:
-    '#eff6ff',
+    'var(--fo-info-wash)',
 
   color:
-    '#1d4ed8',
+    'var(--fo-info)',
 
   fontSize:
     '10px',
@@ -10800,7 +10294,7 @@ const affectedLocationStyle = {
     '4px',
 
   color:
-    '#475569',
+    'var(--fo-muted)',
 
   fontSize:
     '12px',
@@ -10815,7 +10309,7 @@ const affectedDateStyle = {
     '6px',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '11px',
@@ -10834,13 +10328,13 @@ const historyCardStyle = {
     '9px',
 
   border:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   borderRadius:
     '7px',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 
   fontSize:
     '11px',
@@ -10864,7 +10358,7 @@ const historyActorStyle = {
     '3px',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '10px',
@@ -10873,7 +10367,7 @@ const historyActorStyle = {
 
 const historyDateStyle = {
   color:
-    '#94a3b8',
+    'var(--fo-muted)',
 
   fontSize:
     '10px',
@@ -10903,10 +10397,10 @@ const historyCommentStyle = {
     '7px',
 
   borderTop:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 
   color:
-    '#475569',
+    'var(--fo-muted)',
 
   lineHeight:
     1.4,
@@ -10918,29 +10412,14 @@ const historyCommentStyle = {
 // ============================================================
 
 const modalOverlayStyle = {
-  position:
-    'fixed',
-
-  inset:
-    0,
-
-  zIndex:
-    9500,
-
-  display:
-    'flex',
-
-  alignItems:
-    'center',
-
-  justifyContent:
-    'center',
-
-  padding:
-    '20px',
-
-  background:
-    'rgba(15,23,42,0.62)',
+  position: 'fixed',
+  inset: 0,
+  zIndex: 9500,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px',
+  background: 'rgba(6, 38, 55, 0.55)',
 };
 
 
@@ -10958,7 +10437,7 @@ const createModalStyle = {
     '10px',
 
   background:
-    '#ffffff',
+    'var(--fo-surface)',
 
   boxShadow:
     '0 24px 70px rgba(15,23,42,0.30)',
@@ -10979,7 +10458,7 @@ const createModalHeaderStyle = {
     '16px 18px',
 
   borderBottom:
-    '1px solid #e2e8f0',
+    '1px solid var(--fo-line-soft)',
 };
 
 
@@ -11010,7 +10489,7 @@ const emptyStyle = {
     'center',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   fontSize:
     '13px',
@@ -11022,16 +10501,16 @@ const emptyInnerStyle = {
     '14px',
 
   border:
-    '1px dashed #cbd5e1',
+    '1px dashed var(--fo-line)',
 
   borderRadius:
     '6px',
 
   background:
-    '#f8fafc',
+    'var(--fo-sunken)',
 
   color:
-    '#64748b',
+    'var(--fo-muted)',
 
   textAlign:
     'center',
@@ -11040,51 +10519,4 @@ const emptyInnerStyle = {
     '12px',
 };
 
-
-const errorMessageStyle = {
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #fecaca',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fef2f2',
-
-  color:
-    '#b91c1c',
-
-  fontSize:
-    '12px',
-};
-
-
-const successMessageStyle = {
-  marginBottom:
-    '10px',
-
-  padding:
-    '9px',
-
-  border:
-    '1px solid #bbf7d0',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#f0fdf4',
-
-  color:
-    '#166534',
-
-  fontSize:
-    '12px',
-};
 
