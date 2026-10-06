@@ -26,9 +26,16 @@ export default function ActualsTab({ projectId, editable }: { projectId: string;
   const [costError, setCostError] = useState('')
 
   const loadCosts = useCallback(async () => {
-    const { data, error: e } = await createClient().from('commercial_actual_costs').select(COST_COLUMNS).eq('project_id', projectId).order('incurred_on', { ascending: false }).limit(10000)
-    if (e) { setCostError(t('error.load', { message: e.message })); return }
-    setCostError(''); setCosts((data || []) as CostRow[])
+    // Page through all rows: the API returns at most 1000 per request.
+    const all: CostRow[] = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error: e } = await createClient().from('commercial_actual_costs').select(COST_COLUMNS).eq('project_id', projectId)
+        .order('incurred_on', { ascending: false }).order('id').range(from, from + 999)
+      if (e) { setCostError(t('error.load', { message: e.message })); return }
+      all.push(...((data || []) as CostRow[]))
+      if (!data || data.length < 1000) break
+    }
+    setCostError(''); setCosts(all)
   }, [projectId, t])
 
   useEffect(() => { void loadCosts() }, [loadCosts])
@@ -64,6 +71,13 @@ export default function ActualsTab({ projectId, editable }: { projectId: string;
   }, [projectId, t])
 
   const variance = useMemo(() => costVariance(items, costs), [items, costs])
+  // CPI / CV only where both are known: lines with FieldOp progress and the costs linked to them.
+  const performance = useMemo(() => {
+    const withProgress = (cmp?.items || []).filter(r => r.progress != null)
+    const earned = withProgress.reduce((s, r) => s + r.earned, 0)
+    const actual = withProgress.reduce((s, r) => s + (variance.byItem.get(r.id) || 0), 0)
+    return { earned, actual }
+  }, [cmp, variance])
 
   if (loading) return <div style={ui.muted}>{t('loading')}</div>
   if (error) return <div role="alert" style={ui.error}>{error}</div>
@@ -169,7 +183,7 @@ export default function ActualsTab({ projectId, editable }: { projectId: string;
       )}
       <p style={{ ...ui.small, margin: 0 }}>{t('actuals.note')}</p>
       {costError ? <div role="alert" style={ui.error}>{costError}</div> : (
-        <CostsSection projectId={projectId} currency={cur} items={items} costs={costs} variance={variance} earned={cmp.earned} editable={editable} onChanged={() => void loadCosts()} />
+        <CostsSection projectId={projectId} currency={cur} items={items} costs={costs} variance={variance} performance={performance} editable={editable} onChanged={() => void loadCosts()} />
       )}
     </div>
   )

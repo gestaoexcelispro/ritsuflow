@@ -56,7 +56,10 @@ export default function ProposalTab({ bid, editable }: Props) {
       setSelectedId(s => s || rows[0]?.id || null)
       setCompany((o.data as Company | null) || null)
     })
-    supabase.from('commercial_clauses').select(CLAUSE_COLUMNS).eq('is_active', true).order('sort_order').order('created_at')
+    const clauseQuery = (bid.projects?.organization_id
+      ? supabase.from('commercial_clauses').select(CLAUSE_COLUMNS).eq('is_active', true).or(`organization_id.is.null,organization_id.eq.${bid.projects.organization_id}`)
+      : supabase.from('commercial_clauses').select(CLAUSE_COLUMNS).eq('is_active', true).is('organization_id', null))
+    clauseQuery.order('sort_order').order('created_at')
       .then(({ data }) => { if (active) setClauses(((data || []) as ClauseRow[]).filter(c => !c.country_code || c.country_code === bid.projects?.country_code)) })
     return () => { active = false }
   }, [projectId, bid.projects?.organization_id, bid.projects?.country_code, t])

@@ -24,11 +24,12 @@ export default function Clauses() {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    const { data, error: e } = await createClient().from('commercial_clauses').select(CLAUSE_COLUMNS).order('sort_order').order('created_at')
+    const base = createClient().from('commercial_clauses').select(CLAUSE_COLUMNS)
+    const { data, error: e } = await (organizationId ? base.or(`organization_id.is.null,organization_id.eq.${organizationId}`) : base.is('organization_id', null)).order('sort_order').order('created_at')
     setLoading(false)
     if (e) { setError(t('error.load', { message: e.message })); return }
     setError(''); setRows((data || []) as ClauseRow[])
-  }, [t])
+  }, [organizationId, t])
 
   useEffect(() => { void load() }, [load])
 

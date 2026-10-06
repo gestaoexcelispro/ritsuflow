@@ -488,7 +488,7 @@
   "costs.used": "Presupuesto consumido",
   "costs.usedHint": "Costo real ÷ costo directo presupuestado",
   "costs.cpi": "Índice de desempeño del costo (CPI)",
-  "costs.cpiNone": "Requiere costos reales y avance",
+  "costs.cpiNone": "Requiere avance en FieldOp y costos vinculados a esas partidas",
   "costs.cpiGood": "Dentro del presupuesto para lo ejecutado",
   "costs.cpiBad": "Sobre el presupuesto para lo ejecutado",
   "costs.cv": "Variación de costo (CV)",

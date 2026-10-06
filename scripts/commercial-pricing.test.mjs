@@ -325,3 +325,18 @@ test('win rate by project type', () => {
   assert.equal(ind.winRate, 50)
   assert.equal(ind.client, 'INDUSTRIAL')
 })
+
+test('cost amounts: locale thousands, accounting negatives', async () => {
+  const { parseAmount } = await import('../src/lib/commercial/costs.ts')
+  assert.equal(parseAmount('4.580', true), 4580)
+  assert.equal(parseAmount('1,234', false), 1234)
+  assert.equal(parseAmount('1,234', true), 1.234)
+  assert.equal(parseAmount('12.50', true), 12.5)
+  assert.equal(parseAmount('R$ 1.234,56', true), 1234.56)
+  assert.equal(parseAmount('$1,234.56', false), 1234.56)
+  assert.equal(parseAmount('(1.234,56)', true), -1234.56)
+  assert.equal(parseAmount('1.234,56-', true), -1234.56)
+  assert.equal(parseAmount('-150,00', true), -150)
+  assert.equal(parseAmount('1.234.567', true), 1234567)
+  assert.ok(Number.isNaN(parseAmount('abc', true)))
+})

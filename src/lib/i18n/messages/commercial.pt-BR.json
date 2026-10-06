@@ -488,7 +488,7 @@
   "costs.used": "Orçamento consumido",
   "costs.usedHint": "Custo real ÷ custo direto orçado",
   "costs.cpi": "Índice de desempenho de custo (IDC)",
-  "costs.cpiNone": "Precisa de custos reais e avanço",
+  "costs.cpiNone": "Precisa de avanço no FieldOp e custos vinculados a esses itens",
   "costs.cpiGood": "Dentro do orçado para o que foi executado",
   "costs.cpiBad": "Acima do orçado para o que foi executado",
   "costs.cv": "Variação de custo (VC)",

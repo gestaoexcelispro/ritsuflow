@@ -488,7 +488,7 @@
   "costs.used": "Budget used",
   "costs.usedHint": "Actual cost ÷ budgeted direct cost",
   "costs.cpi": "Cost performance index (CPI)",
-  "costs.cpiNone": "Needs actual costs and progress",
+  "costs.cpiNone": "Needs FieldOp progress and costs linked to those lines",
   "costs.cpiGood": "At or under budget for the work done",
   "costs.cpiBad": "Over budget for the work done",
   "costs.cv": "Cost variance (CV)",

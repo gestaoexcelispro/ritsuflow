@@ -1,7 +1,7 @@
 // Actual costs in money on a converted project (commercial_actual_costs): typed in or imported
 // from a CSV (ERP or spreadsheet export), and compared with the baseline estimate and earned value.
 // Pure functions, tested in scripts/commercial-pricing.test.mjs.
-import { parseCsv, parseDate, parseMoney } from './csvImport'
+import { parseCsv, parseDate } from './csvImport'
 import { inPrice, itemDirect, type ItemRow } from './estimates'
 
 export const COST_CATEGORIES = ['material', 'labor', 'equipment', 'subcontract', 'other'] as const
@@ -73,6 +73,34 @@ const CATEGORY_WORDS: Record<CostCategory, string[]> = {
   other: ['other', 'outro', 'outros', 'otro', 'otros', 'diversos', 'misc'],
 }
 
+/**
+ * An amount from an ERP / spreadsheet export. `decimalComma` = pt-BR / es files ("1.234,56").
+ * A lone separator followed by exactly three digits is a thousands separator ("4.580" = 4580 in
+ * pt-BR, "1,234" = 1234 in en-US). "(1.234,56)" and "1.234,56-" are negative (credits).
+ */
+export function parseAmount(input: string, decimalComma: boolean): number {
+  let s = input.trim()
+  let negative = false
+  if (/^\(.*\)$/.test(s)) { negative = true; s = s.slice(1, -1).trim() }
+  if (/-$/.test(s)) { negative = true; s = s.slice(0, -1) }
+  if (/^[^\d]*-/.test(s)) { negative = true; s = s.replace('-', '') }
+  s = s.replace(/[^\d,.]/g, '')
+  if (!/\d/.test(s)) return NaN
+  const commas = (s.match(/,/g) || []).length, dots = (s.match(/\./g) || []).length
+  let n: number
+  if (commas && dots) {
+    // Both marks: the last one is the decimal mark.
+    n = s.lastIndexOf(',') > s.lastIndexOf('.') ? parseFloat(s.replace(/\./g, '').replace(',', '.')) : parseFloat(s.replace(/,/g, ''))
+  } else if (commas || dots) {
+    const sep = commas ? ',' : '.'
+    const thousandsSep = decimalComma ? '.' : ','
+    const lastGroup = s.slice(s.lastIndexOf(sep) + 1)
+    if ((commas || dots) > 1 || (sep === thousandsSep && lastGroup.length === 3)) n = parseFloat(s.split(sep).join(''))
+    else n = parseFloat(s.replace(sep, '.'))
+  } else n = parseFloat(s)
+  return negative ? -n : n
+}
+
 export function categoryOf(text: string): CostCategory | null {
   const k = strip(text)
   if (!k) return null
@@ -98,10 +126,10 @@ export function readCostCsv(text: string, dayFirst: boolean, items: { id: string
     if (!incurredOn) { errors.push({ line, reason: 'date' }); return }
     const description = get('description')
     if (!description) { errors.push({ line, reason: 'description' }); return }
-    const amount = parseMoney(get('amount'))
+    const amount = parseAmount(get('amount'), dayFirst)
     if (!Number.isFinite(amount)) { errors.push({ line, reason: 'amount' }); return }
     const rawQty = get('quantity')
-    const qty = rawQty ? parseMoney(rawQty) : NaN
+    const qty = rawQty ? parseAmount(rawQty, dayFirst) : NaN
     const itemText = get('item')
     const itemId = itemText ? byName.get(strip(itemText)) ?? null : null
     rows.push({

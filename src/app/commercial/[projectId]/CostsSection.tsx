@@ -17,7 +17,8 @@ type Props = {
   items: ItemRow[]
   costs: CostRow[]
   variance: CostVariance
-  earned: number
+  /** Earned value and actual cost of the lines with FieldOp progress (costs linked to them). */
+  performance: { earned: number; actual: number }
   editable: boolean
   onChanged: () => void
 }
@@ -25,7 +26,7 @@ type Props = {
 type Form = { id: string | null; date: string; description: string; category: CostCategory; amount: string; supplier: string; document: string; itemId: string }
 
 /** Converted project → actual costs in money: entries, CSV import, and cost against budget and earned value. */
-export default function CostsSection({ projectId, currency, items, costs, variance, earned, editable, onChanged }: Props) {
+export default function CostsSection({ projectId, currency, items, costs, variance, performance, editable, onChanged }: Props) {
   const t = useT('commercial')
   const { language, numberFormat } = useLanguage()
   const [form, setForm] = useState<Form | null>(null)
@@ -36,7 +37,7 @@ export default function CostsSection({ projectId, currency, items, costs, varian
   const [showAll, setShowAll] = useState(false)
   const money = (v: number) => formatMoney(v, currency, numberFormat)
   const itemName = useMemo(() => new Map(items.map(i => [i.id, i.description])), [items])
-  const perf = costPerformance(earned, variance.actual)
+  const perf = costPerformance(performance.earned, performance.actual)
   const lastBatch = costs.filter(c => c.import_batch).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]?.import_batch || null
 
   async function run(task: () => Promise<void>) {
