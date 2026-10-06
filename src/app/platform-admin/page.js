@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../lib/supabase/client'
 import styles from './platform-admin.module.css'
+import TrialApplications from './TrialApplications'
 
 const supabase=createClient()
 const WORKSPACES=[['projects','Projects'],['precon','PreCon'],['fieldop','FieldOp'],['ritsuscope','RitsuScope'],['commercial','Commercial']]
@@ -54,6 +55,7 @@ export default function PlatformAdminPage(){
     <div className={styles.tableWrap}><table><thead><tr><th>Organization</th><th>Status</th><th>Active Projects</th><th>Project Limit</th><th>Workspaces Included</th><th>Contract Period</th><th>Actions</th></tr></thead><tbody>{filtered.map(o=><tr key={o.organization_id}><td><b>{o.organization_name}</b><small>{o.organization_number||'—'}</small></td><td><span className={`${styles.status} ${styles[o.commercial_status]||''}`}>● {o.commercial_status||'—'}</span></td><td>{o.active_projects??0}</td><td>{o.active_project_limit??'—'}</td><td><div className={styles.tags}>{WORKSPACES.filter(([key])=>key==='projects'||o.workspaces?.[key]).map(([key,name])=><span key={key}>{name}</span>)}</div></td><td>{o.contract_start||'—'} → {o.renewal_end_date||'—'}</td><td><button className={styles.manage} onClick={()=>openOrganization(o.organization_id)}>Manage</button></td></tr>)}</tbody></table></div>
     {!filtered.length&&<div className={styles.empty}>No organizations found.</div>}
    </section>
+   <TrialApplications/>
   </section>
   {selected&&form&&<div className={styles.overlay} onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><section className={styles.modal}><div className={styles.modalHead}><div><small>MANAGE ORGANIZATION</small><h2>{selected.organization_name}</h2><p>{selected.organization_number||selected.organization_id}</p></div><button onClick={()=>setSelected(null)}>×</button></div><div className={styles.modalGrid}>
    <article><h3>Commercial License</h3><label>Status<select value={form.commercial_status} onChange={e=>setForm({...form,commercial_status:e.target.value})}><option value="trial">Trial</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option></select></label><label>Active Project Limit<input type="number" min="0" value={form.active_project_limit} onChange={e=>setForm({...form,active_project_limit:e.target.value})}/></label><div className={styles.two}><label>Contract Start<input type="date" value={form.contract_start} onChange={e=>setForm({...form,contract_start:e.target.value})}/></label><label>Contract End<input type="date" value={form.renewal_end_date} onChange={e=>setForm({...form,renewal_end_date:e.target.value})}/></label></div><label>Contract Reference<input value={form.commercial_reference} onChange={e=>setForm({...form,commercial_reference:e.target.value})}/></label></article>
