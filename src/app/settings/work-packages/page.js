@@ -6,11 +6,13 @@ import { createClient } from '../../../lib/supabase/client'
 import { useT } from '../../../lib/i18n/useT'
 import { AppShell, Badge, Empty, Icon, Notice, Segments, Stat, Stats, ui } from '../../fieldop/ui'
 import { Dialog } from '../../fieldop/ui/dialogs'
+import { suggestWorkPackageCode } from './suggestCode'
 import styles from './work-packages.module.css'
 
 const supabase = createClient()
 const CODE = /^[A-Z]{3}$/
-const EMPTY_FORM = { id: null, code: '', description: '' }
+// codeEdited: the user typed their own code, so the description stops overwriting it.
+const EMPTY_FORM = { id: null, code: '', description: '', codeEdited: false }
 
 /** Label + control. Module level so inputs keep focus while typing. */
 function Field({ label, hint, children }) {
@@ -64,7 +66,18 @@ export default function WorkPackagesSettings() {
   }), [packages])
   const visible = packages.filter((p) => (filter === 'all' ? true : filter === 'active' ? p.is_active : !p.is_active))
 
-  const openForm = (pkg) => { setFormError(''); setForm(pkg ? { id: pkg.id, code: pkg.code, description: pkg.description } : EMPTY_FORM) }
+  const openForm = (pkg) => { setFormError(''); setForm(pkg ? { id: pkg.id, code: pkg.code, description: pkg.description, codeEdited: true } : EMPTY_FORM) }
+
+  // New packages get their code from the description; existing codes only change when edited by hand.
+  const changeDescription = (description) => setForm((f) => ({
+    ...f,
+    description,
+    code: f.codeEdited ? f.code : suggestWorkPackageCode(description, packages.filter((p) => p.id !== f.id).map((p) => p.code)),
+  }))
+  const changeCode = (value) => {
+    const code = value.toUpperCase().replace(/[^A-Z]/g, '')
+    setForm((f) => ({ ...f, code, codeEdited: code !== '' || Boolean(f.id) }))
+  }
 
   async function save(event) {
     event.preventDefault()
@@ -139,11 +152,11 @@ export default function WorkPackagesSettings() {
       </>}
     >
       {formError && <Notice>{formError}</Notice>}
-      <Field label={t('workPackages.fieldCode')} hint={t('workPackages.fieldCodeHint')}>
-        <input value={form.code} maxLength={3} autoFocus className={styles.codeInput} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') })} />
-      </Field>
       <Field label={t('workPackages.fieldDescription')}>
-        <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <input value={form.description} autoFocus onChange={(e) => changeDescription(e.target.value)} />
+      </Field>
+      <Field label={t('workPackages.fieldCode')} hint={form.id ? t('workPackages.fieldCodeHintEdit') : t('workPackages.fieldCodeHint')}>
+        <input value={form.code} maxLength={3} className={styles.codeInput} onChange={(e) => changeCode(e.target.value)} />
       </Field>
     </Dialog>}
   </AppShell>
