@@ -9,7 +9,7 @@
     "lint": "next lint",
     "test:platform-map": "node scripts/check-platform-map.mjs && node scripts/check-platform-map-layout.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
-    "test:commercial": "node --experimental-strip-types --no-warnings --test scripts/commercial-pricing.test.mjs"
+    "test:commercial": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/commercial-pricing.test.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.1",

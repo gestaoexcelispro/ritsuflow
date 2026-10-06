@@ -231,3 +231,22 @@ test('loss reasons: counted over lost and declined bids, unrecorded last', async
   assert.deepEqual(r.map(x => [x.reason, x.count]), [['price', 2], ['capacity', 1], ['unknown', 1]])
   assert.equal(r[0].share, 50)
 })
+
+test('estimate vs actual: progress, earned value, hours and materials', async () => {
+  const { compare } = await import('../src/lib/commercial/actuals.ts')
+  const item = (id, layer, qty, m, l, breakdown) => ({ id, description: id, unit: 'm2', quantity: qty, takeoff_layer_id: layer, material_unit_cost: m, labor_unit_cost: l, equipment_unit_cost: 0, subcontract_unit_cost: 0, breakdown })
+  const items = [
+    item('walls', 'L1', 100, 40, 20, { takeoffQuantity: 100, labor: [{ label: 'Installer', unit: 'h', qty: 50, unitCost: 40, amount: 2000 }], materials: [{ label: 'Chapa ST', unit: 'm2', qty: 210, unitCost: 19, amount: 3990 }] }),
+    item('ceiling', 'L2', 50, 30, 10, { takeoffQuantity: 50, labor: [{ label: 'Installer', unit: 'h', qty: 10, unitCost: 50, amount: 500 }] }),
+    item('manual', null, 1, 1000, 0, {}),
+  ]
+  const actuals = { attendanceHours: 20, producedByLayer: new Map([['L1', 40], ['L2', 60]]), received: [{ name: 'chapa st', unit: 'm²', qty: 100 }, { name: 'Fita', unit: 'm', qty: 5 }], reportCount: 3 }
+  const c = compare(items, actuals)
+  assert.equal(c.items[0].progress, 40); assert.equal(c.items[1].progress, 100); assert.equal(c.items[2].progress, null)
+  assert.equal(c.earned, 6000 * 0.4 + 2000)                 // walls 40% of 6000, ceiling 100% of 2000
+  assert.equal(c.estimatedHours, 60); assert.equal(c.earnedHours, 20 + 10)
+  assert.equal(c.productivity, 30 / 20)
+  assert.equal(c.unlinked, 1)
+  assert.equal(Math.round(c.progress * 100) / 100, Math.round((4400 / 8000) * 10000) / 100)
+  assert.deepEqual(c.materials.map(m => [m.name, m.estimated, m.received]), [['Chapa ST', 210, 100], ['Fita', 0, 5]])
+})
