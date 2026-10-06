@@ -103,5 +103,17 @@
   "nav.commercialModule": "Commercial",
   "nav.commercialTagline": "Price takeoffs, send proposals and win work.",
   "nav.commercialBids": "Bids",
-  "nav.commercialLibrary": "Library"
+  "nav.commercialLibrary": "Library",
+  "nav.ritsuscopeModule": "RitsuScope",
+  "nav.ritsuscopeTagline": "Drawings, locations & quantities",
+  "nav.ritsuscopeProjects": "Projects",
+  "nav.adminModule": "Ritsu Admin",
+  "nav.adminTagline": "Platform owner",
+  "nav.adminMap": "Platform map",
+  "nav.adminReports": "Reports",
+  "nav.adminOrganizations": "Organizations",
+  "nav.adminLicenses": "Licenses & trials",
+  "nav.adminStatus": "System status",
+  "nav.adminAudit": "Audit log",
+  "nav.workspacesTagline": "Choose your workspace"
 }

@@ -63,6 +63,27 @@ const MODULES = {
       { key: 'library', icon: 'package', href: '/commercial/library', labelKey: 'nav.commercialLibrary' },
     ],
   },
+  ritsuscope: {
+    nameKey: 'nav.ritsuscopeModule', taglineKey: 'nav.ritsuscopeTagline', home: '/ritsuscope',
+    tabs: () => [
+      { key: 'projects', icon: 'projects', href: '/ritsuscope', labelKey: 'nav.ritsuscopeProjects' },
+    ],
+  },
+  admin: {
+    nameKey: 'nav.adminModule', taglineKey: 'nav.adminTagline', home: '/ritsu-admin',
+    tabs: () => [
+      { key: 'map', icon: 'grid', href: '/ritsu-admin', labelKey: 'nav.adminMap' },
+      { key: 'reports', icon: 'chart', href: '/ritsu-admin/reports', labelKey: 'nav.adminReports' },
+      { key: 'organizations', icon: 'building', href: '/ritsu-admin/organizations', labelKey: 'nav.adminOrganizations' },
+      { key: 'licenses', icon: 'card', href: '/platform-admin', labelKey: 'nav.adminLicenses' },
+      { key: 'status', icon: 'shield', labelKey: 'nav.adminStatus', soon: true },
+      { key: 'audit', icon: 'reports', labelKey: 'nav.adminAudit', soon: true },
+    ],
+  },
+  workspaces: {
+    nameKey: 'nav.workspaces', taglineKey: 'nav.workspacesTagline', home: '/workspaces',
+    tabs: () => [],
+  },
   settings: {
     nameKey: 'nav.settingsModule', taglineKey: 'nav.settingsTagline', home: '/settings',
     tabs: () => [
@@ -76,6 +97,41 @@ const MODULES = {
       { key: 'license', icon: 'card', href: '/settings/license', labelKey: 'nav.settingsLicense' },
     ],
   },
+}
+
+// Workspace buttons in the header, in this order; each shows only when the company has that workspace.
+const SWITCHES = [
+  { key: 'precon', href: '/dashboard', labelKey: 'nav.precon', className: 'appBtnPre' },
+  { key: 'projects', href: '/projects', labelKey: 'nav.projectsModule', className: 'appBtnPrj' },
+  { key: 'fieldop', href: '/fieldop', label: 'FieldOp', className: 'appBtnPrj' },
+  { key: 'ritsuscope', href: '/ritsuscope', labelKey: 'nav.ritsuscopeModule', className: 'appBtnScope' },
+  { key: 'commercial', href: '/commercial', labelKey: 'nav.commercialModule', className: 'appBtnCom' },
+]
+
+// Read once per browser session: which workspaces the user's company has (the platform owner has all).
+let accessPromise = null
+function loadAccess() {
+  if (!accessPromise) {
+    accessPromise = Promise.all(SWITCHES.map(async ({ key }) => {
+      // RitsuScope opens for every company (its takeoff tools are licensed inside it).
+      if (key === 'ritsuscope') return [key, true]
+      const { data, error } = await supabase.rpc('has_workspace_access', { p_workspace_key: key })
+      return [key, !error && data === true]
+    })).then((pairs) => new Set(pairs.filter(([, ok]) => ok).map(([key]) => key)))
+      .catch(() => { accessPromise = null; return new Set(SWITCHES.map(({ key }) => key)) })
+  }
+  return accessPromise
+}
+
+/** Workspaces the signed-in user's company can open; null while loading. */
+export function useWorkspaceAccess() {
+  const [access, setAccess] = useState(null)
+  useEffect(() => {
+    let alive = true
+    loadAccess().then((set) => { if (alive) setAccess(set) })
+    return () => { alive = false }
+  }, [])
+  return access
 }
 
 function initials(name) {
@@ -97,7 +153,40 @@ function initials(name) {
  */
 export function AppShell({ module = 'fieldop', active, projectId, action, bare = false, children }) {
   const t = useT('fieldop')
+  const config = MODULES[module]
+  const defaultAction = ['settings', 'precon', 'ritsuscope', 'admin', 'workspaces', 'commercial'].includes(module) ? null : module === 'projects'
+    ? <Link className={ui.btnPrimary} href="/projects/new"><Icon name="plus" size={18} />{t('nav.newProject')}</Link>
+    : <Link className={ui.btnPrimary} href={projectId ? `/fieldop/reports/daily/new?projectId=${projectId}` : '/fieldop/reports/daily/new'}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>
+  const mainAction = action === undefined ? defaultAction : action
+  const moduleName = config.nameKey ? t(config.nameKey) : config.name
+  const tabs = config.tabs(projectId)
+
+  return <div className={cx(ui.root, plex.variable)}>
+    <AppBar module={module} />
+    {(tabs.length > 0 || mainAction) && <nav className={ui.tabbar} aria-label={moduleName}>
+      <div className={ui.tabbarInner}>
+        {tabs.map(({ key, icon, href, labelKey, soon }) => soon
+          ? <span key={key} className={cx(ui.mtab, ui.mtabSoon)} aria-disabled="true"><Icon name={icon} size={18} />{t(labelKey || `nav.${key}`)}<Badge>{t('nav.soon')}</Badge></span>
+          : <Link key={key} href={href} className={cx(ui.mtab, active === key && ui.mtabOn)} aria-current={active === key ? 'page' : undefined}>
+            <Icon name={icon} size={18} />{t(labelKey || `nav.${key}`)}
+          </Link>)}
+        {mainAction && <div className={ui.tabbarAction}>{mainAction}</div>}
+      </div>
+    </nav>}
+    {/* `bare` pages manage their own full-height layout below the header (height: calc(100dvh - var(--app-chrome))). */}
+    <main className={ui.main}>{bare ? children : <div className={ui.content}>{children}</div>}</main>
+  </div>
+}
+
+/**
+ * The RitsuFlow header bar on its own: logo, module name, workspace buttons (only the company's
+ * workspaces), settings, user, language and log out. AppShell puts the module tabs under it;
+ * full-screen tools (the RitsuScope editor) use it alone, `compact` (56 px).
+ */
+export function AppBar({ module = 'fieldop', compact = false, title, standalone = false }) {
+  const t = useT('fieldop')
   const user = useFieldOpUser()
+  const access = useWorkspaceAccess()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   useEffect(() => { setOpen(false) }, [pathname])
@@ -113,48 +202,33 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
   }
 
   const switches = <>
-    <Link href="/workspaces" className={ui.appBtn}><Icon name="back" size={16} />{t('nav.workspaces')}</Link>
-    {module !== 'precon' && <Link href="/dashboard" className={cx(ui.appBtn, ui.appBtnPre)}>{t('nav.precon')}</Link>}
-    {module !== 'projects' && <Link href="/projects" className={cx(ui.appBtn, ui.appBtnPrj)}>{t('nav.projectsModule')}</Link>}
-    {module !== 'fieldop' && <Link href="/fieldop" className={cx(ui.appBtn, ui.appBtnPrj)}>FieldOp</Link>}
+    {module !== 'workspaces' && <Link href="/workspaces" className={ui.appBtn}><Icon name="back" size={16} />{t('nav.workspaces')}</Link>}
+    {/* The Workspaces hub lists the workspaces as cards, so its bar has no buttons. */}
+    {(access && module !== 'workspaces' ? SWITCHES.filter((sw) => sw.key !== module && access.has(sw.key)) : []).map((sw) => (
+      <Link key={sw.key} href={sw.href} className={cx(ui.appBtn, ui[sw.className])}>{sw.labelKey ? t(sw.labelKey) : sw.label}</Link>
+    ))}
   </>
   const who = <div className={ui.appUser}>
+    {module !== 'settings' && <Link href="/settings" className={ui.iconBtn} title={t('nav.settingsModule')} aria-label={t('nav.settingsModule')}><Icon name="settings" size={20} /></Link>}
     <span className={ui.avatar}>{initials(user.name)}</span>
     <div className={ui.who}><strong>{user.name || t('user.fallbackName')}</strong><span>{user.role ? t(`role.${user.role}`) : ''}</span></div>
     <LanguageSelector compact dark />
     <button type="button" className={ui.logoutBtn} onClick={logout} disabled={leaving} title={t('nav.logout')} aria-label={t('nav.logout')}><Icon name="logout" size={20} /><span>{t('nav.logout')}</span></button>
   </div>
-  const defaultAction = module === 'settings' || module === 'precon' ? null : module === 'projects'
-    ? <Link className={ui.btnPrimary} href="/projects/new"><Icon name="plus" size={18} />{t('nav.newProject')}</Link>
-    : <Link className={ui.btnPrimary} href={projectId ? `/fieldop/reports/daily/new?projectId=${projectId}` : '/fieldop/reports/daily/new'}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>
-  const mainAction = action === undefined ? defaultAction : action
   const moduleName = config.nameKey ? t(config.nameKey) : config.name
 
-  return <div className={cx(ui.root, plex.variable)}>
-    <header className={ui.appbar}>
-      <div className={ui.appbarInner}>
-        <Link href="/workspaces" className={ui.appLogo} aria-label={t('nav.workspaces')}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority /></Link>
-        <span className={ui.appDivider} />
-        <Link href={config.home} className={ui.moduleName} style={{ color: 'inherit', textDecoration: 'none' }}><strong>{moduleName}</strong><span>{t(config.taglineKey)}</span></Link>
-        <div className={ui.appActions}>{switches}</div>
-        {who}
-        <button type="button" className={ui.menuBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={t('nav.openMenu')}><Icon name={open ? 'close' : 'menu'} size={24} /></button>
-      </div>
-      {open && <div className={ui.menuPanel}>{switches}{who}</div>}
-    </header>
-    <nav className={ui.tabbar} aria-label={moduleName}>
-      <div className={ui.tabbarInner}>
-        {config.tabs(projectId).map(({ key, icon, href, labelKey, soon }) => soon
-          ? <span key={key} className={cx(ui.mtab, ui.mtabSoon)} aria-disabled="true"><Icon name={icon} size={18} />{t(labelKey || `nav.${key}`)}<Badge>{t('nav.soon')}</Badge></span>
-          : <Link key={key} href={href} className={cx(ui.mtab, active === key && ui.mtabOn)} aria-current={active === key ? 'page' : undefined}>
-            <Icon name={icon} size={18} />{t(labelKey || `nav.${key}`)}
-          </Link>)}
-        {mainAction && <div className={ui.tabbarAction}>{mainAction}</div>}
-      </div>
-    </nav>
-    {/* `bare` pages manage their own full-height layout below the header (height: calc(100dvh - var(--app-chrome))). */}
-    <main className={ui.main}>{bare ? children : <div className={ui.content}>{children}</div>}</main>
-  </div>
+  const bar = <header className={cx(ui.appbar, compact && ui.appbarCompact)}>
+    <div className={ui.appbarInner}>
+      <Link href="/workspaces" className={ui.appLogo} aria-label={t('nav.workspaces')}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority /></Link>
+      <span className={ui.appDivider} />
+      <Link href={config.home} className={ui.moduleName} style={{ color: 'inherit', textDecoration: 'none' }}><strong>{moduleName}</strong><span>{title || t(config.taglineKey)}</span></Link>
+      <div className={ui.appActions}>{switches}</div>
+      {who}
+      <button type="button" className={ui.menuBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={t('nav.openMenu')}><Icon name={open ? 'close' : 'menu'} size={24} /></button>
+    </div>
+    {open && <div className={ui.menuPanel}>{switches}{who}</div>}
+  </header>
+  return standalone ? <div className={cx(ui.root, ui.barRoot, plex.variable)}>{bar}</div> : bar
 }
 
 /** FieldOp pages: the shared app frame with the FieldOp tabs. */
