@@ -99,5 +99,9 @@
   "nav.settingsWorkspaces": "Acesso aos espaços",
   "nav.settingsWorkPackages": "Pacotes de trabalho",
   "nav.settingsLocalization": "Idioma e unidades",
-  "nav.settingsLicense": "Plano e uso"
+  "nav.settingsLicense": "Plano e uso",
+  "nav.commercialModule": "Comercial",
+  "nav.commercialTagline": "Orce levantamentos, envie propostas e ganhe obras.",
+  "nav.commercialBids": "Propostas",
+  "nav.commercialLibrary": "Biblioteca"
 }

@@ -7,7 +7,7 @@ import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
 import { BID_COLUMNS, BID_STATUSES, ESTIMATE_SUMMARY_COLUMNS, OPEN_STATUSES, latestByProject, type BidRow, type BidStatus, type EstimateSummary } from '@/lib/commercial/bids'
 import { formatDate, formatMoney } from '@/lib/commercial/format'
-import { useCommercialAccess } from './license'
+import { NEW_BID_EVENT, useCommercialAccess } from './license'
 import NewBidDialog from './NewBidDialog'
 import BidsCalendar from './BidsCalendar'
 import BidsInsights from './BidsInsights'
@@ -44,6 +44,14 @@ export default function BidsPage() {
   }, [t])
 
   useEffect(() => { void load() }, [load])
+
+  // "New bid" lives in the header's tab bar; from another Commercial page it arrives as #new.
+  useEffect(() => {
+    const open = () => { if (licensed) setCreating(true) }
+    if (window.location.hash === '#new') { open(); window.history.replaceState(null, '', window.location.pathname) }
+    window.addEventListener(NEW_BID_EVENT, open)
+    return () => window.removeEventListener(NEW_BID_EVENT, open)
+  }, [licensed])
 
   const stats = useMemo(() => {
     const now = Date.now()
@@ -83,15 +91,6 @@ export default function BidsPage() {
 
   return (
     <section style={ui.page}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16 }}>
-        <header style={{ ...ui.header, flex: '1 1 320px' }}>
-          <div style={ui.eyebrow}>{t('bids.eyebrow')}</div>
-          <h1 style={ui.title}>{t('bids.title')}</h1>
-          <p style={ui.subtitle}>{t('bids.subtitle')}</p>
-        </header>
-        {licensed && <button type="button" onClick={() => setCreating(true)} style={{ ...ui.button, height: 44, padding: '0 18px', fontSize: 14 }}>{t('bids.new')}</button>}
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         {tile(t('bids.stat.open'), stats.open)}
         {tile(t('bids.stat.submitted'), stats.submitted)}

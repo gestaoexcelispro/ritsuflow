@@ -16,11 +16,6 @@ export default function LibraryPage() {
   const tabs: Tab[] = ['prices', 'labor', 'templates']
   return (
     <section style={ui.page}>
-      <header style={ui.header}>
-        <div style={ui.eyebrow}>{t('library.eyebrow')}</div>
-        <h1 style={ui.title}>{t('library.title')}</h1>
-        <p style={ui.subtitle}>{t('library.subtitle')}</p>
-      </header>
       <div role="tablist" aria-label={t('library.title')} style={ui.tabs}>
         {tabs.map(k => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} style={tab === k ? ui.tabOn : ui.tab}>

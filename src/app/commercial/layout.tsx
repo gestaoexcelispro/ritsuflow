@@ -1,19 +1,20 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { currentOrganizationId } from '@/lib/commercial/library'
 import { useT } from '@/lib/i18n/useT'
-import { CommercialAccessProvider, type CommercialAccess } from './license'
-import CommercialShell from './CommercialShell'
+import { AppShell, Icon, ui as shell } from '../fieldop/ui'
+import { CommercialAccessProvider, NEW_BID_EVENT, type CommercialAccess } from './license'
 
 const screen = { minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f4f7f8', color: '#536d78', font: '600 14px Arial, sans-serif' } as const
 
-/** Commercial workspace: signed-in users only; the license decides whether they can change things. */
+/** Commercial workspace, in the standard RitsuFlow frame (same header and tab bar as Projects and FieldOp). */
 export default function CommercialLayout({ children }: { children: ReactNode }) {
   const t = useT('commercial')
   const router = useRouter()
+  const pathname = usePathname() || ''
   const [access, setAccess] = useState<CommercialAccess | null>(null)
 
   useEffect(() => {
@@ -35,16 +36,25 @@ export default function CommercialLayout({ children }: { children: ReactNode }) 
   }, [router])
 
   if (!access) return <main style={screen}>{t('loading')}</main>
+
+  const newBid = () => {
+    if (pathname === '/commercial') window.dispatchEvent(new Event(NEW_BID_EVENT))
+    else router.push('/commercial#new')
+  }
+  const action = access.licensed
+    ? <button type="button" className={shell.btnPrimary} onClick={newBid}><Icon name="plus" size={18} />{t('bids.new')}</button>
+    : false
+
   return (
     <CommercialAccessProvider value={access}>
-      <CommercialShell>
+      <AppShell module="commercial" projectId={undefined} active={pathname.startsWith('/commercial/library') ? 'library' : 'bids'} action={action} bare>
         {!access.licensed && (
           <div role="status" style={{ margin: '16px 32px 0', padding: '10px 14px', borderRadius: 8, background: '#fff4e8', color: '#6e3610', fontSize: 13 }}>
             {t('license.readOnly')}
           </div>
         )}
         {children}
-      </CommercialShell>
+      </AppShell>
     </CommercialAccessProvider>
   )
 }

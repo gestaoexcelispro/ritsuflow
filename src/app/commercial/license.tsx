@@ -14,6 +14,9 @@ export type CommercialAccess = {
   organizationId: string | null
 }
 
+/** Fired by the header's "New bid" button; the bids page opens its dialog. */
+export const NEW_BID_EVENT = 'commercial:new-bid'
+
 const AccessContext = createContext<CommercialAccess>({ licensed: false, isPlatformOwner: false, organizationId: null })
 
 export function CommercialAccessProvider({ value, children }: { value: CommercialAccess; children: ReactNode }) {
