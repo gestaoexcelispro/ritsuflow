@@ -67,7 +67,7 @@ export default function FieldOpPage() {
       const empty = { data: [], count: 0 }
 
       const [projectsResult, sessionsResult, operationsResult, issuesResult, todayReportsResult, eventsResult, newReportsResult] = await Promise.all([
-        safe(supabase.from('projects').select('id,name,code,project_id,city,state_region,status,updated_at').in('status', ONGOING_STATUSES).order('updated_at', { ascending: false }), empty),
+        safe(supabase.from('projects').select('id,name,code,project_id,city,state_region,status,updated_at').eq('stage', 'contract').in('status', ONGOING_STATUSES).order('updated_at', { ascending: false }), empty),
         safe(supabase.from('field_attendance_sessions').select('worker_id').eq('status', 'open'), empty),
         safe(supabase.from('field_execution_events').select('id', { count: 'exact', head: true }).eq('status', 'in_progress'), empty),
         safe(supabase.from('daily_report_issues').select('id', { count: 'exact', head: true }).in('status', OPEN_ISSUE_STATUSES), empty),

@@ -63,7 +63,7 @@ export default function UsersAccess() {
       supabase.from('organizations').select('id,name,slug,organization_number,owner_user_id').eq('id', oid).single(),
       supabase.from('organization_members').select('organization_id,user_id,role,status,joined_at,project_access_mode').eq('organization_id', oid).order('joined_at'),
       supabase.from('user_profiles').select('user_id,full_name,email,job_title,avatar_path,workspace_access'),
-      supabase.from('projects').select('id,project_id,code,name,status').eq('organization_id', oid).order('name'),
+      supabase.from('projects').select('id,project_id,code,name,status').eq('stage', 'contract').eq('organization_id', oid).order('name'),
       supabase.from('organization_modules').select('module_key,is_enabled').eq('organization_id', oid).eq('is_enabled', true),
     ])
     if (oe) throw oe; if (mE) throw mE; if (pE) throw pE; if (prE) throw prE

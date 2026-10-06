@@ -27,7 +27,7 @@ function loadScript(src: string): Promise<void> {
   })
 }
 
-async function loadPdfLib(): Promise<any> {
+export async function loadPdfLib(): Promise<any> {
   const w = window as any
   if (w.PDFLib) return w.PDFLib
   let last: unknown = null

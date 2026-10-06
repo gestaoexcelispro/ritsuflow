@@ -1727,7 +1727,7 @@ export default function MasterPlanPage() {
           name,
           status,
           created_at
-        `)
+        `).eq('stage', 'contract')
         .neq('status', 'archived')
         .order('created_at', { ascending: false });
 

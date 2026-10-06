@@ -60,7 +60,7 @@ import type { Quantities } from '@/lib/takeoff/geometry'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
 
-type Project = { id: string; project_code: string | null; name: string; country: string | null; country_code: string | null }
+type Project = { id: string; project_code: string | null; name: string; country: string | null; country_code: string | null; stage?: string | null }
 
 const BUCKET = 'takeoff-files'
 
@@ -182,7 +182,7 @@ export default function TakeoffWorkspacePage() {
     const supabase = createClient()
     const [p, s, l, e, r, d] = await Promise.all([
       // RitsuFlow projects: `code` and `country_code` (aliased to the names the takeoff uses).
-      supabase.from('projects').select('id, project_code:code, name, country:country_code, country_code').eq('id', projectId).maybeSingle(),
+      supabase.from('projects').select('id, project_code:code, name, country:country_code, country_code, stage').eq('id', projectId).maybeSingle(),
       supabase.from('takeoff_sources')
         .select('*') // includes origin/level columns once they exist
         .eq('project_id', projectId)
@@ -891,6 +891,10 @@ export default function TakeoffWorkspacePage() {
       })
       const href = URL.createObjectURL(blob)
       const fileName = `${project!.project_code || project!.name} - ${kind}.pdf`.replace(/[\\/:*?"<>|]+/g, '_')
+      // Bids keep the latest export of each kind so Commercial can attach it to the proposal.
+      if (project!.stage === 'bid') {
+        void createClient().storage.from(BUCKET).upload(`${projectId}/exports/${what}.pdf`, blob, { upsert: true, contentType: 'application/pdf' })
+      }
       if (win && !win.closed) win.location.href = href
       else {
         const a = document.createElement('a')
@@ -1419,6 +1423,11 @@ export default function TakeoffWorkspacePage() {
         <span style={vRule} />
         <strong style={{ fontSize: 15, color: '#173441', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260 }}>{project.name}</strong>
         {project.project_code && <small style={codeChip}>{project.project_code}</small>}
+        {project.stage === 'bid' && (
+          <Link href={`/commercial/${projectId}`} style={{ ...codeChip, background: '#fff4e8', color: '#8a4413', textDecoration: 'none', fontWeight: 700 }}>
+            ← {t('workspace.backToEstimate')}
+          </Link>
+        )}
         <span style={{ flex: 1 }} />
         <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {modes.map(m => m.key === 'home' ? (

@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { ui } from './ui'
 
-type Project = { id: string; project_code: string | null; name: string }
+type Project = { id: string; project_code: string | null; name: string; stage?: string | null }
 type Counted = { project_id: string }
 
 function countBy(rows: Counted[] | null) {
@@ -30,7 +30,7 @@ export default function TakeoffListPage() {
     async function load() {
       const supabase = createClient()
       const [p, s, l, e] = await Promise.all([
-        supabase.from('projects').select('id, project_code:code, name').neq('status', 'archived').order('name'),
+        supabase.from('projects').select('id, project_code:code, name, stage').neq('status', 'archived').order('name'),
         supabase.from('takeoff_sources').select('project_id'),
         supabase.from('takeoff_layers').select('project_id'),
         supabase.from('takeoff_elements').select('project_id'),
@@ -86,6 +86,7 @@ export default function TakeoffListPage() {
                 <div>
                   <strong>{row.name}</strong>
                   {row.project_code && <small style={ui.code}>{row.project_code}</small>}
+                  {row.stage === 'bid' && <small style={{ ...ui.code, background: '#fff4e8', color: '#8a4413' }}>{t('list.bid')}</small>}
                 </div>
                 <span>{row.sources}</span>
                 <span>{row.layers}</span>

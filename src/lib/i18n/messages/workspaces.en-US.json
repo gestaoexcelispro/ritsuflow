@@ -40,5 +40,11 @@
   "ritsuadmin.subtitle": "Platform administration",
   "ritsuadmin.description": "Explore the platform: architecture, modules, pages, data relationships and system status.",
   "ritsuadmin.features": "Platform map|Workspaces & modules|Data relationships|System diagnostics|Feature flags|Platform settings",
-  "ritsuadmin.action": "Open Ritsu Admin"
+  "ritsuadmin.action": "Open Ritsu Admin",
+  "commercial.eyebrow": "BID · PRICE · WIN",
+  "commercial.name": "Commercial",
+  "commercial.subtitle": "Bids & estimating",
+  "commercial.description": "Price takeoffs with your library, send proposals and turn won bids into projects.",
+  "commercial.features": "Bids & pipeline|Price book & labor rates|BDI / markup templates|Proposals in PDF|Convert to project",
+  "commercial.action": "Enter Commercial"
 }

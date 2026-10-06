@@ -45,7 +45,7 @@ export default function FieldOpProjectsPage() {
     let active = true
     async function load() {
       setLoading(true)
-      const { data, error: loadError } = await supabase.from('projects').select('*').order('created_at', { ascending: true })
+      const { data, error: loadError } = await supabase.from('projects').select('*').eq('stage', 'contract').order('created_at', { ascending: true })
       if (!active) return
       if (loadError) { setError(loadError.message); setProjects([]); setLoading(false); return }
       setError('')

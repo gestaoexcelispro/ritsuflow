@@ -14,6 +14,8 @@ const takeoffEnUS: TakeoffMessages = {
   'list.col.layers': 'Layers',
   'list.col.elements': 'Elements',
   'list.open': 'Open',
+  'list.bid': 'Bid',
+  'workspace.backToEstimate': 'Back to estimate',
   'list.error': 'Error loading takeoff.',
 
   'workspace.back': 'Back to takeoff',

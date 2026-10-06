@@ -29,7 +29,7 @@ export default function NewFieldOpDailyReportPage() {
       const preferred = new URLSearchParams(window.location.search).get('projectId') || ''
       const { data: userData } = await supabase.auth.getUser()
       setUserId(userData?.user?.id || null)
-      const { data, error: projectsError } = await supabase.from('projects').select('id,code,name,organization_id,status').in('status', ['planning', 'active', 'on_hold']).order('name')
+      const { data, error: projectsError } = await supabase.from('projects').select('id,code,name,organization_id,status').eq('stage', 'contract').in('status', ['planning', 'active', 'on_hold']).order('name')
       if (projectsError) { setError(projectsError.message); return }
       setProjects(data || [])
       if (preferred && (data || []).some((p) => p.id === preferred)) setProjectId(preferred)

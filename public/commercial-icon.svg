@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" fill="none">
+  <rect x="40" y="250" width="560" height="70" rx="10" fill="#eef3f5"/>
+  <g stroke="#9fb3bd" stroke-width="2" opacity=".7">
+    <path d="M70 268h500M70 286h500M70 304h500"/>
+  </g>
+  <!-- proposal sheet -->
+  <g transform="translate(150 34)">
+    <rect x="0" y="0" width="210" height="262" rx="12" fill="#ffffff" stroke="#be185d" stroke-width="4"/>
+    <rect x="0" y="0" width="210" height="44" rx="12" fill="#be185d"/>
+    <rect x="0" y="30" width="210" height="14" fill="#be185d"/>
+    <rect x="20" y="16" width="96" height="12" rx="6" fill="#fdeaf3"/>
+    <g fill="#cfdbe0">
+      <rect x="20" y="64" width="170" height="10" rx="5"/>
+      <rect x="20" y="84" width="130" height="10" rx="5"/>
+    </g>
+    <g stroke="#d9e3e6" stroke-width="2">
+      <path d="M20 116h170M20 142h170M20 168h170M20 194h170M130 106v98"/>
+    </g>
+    <g fill="#94a8b1">
+      <rect x="24" y="124" width="80" height="8" rx="4"/>
+      <rect x="24" y="150" width="64" height="8" rx="4"/>
+      <rect x="24" y="176" width="90" height="8" rx="4"/>
+      <rect x="146" y="124" width="40" height="8" rx="4"/>
+      <rect x="152" y="150" width="34" height="8" rx="4"/>
+      <rect x="140" y="176" width="46" height="8" rx="4"/>
+    </g>
+    <rect x="110" y="214" width="80" height="26" rx="6" fill="#fdeaf3" stroke="#be185d" stroke-width="2"/>
+    <rect x="122" y="223" width="56" height="8" rx="4" fill="#be185d"/>
+  </g>
+  <!-- price build-up bars -->
+  <g transform="translate(392 112)">
+    <rect x="0" y="96" width="36" height="88" rx="6" fill="#cfdbe0"/>
+    <rect x="48" y="70" width="36" height="114" rx="6" fill="#94a8b1"/>
+    <rect x="96" y="40" width="36" height="144" rx="6" fill="#be185d" opacity=".75"/>
+    <rect x="144" y="8" width="36" height="176" rx="6" fill="#be185d"/>
+    <path d="M18 84 L66 58 L114 28 L162 -4" stroke="#173441" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="162" cy="-4" r="8" fill="#173441"/>
+  </g>
+  <!-- seal -->
+  <g transform="translate(120 210)">
+    <circle cx="0" cy="0" r="34" fill="#ffffff" stroke="#0b7f75" stroke-width="5"/>
+    <path d="M-14 0 L-4 11 L16 -12" stroke="#0b7f75" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
