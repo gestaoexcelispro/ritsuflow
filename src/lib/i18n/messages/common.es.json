@@ -1,4 +1,9 @@
 {
   "language.label": "Idioma",
-  "language.select": "Seleccionar idioma"
+  "language.select": "Seleccionar idioma",
+  "dialog.ok": "Aceptar",
+  "dialog.cancel": "Cancelar",
+  "dialog.confirm": "Confirmar",
+  "dialog.confirmTitle": "Confirma, por favor",
+  "dialog.close": "Cerrar"
 }

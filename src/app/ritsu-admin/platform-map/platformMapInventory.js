@@ -486,7 +486,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "insert",
-              "line": 1693
+              "line": 1688
             },
             {
               "method": "delete",
@@ -502,7 +502,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "insert",
-              "line": 1544
+              "line": 1539
             },
             {
               "method": "delete",
@@ -518,7 +518,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1728
+              "line": 1723
             }
           ]
         },
@@ -530,19 +530,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1781
-            }
-          ]
-        },
-        {
-          "name": "fieldop_project_activities",
-          "schema": "public",
-          "kind": "table",
-          "purpose": "Project activities from the Projects scope, scheduled as Master Plan packages",
-          "operations": [
-            {
-              "method": "select",
-              "line": 1799
+              "line": 1776
             }
           ]
         },
@@ -554,20 +542,37 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1812
+              "line": 1798
             },
             {
               "method": "insert",
-              "line": 2935
+              "line": 2919
             },
             {
               "method": "update",
-              "line": 2977
+              "line": 2961
             }
           ]
         }
       ],
-      "functions": [],
+      "functions": [
+        {
+          "name": "get_project_work_package_options",
+          "schema": "public",
+          "arguments": "target_project_id uuid",
+          "returns": "TABLE(organization_work_package_id uuid, code text, description text, color text, organization_package_active boolean, selected_for_project boolean)",
+          "line": 284,
+          "purpose": "Company work packages with the project's selection; selected, active ones are the schedulable packages."
+        },
+        {
+          "name": "set_project_work_package_selected",
+          "schema": "public",
+          "arguments": "target_project_id uuid, target_organization_work_package_id uuid, target_selected boolean",
+          "returns": "void",
+          "line": 275,
+          "purpose": "Add or remove a company work package from the project's Master Plan."
+        }
+      ],
       "storage": [],
       "sourcePaths": [
         "src/app/dashboard/planning/master-plan/page.js"

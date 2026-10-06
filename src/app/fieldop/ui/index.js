@@ -62,6 +62,7 @@ const MODULES = {
       { key: 'users', icon: 'workforce', href: '/settings/users', labelKey: 'nav.settingsUsers' },
       { key: 'roles', icon: 'shield', href: '/settings/roles', labelKey: 'nav.settingsRoles' },
       { key: 'workspaces', icon: 'portfolio', href: '/settings/workspaces', labelKey: 'nav.settingsWorkspaces' },
+      { key: 'workPackages', icon: 'package', href: '/settings/work-packages', labelKey: 'nav.settingsWorkPackages' },
       { key: 'localization', icon: 'globe', href: '/settings/localization', labelKey: 'nav.settingsLocalization' },
       { key: 'license', icon: 'card', href: '/settings/license', labelKey: 'nav.settingsLicense' },
     ],
