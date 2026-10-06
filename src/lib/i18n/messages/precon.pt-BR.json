@@ -728,5 +728,6 @@
   "weekly.itemMany": "itens",
   "weekly.ppcFinal": "PPC definitivo",
   "weekly.ppcLive": "PPC em andamento",
-  "weekly.ppcAfterCommit": "Disponível após o compromisso"
+  "weekly.ppcAfterCommit": "Disponível após o compromisso",
+  "weekly.project": "Projeto"
 }

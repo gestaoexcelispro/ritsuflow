@@ -728,5 +728,6 @@
   "weekly.itemMany": "items",
   "weekly.ppcFinal": "Final PPC",
   "weekly.ppcLive": "Live PPC",
-  "weekly.ppcAfterCommit": "Available after commitment"
+  "weekly.ppcAfterCommit": "Available after commitment",
+  "weekly.project": "Project"
 }

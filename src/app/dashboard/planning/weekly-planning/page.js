@@ -13,6 +13,8 @@ import { readPreconProjectId, rememberPreconProjectId } from '../../preconProjec
 import { useT } from '../../../../lib/i18n/useT';
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
 import { usePageDialogs } from '../../../fieldop/ui/dialogs';
+import { Empty, Icon, Stat, ui } from '../../../fieldop/ui';
+import pc from '../../precon.module.css';
 
 
 // ============================================================
@@ -2268,287 +2270,110 @@ export default function WeeklyPlanningPage() {
   // ==========================================================
 
   return (
-    <div
-      style={{
-        minHeight:
-          'calc(100vh - 100px)',
-        padding: '24px',
-        background: '#f8fafc',
-        color: '#0f172a',
-        fontFamily:
-          'Inter, Arial, sans-serif',
-      }}
-    >
-      {/* TOOLBAR: week navigation, project and plan actions */}
+    <div style={{ minWidth: 0, color: 'var(--fo-ink)' }}>
+      {/* TOOLBAR: project, week navigation and plan actions */}
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: '8px',
-              flexWrap: 'wrap',
-              width: '100%',
-            }}
-          >
-        <div
-          style={{
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            flex: '1 1 auto',
-          }}
-        >
-          {selectedProjectId && (
-            <>
-              <button
-                type="button"
-                onClick={() =>
-                  moveWeek(-1)
-                }
-                style={styles.iconButton}
-                aria-label={t.prevWeek}
-              >
-                ←
-              </button>
-
-              <div
-                style={{
-                  minWidth: '185px',
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: 800,
-                    color: '#0f2745',
-                    lineHeight: 1.15,
-                  }}
-                >
-                  {t.weekWord}{' '}
-                  {weekInfo.week}{' '}
-                  ·{' '}
-                  {weekInfo.year}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: '0.78rem',
-                    color: '#64748b',
-                    marginTop: '3px',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {formatDate(
-                    weekStartDate,
-                  )}{' '}
-                  –{' '}
-                  {formatDate(
-                    weekEndDate,
-                  )}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  moveWeek(1)
-                }
-                style={styles.iconButton}
-                aria-label={t.nextWeek}
-              >
-                →
-              </button>
-
-              <input
-                type="date"
-                value={weekStartDate}
-                onChange={(event) =>
-                  handleWeekDateChange(
-                    event.target.value,
-                  )
-                }
-                style={{
-                  ...styles.input,
-                  width: '165px',
-                }}
-                aria-label={t.selectWeek}
-              />
-            </>
-          )}
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: '10px',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-          }}
-        >
-          <select
-            value={selectedProjectId}
-            onChange={(event) => {
-              setSelectedProjectId(
-                event.target.value,
-              );
-              rememberPreconProjectId(
-                event.target.value,
-              );
-            }}
-            style={styles.select}
-          >
-            <option value="">
-              {t.selectProject}
-            </option>
-
-            {projects.map(
-              (project) => (
-                <option
-                  key={project.id}
-                  value={project.id}
-                >
-                  {project.code
-                    ? `${project.code} - ${project.name}`
-                    : project.name}
+      <div className={pc.toolbar} style={{ marginBottom: 12 }}>
+        <div className={pc.group}>
+          <label className={pc.control}>
+            <span>{t.project}</span>
+            <select
+              className={pc.projectSelect}
+              value={selectedProjectId}
+              onChange={(event) => {
+                setSelectedProjectId(event.target.value);
+                rememberPreconProjectId(event.target.value);
+              }}
+            >
+              <option value="">{t.selectProject}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.code ? `${project.code} – ${project.name}` : project.name}
                 </option>
-              ),
-            )}
-          </select>
-
-          <button
-            type="button"
-            onClick={loadWeeklyPlan}
-            disabled={
-              !selectedProjectId ||
-              loading
-            }
-            style={styles.secondaryButton}
-          >
+              ))}
+            </select>
+          </label>
+          <button type="button" className={ui.btnGhost} onClick={loadWeeklyPlan} disabled={!selectedProjectId || loading}>
             {t.refresh}
           </button>
-
-          {selectedProjectId && (
-            <>
-              {weeklyPlan ? (
-                <span
-                  style={{
-                    ...styles.statusBadge,
-                    ...(isDraft
-                      ? styles.draftBadge
-                      : isCommitted
-                        ? styles.committedBadge
-                        : isClosed
-                          ? styles.closedBadge
-                          : styles.cancelledBadge),
-                  }}
-                >
-                  {planStatusLabel(
-                    weeklyPlan.status,
-                  )}
-                </span>
-              ) : (
-                <span
-                  style={{
-                    ...styles.statusBadge,
-                    background: '#f1f5f9',
-                    color: '#64748b',
-                  }}
-                >
-                  {t.noPlanBadge}
-                </span>
-              )}
-
-              {!weeklyPlan && (
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={async () => {
-                    setActionLoading(true);
-                    await createWeeklyPlan();
-                    setActionLoading(false);
-                  }}
-                  style={styles.primaryButton}
-                >
-                  {t.createPlan}
-                </button>
-              )}
-
-              {isDraft && (
-                <>
-                  <button
-                    type="button"
-                    onClick={openActivityModal}
-                    style={styles.primaryButton}
-                  >
-                    {t.addActivityPlus}
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={
-                      actionLoading
-                    }
-                    onClick={cancelWeek}
-                    style={{
-                      ...styles.secondaryButton,
-                      borderColor: '#fecaca',
-                      color: '#b91c1c',
-                      background: '#ffffff',
-                    }}
-                  >
-                    {t.cancelWeek}
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={
-                      formalItems.length === 0 ||
-                      actionLoading
-                    }
-                    onClick={commitWeek}
-                    style={styles.commitButton}
-                  >
-                    {t.commitWeek}
-                  </button>
-                </>
-              )}
-
-              {isCommitted && (
-                <>
-                  <button
-                    type="button"
-                    disabled={
-                      executionEditMode ||
-                      actionLoading
-                    }
-                    onClick={() =>
-                      setShowUnplannedPanel(true)
-                    }
-                    style={styles.secondaryButton}
-                  >
-                    {t.addUnplannedPlus}
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={
-                      executionEditMode ||
-                      !canClose ||
-                      actionLoading
-                    }
-                    onClick={closeWeek}
-                    style={styles.closeButton}
-                  >
-                    {t.closeWeek}
-                  </button>
-                </>
-              )}
-            </>
-          )}
         </div>
+
+        {selectedProjectId && (
+          <div className={pc.group}>
+            <button type="button" className={pc.iconBtn} onClick={() => moveWeek(-1)} aria-label={t.prevWeek}>←</button>
+            <div style={{ minWidth: 170 }}>
+              <div style={{ fontWeight: 600 }}>{t.weekWord} {weekInfo.week} · {weekInfo.year}</div>
+              <div style={{ fontSize: 13, color: 'var(--fo-muted)', whiteSpace: 'nowrap' }}>
+                {formatDate(weekStartDate)} – {formatDate(weekEndDate)}
+              </div>
+            </div>
+            <button type="button" className={pc.iconBtn} onClick={() => moveWeek(1)} aria-label={t.nextWeek}>→</button>
+            <input
+              type="date"
+              value={weekStartDate}
+              onChange={(event) => handleWeekDateChange(event.target.value)}
+              aria-label={t.selectWeek}
+              style={{ width: 160 }}
+            />
+            {weeklyPlan ? (
+              <span
+                style={{
+                  ...styles.statusBadge,
+                  ...(isDraft ? styles.draftBadge : isCommitted ? styles.committedBadge : isClosed ? styles.closedBadge : styles.cancelledBadge),
+                }}
+              >
+                {planStatusLabel(weeklyPlan.status)}
+              </span>
+            ) : (
+              <span style={{ ...styles.statusBadge, background: 'var(--fo-sunken)', color: 'var(--fo-muted)' }}>
+                {t.noPlanBadge}
+              </span>
+            )}
           </div>
+        )}
+
+        {selectedProjectId && (
+          <div className={`${pc.group} ${pc.push}`}>
+            {!weeklyPlan && (
+              <button
+                type="button"
+                className={ui.btnPrimary}
+                disabled={actionLoading}
+                onClick={async () => {
+                  setActionLoading(true);
+                  await createWeeklyPlan();
+                  setActionLoading(false);
+                }}
+              >
+                <Icon name="plus" size={18} />{t.createPlan}
+              </button>
+            )}
+            {isDraft && (
+              <>
+                <button type="button" className={ui.btnDanger} disabled={actionLoading} onClick={cancelWeek}>
+                  {t.cancelWeek}
+                </button>
+                <button type="button" className={ui.btn} onClick={openActivityModal}>
+                  {t.addActivityPlus}
+                </button>
+                <button type="button" className={ui.btnPrimary} disabled={formalItems.length === 0 || actionLoading} onClick={commitWeek}>
+                  {t.commitWeek}
+                </button>
+              </>
+            )}
+            {isCommitted && (
+              <>
+                <button type="button" className={ui.btn} disabled={executionEditMode || actionLoading} onClick={() => setShowUnplannedPanel(true)}>
+                  {t.addUnplannedPlus}
+                </button>
+                <button type="button" className={ui.btnPrimary} disabled={executionEditMode || !canClose || actionLoading} onClick={closeWeek}>
+                  {t.closeWeek}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* FEEDBACK */}
 
@@ -2573,41 +2398,7 @@ export default function WeeklyPlanningPage() {
       )}
 
       {!selectedProjectId ? (
-        <div
-          style={
-            styles.emptyState
-          }
-        >
-          <div
-            style={{
-              fontSize:
-                '2.5rem',
-              marginBottom:
-                '10px',
-            }}
-          >
-            
-          </div>
-
-          <h2
-            style={{
-              margin:
-                '0 0 8px 0',
-              color: '#0f2745',
-            }}
-          >
-            {t.noProject}
-          </h2>
-
-          <p
-            style={{
-              margin: 0,
-              color: '#64748b',
-            }}
-          >
-            {t.noProjectText}
-          </p>
-        </div>
+        <Empty title={t.noProject} text={t.noProjectText} />
       ) : (
         <>
           {/* METRICS */}
@@ -5410,138 +5201,37 @@ function MetricCard({
   footer,
   accent = 'neutral',
 }) {
-  const accentStyle =
-    accent === 'success'
-      ? {
-          background:
-            '#f0fdf4',
-          borderColor:
-            '#bbf7d0',
-          color:
-            '#166534',
-        }
-      : accent === 'danger'
-        ? {
-            background:
-              '#fef2f2',
-            borderColor:
-              '#fecaca',
-            color:
-              '#991b1b',
-          }
-        : {
-            background:
-              '#ffffff',
-            borderColor:
-              '#e2e8f0',
-            color:
-              '#0f2745',
-          };
-
   return (
-    <div
-      style={{
-        border: `1px solid ${accentStyle.borderColor}`,
-        background:
-          accentStyle.background,
-        borderRadius:
-          '10px',
-        padding:
-          '15px',
-      }}
-    >
-      <div
-        style={
-          styles.smallLabel
-        }
-      >
-        {label}
-      </div>
-
-      <div
-        style={{
-          fontSize:
-            '1.65rem',
-          fontWeight:
-            900,
-          color:
-            accentStyle.color,
-          marginTop:
-            '7px',
-        }}
-      >
-        {value}
-      </div>
-
-      {footer && (
-        <div
-          style={{
-            fontSize:
-              '0.72rem',
-            color:
-              '#64748b',
-            marginTop:
-              '5px',
-          }}
-        >
-          {footer}
-        </div>
-      )}
-    </div>
+    <Stat
+      label={label}
+      value={value}
+      hint={footer}
+      tone={accent === 'success' ? 'ok' : accent === 'danger' ? 'bad' : undefined}
+    />
   );
 }
 
 function ExecutionBadge({
   result,
 }) {
-  let background =
-    '#f1f5f9';
+  let background = 'var(--fo-sunken)';
+  let color = 'var(--fo-muted)';
+  let label = tr('resultPending');
 
-  let color =
-    '#475569';
-
-  let label =
-    'Pending';
-
-  if (
-    result === 'completed'
-  ) {
-    background =
-      '#dcfce7';
-
-    color =
-      '#166534';
-
-    label =
-      'Completed';
+  if (result === 'completed') {
+    background = 'var(--fo-ok-wash)';
+    color = 'var(--fo-ok)';
+    label = tr('resultCompleted');
   }
 
-  if (
-    result ===
-    'not_completed'
-  ) {
-    background =
-      '#fee2e2';
-
-    color =
-      '#991b1b';
-
-    label =
-      'Missed';
+  if (result === 'not_completed') {
+    background = 'var(--fo-bad-wash)';
+    color = 'var(--fo-bad)';
+    label = tr('resultMissed');
   }
 
-  if (
-    result ===
-    'not_applicable'
-  ) {
-    background =
-      '#e2e8f0';
-
-    color =
-      '#475569';
-
-    label =
-      'N/A';
+  if (result === 'not_applicable') {
+    label = tr('ready.na');
   }
 
   return (
@@ -5563,22 +5253,15 @@ function TableHeader({
   return (
     <th
       style={{
-        background:
-          '#0f2745',
-        color:
-          '#ffffff',
-        padding:
-          '11px 10px',
-        textAlign:
-          'left',
-        fontSize:
-          '0.75rem',
-        letterSpacing:
-          '0.02em',
-        borderRight:
-          '1px solid #27476d',
-        position:
-          'sticky',
+        background: 'var(--fo-sunken)',
+        color: 'var(--fo-muted)',
+        padding: '10px 12px',
+        textAlign: 'left',
+        fontSize: '13px',
+        fontWeight: 600,
+        borderBottom: '1px solid var(--fo-line-soft)',
+        whiteSpace: 'nowrap',
+        position: 'sticky',
         top: 0,
         zIndex: 2,
       }}
@@ -5594,14 +5277,10 @@ function TableCell({
   return (
     <td
       style={{
-        padding:
-          '10px',
-        fontSize:
-          '0.82rem',
-        borderRight:
-          '1px solid #e2e8f0',
-        verticalAlign:
-          'middle',
+        padding: '10px 12px',
+        fontSize: '14px',
+        borderBottom: '1px solid var(--fo-line-soft)',
+        verticalAlign: 'middle',
       }}
     >
       {children}
@@ -5615,21 +5294,14 @@ function ModalOverlay({
   return (
     <div
       style={{
-        position:
-          'fixed',
+        position: 'fixed',
         inset: 0,
-        background:
-          'rgba(15, 23, 42, 0.50)',
-        display:
-          'flex',
-        alignItems:
-          'center',
-        justifyContent:
-          'center',
-        padding:
-          '20px',
-        zIndex:
-          9999,
+        background: 'rgba(6, 38, 55, 0.55)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        zIndex: 5000,
       }}
     >
       {children}
@@ -5642,29 +5314,8 @@ function FormField({
   children,
 }) {
   return (
-    <label
-      style={{
-        display:
-          'grid',
-        gap:
-          '6px',
-        marginBottom:
-          '13px',
-      }}
-    >
-      <span
-        style={{
-          fontSize:
-            '0.8rem',
-          fontWeight:
-            800,
-          color:
-            '#334155',
-        }}
-      >
-        {label}
-      </span>
-
+    <label className={ui.field} style={{ marginBottom: 14 }}>
+      <span className={ui.fieldLabel}>{label}</span>
       {children}
     </label>
   );
@@ -5676,31 +5327,19 @@ function FormField({
 
 const styles = {
   card: {
-    background:
-      '#ffffff',
-
-    border:
-      '1px solid #e2e8f0',
-
-    borderRadius:
-      '10px',
-
-    padding:
-      '16px',
-
-    boxShadow:
-      '0 1px 2px rgba(15, 23, 42, 0.04)',
-
-    marginBottom:
-      '18px',
+    background: 'var(--fo-surface)',
+    border: '1px solid var(--fo-line)',
+    borderRadius: 'var(--fo-radius)',
+    padding: '18px 20px',
+    marginBottom: '12px',
   },
 
   emptyState: {
     background:
-      '#ffffff',
+      'var(--fo-surface)',
 
     border:
-      '1px dashed #cbd5e1',
+      '1px dashed var(--fo-line)',
 
     borderRadius:
       '12px',
@@ -5735,73 +5374,27 @@ const styles = {
       'center',
 
     color:
-      '#64748b',
+      'var(--fo-muted)',
 
     background:
-      '#f8fafc',
+      'var(--fo-sunken)',
 
     borderRadius:
       '8px',
   },
 
   input: {
-    border:
-      '1px solid #cbd5e1',
-
-    borderRadius:
-      '7px',
-
-    padding:
-      '9px 10px',
-
-    fontSize:
-      '0.85rem',
-
-    outline:
-      'none',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#0f172a',
-
-    width:
-      '100%',
-
-    boxSizing:
-      'border-box',
+    width: '100%',
+    minHeight: '40px',
   },
 
   select: {
-    border:
-      '1px solid #cbd5e1',
-
-    borderRadius:
-      '7px',
-
-    padding:
-      '9px 10px',
-
-    minWidth:
-      '220px',
-
-    fontSize:
-      '0.85rem',
-
-    outline:
-      'none',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#0f172a',
+    minHeight: '40px',
   },
 
   tableInput: {
     border:
-      '1px solid #cbd5e1',
+      '1px solid var(--fo-line)',
 
     borderRadius:
       '5px',
@@ -5818,7 +5411,7 @@ const styles = {
 
   tableNumberInput: {
     border:
-      '1px solid #cbd5e1',
+      '1px solid var(--fo-line)',
 
     borderRadius:
       '5px',
@@ -5834,254 +5427,102 @@ const styles = {
   },
 
   primaryButton: {
-    border:
-      'none',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#1d4ed8',
-
-    color:
-      '#ffffff',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      800,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    minHeight: '40px',
+    padding: '0 14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-teal)',
+    background: 'var(--fo-teal)',
+    color: '#04312c',
   },
 
   secondaryButton: {
-    border:
-      '1px solid #cbd5e1',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#334155',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      700,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
-  },
-
-  commitButton: {
-    border:
-      'none',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#0f766e',
-
-    color:
-      '#ffffff',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      800,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
-  },
-
-  closeButton: {
-    border:
-      'none',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#0f2745',
-
-    color:
-      '#ffffff',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      800,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    minHeight: '40px',
+    padding: '0 14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-line)',
+    background: 'var(--fo-surface)',
+    color: 'var(--fo-ink)',
   },
 
   dangerButton: {
-    border:
-      'none',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#b91c1c',
-
-    color:
-      '#ffffff',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      800,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
-  },
-
-  iconButton: {
-    width:
-      '36px',
-
-    height:
-      '36px',
-
-    border:
-      '1px solid #cbd5e1',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#334155',
-
-    cursor:
-      'pointer',
-
-    fontWeight:
-      900,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    minHeight: '40px',
+    padding: '0 14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-bad)',
+    background: 'var(--fo-surface)',
+    color: 'var(--fo-bad)',
   },
 
   smallSecondaryButton: {
-    border:
-      '1px solid #cbd5e1',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#334155',
-
-    borderRadius:
-      '5px',
-
-    padding:
-      '5px 7px',
-
-    fontSize:
-      '0.72rem',
-
-    fontWeight:
-      800,
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '32px',
+    padding: '0 10px',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-line)',
+    background: 'var(--fo-surface)',
+    color: 'var(--fo-ink)',
   },
 
   smallSuccessButton: {
-    border:
-      '1px solid #86efac',
-
-    background:
-      '#f0fdf4',
-
-    color:
-      '#166534',
-
-    borderRadius:
-      '5px',
-
-    padding:
-      '5px 7px',
-
-    fontSize:
-      '0.72rem',
-
-    fontWeight:
-      800,
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '32px',
+    padding: '0 10px',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-ok)',
+    background: 'var(--fo-ok-wash)',
+    color: 'var(--fo-ok)',
   },
 
   smallDangerButton: {
-    border:
-      '1px solid #fecaca',
-
-    background:
-      '#fef2f2',
-
-    color:
-      '#991b1b',
-
-    borderRadius:
-      '5px',
-
-    padding:
-      '5px 7px',
-
-    fontSize:
-      '0.72rem',
-
-    fontWeight:
-      800,
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '32px',
+    padding: '0 10px',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-bad)',
+    background: 'var(--fo-bad-wash)',
+    color: 'var(--fo-bad)',
   },
 
   smallLabel: {
-    fontSize:
-      '0.72rem',
-
-    fontWeight:
-      800,
-
-    letterSpacing:
-      '0.05em',
-
-    color:
-      '#64748b',
-
-    textTransform:
-      'uppercase',
+    color: 'var(--fo-muted)',
+    fontSize: '13px',
+    fontWeight: 600,
   },
 
   secondaryMetricValue: {
@@ -6095,7 +5536,7 @@ const styles = {
       900,
 
     color:
-      '#0f2745',
+      'var(--fo-ink)',
   },
 
   statusBadge: {
@@ -6142,15 +5583,15 @@ const styles = {
       '#dcfce7',
 
     color:
-      '#166534',
+      'var(--fo-ok)',
   },
 
   cancelledBadge: {
     background:
-      '#f1f5f9',
+      'var(--fo-sunken)',
 
     color:
-      '#64748b',
+      'var(--fo-muted)',
   },
 
   miniBadge: {
@@ -6198,13 +5639,13 @@ const styles = {
 
   successBox: {
     background:
-      '#f0fdf4',
+      'var(--fo-ok-wash)',
 
     border:
       '1px solid #bbf7d0',
 
     color:
-      '#166534',
+      'var(--fo-ok)',
 
     borderRadius:
       '8px',
@@ -6221,13 +5662,13 @@ const styles = {
 
   errorBox: {
     background:
-      '#fef2f2',
+      'var(--fo-bad-wash)',
 
     border:
       '1px solid #fecaca',
 
     color:
-      '#991b1b',
+      'var(--fo-bad)',
 
     borderRadius:
       '8px',
@@ -6256,7 +5697,7 @@ const styles = {
       'auto',
 
     background:
-      '#ffffff',
+      'var(--fo-surface)',
 
     borderRadius:
       '12px',
@@ -6282,7 +5723,7 @@ const styles = {
       'auto',
 
     background:
-      '#ffffff',
+      'var(--fo-surface)',
 
     borderRadius:
       '12px',
@@ -6328,7 +5769,7 @@ const styles = {
       '14px',
 
     borderTop:
-      '1px solid #e2e8f0',
+      '1px solid var(--fo-line-soft)',
   },
 
   closeModalButton: {
@@ -6339,7 +5780,7 @@ const styles = {
       'transparent',
 
     color:
-      '#64748b',
+      'var(--fo-muted)',
 
     fontSize:
       '1.6rem',

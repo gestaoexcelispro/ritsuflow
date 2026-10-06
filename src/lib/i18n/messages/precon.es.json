@@ -728,5 +728,6 @@
   "weekly.itemMany": "elementos",
   "weekly.ppcFinal": "PPC definitivo",
   "weekly.ppcLive": "PPC en curso",
-  "weekly.ppcAfterCommit": "Disponible tras el compromiso"
+  "weekly.ppcAfterCommit": "Disponible tras el compromiso",
+  "weekly.project": "Proyecto"
 }
