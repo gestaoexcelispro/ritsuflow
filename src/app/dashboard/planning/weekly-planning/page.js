@@ -7,29 +7,53 @@ import React, {
   useState,
 } from 'react';
 
-import { createPortal } from 'react-dom';
 
 import { supabase } from '../../../../lib/supabase';
 import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
+import { useT } from '../../../../lib/i18n/useT';
+import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
+import { usePageDialogs } from '../../../fieldop/ui/dialogs';
+import { Empty, Icon, Stat, ui } from '../../../fieldop/ui';
+import pc from '../../precon.module.css';
+
+
+// ============================================================
+// TRANSLATIONS
+// ============================================================
+// Texts: weekly.* in messages/precon.<language>.json. The page sets the
+// translator on every render, so the helpers and module-level components
+// below read the current language. Stored values (statuses, variance
+// reasons, categories) are unchanged.
+const I18N = {
+  translate: (key) => key,
+  language: 'en-US',
+};
+
+const tr = (key, vars) =>
+  I18N.translate(`weekly.${key}`, vars);
+
+const t = new Proxy({}, {
+  get: (_, key) => tr(String(key)),
+});
 
 // ============================================================
 // CONSTANTS
 // ============================================================
 
 const VARIANCE_REASONS = [
-  { value: 'labor', label: 'Labor' },
-  { value: 'material', label: 'Material' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'design_information', label: 'Design / Information' },
-  { value: 'predecessor', label: 'Predecessor' },
-  { value: 'workspace_access', label: 'Workspace / Access' },
-  { value: 'weather', label: 'Weather' },
-  { value: 'subcontractor', label: 'Subcontractor' },
-  { value: 'client_owner', label: 'Client / Owner' },
-  { value: 'planning', label: 'Planning' },
-  { value: 'quality_rework', label: 'Quality / Rework' },
-  { value: 'safety', label: 'Safety' },
-  { value: 'other', label: 'Other' },
+  { value: 'labor', get label() { return tr('reason.labor'); } },
+  { value: 'material', get label() { return tr('reason.material'); } },
+  { value: 'equipment', get label() { return tr('reason.equipment'); } },
+  { value: 'design_information', get label() { return tr('reason.design_information'); } },
+  { value: 'predecessor', get label() { return tr('reason.predecessor'); } },
+  { value: 'workspace_access', get label() { return tr('reason.workspace_access'); } },
+  { value: 'weather', get label() { return tr('reason.weather'); } },
+  { value: 'subcontractor', get label() { return tr('reason.subcontractor'); } },
+  { value: 'client_owner', get label() { return tr('reason.client_owner'); } },
+  { value: 'planning', get label() { return tr('reason.planning'); } },
+  { value: 'quality_rework', get label() { return tr('reason.quality_rework'); } },
+  { value: 'safety', get label() { return tr('reason.safety'); } },
+  { value: 'other', get label() { return tr('reason.other'); } },
 ];
 
 const MAKE_READY_CATEGORIES = [
@@ -37,43 +61,57 @@ const MAKE_READY_CATEGORIES = [
     key: 'projects_information_status',
     sourceKey: 'projects_information_source',
     category: 'projects_information',
-    label: 'Projects / Information',
+    get label() {
+      return tr('category.projects_information');
+    },
   },
   {
     key: 'materials_status',
     sourceKey: 'materials_source',
     category: 'materials',
-    label: 'Materials',
+    get label() {
+      return tr('category.materials');
+    },
   },
   {
     key: 'labor_status',
     sourceKey: 'labor_source',
     category: 'labor',
-    label: 'Labor',
+    get label() {
+      return tr('category.labor');
+    },
   },
   {
     key: 'equipment_status',
     sourceKey: 'equipment_source',
     category: 'equipment',
-    label: 'Equipment',
+    get label() {
+      return tr('category.equipment');
+    },
   },
   {
     key: 'space_status',
     sourceKey: 'space_source',
     category: 'space',
-    label: 'Space',
+    get label() {
+      return tr('category.space');
+    },
   },
   {
     key: 'predecessor_status',
     sourceKey: 'predecessor_source',
     category: 'predecessor',
-    label: 'Predecessor',
+    get label() {
+      return tr('category.predecessor');
+    },
   },
   {
     key: 'external_conditions_status',
     sourceKey: 'external_conditions_source',
     category: 'external_conditions',
-    label: 'External Conditions',
+    get label() {
+      return tr('category.external_conditions');
+    },
   },
 ];
 
@@ -202,7 +240,7 @@ function formatDate(value) {
   if (!value) return '—';
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    I18N.language,
     {
       month: 'short',
       day: 'numeric',
@@ -217,7 +255,7 @@ function formatShortDate(value) {
   if (!value) return '—';
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    I18N.language,
     {
       month: 'short',
       day: 'numeric',
@@ -270,16 +308,16 @@ function varianceLabel(value) {
 function planStatusLabel(status) {
   switch (status) {
     case 'draft':
-      return 'Draft';
+      return tr('planStatus.draft');
 
     case 'committed':
-      return 'Committed';
+      return tr('planStatus.committed');
 
     case 'closed':
-      return 'Closed';
+      return tr('planStatus.closed');
 
     case 'cancelled':
-      return 'Cancelled';
+      return tr('planStatus.cancelled');
 
     default:
       return status;
@@ -294,24 +332,24 @@ function makeReadyStatusLabel(
     status === 'clear' &&
     source === 'constraint_cleared'
   ) {
-    return 'Yes 🔒';
+    return tr('readyLocked');
   }
 
   switch (status) {
     case 'clear':
-      return 'Yes';
+      return tr('ready.yes');
 
     case 'not_applicable':
-      return 'N/A';
+      return tr('ready.na');
 
     case 'constrained':
-      return 'No 🔒';
+      return tr('ready.no');
 
     case 'not_assessed':
-      return 'Not Assessed';
+      return tr('ready.notAssessed');
 
     default:
-      return status || 'Not Assessed';
+      return status || tr('ready.notAssessed');
   }
 }
 
@@ -357,24 +395,24 @@ function constraintLifecycleLabel(
   constraint,
 ) {
   if (!constraint) {
-    return 'Constraint Blocking';
+    return tr('lifecycle.blocking');
   }
 
   switch (constraint.status) {
     case 'resolved':
-      return 'Resolved — Awaiting Verification';
+      return tr('lifecycle.resolved');
 
     case 'in_progress':
-      return 'Active Constraint — In Progress';
+      return tr('lifecycle.inProgress');
 
     case 'waiting':
-      return 'Active Constraint — Waiting';
+      return tr('lifecycle.waiting');
 
     case 'open':
-      return 'Active Constraint';
+      return tr('lifecycle.open');
 
     default:
-      return 'Constraint Blocking';
+      return tr('lifecycle.blocking');
   }
 }
 
@@ -383,6 +421,11 @@ function constraintLifecycleLabel(
 // ============================================================
 
 export default function WeeklyPlanningPage() {
+  const translate = useT('precon');
+  const { language } = useLanguage();
+  I18N.translate = translate;
+  I18N.language = language;
+  const dialogs = usePageDialogs();
   const initialMonday = useMemo(
     () =>
       dateToIso(
@@ -390,23 +433,6 @@ export default function WeeklyPlanningPage() {
       ),
     [],
   );
-
-  // ----------------------------------------------------------
-  // DASHBOARD HEADER PORTAL
-  // ----------------------------------------------------------
-
-  const [
-    headerActionsTarget,
-    setHeaderActionsTarget,
-  ] = useState(null);
-
-  useEffect(() => {
-    setHeaderActionsTarget(
-      document.getElementById(
-        'dashboard-topbar-actions',
-      ),
-    );
-  }, []);
 
   // ----------------------------------------------------------
   // GENERAL STATE
@@ -668,7 +694,7 @@ export default function WeeklyPlanningPage() {
     }
 
     setErrorMessage(
-      'Unexpected error.',
+      t.errUnexpected,
     );
   }, []);
 
@@ -1025,7 +1051,7 @@ export default function WeeklyPlanningPage() {
     async () => {
       if (!selectedProject) {
         setErrorMessage(
-          'Select a project first.',
+          t.errSelectProject,
         );
 
         return null;
@@ -1052,7 +1078,7 @@ export default function WeeklyPlanningPage() {
 
         if (!activeLookaheadPlanId) {
           throw new Error(
-            'This project does not have an active Lookahead Plan.',
+            t.errNoLookahead,
           );
         }
 
@@ -1103,7 +1129,7 @@ export default function WeeklyPlanningPage() {
         setWeeklyPlan(data);
 
         setMessage(
-          'Weekly Plan created.',
+          t.planCreated,
         );
 
         return data;
@@ -1140,7 +1166,7 @@ export default function WeeklyPlanningPage() {
 
       if (!isDraft) {
         setErrorMessage(
-          'Activities can only be added while the Weekly Plan is Draft.',
+          t.errNotDraft,
         );
 
         return;
@@ -1150,7 +1176,7 @@ export default function WeeklyPlanningPage() {
         !activityForm.activityDescription.trim()
       ) {
         setErrorMessage(
-          'Activity description is required.',
+          t.errActivityRequired,
         );
 
         return;
@@ -1160,7 +1186,7 @@ export default function WeeklyPlanningPage() {
         !activityForm.lookaheadSheetRowId
       ) {
         setErrorMessage(
-          'Select a Work Package.',
+          t.errSelectPackage,
         );
 
         return;
@@ -1168,7 +1194,7 @@ export default function WeeklyPlanningPage() {
 
       if (!selectedWorkPackage) {
         setErrorMessage(
-          'The selected Work Package could not be found.',
+          t.errPackageNotFound,
         );
 
         return;
@@ -1176,7 +1202,7 @@ export default function WeeklyPlanningPage() {
 
       if (!selectedPackageReady) {
         setErrorMessage(
-          `Work Package ${selectedWorkPackage.package_code} is not Make Ready and cannot move to Weekly Planning.`,
+          tr('errNotReady', { code: selectedWorkPackage.package_code }),
         );
 
         return;
@@ -1282,7 +1308,7 @@ export default function WeeklyPlanningPage() {
         );
 
         setMessage(
-          'Weekly Activity added.',
+          t.activityAdded,
         );
 
         await loadWeeklyPlan();
@@ -1362,9 +1388,7 @@ export default function WeeklyPlanningPage() {
       }
 
       const confirmed =
-        window.confirm(
-          `Remove "${item.activity_description}" from this Weekly Plan?`,
-        );
+        await dialogs.confirm(tr('confirmRemove', { activity: item.activity_description }), { danger: true });
 
       if (!confirmed) {
         return;
@@ -1391,7 +1415,7 @@ export default function WeeklyPlanningPage() {
       }
 
       setMessage(
-        'Activity removed from the Weekly Plan.',
+        t.activityRemoved,
       );
 
       await loadWeeklyPlan();
@@ -1463,9 +1487,7 @@ export default function WeeklyPlanningPage() {
       }
 
       const confirmed =
-        window.confirm(
-          'Cancel this Draft Weekly Plan? The week will not move forward and its draft activities will be cancelled. This action cannot be used after commitment.',
-        );
+        await dialogs.confirm(t.confirmCancel, { danger: true });
 
       if (!confirmed) {
         return;
@@ -1491,7 +1513,7 @@ export default function WeeklyPlanningPage() {
         }
 
         setMessage(
-          'Draft Weekly Plan cancelled. You can create a new Weekly Plan for this week.',
+          t.planCancelled,
         );
 
         await loadWeeklyPlan();
@@ -1517,16 +1539,14 @@ export default function WeeklyPlanningPage() {
         0
       ) {
         setErrorMessage(
-          'Add at least one Make Ready activity before committing the week.',
+          t.errCommitEmpty,
         );
 
         return;
       }
 
       const confirmed =
-        window.confirm(
-          'Commit this Weekly Plan? RitsuFlow will revalidate Make Ready before freezing the commitment baseline used for PPC.',
-        );
+        await dialogs.confirm(t.confirmCommit);
 
       if (!confirmed) {
         return;
@@ -1552,7 +1572,7 @@ export default function WeeklyPlanningPage() {
         }
 
         setMessage(
-          'Weekly Plan committed. Make Ready was validated and the PPC baseline is now frozen.',
+          t.planCommitted,
         );
 
         await loadWeeklyPlan();
@@ -1591,7 +1611,7 @@ export default function WeeklyPlanningPage() {
         )
       ) {
         setErrorMessage(
-          'This commitment cannot be marked Completed because Actual Qty. is lower than Planned Qty. Mark it as Missed and record the Reason for Variance.',
+          t.errCompleteQty,
         );
 
         return;
@@ -1631,7 +1651,7 @@ export default function WeeklyPlanningPage() {
         }
 
         setMessage(
-          `"${item.activity_description}" marked Completed.`,
+          tr('markedCompleted', { activity: item.activity_description }),
         );
 
         await loadWeeklyPlan();
@@ -1679,7 +1699,7 @@ export default function WeeklyPlanningPage() {
         !missedCommitment.varianceReason
       ) {
         setErrorMessage(
-          'Reason for Variance is required for a missed commitment.',
+          t.errReasonRequired,
         );
 
         return;
@@ -1729,7 +1749,7 @@ export default function WeeklyPlanningPage() {
         );
 
         setMessage(
-          'Missed commitment recorded with its Reason for Variance.',
+          t.missedRecorded,
         );
 
         await loadWeeklyPlan();
@@ -1836,7 +1856,7 @@ export default function WeeklyPlanningPage() {
           )
         ) {
           setErrorMessage(
-            `"${item.activity_description}" cannot be Completed because Actual Qty. is lower than Planned Qty. Select Missed and record the Reason for Variance.`,
+            tr('errCompleteQtyItem', { activity: item.activity_description }),
           );
 
           return;
@@ -1848,7 +1868,7 @@ export default function WeeklyPlanningPage() {
           !item.variance_reason
         ) {
           setErrorMessage(
-            `Reason for Variance is required for "${item.activity_description}".`,
+            tr('errReasonItem', { activity: item.activity_description }),
           );
 
           return;
@@ -1921,7 +1941,7 @@ export default function WeeklyPlanningPage() {
         setExecutionEditMode(false);
 
         setMessage(
-          'Weekly execution information updated. PPC and Reasons for Variance were recalculated.',
+          t.executionSaved,
         );
 
         await loadWeeklyPlan();
@@ -2004,7 +2024,7 @@ export default function WeeklyPlanningPage() {
         !unplannedForm.activityDescription.trim()
       ) {
         setErrorMessage(
-          'Activity description is required.',
+          t.errActivityRequired,
         );
 
         return;
@@ -2099,7 +2119,7 @@ export default function WeeklyPlanningPage() {
         );
 
         setMessage(
-          'Unplanned Work added. It is visible but excluded from PPC.',
+          t.unplannedAdded,
         );
 
         await loadWeeklyPlan();
@@ -2121,9 +2141,7 @@ export default function WeeklyPlanningPage() {
       }
 
       const confirmed =
-        window.confirm(
-          'Close this Weekly Plan? PPC will become final and the plan will become historical.',
-        );
+        await dialogs.confirm(t.confirmClose);
 
       if (!confirmed) {
         return;
@@ -2149,7 +2167,7 @@ export default function WeeklyPlanningPage() {
         }
 
         setMessage(
-          'Weekly Plan closed. PPC is now final.',
+          t.planClosed,
         );
 
         await loadWeeklyPlan();
@@ -2252,291 +2270,110 @@ export default function WeeklyPlanningPage() {
   // ==========================================================
 
   return (
-    <div
-      style={{
-        minHeight:
-          'calc(100vh - 100px)',
-        padding: '24px',
-        background: '#f8fafc',
-        color: '#0f172a',
-        fontFamily:
-          'Inter, Arial, sans-serif',
-      }}
-    >
-      {/* WEEKLY PLANNING CONTROLS IN THE REAL DASHBOARD HEADER */}
+    <div style={{ minWidth: 0, color: 'var(--fo-ink)' }}>
+      {/* TOOLBAR: project, week navigation and plan actions */}
 
-      {headerActionsTarget &&
-        createPortal(
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: '8px',
-              flexWrap: 'wrap',
-              width: '100%',
-            }}
-          >
-        <div
-          style={{
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            flex: '1 1 auto',
-          }}
-        >
-          {selectedProjectId && (
-            <>
-              <button
-                type="button"
-                onClick={() =>
-                  moveWeek(-1)
-                }
-                style={styles.iconButton}
-                aria-label="Previous week"
-              >
-                ←
-              </button>
-
-              <div
-                style={{
-                  minWidth: '185px',
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: 800,
-                    color: '#0f2745',
-                    lineHeight: 1.15,
-                  }}
-                >
-                  Week{' '}
-                  {weekInfo.week}{' '}
-                  ·{' '}
-                  {weekInfo.year}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: '0.78rem',
-                    color: '#64748b',
-                    marginTop: '3px',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {formatDate(
-                    weekStartDate,
-                  )}{' '}
-                  –{' '}
-                  {formatDate(
-                    weekEndDate,
-                  )}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  moveWeek(1)
-                }
-                style={styles.iconButton}
-                aria-label="Next week"
-              >
-                →
-              </button>
-
-              <input
-                type="date"
-                value={weekStartDate}
-                onChange={(event) =>
-                  handleWeekDateChange(
-                    event.target.value,
-                  )
-                }
-                style={{
-                  ...styles.input,
-                  width: '165px',
-                }}
-                aria-label="Select week"
-              />
-            </>
-          )}
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: '10px',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-          }}
-        >
-          <select
-            value={selectedProjectId}
-            onChange={(event) => {
-              setSelectedProjectId(
-                event.target.value,
-              );
-              rememberPreconProjectId(
-                event.target.value,
-              );
-            }}
-            style={styles.select}
-          >
-            <option value="">
-              Select Project
-            </option>
-
-            {projects.map(
-              (project) => (
-                <option
-                  key={project.id}
-                  value={project.id}
-                >
-                  {project.code
-                    ? `${project.code} - ${project.name}`
-                    : project.name}
+      <div className={pc.toolbar} style={{ marginBottom: 12 }}>
+        <div className={pc.group}>
+          <label className={pc.control}>
+            <span>{t.project}</span>
+            <select
+              className={pc.projectSelect}
+              value={selectedProjectId}
+              onChange={(event) => {
+                setSelectedProjectId(event.target.value);
+                rememberPreconProjectId(event.target.value);
+              }}
+            >
+              <option value="">{t.selectProject}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.code ? `${project.code} – ${project.name}` : project.name}
                 </option>
-              ),
-            )}
-          </select>
-
-          <button
-            type="button"
-            onClick={loadWeeklyPlan}
-            disabled={
-              !selectedProjectId ||
-              loading
-            }
-            style={styles.secondaryButton}
-          >
-            Refresh
+              ))}
+            </select>
+          </label>
+          <button type="button" className={ui.btnGhost} onClick={loadWeeklyPlan} disabled={!selectedProjectId || loading}>
+            {t.refresh}
           </button>
-
-          {selectedProjectId && (
-            <>
-              {weeklyPlan ? (
-                <span
-                  style={{
-                    ...styles.statusBadge,
-                    ...(isDraft
-                      ? styles.draftBadge
-                      : isCommitted
-                        ? styles.committedBadge
-                        : isClosed
-                          ? styles.closedBadge
-                          : styles.cancelledBadge),
-                  }}
-                >
-                  {planStatusLabel(
-                    weeklyPlan.status,
-                  )}
-                </span>
-              ) : (
-                <span
-                  style={{
-                    ...styles.statusBadge,
-                    background: '#f1f5f9',
-                    color: '#64748b',
-                  }}
-                >
-                  No Weekly Plan
-                </span>
-              )}
-
-              {!weeklyPlan && (
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={async () => {
-                    setActionLoading(true);
-                    await createWeeklyPlan();
-                    setActionLoading(false);
-                  }}
-                  style={styles.primaryButton}
-                >
-                  Create Weekly Plan
-                </button>
-              )}
-
-              {isDraft && (
-                <>
-                  <button
-                    type="button"
-                    onClick={openActivityModal}
-                    style={styles.primaryButton}
-                  >
-                    + Add Activity
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={
-                      actionLoading
-                    }
-                    onClick={cancelWeek}
-                    style={{
-                      ...styles.secondaryButton,
-                      borderColor: '#fecaca',
-                      color: '#b91c1c',
-                      background: '#ffffff',
-                    }}
-                  >
-                    Cancel Week
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={
-                      formalItems.length === 0 ||
-                      actionLoading
-                    }
-                    onClick={commitWeek}
-                    style={styles.commitButton}
-                  >
-                    Commit Week
-                  </button>
-                </>
-              )}
-
-              {isCommitted && (
-                <>
-                  <button
-                    type="button"
-                    disabled={
-                      executionEditMode ||
-                      actionLoading
-                    }
-                    onClick={() =>
-                      setShowUnplannedPanel(true)
-                    }
-                    style={styles.secondaryButton}
-                  >
-                    + Add Unplanned Work
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={
-                      executionEditMode ||
-                      !canClose ||
-                      actionLoading
-                    }
-                    onClick={closeWeek}
-                    style={styles.closeButton}
-                  >
-                    Close Week
-                  </button>
-                </>
-              )}
-            </>
-          )}
         </div>
-          </div>,
-          headerActionsTarget,
+
+        {selectedProjectId && (
+          <div className={pc.group}>
+            <button type="button" className={pc.iconBtn} onClick={() => moveWeek(-1)} aria-label={t.prevWeek}>←</button>
+            <div style={{ minWidth: 170 }}>
+              <div style={{ fontWeight: 600 }}>{t.weekWord} {weekInfo.week} · {weekInfo.year}</div>
+              <div style={{ fontSize: 13, color: 'var(--fo-muted)', whiteSpace: 'nowrap' }}>
+                {formatDate(weekStartDate)} – {formatDate(weekEndDate)}
+              </div>
+            </div>
+            <button type="button" className={pc.iconBtn} onClick={() => moveWeek(1)} aria-label={t.nextWeek}>→</button>
+            <input
+              type="date"
+              value={weekStartDate}
+              onChange={(event) => handleWeekDateChange(event.target.value)}
+              aria-label={t.selectWeek}
+              style={{ width: 160 }}
+            />
+            {weeklyPlan ? (
+              <span
+                style={{
+                  ...styles.statusBadge,
+                  ...(isDraft ? styles.draftBadge : isCommitted ? styles.committedBadge : isClosed ? styles.closedBadge : styles.cancelledBadge),
+                }}
+              >
+                {planStatusLabel(weeklyPlan.status)}
+              </span>
+            ) : (
+              <span style={{ ...styles.statusBadge, background: 'var(--fo-sunken)', color: 'var(--fo-muted)' }}>
+                {t.noPlanBadge}
+              </span>
+            )}
+          </div>
         )}
+
+        {selectedProjectId && (
+          <div className={`${pc.group} ${pc.push}`}>
+            {!weeklyPlan && (
+              <button
+                type="button"
+                className={ui.btnPrimary}
+                disabled={actionLoading}
+                onClick={async () => {
+                  setActionLoading(true);
+                  await createWeeklyPlan();
+                  setActionLoading(false);
+                }}
+              >
+                <Icon name="plus" size={18} />{t.createPlan}
+              </button>
+            )}
+            {isDraft && (
+              <>
+                <button type="button" className={ui.btnDanger} disabled={actionLoading} onClick={cancelWeek}>
+                  {t.cancelWeek}
+                </button>
+                <button type="button" className={ui.btn} onClick={openActivityModal}>
+                  {t.addActivityPlus}
+                </button>
+                <button type="button" className={ui.btnPrimary} disabled={formalItems.length === 0 || actionLoading} onClick={commitWeek}>
+                  {t.commitWeek}
+                </button>
+              </>
+            )}
+            {isCommitted && (
+              <>
+                <button type="button" className={ui.btn} disabled={executionEditMode || actionLoading} onClick={() => setShowUnplannedPanel(true)}>
+                  {t.addUnplannedPlus}
+                </button>
+                <button type="button" className={ui.btnPrimary} disabled={executionEditMode || !canClose || actionLoading} onClick={closeWeek}>
+                  {t.closeWeek}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* FEEDBACK */}
 
@@ -2561,41 +2398,7 @@ export default function WeeklyPlanningPage() {
       )}
 
       {!selectedProjectId ? (
-        <div
-          style={
-            styles.emptyState
-          }
-        >
-          <div
-            style={{
-              fontSize:
-                '2.5rem',
-              marginBottom:
-                '10px',
-            }}
-          >
-            
-          </div>
-
-          <h2
-            style={{
-              margin:
-                '0 0 8px 0',
-              color: '#0f2745',
-            }}
-          >
-            Select a Project
-          </h2>
-
-          <p
-            style={{
-              margin: 0,
-              color: '#64748b',
-            }}
-          >
-            Choose a project to create, commit and evaluate its Weekly Plan.
-          </p>
-        </div>
+        <Empty title={t.noProject} text={t.noProjectText} />
       ) : (
         <>
           {/* METRICS */}
@@ -2611,7 +2414,7 @@ export default function WeeklyPlanningPage() {
             }}
           >
             <MetricCard
-              label="PPC"
+              label={t.ppc}
               value={
                 ppc === null
                   ? '—'
@@ -2630,15 +2433,15 @@ export default function WeeklyPlanningPage() {
               }
               footer={
                 isClosed
-                  ? 'Final PPC'
+                  ? t.ppcFinal
                   : isCommitted
-                    ? 'Live PPC'
-                    : 'Available after commitment'
+                    ? t.ppcLive
+                    : t.ppcAfterCommit
               }
             />
 
             <MetricCard
-              label="Committed"
+              label={t.statCommitted}
               value={String(
                 performance?.total_commitments ||
                   0,
@@ -2646,7 +2449,7 @@ export default function WeeklyPlanningPage() {
             />
 
             <MetricCard
-              label="Completed"
+              label={t.statCompleted}
               value={String(
                 performance?.completed_commitments ||
                   0,
@@ -2655,7 +2458,7 @@ export default function WeeklyPlanningPage() {
             />
 
             <MetricCard
-              label="Missed"
+              label={t.statMissed}
               value={String(
                 performance?.missed_commitments ||
                   0,
@@ -2664,7 +2467,7 @@ export default function WeeklyPlanningPage() {
             />
 
             <MetricCard
-              label="Pending"
+              label={t.statPending}
               value={String(
                 performance?.pending_commitments ||
                   0,
@@ -2672,7 +2475,7 @@ export default function WeeklyPlanningPage() {
             />
 
             <MetricCard
-              label="Unplanned"
+              label={t.statUnplanned}
               value={String(
                 performance?.unplanned_work_items ??
                   unplannedItems.length,
@@ -2704,7 +2507,7 @@ export default function WeeklyPlanningPage() {
                     styles.smallLabel
                   }
                 >
-                  PPC Target
+                  {t.ppcTarget}
                 </div>
 
                 {isDraft ? (
@@ -2768,7 +2571,7 @@ export default function WeeklyPlanningPage() {
                     styles.smallLabel
                   }
                 >
-                  Previous Week PPC
+                  {t.ppcPrevious}
                 </div>
 
                 <div
@@ -2799,7 +2602,7 @@ export default function WeeklyPlanningPage() {
                     styles.smallLabel
                   }
                 >
-                  Change vs Previous
+                  {t.ppcChange}
                 </div>
 
                 <div
@@ -2834,7 +2637,7 @@ export default function WeeklyPlanningPage() {
                     styles.smallLabel
                   }
                 >
-                  Rolling 4-Week PPC
+                  {t.ppcRolling}
                 </div>
 
                 <div
@@ -2874,7 +2677,7 @@ export default function WeeklyPlanningPage() {
                       '#0f2745',
                   }}
                 >
-                  No Weekly Plan for Week{' '}
+                  {t.noPlanForWeek}{' '}
                   {weekInfo.week}
                 </h2>
 
@@ -2886,7 +2689,7 @@ export default function WeeklyPlanningPage() {
                       '#64748b',
                   }}
                 >
-                  Create the plan, then add Weekly Activities linked to Make Ready Work Packages.
+                  {t.noPlanText}
                 </p>
 
                 <button
@@ -2909,7 +2712,7 @@ export default function WeeklyPlanningPage() {
                     styles.primaryButton
                   }
                 >
-                  Create Weekly Plan
+                  {t.createPlan}
                 </button>
               </div>
             )}
@@ -2946,7 +2749,7 @@ export default function WeeklyPlanningPage() {
                         '#0f2745',
                     }}
                   >
-                    Weekly Commitments
+                    {t.commitmentsTitle}
                   </h2>
 
                   <div
@@ -2959,7 +2762,7 @@ export default function WeeklyPlanningPage() {
                         '4px',
                     }}
                   >
-                    Activities become commitments only when the week is committed.
+                    {t.commitmentsText}
                   </div>
                 </div>
 
@@ -2984,8 +2787,8 @@ export default function WeeklyPlanningPage() {
                   >
                     {items.length}{' '}
                     {items.length === 1
-                      ? 'item'
-                      : 'items'}
+                      ? t.itemOne
+                      : t.itemMany}
                   </div>
 
                   {isCommitted &&
@@ -3003,7 +2806,7 @@ export default function WeeklyPlanningPage() {
                             styles.smallSecondaryButton
                           }
                         >
-                          Edit Results
+                          {t.editResults}
                         </button>
                       ) : (
                         <>
@@ -3019,7 +2822,7 @@ export default function WeeklyPlanningPage() {
                               styles.smallSecondaryButton
                             }
                           >
-                            Cancel Changes
+                            {t.cancelChanges}
                           </button>
 
                           <button
@@ -3034,7 +2837,7 @@ export default function WeeklyPlanningPage() {
                               styles.smallSuccessButton
                             }
                           >
-                            Save Changes
+                            {t.saveChanges}
                           </button>
                         </>
                       )
@@ -3049,7 +2852,7 @@ export default function WeeklyPlanningPage() {
                     styles.tableEmpty
                   }
                 >
-                  No activities have been added to this Weekly Plan.
+                  {t.noActivities}
                 </div>
               ) : (
                 <div
@@ -3076,55 +2879,55 @@ export default function WeeklyPlanningPage() {
                     <thead>
                       <tr>
                         <TableHeader>
-                          Type
+                          {t.colType}
                         </TableHeader>
 
                         <TableHeader>
-                          Work Package
+                          {t.colPackage}
                         </TableHeader>
 
                         <TableHeader>
-                          Activity
+                          {t.colActivity}
                         </TableHeader>
 
                         <TableHeader>
-                          Location
+                          {t.colLocation}
                         </TableHeader>
 
                         <TableHeader>
-                          Week
+                          {t.colWeek}
                         </TableHeader>
 
                         <TableHeader>
-                          Responsible
+                          {t.colResponsible}
                         </TableHeader>
 
                         <TableHeader>
-                          Planned Qty.
+                          {t.colPlannedQty}
                         </TableHeader>
 
                         <TableHeader>
-                          Actual Qty.
+                          {t.colActualQty}
                         </TableHeader>
 
                         <TableHeader>
-                          Unit
+                          {t.colUnit}
                         </TableHeader>
 
                         <TableHeader>
-                          Commitment
+                          {t.colCommitment}
                         </TableHeader>
 
                         <TableHeader>
-                          Result
+                          {t.colResult}
                         </TableHeader>
 
                         <TableHeader>
-                          Variance
+                          {t.colVariance}
                         </TableHeader>
 
                         <TableHeader>
-                          Actions
+                          {t.colActions}
                         </TableHeader>
                       </tr>
                     </thead>
@@ -3187,8 +2990,8 @@ export default function WeeklyPlanningPage() {
                                   }}
                                 >
                                   {item.is_unplanned_work
-                                    ? 'Unplanned'
-                                    : 'Weekly'}
+                                    ? t.typeUnplanned
+                                    : t.typeWeekly}
                                 </span>
                               </TableCell>
 
@@ -3248,7 +3051,7 @@ export default function WeeklyPlanningPage() {
                                       '2px',
                                   }}
                                 >
-                                  to{' '}
+                                  {t.to}{' '}
                                   {formatShortDate(
                                     item.planned_finish_date,
                                   )}
@@ -3271,7 +3074,7 @@ export default function WeeklyPlanningPage() {
                                         event.target.value,
                                       )
                                     }
-                                    placeholder="Responsible"
+                                    placeholder={t.colResponsible}
                                     style={
                                       styles.tableInput
                                     }
@@ -3551,15 +3354,15 @@ export default function WeeklyPlanningPage() {
                                     }}
                                   >
                                     <option value="pending">
-                                      Pending
+                                      {t.resultPending}
                                     </option>
 
                                     <option value="completed">
-                                      Completed
+                                      {t.resultCompleted}
                                     </option>
 
                                     <option value="not_completed">
-                                      Missed
+                                      {t.resultMissed}
                                     </option>
                                   </select>
                                 ) : (
@@ -3607,7 +3410,7 @@ export default function WeeklyPlanningPage() {
                                       }
                                     >
                                       <option value="">
-                                        Select reason
+                                        {t.selectReason}
                                       </option>
 
                                       {VARIANCE_REASONS.map(
@@ -3647,7 +3450,7 @@ export default function WeeklyPlanningPage() {
                                           },
                                         )
                                       }
-                                      placeholder="Variance notes"
+                                      placeholder={t.varianceNotesPlaceholder}
                                       style={{
                                         ...styles.input,
                                         minHeight:
@@ -3709,7 +3512,7 @@ export default function WeeklyPlanningPage() {
                                           styles.smallDangerButton
                                         }
                                       >
-                                        Remove
+                                        {t.remove}
                                       </button>
                                     )}
 
@@ -3733,7 +3536,7 @@ export default function WeeklyPlanningPage() {
                                             styles.smallSuccessButton
                                           }
                                         >
-                                          Completed
+                                          {t.resultCompleted}
                                         </button>
 
                                         <button
@@ -3750,7 +3553,7 @@ export default function WeeklyPlanningPage() {
                                             styles.smallDangerButton
                                           }
                                         >
-                                          Missed
+                                          {t.resultMissed}
                                         </button>
                                       </>
                                     )}
@@ -3776,7 +3579,7 @@ export default function WeeklyPlanningPage() {
                                           styles.smallSecondaryButton
                                         }
                                       >
-                                        Edit
+                                        {t.edit}
                                       </button>
                                     )}
 
@@ -3792,7 +3595,7 @@ export default function WeeklyPlanningPage() {
                                             '#92400e',
                                         }}
                                       >
-                                        Editing
+                                        {t.editing}
                                       </span>
                                     )}
 
@@ -3806,7 +3609,7 @@ export default function WeeklyPlanningPage() {
                                             '0.78rem',
                                         }}
                                       >
-                                        Locked
+                                        {t.locked}
                                       </span>
                                     )}
                                 </div>
@@ -3857,7 +3660,7 @@ export default function WeeklyPlanningPage() {
                           '#0f2745',
                       }}
                     >
-                      Reasons for Variance
+                      {t.varianceTitle}
                     </h2>
 
                     <p
@@ -3869,7 +3672,7 @@ export default function WeeklyPlanningPage() {
                           '#64748b',
                       }}
                     >
-                      Pareto analysis of missed formal commitments.
+                      {t.varianceText}
                     </p>
                   </div>
 
@@ -3896,7 +3699,7 @@ export default function WeeklyPlanningPage() {
                             styles.smallSecondaryButton
                           }
                         >
-                          Edit Variances
+                          {t.editVariances}
                         </button>
                       ) : (
                         <>
@@ -3912,7 +3715,7 @@ export default function WeeklyPlanningPage() {
                               styles.smallSecondaryButton
                             }
                           >
-                            Cancel Changes
+                            {t.cancelChanges}
                           </button>
 
                           <button
@@ -3927,7 +3730,7 @@ export default function WeeklyPlanningPage() {
                               styles.smallSuccessButton
                             }
                           >
-                            Save Changes
+                            {t.saveChanges}
                           </button>
                         </>
                       )}
@@ -3972,7 +3775,7 @@ export default function WeeklyPlanningPage() {
 
                         <span>
                           {row.variance_count}{' '}
-                          occurrences
+                          {t.occurrences}
                         </span>
 
                         <span>
@@ -3990,7 +3793,7 @@ export default function WeeklyPlanningPage() {
                           ).toFixed(
                             1,
                           )}
-                          % cumulative
+                          {t.cumulative}
                         </span>
                       </div>
                     ),
@@ -4020,7 +3823,7 @@ export default function WeeklyPlanningPage() {
                           '10px',
                       }}
                     >
-                      Edit Missed Commitments
+                      {t.editMissed}
                     </div>
 
                     <div
@@ -4082,7 +3885,7 @@ export default function WeeklyPlanningPage() {
                                     '#64748b',
                                 }}
                               >
-                                Planned:{' '}
+                                {t.plannedColon}{' '}
                                 {item.planned_quantity ??
                                   '—'}{' '}
                                 {item.unit ||
@@ -4103,7 +3906,7 @@ export default function WeeklyPlanningPage() {
                                     '5px',
                                 }}
                               >
-                                Actual Qty.
+                                {t.colActualQty}
                               </div>
 
                               <input
@@ -4146,7 +3949,7 @@ export default function WeeklyPlanningPage() {
                                     '5px',
                                 }}
                               >
-                                Reason
+                                {t.reason}
                               </div>
 
                               <select
@@ -4170,7 +3973,7 @@ export default function WeeklyPlanningPage() {
                                 }
                               >
                                 <option value="">
-                                  Select reason
+                                  {t.selectReason}
                                 </option>
 
                                 {VARIANCE_REASONS.map(
@@ -4207,7 +4010,7 @@ export default function WeeklyPlanningPage() {
                                     '5px',
                                 }}
                               >
-                                Variance Notes
+                                {t.varianceNotes}
                               </div>
 
                               <textarea
@@ -4227,7 +4030,7 @@ export default function WeeklyPlanningPage() {
                                     },
                                   )
                                 }
-                                placeholder="Describe what prevented completion."
+                                placeholder={t.varianceNotesHint}
                                 style={{
                                   ...styles.input,
                                   minHeight:
@@ -4267,7 +4070,7 @@ export default function WeeklyPlanningPage() {
                             '#0f2745',
                         }}
                       >
-                        Add Weekly Activity
+                        {t.addActivityTitle}
                       </h2>
 
                       <p
@@ -4280,7 +4083,7 @@ export default function WeeklyPlanningPage() {
                             '0.85rem',
                         }}
                       >
-                        Create the activity, link it to its Work Package, and verify Make Ready before adding it to the Weekly Plan.
+                        {t.addActivityText}
                       </p>
                     </div>
 
@@ -4312,7 +4115,7 @@ export default function WeeklyPlanningPage() {
                     }}
                   >
                     <div>
-                      <FormField label="Activity">
+                      <FormField label={t.colActivity}>
                         <input
                           value={
                             activityForm.activityDescription
@@ -4333,11 +4136,11 @@ export default function WeeklyPlanningPage() {
                           style={
                             styles.input
                           }
-                          placeholder="Example: Install drywall"
+                          placeholder={t.activityPlaceholder}
                         />
                       </FormField>
 
-                      <FormField label="Work Package">
+                      <FormField label={t.colPackage}>
                         <select
                           value={
                             activityForm.lookaheadSheetRowId
@@ -4361,7 +4164,7 @@ export default function WeeklyPlanningPage() {
                           }}
                         >
                           <option value="">
-                            Select Work Package
+                            {t.selectPackage}
                           </option>
 
                           {workPackages.map(
@@ -4380,15 +4183,15 @@ export default function WeeklyPlanningPage() {
                                 {' - '}
                                 {workPackage.package_description}
                                 {workPackage.readiness_is_clear
-                                  ? ' · Ready'
-                                  : ' · Not Ready'}
+                                  ? t.readySuffix
+                                  : t.notReadySuffix}
                               </option>
                             ),
                           )}
                         </select>
                       </FormField>
 
-                      <FormField label="Location">
+                      <FormField label={t.colLocation}>
                         <input
                           value={
                             activityForm.locationName
@@ -4409,11 +4212,11 @@ export default function WeeklyPlanningPage() {
                           style={
                             styles.input
                           }
-                          placeholder="Example: LEVEL 1 ZONE 1"
+                          placeholder={t.locationPlaceholder}
                         />
                       </FormField>
 
-                      <FormField label="Responsible">
+                      <FormField label={t.colResponsible}>
                         <input
                           value={
                             activityForm.responsibleParty
@@ -4434,7 +4237,7 @@ export default function WeeklyPlanningPage() {
                           style={
                             styles.input
                           }
-                          placeholder="Responsible person or crew"
+                          placeholder={t.responsiblePlaceholder}
                         />
                       </FormField>
 
@@ -4446,7 +4249,7 @@ export default function WeeklyPlanningPage() {
                           gap: '10px',
                         }}
                       >
-                        <FormField label="Planned Quantity">
+                        <FormField label={t.plannedQuantity}>
                           <input
                             type="number"
                             step="any"
@@ -4473,7 +4276,7 @@ export default function WeeklyPlanningPage() {
                           />
                         </FormField>
 
-                        <FormField label="Unit">
+                        <FormField label={t.colUnit}>
                           <input
                             value={
                               activityForm.unit
@@ -4499,7 +4302,7 @@ export default function WeeklyPlanningPage() {
                         </FormField>
                       </div>
 
-                      <FormField label="Notes">
+                      <FormField label={t.notes}>
                         <textarea
                           rows="3"
                           value={
@@ -4560,7 +4363,7 @@ export default function WeeklyPlanningPage() {
                                 styles.smallLabel
                               }
                             >
-                              Make Ready
+                              {t.makeReady}
                             </div>
 
                             <div
@@ -4575,7 +4378,7 @@ export default function WeeklyPlanningPage() {
                             >
                               {selectedWorkPackage
                                 ? `${selectedWorkPackage.package_code} - ${selectedWorkPackage.package_description}`
-                                : 'Select a Work Package'}
+                                : t.selectPackage}
                             </div>
                           </div>
 
@@ -4597,8 +4400,8 @@ export default function WeeklyPlanningPage() {
                               }}
                             >
                               {selectedPackageReady
-                                ? 'READY TO COMMIT'
-                                : 'NOT READY TO COMMIT'}
+                                ? t.readyToCommit
+                                : t.notReadyToCommit}
                             </span>
                           )}
                         </div>
@@ -4612,7 +4415,7 @@ export default function WeeklyPlanningPage() {
                                 '0.82rem',
                             }}
                           >
-                            Choose a Work Package to verify its Koskela Make Ready conditions.
+                            {t.chooseToVerify}
                           </div>
                         ) : (
                           <>
@@ -4715,7 +4518,7 @@ export default function WeeklyPlanningPage() {
                                   }}
                                 >
                                   <div>
-                                    READY TO COMMIT
+                                    {t.readyToCommit}
                                   </div>
 
                                   <div
@@ -4726,7 +4529,7 @@ export default function WeeklyPlanningPage() {
                                         600,
                                     }}
                                   >
-                                    {selectedWorkPackage.satisfied_category_count} of 7 Make Ready conditions satisfied. This Work Package can move to Weekly Planning.
+                                    {selectedWorkPackage.satisfied_category_count} {t.conditionsReady}
                                   </div>
                                 </div>
                               ) : (
@@ -4747,7 +4550,7 @@ export default function WeeklyPlanningPage() {
                                   }}
                                 >
                                   <strong>
-                                    NOT READY TO COMMIT
+                                    {t.notReadyToCommit}
                                   </strong>
 
                                   <div
@@ -4758,7 +4561,7 @@ export default function WeeklyPlanningPage() {
                                         '#7f1d1d',
                                     }}
                                   >
-                                    {selectedWorkPackage.satisfied_category_count} of 7 Make Ready conditions satisfied.
+                                    {selectedWorkPackage.satisfied_category_count} {t.conditionsMet}
                                   </div>
 
                                   <div
@@ -4769,7 +4572,7 @@ export default function WeeklyPlanningPage() {
                                         700,
                                     }}
                                   >
-                                    Outstanding Make Ready conditions:
+                                    {t.outstanding}
                                   </div>
 
                                   <ul
@@ -4794,7 +4597,7 @@ export default function WeeklyPlanningPage() {
                                           );
 
                                         let reason =
-                                          'Not Assessed';
+                                          tr('ready.notAssessed');
 
                                         if (
                                           status ===
@@ -4867,7 +4670,7 @@ export default function WeeklyPlanningPage() {
                         styles.secondaryButton
                       }
                     >
-                      Cancel
+                      {t.cancel}
                     </button>
 
                     <button
@@ -4896,7 +4699,7 @@ export default function WeeklyPlanningPage() {
                             : 'pointer',
                       }}
                     >
-                      Add Activity
+                      {t.addActivity}
                     </button>
                   </div>
                 </div>
@@ -4926,7 +4729,7 @@ export default function WeeklyPlanningPage() {
                             '#0f2745',
                         }}
                       >
-                        Add Unplanned Work
+                        {t.addUnplanned}
                       </h2>
 
                       <p
@@ -4939,7 +4742,7 @@ export default function WeeklyPlanningPage() {
                             '0.85rem',
                         }}
                       >
-                        This work occurred after the weekly commitment freeze and will not affect PPC.
+                        {t.unplannedText}
                       </p>
                     </div>
 
@@ -4958,7 +4761,7 @@ export default function WeeklyPlanningPage() {
                     </button>
                   </div>
 
-                  <FormField label="Activity">
+                  <FormField label={t.colActivity}>
                     <input
                       value={
                         unplannedForm.activityDescription
@@ -4979,11 +4782,11 @@ export default function WeeklyPlanningPage() {
                       style={
                         styles.input
                       }
-                      placeholder="Describe the unplanned activity"
+                      placeholder={t.unplannedPlaceholder}
                     />
                   </FormField>
 
-                  <FormField label="Location">
+                  <FormField label={t.colLocation}>
                     <input
                       value={
                         unplannedForm.locationName
@@ -5007,7 +4810,7 @@ export default function WeeklyPlanningPage() {
                     />
                   </FormField>
 
-                  <FormField label="Responsible">
+                  <FormField label={t.colResponsible}>
                     <input
                       value={
                         unplannedForm.responsibleParty
@@ -5039,7 +4842,7 @@ export default function WeeklyPlanningPage() {
                       gap: '10px',
                     }}
                   >
-                    <FormField label="Planned Qty.">
+                    <FormField label={t.colPlannedQty}>
                       <input
                         type="number"
                         step="any"
@@ -5066,7 +4869,7 @@ export default function WeeklyPlanningPage() {
                       />
                     </FormField>
 
-                    <FormField label="Actual Qty.">
+                    <FormField label={t.colActualQty}>
                       <input
                         type="number"
                         step="any"
@@ -5093,7 +4896,7 @@ export default function WeeklyPlanningPage() {
                       />
                     </FormField>
 
-                    <FormField label="Unit">
+                    <FormField label={t.colUnit}>
                       <input
                         value={
                           unplannedForm.unit
@@ -5119,7 +4922,7 @@ export default function WeeklyPlanningPage() {
                     </FormField>
                   </div>
 
-                  <FormField label="Notes">
+                  <FormField label={t.notes}>
                     <textarea
                       rows="3"
                       value={
@@ -5162,7 +4965,7 @@ export default function WeeklyPlanningPage() {
                         styles.secondaryButton
                       }
                     >
-                      Cancel
+                      {t.cancel}
                     </button>
 
                     <button
@@ -5177,7 +4980,7 @@ export default function WeeklyPlanningPage() {
                         styles.primaryButton
                       }
                     >
-                      Add Unplanned Work
+                      {t.addUnplanned}
                     </button>
                   </div>
                 </div>
@@ -5206,7 +5009,7 @@ export default function WeeklyPlanningPage() {
                           '#0f2745',
                       }}
                     >
-                      Missed Commitment
+                      {t.missedTitle}
                     </h2>
 
                     <p
@@ -5219,7 +5022,7 @@ export default function WeeklyPlanningPage() {
                           '0.85rem',
                       }}
                     >
-                      Capture why the commitment was not completed.
+                      {t.missedText}
                     </p>
                   </div>
 
@@ -5238,7 +5041,7 @@ export default function WeeklyPlanningPage() {
                   </button>
                 </div>
 
-                <FormField label="Reason for Variance">
+                <FormField label={t.varianceReason}>
                   <select
                     value={
                       missedCommitment.varianceReason
@@ -5259,7 +5062,7 @@ export default function WeeklyPlanningPage() {
                     }
                   >
                     <option value="">
-                      Select reason
+                      {t.selectReason}
                     </option>
 
                     {VARIANCE_REASONS.map(
@@ -5279,7 +5082,7 @@ export default function WeeklyPlanningPage() {
                   </select>
                 </FormField>
 
-                <FormField label="Actual Quantity">
+                <FormField label={t.actualQuantity}>
                   <input
                     type="number"
                     min="0"
@@ -5304,7 +5107,7 @@ export default function WeeklyPlanningPage() {
                   />
                 </FormField>
 
-                <FormField label="Variance Notes">
+                <FormField label={t.varianceNotes}>
                   <textarea
                     rows="4"
                     value={
@@ -5326,7 +5129,7 @@ export default function WeeklyPlanningPage() {
                       resize:
                         'vertical',
                     }}
-                    placeholder="Describe what prevented completion."
+                    placeholder={t.varianceNotesHint}
                   />
                 </FormField>
 
@@ -5346,7 +5149,7 @@ export default function WeeklyPlanningPage() {
                       styles.secondaryButton
                     }
                   >
-                    Cancel
+                    {t.cancel}
                   </button>
 
                   <button
@@ -5361,7 +5164,7 @@ export default function WeeklyPlanningPage() {
                       styles.dangerButton
                     }
                   >
-                    Record Missed Commitment
+                    {t.recordMissed}
                   </button>
                 </div>
               </div>
@@ -5381,7 +5184,7 @@ export default function WeeklyPlanningPage() {
               '0.85rem',
           }}
         >
-          Loading Weekly Planning...
+          {t.loading}
         </div>
       )}
     </div>
@@ -5398,138 +5201,37 @@ function MetricCard({
   footer,
   accent = 'neutral',
 }) {
-  const accentStyle =
-    accent === 'success'
-      ? {
-          background:
-            '#f0fdf4',
-          borderColor:
-            '#bbf7d0',
-          color:
-            '#166534',
-        }
-      : accent === 'danger'
-        ? {
-            background:
-              '#fef2f2',
-            borderColor:
-              '#fecaca',
-            color:
-              '#991b1b',
-          }
-        : {
-            background:
-              '#ffffff',
-            borderColor:
-              '#e2e8f0',
-            color:
-              '#0f2745',
-          };
-
   return (
-    <div
-      style={{
-        border: `1px solid ${accentStyle.borderColor}`,
-        background:
-          accentStyle.background,
-        borderRadius:
-          '10px',
-        padding:
-          '15px',
-      }}
-    >
-      <div
-        style={
-          styles.smallLabel
-        }
-      >
-        {label}
-      </div>
-
-      <div
-        style={{
-          fontSize:
-            '1.65rem',
-          fontWeight:
-            900,
-          color:
-            accentStyle.color,
-          marginTop:
-            '7px',
-        }}
-      >
-        {value}
-      </div>
-
-      {footer && (
-        <div
-          style={{
-            fontSize:
-              '0.72rem',
-            color:
-              '#64748b',
-            marginTop:
-              '5px',
-          }}
-        >
-          {footer}
-        </div>
-      )}
-    </div>
+    <Stat
+      label={label}
+      value={value}
+      hint={footer}
+      tone={accent === 'success' ? 'ok' : accent === 'danger' ? 'bad' : undefined}
+    />
   );
 }
 
 function ExecutionBadge({
   result,
 }) {
-  let background =
-    '#f1f5f9';
+  let background = 'var(--fo-sunken)';
+  let color = 'var(--fo-muted)';
+  let label = tr('resultPending');
 
-  let color =
-    '#475569';
-
-  let label =
-    'Pending';
-
-  if (
-    result === 'completed'
-  ) {
-    background =
-      '#dcfce7';
-
-    color =
-      '#166534';
-
-    label =
-      'Completed';
+  if (result === 'completed') {
+    background = 'var(--fo-ok-wash)';
+    color = 'var(--fo-ok)';
+    label = tr('resultCompleted');
   }
 
-  if (
-    result ===
-    'not_completed'
-  ) {
-    background =
-      '#fee2e2';
-
-    color =
-      '#991b1b';
-
-    label =
-      'Missed';
+  if (result === 'not_completed') {
+    background = 'var(--fo-bad-wash)';
+    color = 'var(--fo-bad)';
+    label = tr('resultMissed');
   }
 
-  if (
-    result ===
-    'not_applicable'
-  ) {
-    background =
-      '#e2e8f0';
-
-    color =
-      '#475569';
-
-    label =
-      'N/A';
+  if (result === 'not_applicable') {
+    label = tr('ready.na');
   }
 
   return (
@@ -5551,22 +5253,15 @@ function TableHeader({
   return (
     <th
       style={{
-        background:
-          '#0f2745',
-        color:
-          '#ffffff',
-        padding:
-          '11px 10px',
-        textAlign:
-          'left',
-        fontSize:
-          '0.75rem',
-        letterSpacing:
-          '0.02em',
-        borderRight:
-          '1px solid #27476d',
-        position:
-          'sticky',
+        background: 'var(--fo-sunken)',
+        color: 'var(--fo-muted)',
+        padding: '10px 12px',
+        textAlign: 'left',
+        fontSize: '13px',
+        fontWeight: 600,
+        borderBottom: '1px solid var(--fo-line-soft)',
+        whiteSpace: 'nowrap',
+        position: 'sticky',
         top: 0,
         zIndex: 2,
       }}
@@ -5582,14 +5277,10 @@ function TableCell({
   return (
     <td
       style={{
-        padding:
-          '10px',
-        fontSize:
-          '0.82rem',
-        borderRight:
-          '1px solid #e2e8f0',
-        verticalAlign:
-          'middle',
+        padding: '10px 12px',
+        fontSize: '14px',
+        borderBottom: '1px solid var(--fo-line-soft)',
+        verticalAlign: 'middle',
       }}
     >
       {children}
@@ -5603,21 +5294,14 @@ function ModalOverlay({
   return (
     <div
       style={{
-        position:
-          'fixed',
+        position: 'fixed',
         inset: 0,
-        background:
-          'rgba(15, 23, 42, 0.50)',
-        display:
-          'flex',
-        alignItems:
-          'center',
-        justifyContent:
-          'center',
-        padding:
-          '20px',
-        zIndex:
-          9999,
+        background: 'rgba(6, 38, 55, 0.55)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        zIndex: 5000,
       }}
     >
       {children}
@@ -5630,29 +5314,8 @@ function FormField({
   children,
 }) {
   return (
-    <label
-      style={{
-        display:
-          'grid',
-        gap:
-          '6px',
-        marginBottom:
-          '13px',
-      }}
-    >
-      <span
-        style={{
-          fontSize:
-            '0.8rem',
-          fontWeight:
-            800,
-          color:
-            '#334155',
-        }}
-      >
-        {label}
-      </span>
-
+    <label className={ui.field} style={{ marginBottom: 14 }}>
+      <span className={ui.fieldLabel}>{label}</span>
       {children}
     </label>
   );
@@ -5664,31 +5327,19 @@ function FormField({
 
 const styles = {
   card: {
-    background:
-      '#ffffff',
-
-    border:
-      '1px solid #e2e8f0',
-
-    borderRadius:
-      '10px',
-
-    padding:
-      '16px',
-
-    boxShadow:
-      '0 1px 2px rgba(15, 23, 42, 0.04)',
-
-    marginBottom:
-      '18px',
+    background: 'var(--fo-surface)',
+    border: '1px solid var(--fo-line)',
+    borderRadius: 'var(--fo-radius)',
+    padding: '18px 20px',
+    marginBottom: '12px',
   },
 
   emptyState: {
     background:
-      '#ffffff',
+      'var(--fo-surface)',
 
     border:
-      '1px dashed #cbd5e1',
+      '1px dashed var(--fo-line)',
 
     borderRadius:
       '12px',
@@ -5723,73 +5374,27 @@ const styles = {
       'center',
 
     color:
-      '#64748b',
+      'var(--fo-muted)',
 
     background:
-      '#f8fafc',
+      'var(--fo-sunken)',
 
     borderRadius:
       '8px',
   },
 
   input: {
-    border:
-      '1px solid #cbd5e1',
-
-    borderRadius:
-      '7px',
-
-    padding:
-      '9px 10px',
-
-    fontSize:
-      '0.85rem',
-
-    outline:
-      'none',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#0f172a',
-
-    width:
-      '100%',
-
-    boxSizing:
-      'border-box',
+    width: '100%',
+    minHeight: '40px',
   },
 
   select: {
-    border:
-      '1px solid #cbd5e1',
-
-    borderRadius:
-      '7px',
-
-    padding:
-      '9px 10px',
-
-    minWidth:
-      '220px',
-
-    fontSize:
-      '0.85rem',
-
-    outline:
-      'none',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#0f172a',
+    minHeight: '40px',
   },
 
   tableInput: {
     border:
-      '1px solid #cbd5e1',
+      '1px solid var(--fo-line)',
 
     borderRadius:
       '5px',
@@ -5806,7 +5411,7 @@ const styles = {
 
   tableNumberInput: {
     border:
-      '1px solid #cbd5e1',
+      '1px solid var(--fo-line)',
 
     borderRadius:
       '5px',
@@ -5822,254 +5427,102 @@ const styles = {
   },
 
   primaryButton: {
-    border:
-      'none',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#1d4ed8',
-
-    color:
-      '#ffffff',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      800,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    minHeight: '40px',
+    padding: '0 14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-teal)',
+    background: 'var(--fo-teal)',
+    color: '#04312c',
   },
 
   secondaryButton: {
-    border:
-      '1px solid #cbd5e1',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#334155',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      700,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
-  },
-
-  commitButton: {
-    border:
-      'none',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#0f766e',
-
-    color:
-      '#ffffff',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      800,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
-  },
-
-  closeButton: {
-    border:
-      'none',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#0f2745',
-
-    color:
-      '#ffffff',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      800,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    minHeight: '40px',
+    padding: '0 14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-line)',
+    background: 'var(--fo-surface)',
+    color: 'var(--fo-ink)',
   },
 
   dangerButton: {
-    border:
-      'none',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#b91c1c',
-
-    color:
-      '#ffffff',
-
-    padding:
-      '9px 14px',
-
-    fontWeight:
-      800,
-
-    fontSize:
-      '0.82rem',
-
-    cursor:
-      'pointer',
-  },
-
-  iconButton: {
-    width:
-      '36px',
-
-    height:
-      '36px',
-
-    border:
-      '1px solid #cbd5e1',
-
-    borderRadius:
-      '7px',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#334155',
-
-    cursor:
-      'pointer',
-
-    fontWeight:
-      900,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    minHeight: '40px',
+    padding: '0 14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-bad)',
+    background: 'var(--fo-surface)',
+    color: 'var(--fo-bad)',
   },
 
   smallSecondaryButton: {
-    border:
-      '1px solid #cbd5e1',
-
-    background:
-      '#ffffff',
-
-    color:
-      '#334155',
-
-    borderRadius:
-      '5px',
-
-    padding:
-      '5px 7px',
-
-    fontSize:
-      '0.72rem',
-
-    fontWeight:
-      800,
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '32px',
+    padding: '0 10px',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-line)',
+    background: 'var(--fo-surface)',
+    color: 'var(--fo-ink)',
   },
 
   smallSuccessButton: {
-    border:
-      '1px solid #86efac',
-
-    background:
-      '#f0fdf4',
-
-    color:
-      '#166534',
-
-    borderRadius:
-      '5px',
-
-    padding:
-      '5px 7px',
-
-    fontSize:
-      '0.72rem',
-
-    fontWeight:
-      800,
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '32px',
+    padding: '0 10px',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-ok)',
+    background: 'var(--fo-ok-wash)',
+    color: 'var(--fo-ok)',
   },
 
   smallDangerButton: {
-    border:
-      '1px solid #fecaca',
-
-    background:
-      '#fef2f2',
-
-    color:
-      '#991b1b',
-
-    borderRadius:
-      '5px',
-
-    padding:
-      '5px 7px',
-
-    fontSize:
-      '0.72rem',
-
-    fontWeight:
-      800,
-
-    cursor:
-      'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '32px',
+    padding: '0 10px',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--fo-bad)',
+    background: 'var(--fo-bad-wash)',
+    color: 'var(--fo-bad)',
   },
 
   smallLabel: {
-    fontSize:
-      '0.72rem',
-
-    fontWeight:
-      800,
-
-    letterSpacing:
-      '0.05em',
-
-    color:
-      '#64748b',
-
-    textTransform:
-      'uppercase',
+    color: 'var(--fo-muted)',
+    fontSize: '13px',
+    fontWeight: 600,
   },
 
   secondaryMetricValue: {
@@ -6083,7 +5536,7 @@ const styles = {
       900,
 
     color:
-      '#0f2745',
+      'var(--fo-ink)',
   },
 
   statusBadge: {
@@ -6130,15 +5583,15 @@ const styles = {
       '#dcfce7',
 
     color:
-      '#166534',
+      'var(--fo-ok)',
   },
 
   cancelledBadge: {
     background:
-      '#f1f5f9',
+      'var(--fo-sunken)',
 
     color:
-      '#64748b',
+      'var(--fo-muted)',
   },
 
   miniBadge: {
@@ -6186,13 +5639,13 @@ const styles = {
 
   successBox: {
     background:
-      '#f0fdf4',
+      'var(--fo-ok-wash)',
 
     border:
       '1px solid #bbf7d0',
 
     color:
-      '#166534',
+      'var(--fo-ok)',
 
     borderRadius:
       '8px',
@@ -6209,13 +5662,13 @@ const styles = {
 
   errorBox: {
     background:
-      '#fef2f2',
+      'var(--fo-bad-wash)',
 
     border:
       '1px solid #fecaca',
 
     color:
-      '#991b1b',
+      'var(--fo-bad)',
 
     borderRadius:
       '8px',
@@ -6244,7 +5697,7 @@ const styles = {
       'auto',
 
     background:
-      '#ffffff',
+      'var(--fo-surface)',
 
     borderRadius:
       '12px',
@@ -6270,7 +5723,7 @@ const styles = {
       'auto',
 
     background:
-      '#ffffff',
+      'var(--fo-surface)',
 
     borderRadius:
       '12px',
@@ -6316,7 +5769,7 @@ const styles = {
       '14px',
 
     borderTop:
-      '1px solid #e2e8f0',
+      '1px solid var(--fo-line-soft)',
   },
 
   closeModalButton: {
@@ -6327,7 +5780,7 @@ const styles = {
       'transparent',
 
     color:
-      '#64748b',
+      'var(--fo-muted)',
 
     fontSize:
       '1.6rem',
