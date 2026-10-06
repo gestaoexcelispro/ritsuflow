@@ -561,5 +561,10 @@
   "constraints.currentStatusValue": "Current status: {status}",
   "constraints.linkedWorkOne": "1 linked work item",
   "constraints.linkedWork": "{count} linked work items",
-  "constraints.unassignedLocation": "Location not assigned"
+  "constraints.unassignedLocation": "Location not assigned",
+  "constraints.project": "Project",
+  "constraints.selectProject": "Select a project",
+  "constraints.refresh": "Refresh",
+  "constraints.noProject": "No project selected",
+  "constraints.noProjectText": "Choose a project to see and manage its constraints."
 }
