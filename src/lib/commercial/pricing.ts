@@ -139,6 +139,17 @@ export type PricedPart = { total: number; lines: PricedLine[]; missing: string[]
 
 const norm = (s: string) => s.trim().toLowerCase()
 
+const UNIT_ALIASES: Record<string, string> = {
+  'm²': 'm2', 'm^2': 'm2', 'm³': 'm3', 'm^3': 'm3', 'ml': 'm', 'mt': 'm',
+  'und': 'un', 'unid': 'un', 'unid.': 'un', 'pç': 'un', 'pc': 'un', 'pç.': 'un', 'peça': 'un', 'ea': 'un', 'each': 'un', 'pcs': 'un', 'u': 'un',
+}
+
+/** Unit as compared for pricing: lower case, "m²" = "m2", "pç" / "und" / "ea" = "un". */
+export function normUnit(u: string): string {
+  const k = norm(u)
+  return UNIT_ALIASES[k] || k
+}
+
 /** Prices material needs: by catalog product first, then by name + unit. Unpriced needs are reported. */
 export function priceMaterials(needs: MaterialNeed[], book: PriceItem[], onDate: string): PricedPart {
   const lines: PricedLine[] = []
@@ -147,10 +158,32 @@ export function priceMaterials(needs: MaterialNeed[], book: PriceItem[], onDate:
     if (!(n.qty > 0)) continue
     const candidates = n.materialId
       ? book.filter(p => p.material_id === n.materialId)
-      : book.filter(p => norm(p.name) === norm(n.mat) && norm(p.unit) === norm(n.unit))
+      : book.filter(p => norm(p.name) === norm(n.mat) && normUnit(p.unit) === normUnit(n.unit))
     const hit = effective(candidates, onDate)
     if (!hit) { missing.push(`${n.mat} (${n.unit})`); continue }
     lines.push({ label: n.mat, unit: n.unit, qty: n.qty, unitCost: hit.unit_cost, amount: n.qty * hit.unit_cost, sourceId: hit.id })
+  }
+  return { total: lines.reduce((s, l) => s + l.amount, 0), lines, missing }
+}
+
+/**
+ * Prices groups of alternatives: each group is one product that can be bought in more than one
+ * unit (a stud by the bar or by the metre; a board by the sheet or by m²). The first alternative
+ * with a price wins; a group with none is reported once, by its first alternative.
+ */
+export function priceNeedGroups(groups: MaterialNeed[][], book: PriceItem[], onDate: string): PricedPart {
+  const lines: PricedLine[] = []
+  const missing: string[] = []
+  for (const options of groups) {
+    const usable = options.filter(o => o.qty > 0)
+    if (!usable.length) continue
+    let hit: PricedPart | null = null
+    for (const o of usable) {
+      const r = priceMaterials([o], book, onDate)
+      if (r.lines.length) { hit = r; break }
+    }
+    if (hit) lines.push(...hit.lines)
+    else missing.push(`${usable[0].mat} (${usable[0].unit})`)
   }
   return { total: lines.reduce((s, l) => s + l.amount, 0), lines, missing }
 }

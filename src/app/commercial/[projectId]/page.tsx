@@ -10,6 +10,7 @@ import { BID_COLUMNS, ESTIMATE_SUMMARY_COLUMNS, statusPatch, type BidRow, type B
 import { formatDate, formatMoney } from '@/lib/commercial/format'
 import { useCommercialAccess } from '../license'
 import { statusStyle, ui } from '../ui'
+import EstimateTab from './EstimateTab'
 
 type Tab = 'estimate' | 'takeoff' | 'proposal' | 'revisions'
 type Counts = { sheets: number; items: number; elements: number }
@@ -130,7 +131,7 @@ export default function BidWorkspace() {
           </div>
         )}
 
-        {tab === 'estimate' && <div style={ui.empty}>{t('estimate.comingNext')}</div>}
+        {tab === 'estimate' && <EstimateTab projectId={projectId} country={p?.country_code || 'BR'} editable={licensed && !converted} onChanged={() => void load()} />}
         {tab === 'proposal' && <div style={ui.empty}>{t('proposal.comingNext')}</div>}
 
         {tab === 'revisions' && (

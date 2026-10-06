@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  applyPricing, directOf, effective, money, priceLabor, priceMaterials, PricingError,
+  applyPricing, directOf, effective, money, normUnit, priceLabor, priceMaterials, priceNeedGroups, PricingError,
 } from '../src/lib/commercial/pricing.ts'
 
 const BR_TCU = [
@@ -104,4 +104,25 @@ test('directOf(): sums buckets over items', () => {
   ])
   assert.equal(money(d.material), money(1284.6 * 58.4 + 214 * 18.5))
   assert.equal(money(d.labor), money(1284.6 * 31.2 + 214 * 9.2))
+})
+
+test('normUnit(): common spellings compare equal', () => {
+  assert.equal(normUnit('m²'), 'm2')
+  assert.equal(normUnit(' Pç '), 'un')
+  assert.equal(normUnit('EA'), 'un')
+  assert.equal(normUnit('kg'), 'kg')
+})
+
+test('priceNeedGroups(): first alternative with a price wins', () => {
+  const book = [
+    { id: 'm1', material_id: null, name: 'Montante 48', unit: 'm', unit_cost: 6, valid_from: '2026-01-01' },
+    { id: 'b1', material_id: null, name: 'Chapa ST', unit: 'pç', unit_cost: 40, valid_from: '2026-01-01' },
+  ]
+  const r = priceNeedGroups([
+    [{ mat: 'Montante 48', unit: 'un', qty: 10 }, { mat: 'Montante 48', unit: 'm', qty: 30 }],
+    [{ mat: 'Chapa ST', unit: 'un', qty: 5 }, { mat: 'Chapa ST', unit: 'm2', qty: 14.4 }],
+    [{ mat: 'Parafuso TA', unit: 'un', qty: 300 }],
+  ], book, '2026-10-06')
+  assert.equal(money(r.total), 180 + 200)
+  assert.deepEqual(r.missing, ['Parafuso TA (un)'])
 })

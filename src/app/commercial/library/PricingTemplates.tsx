@@ -141,7 +141,7 @@ export default function PricingTemplates() {
           </select>
         </label>
         <span style={{ flex: 1 }} />
-        {licensed && <button type="button" style={ui.button} onClick={() => { setMessage(''); setDraft({ id: null, name: '', isDefault: companyRows.length === 0, notes: '', standard: false, lines: [newLine(0)] }) }}>{t('templates.add')}</button>}
+        {licensed && <button type="button" style={ui.button} onClick={() => { setMessage(''); setDraft({ id: null, name: '', isDefault: companyRows.length === 0, notes: '', standard: false, lines: [{ ...newLine(0), rate: '' }] }) }}>{t('templates.add')}</button>}
       </div>
 
       {error && <div role="alert" style={ui.error}>{error}</div>}
@@ -215,7 +215,7 @@ export default function PricingTemplates() {
                   </tbody>
                 </table>
               </div>
-              {canEdit && <button type="button" style={{ ...ui.buttonGhost, alignSelf: 'flex-start' }} onClick={() => setDraft({ ...draft, lines: [...draft.lines, newLine(draft.lines.length)] })}>{t('templates.addLine')}</button>}
+              {canEdit && <button type="button" style={{ ...ui.buttonGhost, alignSelf: 'flex-start' }} onClick={() => setDraft({ ...draft, lines: [...draft.lines, { ...newLine(draft.lines.length), rate: '' }] })}>{t('templates.addLine')}</button>}
               <p style={{ ...ui.small, margin: 0 }}>{t('templates.rulesNote')}</p>
               <label style={ui.label}>{t('field.notes')}<input value={draft.notes} disabled={!canEdit} onChange={e => setDraft({ ...draft, notes: e.target.value })} style={ui.input} /></label>
               {canEdit && (
