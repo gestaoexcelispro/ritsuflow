@@ -126,3 +126,12 @@ test('priceNeedGroups(): first alternative with a price wins', () => {
   assert.equal(money(r.total), 180 + 200)
   assert.deepEqual(r.missing, ['Parafuso TA (un)'])
 })
+
+test('proposal: lines, defaults and the selling factor', async () => {
+  const { lines, readProposal, sellingFactor } = await import('../src/lib/commercial/proposal.ts')
+  assert.deepEqual(lines('- Drywall walls\n\n• Ceilings \n*Joints'), ['Drywall walls', 'Ceilings', 'Joints'])
+  const p = readProposal({ scope: 'x', validityDays: 'bad', showItems: false })
+  assert.equal(p.scope, 'x'); assert.equal(p.validityDays, 30); assert.equal(p.showItems, false); assert.equal(p.showBuildUp, false)
+  assert.equal(money(294365.11 * sellingFactor(294365.11, 381320.54)), 381320.54)
+  assert.equal(sellingFactor(0, 10), 1)
+})

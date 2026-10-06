@@ -11,6 +11,7 @@ import { formatDate, formatMoney } from '@/lib/commercial/format'
 import { useCommercialAccess } from '../license'
 import { statusStyle, ui } from '../ui'
 import EstimateTab from './EstimateTab'
+import ProposalTab from './ProposalTab'
 
 type Tab = 'estimate' | 'takeoff' | 'proposal' | 'revisions'
 type Counts = { sheets: number; items: number; elements: number }
@@ -132,7 +133,7 @@ export default function BidWorkspace() {
         )}
 
         {tab === 'estimate' && <EstimateTab projectId={projectId} country={p?.country_code || 'BR'} editable={licensed && !converted} onChanged={() => void load()} />}
-        {tab === 'proposal' && <div style={ui.empty}>{t('proposal.comingNext')}</div>}
+        {tab === 'proposal' && <ProposalTab bid={bid} editable={licensed && !converted} />}
 
         {tab === 'revisions' && (
           estimates.length === 0 ? <div style={ui.empty}>{t('revisions.empty')}</div> : (
