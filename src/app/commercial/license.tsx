@@ -12,12 +12,16 @@ export type CommercialAccess = {
   licensed: boolean
   isPlatformOwner: boolean
   organizationId: string | null
+  /** May change the price book, labor rates, templates and clauses (role or Commercial editor switch). */
+  canEditLibrary: boolean
+  /** May create bids (projects.create permission or Commercial editor switch). */
+  canCreateBids: boolean
 }
 
 /** Fired by the header's "New bid" button; the bids page opens its dialog. */
 export const NEW_BID_EVENT = 'commercial:new-bid'
 
-const AccessContext = createContext<CommercialAccess>({ licensed: false, isPlatformOwner: false, organizationId: null })
+const AccessContext = createContext<CommercialAccess>({ licensed: false, isPlatformOwner: false, organizationId: null, canEditLibrary: false, canCreateBids: false })
 
 export function CommercialAccessProvider({ value, children }: { value: CommercialAccess; children: ReactNode }) {
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>

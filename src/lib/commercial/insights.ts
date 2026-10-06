@@ -18,11 +18,11 @@ export type MarkupStats = { won: number | null; lost: number | null; wonCount: n
 
 const markupOf = (e: EstimateSummary | undefined) => (e && e.direct_total > 0 ? (e.price_total / e.direct_total - 1) * 100 : null)
 
-export function clientStats(bids: BidRow[], latest: Map<string, EstimateSummary>, noClient: string): ClientStats[] {
+/** Bids grouped by a key (client, project type…), with win rate and won value. */
+function statsBy(bids: BidRow[], latest: Map<string, EstimateSummary>, keyOf: (b: BidRow) => [string, string]): ClientStats[] {
   const by = new Map<string, ClientStats>()
   for (const b of bids) {
-    const name = b.projects?.client_name?.trim() || noClient
-    const key = name.toLowerCase()
+    const [key, name] = keyOf(b)
     const s = by.get(key) || { client: name, bids: 0, open: 0, won: 0, lost: 0, winRate: null, wonValue: new Map() }
     s.bids++
     if (b.status === 'draft' || b.status === 'submitted') s.open++
@@ -37,6 +37,20 @@ export function clientStats(bids: BidRow[], latest: Map<string, EstimateSummary>
   return [...by.values()]
     .map(s => ({ ...s, winRate: s.won + s.lost ? (s.won / (s.won + s.lost)) * 100 : null }))
     .sort((a, b) => b.bids - a.bids || a.client.localeCompare(b.client))
+}
+
+export function clientStats(bids: BidRow[], latest: Map<string, EstimateSummary>, noClient: string): ClientStats[] {
+  return statsBy(bids, latest, b => {
+    const name = b.projects?.client_name?.trim() || noClient
+    return [name.toLowerCase(), name]
+  })
+}
+
+/** Same figures by project type; `labelOf` translates the type key ('none' when the bid has no type). */
+export function typeStats(bids: BidRow[], latest: Map<string, EstimateSummary>, labelOf: (type: string) => string): (ClientStats & { type: string })[] {
+  const rows = statsBy(bids, latest, b => { const k = b.project_type || 'none'; return [k, k] })
+  return rows.map(r => ({ ...r, type: r.client, client: labelOf(r.client) }))
+    .sort((a, b) => Number(a.type === 'none') - Number(b.type === 'none') || b.bids - a.bids)
 }
 
 /** Average BDI / markup of won and of lost bids (latest revision of each). */

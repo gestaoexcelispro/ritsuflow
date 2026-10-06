@@ -10,8 +10,8 @@ import styles from './users.module.css'
 
 const supabase = createClient()
 const INCLUDED_PROJECT_CAPACITY = 10
-const BLANK = { fullName: '', email: '', jobTitle: '', role: 'user', projectAccessMode: 'selected_projects', projectIds: [], workspaceAccess: ['projects'] }
-const WORKSPACES = ['projects', 'precon', 'fieldop', 'ritsuscope']
+const BLANK = { fullName: '', email: '', jobTitle: '', role: 'user', projectAccessMode: 'selected_projects', projectIds: [], workspaceAccess: ['projects'], commercialEditor: false }
+const WORKSPACES = ['projects', 'precon', 'fieldop', 'ritsuscope', 'commercial']
 const ROLES = ['admin', 'manager', 'user']
 const STATUS_TONE = { active: 'ok', invited: 'info', suspended: 'warn', disabled: 'bad', removed: 'bad' }
 const initialsOf = (text) => String(text || '?').split(/\s+/).filter(Boolean).map((x) => x[0]).slice(0, 2).join('').toUpperCase()
@@ -32,6 +32,7 @@ export default function UsersAccess() {
   const [members, setMembers] = useState([])
   const [projects, setProjects] = useState([])
   const [enabledModules, setEnabledModules] = useState([])
+  const [hasCommercial, setHasCommercial] = useState(false)
   const [message, setMessage] = useState({ tone: 'ok', text: '' })
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
@@ -61,12 +62,14 @@ export default function UsersAccess() {
     const oid = membership.organization_id
     const [{ data: o, error: oe }, { data: ms, error: mE }, { data: ps, error: pE }, { data: prs, error: prE }, { data: mods }] = await Promise.all([
       supabase.from('organizations').select('id,name,slug,organization_number,owner_user_id').eq('id', oid).single(),
-      supabase.from('organization_members').select('organization_id,user_id,role,status,joined_at,project_access_mode').eq('organization_id', oid).order('joined_at'),
+      supabase.from('organization_members').select('organization_id,user_id,role,status,joined_at,project_access_mode,commercial_editor').eq('organization_id', oid).order('joined_at'),
       supabase.from('user_profiles').select('user_id,full_name,email,job_title,avatar_path,workspace_access'),
       supabase.from('projects').select('id,project_id,code,name,status').eq('stage', 'contract').eq('organization_id', oid).order('name'),
       supabase.from('organization_modules').select('module_key,is_enabled').eq('organization_id', oid).eq('is_enabled', true),
     ])
     if (oe) throw oe; if (mE) throw mE; if (pE) throw pE; if (prE) throw prE
+    const { data: commercial } = await supabase.rpc('has_workspace_access', { p_workspace_key: 'commercial' })
+    setHasCommercial(commercial === true)
     const pm = new Map((ps || []).map((p) => [p.user_id, p]))
     setOrg(o); setMembers((ms || []).map((m) => ({ ...m, profile: pm.get(m.user_id) || null }))); setProjects(prs || []); setEnabledModules((mods || []).map((x) => x.module_key))
   }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -94,7 +97,7 @@ export default function UsersAccess() {
     let projectIds = []
     if (m.project_access_mode === 'selected_projects') { const { data } = await supabase.from('project_members').select('project_id').eq('user_id', m.user_id); projectIds = (data || []).map((x) => x.project_id) }
     const savedWorkspaces = Array.isArray(p?.workspace_access) && p.workspace_access.length ? p.workspace_access : ['projects']
-    setForm({ fullName: p?.full_name || '', email: p?.email || '', jobTitle: p?.job_title || '', role: m.role || 'user', projectAccessMode: m.project_access_mode || 'selected_projects', projectIds, workspaceAccess: savedWorkspaces })
+    setForm({ fullName: p?.full_name || '', email: p?.email || '', jobTitle: p?.job_title || '', role: m.role || 'user', projectAccessMode: m.project_access_mode || 'selected_projects', projectIds, workspaceAccess: savedWorkspaces, commercialEditor: m.commercial_editor === true })
     setPreview(avatarUrl(p?.avatar_path)); setModalError(''); setModal({ mode: 'edit', member: m })
   }
   function choosePhoto(e) {
@@ -132,11 +135,13 @@ export default function UsersAccess() {
         const r = await fetch('/api/settings/users/invite', { method: 'POST', headers, body }); const result = await r.json()
         if (!r.ok) throw new Error(result.error || t('users.errInvite'))
         if (photo && result.avatarUpload) { const { error } = await supabase.storage.from('user-avatars').uploadToSignedUrl(result.avatarUpload.path, result.avatarUpload.token, photo, { contentType: photo.type, upsert: true }); if (error) throw new Error(t('users.errInvitePhoto', { message: error.message })) }
+        if (form.commercialEditor && result.user?.id) { const { error } = await supabase.rpc('set_member_commercial_editor', { p_organization_id: org.id, p_user_id: result.user.id, p_enabled: true }); if (error) throw new Error(error.message) }
         doneMessage = t('users.invited', { email: result.user.email })
       } else {
         const r = await fetch(`/api/settings/users/${modal.member.user_id}`, { method: 'PATCH', headers, body }); const result = await r.json()
         if (!r.ok) throw new Error(result.error || t('users.errUpdate'))
         if (photo && result.avatarUpload) { const { error } = await supabase.storage.from('user-avatars').uploadToSignedUrl(result.avatarUpload.path, result.avatarUpload.token, photo, { contentType: photo.type, upsert: true }); if (error) throw new Error(t('users.errUpdatePhoto', { message: error.message })) }
+        if (form.commercialEditor !== (modal.member.commercial_editor === true)) { const { error } = await supabase.rpc('set_member_commercial_editor', { p_organization_id: org.id, p_user_id: modal.member.user_id, p_enabled: form.commercialEditor }); if (error) throw new Error(error.message) }
         doneMessage = t('users.updated', { name: form.fullName })
       }
       close(); say(doneMessage); await load()
@@ -184,7 +189,7 @@ export default function UsersAccess() {
               <td data-label=""><div className={styles.person}>{a ? <img src={a} alt="" /> : <b>{initialsOf(p?.full_name || p?.email)}</b>}<span><strong>{p?.full_name || t('users.unnamed')}</strong>{note && <small>{note}</small>}</span></div></td>
               <td data-label={t('users.colEmail')}>{p?.email || '—'}</td>
               <td data-label={t('users.colJob')}>{p?.job_title || '—'}</td>
-              <td data-label={t('users.colRole')}>{protectedUser ? t('users.platformOwner') : roleLabel(m.role)}</td>
+              <td data-label={t('users.colRole')}>{protectedUser ? t('users.platformOwner') : roleLabel(m.role)}{m.commercial_editor && <small style={{ display: 'block', color: '#0b7f75', fontWeight: 700 }}>{t('users.commercialEditorBadge')}</small>}</td>
               <td data-label={t('users.colStatus')}><Badge tone={STATUS_TONE[m.status]}>{statusLabel(m.status)}</Badge></td>
               <td data-label={t('users.colAccess')}>{protectedUser ? t('users.protected') : accessLabel(m.project_access_mode)}</td>
               <td data-label={t('users.colJoined')}>{date(m.joined_at)}</td>
@@ -221,6 +226,7 @@ export default function UsersAccess() {
               <legend>{t('users.workspaceTitle')} *</legend>
               <p>{t('users.workspaceText')}</p>
               {WORKSPACES.map((k) => <label key={k} className={`${styles.option} ${!allowed(k) ? styles.optionOff : ''}`}><input type="checkbox" checked={form.workspaceAccess.includes(k)} disabled={!allowed(k)} onChange={() => toggleIn('workspaceAccess', k)} /><b>{t(`users.workspace.${k}`)}</b>{!allowed(k) && <small>{t('users.notInPlan')}</small>}</label>)}
+              {hasCommercial && <label className={styles.option}><input type="checkbox" checked={form.commercialEditor} onChange={(e) => setForm({ ...form, commercialEditor: e.target.checked })} /><span><b>{t('users.commercialEditor')}</b><small>{t('users.commercialEditorHint')}</small></span></label>}
             </fieldset>
             <fieldset className={styles.fieldset}>
               <legend>{t('users.projectTitle')} *</legend>

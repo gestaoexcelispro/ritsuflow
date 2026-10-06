@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
 import { COUNTRIES } from '@/lib/takeoff/wallTypes'
-import { createBid } from '@/lib/commercial/bids'
+import { PROJECT_TYPES, createBid, type ProjectType } from '@/lib/commercial/bids'
 import { CURRENCIES, TEMPLATE_COLUMNS, currencyOf, type TemplateRow } from '@/lib/commercial/library'
 import { useCommercialAccess } from './license'
 import { ui } from './ui'
@@ -22,6 +22,7 @@ export default function NewBidDialog({ onClose }: { onClose: () => void }) {
   const [country, setCountry] = useState('BR')
   const [currency, setCurrency] = useState('BRL')
   const [dueDate, setDueDate] = useState('')
+  const [projectType, setProjectType] = useState<ProjectType | ''>('')
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [templateId, setTemplateId] = useState<string>('')
   const [saving, setSaving] = useState(false)
@@ -56,7 +57,7 @@ export default function NewBidDialog({ onClose }: { onClose: () => void }) {
     const { data: auth } = await supabase.auth.getUser()
     if (!auth?.user) { setSaving(false); return }
     const res = await createBid(supabase, {
-      organizationId, userId: auth.user.id, name, client, country, currency, dueDate,
+      organizationId, userId: auth.user.id, name, client, country, currency, dueDate, projectType: projectType || null,
       templateId: chosen?.id ?? null, templateLines: chosen?.lines ?? [],
     })
     if ('error' in res) { setSaving(false); setError(t('error.save', { message: res.error })); return }
@@ -78,6 +79,12 @@ export default function NewBidDialog({ onClose }: { onClose: () => void }) {
           </label>
           <label style={ui.label}>{t('newBid.client')}<input value={client} onChange={e => setClient(e.target.value)} style={ui.input} /></label>
           <label style={ui.label}>{t('newBid.due')}<input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={ui.input} /></label>
+          <label style={{ ...ui.label, gridColumn: '1 / -1' }}>{t('field.projectType')}
+            <select value={projectType} onChange={e => setProjectType(e.target.value as ProjectType | '')} style={ui.input}>
+              <option value="">{t('projectType.none')}</option>
+              {PROJECT_TYPES.map(k => <option key={k} value={k}>{t(`projectType.${k}`)}</option>)}
+            </select>
+          </label>
           <label style={ui.label}>{t('field.country')}
             <select value={country} onChange={e => { setCountry(e.target.value); setCurrency(currencyOf(e.target.value)) }} style={ui.input}>
               {COUNTRIES.map(c => <option key={c.code} value={c.code}>{language === 'pt-BR' ? c.name['pt-BR'] : c.name['en-US']}</option>)}

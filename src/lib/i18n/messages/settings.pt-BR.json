@@ -396,5 +396,9 @@
   "plan.authority": "Quem habilita",
   "plan.authorityValue": "Operadora da plataforma RitsuFlow",
   "plan.chainTitle": "Cadeia de governança.",
-  "plan.chainText": "Plano e uso → Acesso aos espaços → Usuários → Acesso a projetos → Perfis e permissões. Cada nível nunca pode passar do anterior."
+  "plan.chainText": "Plano e uso → Acesso aos espaços → Usuários → Acesso a projetos → Perfis e permissões. Cada nível nunca pode passar do anterior.",
+  "users.workspace.commercial": "Commercial",
+  "users.commercialEditor": "Editor do Commercial",
+  "users.commercialEditorHint": "Edita preços, mão de obra, modelos de BDI e cláusulas, e cria e gerencia todas as concorrências da empresa (inclusive o levantamento no RitsuScope), qualquer que seja o papel. Projetos contratados mantêm o acesso normal.",
+  "users.commercialEditorBadge": "Editor do Commercial"
 }

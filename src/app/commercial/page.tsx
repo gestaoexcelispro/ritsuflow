@@ -21,7 +21,7 @@ const DAY = 86400000
 export default function BidsPage() {
   const t = useT('commercial')
   const { language, numberFormat } = useLanguage()
-  const { licensed } = useCommercialAccess()
+  const { canCreateBids: licensed } = useCommercialAccess()
   const [bids, setBids] = useState<BidRow[]>([])
   const [estimates, setEstimates] = useState<Map<string, EstimateSummary>>(new Map())
   const [filter, setFilter] = useState<Filter>('open')

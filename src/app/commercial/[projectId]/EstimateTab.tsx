@@ -5,7 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
-import { ESTIMATE_COLUMNS, ITEM_COLUMNS, newRevision, refreshFromTakeoff, totalsOf, type EstimateRow, type ItemRow } from '@/lib/commercial/estimates'
+import { ESTIMATE_COLUMNS, ITEM_COLUMNS, ITEM_KINDS, newRevision, refreshFromTakeoff, sellingPrices, totalsOf, type EstimateRow, type ItemKind, type ItemRow } from '@/lib/commercial/estimates'
+import { loadWorkPackages, type WorkPackage } from '@/lib/commercial/workPackages'
+import { useCommercialAccess } from '../license'
 import { LABOR_RATE_COLUMNS, PRICE_ITEM_COLUMNS, today, type LaborRateRow, type PriceItemRow } from '@/lib/commercial/library'
 import { priceWithLines, type AppliesTo, type PricingLine } from '@/lib/commercial/pricing'
 import { readTakeoff } from '@/lib/commercial/takeoffEstimate'
@@ -29,6 +31,8 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const { organizationId } = useCommercialAccess()
+  const [packages, setPackages] = useState<WorkPackage[]>([])
 
   const estimate = revisions.find(r => r.id === selectedId) || revisions[0] || null
   const canEdit = editable && !!estimate && estimate.status === 'draft'
@@ -54,9 +58,19 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
     return () => { active = false }
   }, [loadRevisions])
 
+  useEffect(() => {
+    let active = true
+    if (organizationId) loadWorkPackages(createClient(), organizationId).then(list => { if (active) setPackages(list) })
+    return () => { active = false }
+  }, [organizationId])
+
   useEffect(() => { if (estimate) void loadItems(estimate.id) }, [estimate?.id, loadItems]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = useMemo(() => totalsOf(items, estimate?.pricing_lines || []), [items, estimate?.pricing_lines])
+  const selling = useMemo(() => sellingPrices(items, estimate?.pricing_lines || []), [items, estimate?.pricing_lines])
+  const alternates = items.filter(i => i.kind === 'alternate')
+  const allowanceTotal = items.filter(i => i.kind === 'allowance').reduce((s, i) => s + (selling.get(i.id) || 0), 0)
+  const packageOf = (id: string | null) => packages.find(w => w.id === id) || null
   const steps = useMemo(() => {
     try { return priceWithLines(totals.direct, estimate?.pricing_lines || []) } catch { return null }
   }, [totals.direct, estimate?.pricing_lines])
@@ -233,13 +247,26 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
                   const missing = item.breakdown?.missing || []
                   const hasDetail = !!(item.breakdown?.materials?.length || item.breakdown?.labor?.length || item.breakdown?.equipment?.length || item.breakdown?.subcontract?.length || missing.length)
                   return [
-                    <tr key={item.id}>
+                    <tr key={item.id} style={item.kind === 'alternate' ? { background: '#fffaf3' } : undefined}>
                       <td style={ui.td}>
                         {canEdit && item.source === 'manual'
                           ? <input key={`${item.id}-d`} aria-label={t('estimate.col.item')} defaultValue={item.description} onBlur={e => { const v = e.target.value.trim(); if (v && v !== item.description) void patchItem(item, { description: v }) }} style={{ ...ui.input, width: '100%', height: 32 }} />
                           : <strong style={{ fontWeight: 600 }}>{item.description}</strong>}
                         <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
                           <span style={item.source === 'takeoff' ? ui.chipTeal : ui.chip}>{t(`estimate.source.${item.source}`)}</span>
+                          {canEdit ? (
+                            <select aria-label={t('estimate.kind.label')} value={item.kind || 'base'} onChange={e => void patchItem(item, { kind: e.target.value as ItemKind })}
+                              style={{ ...ui.input, height: 24, padding: '0 6px', fontSize: 11, width: 'auto' }}>
+                              {ITEM_KINDS.map(k => <option key={k} value={k}>{t(`estimate.kind.${k}`)}</option>)}
+                            </select>
+                          ) : item.kind && item.kind !== 'base' && <span style={item.kind === 'alternate' ? ui.chipOrange : ui.chip}>{t(`estimate.kind.${item.kind}`)}</span>}
+                          {canEdit && packages.length > 0 ? (
+                            <select aria-label={t('estimate.workPackage')} value={item.organization_work_package_id || ''} onChange={e => void patchItem(item, { organization_work_package_id: e.target.value || null })}
+                              style={{ ...ui.input, height: 24, padding: '0 6px', fontSize: 11, width: 'auto', maxWidth: 220 }}>
+                              <option value="">{t('estimate.noWorkPackage')}</option>
+                              {packages.filter(w => w.is_active || w.id === item.organization_work_package_id).map(w => <option key={w.id} value={w.id}>{w.code} · {w.description}</option>)}
+                            </select>
+                          ) : packageOf(item.organization_work_package_id) && <span style={ui.chip} title={packageOf(item.organization_work_package_id)!.description}>{packageOf(item.organization_work_package_id)!.code}</span>}
                           {item.quantity_overridden && <span style={ui.chipOrange}>{t('estimate.overridden')}</span>}
                           {missing.length > 0 && <span style={ui.chipOrange}>{t('estimate.unpriced', { count: missing.length })}</span>}
                           {hasDetail && <button type="button" aria-expanded={open === item.id} onClick={() => setOpen(open === item.id ? null : item.id)} style={{ ...ui.chip, border: 0, cursor: 'pointer' }}>{open === item.id ? t('estimate.hideDetail') : t('estimate.showDetail')}</button>}
@@ -259,7 +286,7 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
                           : item.unit}
                       </td>
                       {COST_FIELDS.map(f => <td key={f} style={{ ...ui.td, ...ui.num }}>{costInput(item, f)}</td>)}
-                      <td style={{ ...ui.td, ...ui.num, fontWeight: 700 }}>{formatMoney(item.quantity * unitTotal, cur, numberFormat)}</td>
+                      <td style={{ ...ui.td, ...ui.num, fontWeight: 700, color: item.kind === 'alternate' ? '#8a4413' : undefined }} title={item.kind === 'alternate' ? t('estimate.kind.alternateHint') : undefined}>{formatMoney(item.quantity * unitTotal, cur, numberFormat)}</td>
                       <td style={ui.td}>{canEdit && <button type="button" aria-label={t('action.delete')} onClick={() => removeItem(item)} style={ui.buttonSmall}>✕</button>}</td>
                     </tr>,
                     open === item.id && (
@@ -329,6 +356,18 @@ export default function EstimateTab({ projectId, country, editable, onChanged }:
             <strong style={{ fontSize: 20, color: '#075a53', fontVariantNumeric: 'tabular-nums' }}>{formatMoney(totals.row.price_total, cur, numberFormat)}</strong>
           </div>
         </div>
+        {allowanceTotal > 0 && <span style={ui.small}>{t('estimate.allowanceIncluded', { amount: formatMoney(allowanceTotal, cur, numberFormat) })}</span>}
+        {alternates.length > 0 && (
+          <div style={{ padding: 12, borderRadius: 8, background: '#fffaf3', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+            <strong style={{ color: '#6e3610' }}>{t('estimate.alternatesTitle')}</strong>
+            {alternates.map(a => (
+              <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span>{a.description}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>+ {formatMoney(selling.get(a.id) || 0, cur, numberFormat)}</span>
+              </div>
+            ))}
+            <span style={ui.small}>{t('estimate.alternatesHint')}</span>
+          </div>
+        )}
         <span style={ui.small}>{t('estimate.pricedOn', { date: formatDate(estimate.priced_on, language) })}</span>
       </aside>
     </div>

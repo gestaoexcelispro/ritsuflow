@@ -30,7 +30,16 @@ export default function CommercialLayout({ children }: { children: ReactNode }) 
         currentOrganizationId(supabase),
       ])
       if (!active) return
-      setAccess({ licensed: !licensed.error && licensed.data === true, isPlatformOwner: Boolean(owner.data), organizationId })
+      const isLicensed = !licensed.error && licensed.data === true
+      // What the database would allow; before the permissions function exists, the license decides.
+      const perms = await supabase.rpc('commercial_permissions', { p_organization_id: organizationId })
+      if (!active) return
+      const p = (perms.error ? null : perms.data) as { edit_library?: boolean; create_bids?: boolean } | null
+      setAccess({
+        licensed: isLicensed, isPlatformOwner: Boolean(owner.data), organizationId,
+        canEditLibrary: isLicensed && (p ? p.edit_library === true : true),
+        canCreateBids: isLicensed && (p ? p.create_bids === true : true),
+      })
     })
     return () => { active = false }
   }, [router])
@@ -41,7 +50,7 @@ export default function CommercialLayout({ children }: { children: ReactNode }) 
     if (pathname === '/commercial') window.dispatchEvent(new Event(NEW_BID_EVENT))
     else router.push('/commercial#new')
   }
-  const action = access.licensed
+  const action = access.canCreateBids
     ? <button type="button" className={shell.btnPrimary} onClick={newBid}><Icon name="plus" size={18} />{t('bids.new')}</button>
     : false
 

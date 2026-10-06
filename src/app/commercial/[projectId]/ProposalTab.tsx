@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
-import { ESTIMATE_COLUMNS, ITEM_COLUMNS, totalsOf, type EstimateRow, type ItemRow } from '@/lib/commercial/estimates'
+import { ESTIMATE_COLUMNS, ITEM_COLUMNS, inPrice, sellingPrices, totalsOf, type EstimateRow, type ItemRow } from '@/lib/commercial/estimates'
+import { CLAUSE_COLUMNS, appendClause, type ClauseRow } from '@/lib/commercial/clauses'
 import { priceWithLines, sellingFactors } from '@/lib/commercial/pricing'
 import { lines, readProposal, type Proposal } from '@/lib/commercial/proposal'
 import { formatDate, formatMoney, formatPct, formatQty } from '@/lib/commercial/format'
@@ -34,6 +35,7 @@ export default function ProposalTab({ bid, editable }: Props) {
   const [files, setFiles] = useState<AttachmentFile[]>([])
   const [attached, setAttached] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
+  const [clauses, setClauses] = useState<ClauseRow[]>([])
 
   const estimate = revisions.find(r => r.id === selectedId) || revisions[0] || null
   const canEdit = editable && estimate?.status === 'draft'
@@ -54,8 +56,10 @@ export default function ProposalTab({ bid, editable }: Props) {
       setSelectedId(s => s || rows[0]?.id || null)
       setCompany((o.data as Company | null) || null)
     })
+    supabase.from('commercial_clauses').select(CLAUSE_COLUMNS).eq('is_active', true).order('sort_order').order('created_at')
+      .then(({ data }) => { if (active) setClauses(((data || []) as ClauseRow[]).filter(c => !c.country_code || c.country_code === bid.projects?.country_code)) })
     return () => { active = false }
-  }, [projectId, bid.projects?.organization_id, t])
+  }, [projectId, bid.projects?.organization_id, bid.projects?.country_code, t])
 
   useEffect(() => {
     if (!estimate) return
@@ -81,6 +85,7 @@ export default function ProposalTab({ bid, editable }: Props) {
 
   const cur = estimate?.currency_code || bid.projects?.currency_code || 'BRL'
   const totals = useMemo(() => totalsOf(items, estimate?.pricing_lines || []), [items, estimate?.pricing_lines])
+  const selling = useMemo(() => sellingPrices(items, estimate?.pricing_lines || []), [items, estimate?.pricing_lines])
 
   async function exportPdf() {
     if (!estimate || !draft) return
@@ -104,6 +109,7 @@ export default function ProposalTab({ bid, editable }: Props) {
           colItem: L('colItem'), colQty: L('colQty'), colUnit: L('colUnit'), colUnitPrice: L('colUnitPrice'), colTotal: L('colTotal'),
           unitPriceNote: L('unitPriceNote'), direct: L('direct'), markup: L('markup'), total: L('total'), inclusions: L('inclusions'),
           exclusions: L('exclusions'), paymentTerms: L('paymentTerms'), notes: L('notes'), accepted: L('accepted'),
+          allowances: L('allowances'), allowancesNote: L('allowancesNote'), alternates: L('alternates'), alternatesNote: L('alternatesNote'), alternate: L('alternate'),
         },
         company: {
           name: company?.name || '', legalName: company?.legal_name || null, taxId: company?.tax_id || null, logoUrl: company?.logo_url || null,
@@ -121,10 +127,12 @@ export default function ProposalTab({ bid, editable }: Props) {
         exclusions: lines(draft.exclusions),
         paymentTerms: draft.paymentTerms.trim(),
         notes: draft.notes.trim(),
-        items: draft.showItems ? items.map(it => {
+        allowances: items.filter(i => i.kind === 'allowance').map(i => ({ description: i.description, amount: formatMoney(selling.get(i.id) || 0, cur, numberFormat) })),
+        alternates: items.filter(i => i.kind === 'alternate').map(i => ({ description: i.description, amount: formatMoney(selling.get(i.id) || 0, cur, numberFormat) })),
+        items: draft.showItems ? inPrice(items).map(it => {
           const unitPrice = it.material_unit_cost * factor.material + (it.labor_unit_cost + it.equipment_unit_cost + it.subcontract_unit_cost) * factor.services
           return {
-            description: it.description, qty: formatQty(it.quantity, numberFormat), unit: it.unit,
+            description: it.kind === 'allowance' ? `${it.description} (${t('estimate.kind.allowance')})` : it.description, qty: formatQty(it.quantity, numberFormat), unit: it.unit,
             unitPrice: formatMoney(unitPrice, cur, numberFormat), total: formatMoney(it.quantity * unitPrice, cur, numberFormat),
           }
         }) : null,
@@ -152,11 +160,26 @@ export default function ProposalTab({ bid, editable }: Props) {
 
   if (!estimate || !draft) return <div style={ui.muted}>{error || t('loading')}</div>
 
+  const kindFor = { inclusions: 'inclusion', exclusions: 'exclusion', notes: 'condition' } as const
+  const picker = (k: 'inclusions' | 'exclusions' | 'notes') => {
+    const options = clauses.filter(c => c.kind === kindFor[k])
+    if (!canEdit || options.length === 0) return null
+    return (
+      <select aria-label={t('clauses.insert')} value="" onChange={e => {
+        const c = options.find(x => x.id === e.target.value)
+        if (c) void save({ ...draft, [k]: appendClause(draft[k], c.body) })
+      }} style={{ ...ui.input, height: 30, fontSize: 12, marginTop: 4 }}>
+        <option value="">{t('clauses.insert')}</option>
+        {options.map(c => <option key={c.id} value={c.id}>{c.body.length > 90 ? `${c.body.slice(0, 90)}…` : c.body}</option>)}
+      </select>
+    )
+  }
   const text = (k: 'scope' | 'inclusions' | 'exclusions' | 'paymentTerms' | 'notes', rows: number) => (
     <label style={ui.label}>{t(`proposal.${k}`)}
-      <textarea key={`${estimate.id}-${k}`} rows={rows} defaultValue={draft[k]} disabled={!canEdit} placeholder={t(`proposal.${k}Hint`)}
+      <textarea key={`${estimate.id}-${k}-${draft[k].length}`} rows={rows} defaultValue={draft[k]} disabled={!canEdit} placeholder={t(`proposal.${k}Hint`)}
         onBlur={e => { if (e.target.value !== draft[k]) void save({ ...draft, [k]: e.target.value }) }}
         style={{ ...ui.input, height: 'auto', padding: 10, fontFamily: 'inherit', lineHeight: 1.45, resize: 'vertical' }} />
+      {(k === 'inclusions' || k === 'exclusions' || k === 'notes') && picker(k)}
     </label>
   )
 

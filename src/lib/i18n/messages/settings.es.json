@@ -396,5 +396,9 @@
   "plan.authority": "Quién habilita",
   "plan.authorityValue": "Operador de la plataforma RitsuFlow",
   "plan.chainTitle": "Cadena de gobierno.",
-  "plan.chainText": "Plan y uso → Acceso a espacios → Usuarios → Acceso a proyectos → Roles y permisos. Cada nivel nunca puede superar al anterior."
+  "plan.chainText": "Plan y uso → Acceso a espacios → Usuarios → Acceso a proyectos → Roles y permisos. Cada nivel nunca puede superar al anterior.",
+  "users.workspace.commercial": "Commercial",
+  "users.commercialEditor": "Editor de Commercial",
+  "users.commercialEditorHint": "Edita precios, mano de obra, plantillas de margen y cláusulas, y crea y gestiona todas las licitaciones de la empresa (incluido su levantamiento en RitsuScope), sea cual sea el rol. Los proyectos contratados mantienen su acceso normal.",
+  "users.commercialEditorBadge": "Editor de Commercial"
 }
