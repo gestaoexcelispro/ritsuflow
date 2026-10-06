@@ -7,8 +7,10 @@ import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
 import { BID_COLUMNS, BID_STATUSES, ESTIMATE_SUMMARY_COLUMNS, OPEN_STATUSES, latestByProject, type BidRow, type BidStatus, type EstimateSummary } from '@/lib/commercial/bids'
 import { formatDate, formatMoney } from '@/lib/commercial/format'
-import { useCommercialAccess } from './license'
+import { NEW_BID_EVENT, useCommercialAccess } from './license'
 import NewBidDialog from './NewBidDialog'
+import BidsCalendar from './BidsCalendar'
+import BidsInsights from './BidsInsights'
 import { statusStyle, ui } from './ui'
 
 type Filter = 'open' | 'all' | BidStatus
@@ -23,6 +25,7 @@ export default function BidsPage() {
   const [bids, setBids] = useState<BidRow[]>([])
   const [estimates, setEstimates] = useState<Map<string, EstimateSummary>>(new Map())
   const [filter, setFilter] = useState<Filter>('open')
+  const [view, setView] = useState<'list' | 'calendar' | 'insights'>('list')
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -41,6 +44,14 @@ export default function BidsPage() {
   }, [t])
 
   useEffect(() => { void load() }, [load])
+
+  // "New bid" lives in the header's tab bar; from another Commercial page it arrives as #new.
+  useEffect(() => {
+    const open = () => { if (licensed) setCreating(true) }
+    if (window.location.hash === '#new') { open(); window.history.replaceState(null, '', window.location.pathname) }
+    window.addEventListener(NEW_BID_EVENT, open)
+    return () => window.removeEventListener(NEW_BID_EVENT, open)
+  }, [licensed])
 
   const stats = useMemo(() => {
     const now = Date.now()
@@ -80,15 +91,6 @@ export default function BidsPage() {
 
   return (
     <section style={ui.page}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16 }}>
-        <header style={{ ...ui.header, flex: '1 1 320px' }}>
-          <div style={ui.eyebrow}>{t('bids.eyebrow')}</div>
-          <h1 style={ui.title}>{t('bids.title')}</h1>
-          <p style={ui.subtitle}>{t('bids.subtitle')}</p>
-        </header>
-        {licensed && <button type="button" onClick={() => setCreating(true)} style={{ ...ui.button, height: 44, padding: '0 18px', fontSize: 14 }}>{t('bids.new')}</button>}
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         {tile(t('bids.stat.open'), stats.open)}
         {tile(t('bids.stat.submitted'), stats.submitted)}
@@ -96,6 +98,16 @@ export default function BidsPage() {
         {tile(t('bids.stat.dueSoon'), stats.dueSoon, stats.dueSoon > 0)}
       </div>
 
+      <div role="tablist" aria-label={t('bids.views')} style={{ ...ui.tabs, alignSelf: 'flex-start' }}>
+        {(['list', 'calendar', 'insights'] as const).map(v => (
+          <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} style={view === v ? ui.tabOn : ui.tab}>{t(`bids.view.${v}`)}</button>
+        ))}
+      </div>
+
+      {view === 'calendar' && !loading && <BidsCalendar bids={bids} />}
+      {view === 'insights' && !loading && <BidsInsights bids={bids} estimates={estimates} />}
+
+      {view === 'list' && <>
       <div style={ui.toolbar}>
         <div role="tablist" aria-label={t('bids.filter')} style={ui.tabs}>
           {(['open', 'all', ...BID_STATUSES] as Filter[]).map(f => (
@@ -151,6 +163,7 @@ export default function BidsPage() {
           </table>
         </div>
       )}
+      </>}
       {creating && <NewBidDialog onClose={() => setCreating(false)} />}
     </section>
   )

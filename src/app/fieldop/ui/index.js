@@ -56,6 +56,13 @@ const MODULES = {
       ]
     },
   },
+  commercial: {
+    nameKey: 'nav.commercialModule', taglineKey: 'nav.commercialTagline', home: '/commercial',
+    tabs: () => [
+      { key: 'bids', icon: 'portfolio', href: '/commercial', labelKey: 'nav.commercialBids' },
+      { key: 'library', icon: 'package', href: '/commercial/library', labelKey: 'nav.commercialLibrary' },
+    ],
+  },
   settings: {
     nameKey: 'nav.settingsModule', taglineKey: 'nav.settingsTagline', home: '/settings',
     tabs: () => [

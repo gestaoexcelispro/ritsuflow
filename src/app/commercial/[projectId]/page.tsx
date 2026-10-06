@@ -13,8 +13,9 @@ import { statusStyle, ui } from '../ui'
 import EstimateTab from './EstimateTab'
 import ProposalTab from './ProposalTab'
 import ConvertDialog from './ConvertDialog'
+import AbcTab from './AbcTab'
 
-type Tab = 'estimate' | 'takeoff' | 'proposal' | 'revisions'
+type Tab = 'estimate' | 'takeoff' | 'proposal' | 'abc' | 'revisions'
 type Counts = { sheets: number; items: number; elements: number }
 
 /** One bid: its status, the takeoff in RitsuScope, the estimate, the proposal and the revisions. */
@@ -81,7 +82,7 @@ export default function BidWorkspace() {
     bid.status === 'submitted' ? [{ status: 'won', label: t('bid.markWon'), primary: true }, { status: 'lost', label: t('bid.markLost') }, { status: 'draft', label: t('bid.reopen') }] :
     [{ status: 'draft', label: t('bid.reopen') }]
 
-  const tabs: Tab[] = ['estimate', 'takeoff', 'proposal', 'revisions']
+  const tabs: Tab[] = ['estimate', 'takeoff', 'proposal', 'abc', 'revisions']
 
   return (
     <>
@@ -136,6 +137,7 @@ export default function BidWorkspace() {
         )}
 
         {tab === 'estimate' && <EstimateTab projectId={projectId} country={p?.country_code || 'BR'} editable={licensed && !converted} onChanged={() => void load()} />}
+        {tab === 'abc' && <AbcTab projectId={projectId} bidNumber={bid.bid_number} />}
         {tab === 'proposal' && <ProposalTab bid={bid} editable={licensed && !converted} />}
 
         {tab === 'revisions' && (

@@ -99,5 +99,9 @@
   "nav.settingsWorkspaces": "Workspace access",
   "nav.settingsWorkPackages": "Work packages",
   "nav.settingsLocalization": "Language & units",
-  "nav.settingsLicense": "Plan & usage"
+  "nav.settingsLicense": "Plan & usage",
+  "nav.commercialModule": "Commercial",
+  "nav.commercialTagline": "Price takeoffs, send proposals and win work.",
+  "nav.commercialBids": "Bids",
+  "nav.commercialLibrary": "Library"
 }
