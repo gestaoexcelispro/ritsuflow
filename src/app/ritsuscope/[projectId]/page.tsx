@@ -52,6 +52,7 @@ import { originOf, pdfBuildingItems, sheetToModel, type SheetOrigin } from '@/li
 import Icon from './icons'
 import LevelsPanel from './LevelsPanel'
 import LevelProperties from './LevelProperties'
+import LevelsBulkEdit from './LevelsBulkEdit'
 import GenerateLevelsDialog from './GenerateLevelsDialog'
 import CopyToLevelsDialog from './CopyToLevelsDialog'
 import DeleteFromLevelsDialog from './DeleteFromLevelsDialog'
@@ -104,6 +105,8 @@ export default function TakeoffWorkspacePage() {
   /** Building levels (pavimentos) and the one being edited in the right sidebar. */
   const [levels, setLevels] = useState<LevelRow[]>([])
   const [editingLevelId, setEditingLevelId] = useState<string | null>(null)
+  /** Levels ticked in the levels panel, to edit or delete together. */
+  const [checkedLevelIds, setCheckedLevelIds] = useState<Set<string>>(new Set())
   const [generateOpen, setGenerateOpen] = useState(false)
   /** Sheet whose takeoff is being copied to other levels. */
   const [copyFromId, setCopyFromId] = useState<string | null>(null)
@@ -325,10 +328,11 @@ export default function TakeoffWorkspacePage() {
     if (!selectedElementId) return
     setEditingLayerId(null)
     setEditingLevelId(null)
+    setCheckedLevelIds(new Set())
     setOpeningEditor(null)
     setRightTab('props')
   }, [selectedElementId])
-  useEffect(() => { if (editingLayerId || openingEditor) setEditingLevelId(null) }, [editingLayerId, openingEditor])
+  useEffect(() => { if (editingLayerId || openingEditor) { setEditingLevelId(null); setCheckedLevelIds(new Set()) } }, [editingLayerId, openingEditor])
 
   async function deleteSource(source: SourceRow) {
     const count = elements.filter(e => e.source_id === source.id).length
@@ -661,7 +665,24 @@ export default function TakeoffWorkspacePage() {
   const selectedWallType = selectedLayerRow?.wall_type_id ? wallTypes.find(w => w.id === selectedLayerRow.wall_type_id) || null : null
 
   const editingLevel = levels.find(l => l.id === editingLevelId) || null
+  const checkedLevels = levels.filter(l => checkedLevelIds.has(l.id))
+  function checkLevels(ids: string[], checked: boolean) {
+    setCheckedLevelIds(prev => {
+      const next = new Set(prev)
+      for (const id of ids) { if (checked) next.add(id); else next.delete(id) }
+      return next
+    })
+    if (checked) {
+      setEditingLayerId(null)
+      setOpeningEditor(null)
+      setSelectedElementId(null)
+      setEditingLevelId(null)
+      setRightTab('props')
+      setRightOpen(true)
+    }
+  }
   function editLevel(id: string) {
+    setCheckedLevelIds(new Set())
     setEditingLayerId(null)
     setOpeningEditor(null)
     setSelectedElementId(null)
@@ -692,7 +713,14 @@ export default function TakeoffWorkspacePage() {
     editLevel(data.id)
   }
 
-  const properties = editingLevel ? (
+  const properties = checkedLevels.length ? (
+    <LevelsBulkEdit
+      levels={checkedLevels}
+      sources={sources}
+      onChanged={async message => { await load(); if (message) setStatus(message) }}
+      onClose={() => setCheckedLevelIds(new Set())}
+    />
+  ) : editingLevel ? (
     <LevelProperties
       key={editingLevel.id}
       level={editingLevel}
@@ -1239,6 +1267,8 @@ export default function TakeoffWorkspacePage() {
       hiddenBranches={hiddenBranches}
       onToggleBranch={toggleBranch}
       onSyncFloors={() => void syncFloors()}
+      checkedLevels={checkedLevelIds}
+      onCheckLevels={checkLevels}
     />
   )
   const levelsPanel = levelsPanelFor(true)
