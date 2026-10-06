@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../../lib/supabase';
+import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
 
 // ============================================================
 // MASTER PLAN - SHARED WORK PACKAGE CATALOG INTEGRATION
@@ -1794,9 +1795,8 @@ export default function MasterPlanPage() {
       const projects = data || [];
       setProjects(projects);
 
-      // If the user opened a project card, restore that project directly
-      // from the URL while keeping the sidebar route unchanged.
-      const projectIdFromUrl = new URLSearchParams(window.location.search).get('projectId');
+      // Open the project chosen in the URL or last selected in PreCon.
+      const projectIdFromUrl = readPreconProjectId();
       if (projectIdFromUrl && projects.some((project) => project.id === projectIdFromUrl)) {
         setSelectedProjectId(projectIdFromUrl);
       }
@@ -4656,7 +4656,7 @@ ${
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <select
                 value={selectedProjectId}
-                onChange={(e) => { const projectId = e.target.value; setSelectedProjectId(projectId); if (projectId) window.history.replaceState({}, '', `/dashboard/planning/master-plan?projectId=${projectId}`); }}
+                onChange={(e) => { const projectId = e.target.value; setSelectedProjectId(projectId); rememberPreconProjectId(projectId); }}
                 style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e0', minWidth: '300px', fontSize: '0.9rem', outline: 'none' }}
               >
                 <option value="">{t.selectProject}</option>

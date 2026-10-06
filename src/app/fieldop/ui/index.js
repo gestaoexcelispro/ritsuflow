@@ -39,6 +39,21 @@ const MODULES = {
       ] : []),
     ],
   },
+  precon: {
+    nameKey: 'nav.precon', taglineKey: 'nav.preconTagline', home: '/dashboard',
+    // The selected project travels with every tab (?projectId=…); `soon` tabs are shown but not linked.
+    tabs: (projectId) => {
+      const withProject = (href) => (projectId ? `${href}?projectId=${projectId}` : href)
+      return [
+        { key: 'overview', icon: 'grid', href: '/dashboard', labelKey: 'nav.preconOverview' },
+        { key: 'masterPlan', icon: 'masterPlan', href: withProject('/dashboard/planning/master-plan'), labelKey: 'nav.preconMasterPlan' },
+        { key: 'lookahead', icon: 'lookahead', href: withProject('/dashboard/planning/lookahead'), labelKey: 'nav.preconLookahead' },
+        { key: 'constraints', icon: 'constraint', href: withProject('/dashboard/projects/constraints'), labelKey: 'nav.preconConstraints' },
+        { key: 'weekly', icon: 'weekly', href: withProject('/dashboard/planning/weekly-planning'), labelKey: 'nav.preconWeekly' },
+        { key: 'reports', icon: 'chart', labelKey: 'nav.preconReports', soon: true },
+      ]
+    },
+  },
   settings: {
     nameKey: 'nav.settingsModule', taglineKey: 'nav.settingsTagline', home: '/settings',
     tabs: () => [
@@ -80,7 +95,7 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
 
   const switches = <>
     <Link href="/workspaces" className={ui.appBtn}><Icon name="back" size={16} />{t('nav.workspaces')}</Link>
-    <Link href="/dashboard" className={cx(ui.appBtn, ui.appBtnPre)}>{t('nav.precon')}</Link>
+    {module !== 'precon' && <Link href="/dashboard" className={cx(ui.appBtn, ui.appBtnPre)}>{t('nav.precon')}</Link>}
     {module !== 'projects' && <Link href="/projects" className={cx(ui.appBtn, ui.appBtnPrj)}>{t('nav.projectsModule')}</Link>}
     {module !== 'fieldop' && <Link href="/fieldop" className={cx(ui.appBtn, ui.appBtnPrj)}>FieldOp</Link>}
   </>
@@ -89,7 +104,7 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
     <div className={ui.who}><strong>{user.name || t('user.fallbackName')}</strong><span>{user.role ? t(`role.${user.role}`) : ''}</span></div>
     <LanguageSelector compact dark />
   </div>
-  const defaultAction = module === 'settings' ? null : module === 'projects'
+  const defaultAction = module === 'settings' || module === 'precon' ? null : module === 'projects'
     ? <Link className={ui.btnPrimary} href="/projects/new"><Icon name="plus" size={18} />{t('nav.newProject')}</Link>
     : <Link className={ui.btnPrimary} href={projectId ? `/fieldop/reports/daily/new?projectId=${projectId}` : '/fieldop/reports/daily/new'}><Icon name="plus" size={18} />{t('nav.newReport')}</Link>
   const mainAction = action === undefined ? defaultAction : action
@@ -109,9 +124,11 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
     </header>
     <nav className={ui.tabbar} aria-label={moduleName}>
       <div className={ui.tabbarInner}>
-        {config.tabs(projectId).map(({ key, icon, href, labelKey }) => <Link key={key} href={href} className={cx(ui.mtab, active === key && ui.mtabOn)} aria-current={active === key ? 'page' : undefined}>
-          <Icon name={icon} size={18} />{t(labelKey || `nav.${key}`)}
-        </Link>)}
+        {config.tabs(projectId).map(({ key, icon, href, labelKey, soon }) => soon
+          ? <span key={key} className={cx(ui.mtab, ui.mtabSoon)} aria-disabled="true"><Icon name={icon} size={18} />{t(labelKey || `nav.${key}`)}<Badge>{t('nav.soon')}</Badge></span>
+          : <Link key={key} href={href} className={cx(ui.mtab, active === key && ui.mtabOn)} aria-current={active === key ? 'page' : undefined}>
+            <Icon name={icon} size={18} />{t(labelKey || `nav.${key}`)}
+          </Link>)}
         {mainAction && <div className={ui.tabbarAction}>{mainAction}</div>}
       </div>
     </nav>

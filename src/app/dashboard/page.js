@@ -1,529 +1,109 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '../../lib/supabase/server'
+import { createClient } from '../../lib/supabase/client'
+import { useT } from '../../lib/i18n/useT'
+import { useLanguage } from '../../lib/i18n/LanguageProvider'
+import { Badge, Empty, Icon, Notice, Stat, Stats, ui } from '../fieldop/ui'
 import styles from './overview.module.css'
 
-const planningCycle = [
-  {
-    number: '01',
-    title: 'Master Plan',
-    description:
-      'Define locations, production sequence, milestones, and long-term flow.',
-    href: '/dashboard/planning/master-plan',
-  },
-  {
-    number: '02',
-    title: 'Lookahead Planning',
-    description:
-      'Prepare upcoming work and remove constraints before execution.',
-    href: '/dashboard/planning/lookahead',
-  },
-  {
-    number: '03',
-    title: 'Weekly Planning',
-    description:
-      'Convert ready work into reliable field commitments.',
-    href: '/dashboard/planning/weekly-planning',
-  },
-]
+const supabase = createClient()
 
-function formatProjectDetail({
-  activeProjects,
-  planningProjects,
-  totalProjects,
-  hasError,
-}) {
-  if (hasError) {
-    return 'Unable to load project data'
-  }
+const PROJECT_TONE = { active: 'ok', planning: 'info', on_hold: 'warn' }
+const OPEN_CONSTRAINT = ['open', 'in_progress']
+const RECENT_WEEKS = 4
 
-  if (activeProjects > 0) {
-    return activeProjects === 1
-      ? '1 project currently active'
-      : `${activeProjects} projects currently active`
-  }
+const countBy = (rows, key = 'project_id') => rows.reduce((map, row) => map.set(row[key], (map.get(row[key]) || 0) + 1), new Map())
 
-  if (planningProjects > 0) {
-    return planningProjects === 1
-      ? '1 project currently in planning'
-      : `${planningProjects} projects currently in planning`
-  }
+export default function PreconOverviewPage() {
+  const t = useT('precon')
+  const { numberFormat } = useLanguage()
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
 
-  if (totalProjects > 0) {
-    return totalProjects === 1
-      ? '1 project configured'
-      : `${totalProjects} projects configured`
-  }
-
-  return 'No projects configured'
-}
-
-function formatLocationDetail({
-  locations,
-  hasError,
-}) {
-  if (hasError) {
-    return 'Unable to load location data'
-  }
-
-  if (locations === 1) {
-    return '1 production location configured'
-  }
-
-  if (locations > 1) {
-    return `${locations} production locations configured`
-  }
-
-  return 'No locations configured'
-}
-
-function getReadinessStatus({
-  complete,
-  completeLabel = 'Complete',
-  pendingLabel = 'Not configured',
-}) {
-  if (complete) {
-    return {
-      status: completeLabel,
-      statusClass: styles.statusComplete,
+  useEffect(() => {
+    let alive = true
+    async function load() {
+      const [projects, scenarios, lookaheads, constraints, weeks] = await Promise.all([
+        supabase.from('projects').select('id, project_id, code, name, status').neq('status', 'archived').order('name'),
+        supabase.from('master_plan_scenarios').select('project_id, is_baseline'),
+        supabase.from('lookahead_plans').select('project_id'),
+        supabase.from('constraints').select('project_id, blocking').in('status', OPEN_CONSTRAINT),
+        supabase.from('weekly_plan_performance').select('project_id, week_start_date, ppc_percent').eq('ppc_is_final', true).order('week_start_date', { ascending: false }),
+      ])
+      if (!alive) return
+      const failed = [projects, scenarios, lookaheads, constraints, weeks].find((result) => result.error)
+      if (failed) setError(failed.error.message)
+      setData({
+        projects: projects.data || [],
+        scenarios: scenarios.data || [],
+        lookaheads: lookaheads.data || [],
+        constraints: constraints.data || [],
+        weeks: (weeks.data || []).filter((week) => week.ppc_percent != null),
+      })
     }
-  }
+    load()
+    return () => { alive = false }
+  }, [])
 
-  return {
-    status: pendingLabel,
-    statusClass: styles.statusPlanned,
-  }
+  const percent = useMemo(() => new Intl.NumberFormat(numberFormat, { style: 'percent', maximumFractionDigits: 0 }), [numberFormat])
+  const ppcText = (value) => (value == null ? '—' : percent.format(Number(value) / 100))
+
+  const summary = useMemo(() => {
+    if (!data) return null
+    const recent = data.weeks.slice(0, RECENT_WEEKS)
+    const lastPpc = new Map()
+    data.weeks.forEach((week) => { if (!lastPpc.has(week.project_id)) lastPpc.set(week.project_id, week.ppc_percent) })
+    return {
+      active: data.projects.filter((project) => project.status === 'active').length,
+      baselines: new Set(data.scenarios.filter((s) => s.is_baseline).map((s) => s.project_id)),
+      scenarios: countBy(data.scenarios),
+      lookaheads: countBy(data.lookaheads),
+      constraints: countBy(data.constraints),
+      blocking: data.constraints.filter((c) => c.blocking).length,
+      ppc: recent.length ? recent.reduce((sum, week) => sum + Number(week.ppc_percent), 0) / recent.length : null,
+      lastPpc,
+    }
+  }, [data])
+
+  if (!data) return <p className={styles.loading}>{t('overview.loading')}</p>
+
+  return <>
+    {error && <Notice>{t('overview.loadError', { message: error })}</Notice>}
+    <Stats>
+      <Stat label={t('overview.statProjects')} value={data.projects.length} hint={t('overview.statProjectsHint', { count: summary.active })} />
+      <Stat label={t('overview.statScenarios')} value={data.scenarios.length} hint={t('overview.statScenariosHint', { count: summary.baselines.size })} />
+      <Stat label={t('overview.statConstraints')} value={data.constraints.length} hint={t('overview.statConstraintsHint', { count: summary.blocking })} tone={summary.blocking ? 'warn' : undefined} />
+      <Stat label={t('overview.statPpc')} value={ppcText(summary.ppc)} hint={t('overview.statPpcHint', { count: RECENT_WEEKS })} />
+    </Stats>
+
+    {!data.projects.length
+      ? <Empty title={t('overview.empty')} text={t('overview.emptyText')} action={<Link className={ui.btnPrimary} href="/projects/new"><Icon name="plus" size={18} />{t('overview.newProject')}</Link>} />
+      : <div className={`${ui.panel} ${ui.tableWrap}`}><table className={`${ui.table} ${ui.phoneCards}`}>
+        <thead><tr>
+          <th>{t('overview.colProject')}</th><th>{t('overview.colStatus')}</th><th>{t('overview.colMasterPlan')}</th>
+          <th>{t('overview.colLookahead')}</th><th>{t('overview.colConstraints')}</th><th>{t('overview.colPpc')}</th><th />
+        </tr></thead>
+        <tbody>{data.projects.map((project) => {
+          const scenarios = summary.scenarios.get(project.id) || 0
+          const open = summary.constraints.get(project.id) || 0
+          const code = project.code || project.project_id
+          return <tr key={project.id}>
+            <td data-label=""><div className={styles.project}><strong>{project.name}</strong>{code && <small>{code}</small>}</div></td>
+            <td data-label={t('overview.colStatus')}><Badge tone={PROJECT_TONE[project.status]}>{t(`status.${project.status || 'planning'}`)}</Badge></td>
+            <td data-label={t('overview.colMasterPlan')}><span className={styles.cell}>
+              {scenarios ? scenarios : <span className={styles.muted}>{t('overview.notStarted')}</span>}
+              {summary.baselines.has(project.id) && <Badge tone="ok">{t('overview.baseline')}</Badge>}
+            </span></td>
+            <td data-label={t('overview.colLookahead')}>{summary.lookaheads.get(project.id) || <span className={styles.muted}>—</span>}</td>
+            <td data-label={t('overview.colConstraints')}>{open ? <Badge tone="warn">{open}</Badge> : <span className={styles.muted}>0</span>}</td>
+            <td data-label={t('overview.colPpc')}>{ppcText(summary.lastPpc.get(project.id))}</td>
+            <td data-label=""><div className={styles.rowAction}>
+              <Link className={`${ui.btn} ${ui.small}`} href={`/dashboard/planning/master-plan?projectId=${project.id}`}>{t('overview.open')}<Icon name="right" size={16} /></Link>
+            </div></td>
+          </tr>
+        })}</tbody>
+      </table></div>}
+  </>
 }
-
-export default async function DashboardHome() {
-  const supabase = await createClient()
-
-  const [
-    activeProjectsResult,
-    planningProjectsResult,
-    totalProjectsResult,
-    locationsResult,
-    scopeItemsResult,
-  ] = await Promise.all([
-    supabase
-      .from('projects')
-      .select('id', {
-        count: 'exact',
-        head: true,
-      })
-      .eq('status', 'active'),
-
-    supabase
-      .from('projects')
-      .select('id', {
-        count: 'exact',
-        head: true,
-      })
-      .eq('status', 'planning'),
-
-    supabase
-      .from('projects')
-      .select('id', {
-        count: 'exact',
-        head: true,
-      })
-      .neq('status', 'archived'),
-
-    supabase
-      .from('locations')
-      .select('id', {
-        count: 'exact',
-        head: true,
-      }),
-
-    supabase
-      .from('scope_items')
-      .select('id', {
-        count: 'exact',
-        head: true,
-      }),
-  ])
-
-  const projectQueryFailed = Boolean(
-    activeProjectsResult.error ||
-      planningProjectsResult.error ||
-      totalProjectsResult.error
-  )
-
-  const locationQueryFailed = Boolean(
-    locationsResult.error
-  )
-
-  const scopeQueryFailed = Boolean(
-    scopeItemsResult.error
-  )
-
-  if (
-    projectQueryFailed ||
-    locationQueryFailed ||
-    scopeQueryFailed
-  ) {
-    console.error(
-      'RitsuFlow dashboard data query failed.',
-      {
-        activeProjects:
-          activeProjectsResult.error,
-        planningProjects:
-          planningProjectsResult.error,
-        totalProjects:
-          totalProjectsResult.error,
-        locations:
-          locationsResult.error,
-        scopeItems:
-          scopeItemsResult.error,
-      }
-    )
-  }
-
-  const activeProjects =
-    activeProjectsResult.count ?? 0
-
-  const planningProjects =
-    planningProjectsResult.count ?? 0
-
-  const totalProjects =
-    totalProjectsResult.count ?? 0
-
-  const locations =
-    locationsResult.count ?? 0
-
-  const scopeItems =
-    scopeItemsResult.count ?? 0
-
-  const metrics = [
-    {
-      label: 'Active projects',
-      value: projectQueryFailed
-        ? '—'
-        : String(activeProjects),
-
-      detail: formatProjectDetail({
-        activeProjects,
-        planningProjects,
-        totalProjects,
-        hasError: projectQueryFailed,
-      }),
-
-      icon: 'PR',
-    },
-    {
-      label: 'Locations',
-      value: locationQueryFailed
-        ? '—'
-        : String(locations),
-
-      detail: formatLocationDetail({
-        locations,
-        hasError: locationQueryFailed,
-      }),
-
-      icon: 'LB',
-    },
-    {
-      label: 'Open constraints',
-      value: '—',
-      detail: 'Constraint module coming next',
-      icon: 'CM',
-    },
-    {
-      label: 'Plan reliability',
-      value: '—',
-      detail: 'Weekly planning module coming next',
-      icon: 'PPC',
-    },
-  ]
-
-  const projectReadiness = getReadinessStatus({
-    complete:
-      !projectQueryFailed &&
-      totalProjects > 0,
-  })
-
-  const locationReadiness =
-    getReadinessStatus({
-      complete:
-        !locationQueryFailed &&
-        locations > 0,
-    })
-
-  const scopeReadiness = scopeQueryFailed
-    ? {
-        status: 'Unable to verify',
-        statusClass: styles.statusPlanned,
-      }
-    : scopeItems > 0
-      ? {
-          status: 'Foundation ready',
-          statusClass:
-            styles.statusComplete,
-        }
-      : {
-          status: 'In preparation',
-          statusClass:
-            styles.statusProgress,
-        }
-
-  const readinessItems = [
-    {
-      icon: '✓',
-      name: 'Secure authentication',
-      status: 'Complete',
-      statusClass: styles.statusComplete,
-    },
-    {
-      icon: '01',
-      name: 'Project structure',
-      status: projectReadiness.status,
-      statusClass:
-        projectReadiness.statusClass,
-    },
-    {
-      icon: '02',
-      name: 'Location breakdown structure',
-      status: locationReadiness.status,
-      statusClass:
-        locationReadiness.statusClass,
-    },
-    {
-      icon: '03',
-      name: 'Planning workspace',
-      status: scopeReadiness.status,
-      statusClass:
-        scopeReadiness.statusClass,
-    },
-  ]
-
-  return (
-    <div className={styles.container}>
-      <section className={styles.heading}>
-        <div className={styles.headingContent}>
-          <p className={styles.eyebrow}>
-            Production planning workspace
-          </p>
-
-          <h2 className={styles.title}>
-            Production Overview
-          </h2>
-
-          <p className={styles.description}>
-            Connect projects, locations, planning
-            horizons, constraints, and production
-            performance in one operational view.
-          </p>
-        </div>
-
-        <div
-          className={styles.developmentBadge}
-        >
-          <span
-            className={styles.developmentDot}
-          />
-
-          Private development
-        </div>
-      </section>
-
-      <section
-        className={styles.metricsGrid}
-        aria-label="Production metrics"
-      >
-        {metrics.map((metric) => (
-          <article
-            className={styles.metricCard}
-            key={metric.label}
-          >
-            <div
-              className={styles.metricHeader}
-            >
-              <span
-                className={styles.metricLabel}
-              >
-                {metric.label}
-              </span>
-
-              <span
-                className={styles.metricIcon}
-              >
-                {metric.icon}
-              </span>
-            </div>
-
-            <p
-              className={styles.metricValue}
-            >
-              {metric.value}
-            </p>
-
-            <p
-              className={styles.metricDetail}
-            >
-              {metric.detail}
-            </p>
-          </article>
-        ))}
-      </section>
-
-      <section className={styles.section}>
-        <div
-          className={styles.sectionHeading}
-        >
-          <div>
-            <h3
-              className={styles.sectionTitle}
-            >
-              Planning cycle
-            </h3>
-
-            <p
-              className={
-                styles.sectionDescription
-              }
-            >
-              Move from strategic planning to
-              reliable production control.
-            </p>
-          </div>
-        </div>
-
-        <div className={styles.cycleGrid}>
-          {planningCycle.map((step) => (
-            <Link
-              href={step.href}
-              className={styles.cycleCard}
-              key={step.number}
-            >
-              <span
-                className={styles.cycleNumber}
-              >
-                {step.number}
-              </span>
-
-              <h4
-                className={styles.cycleTitle}
-              >
-                {step.title}
-              </h4>
-
-              <p
-                className={
-                  styles.cycleDescription
-                }
-              >
-                {step.description}
-              </p>
-
-              <span
-                className={styles.cycleArrow}
-                aria-hidden="true"
-              >
-                →
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className={styles.lowerGrid}>
-        <article className={styles.panel}>
-          <h3 className={styles.panelTitle}>
-            Project readiness
-          </h3>
-
-          <p
-            className={
-              styles.panelDescription
-            }
-          >
-            Complete the project foundation
-            before activating the planning
-            cycle.
-          </p>
-
-          <div
-            className={styles.progressList}
-          >
-            {readinessItems.map((item) => (
-              <div
-                className={
-                  styles.progressItem
-                }
-                key={item.name}
-              >
-                <div
-                  className={
-                    styles.progressIdentity
-                  }
-                >
-                  <span
-                    className={
-                      styles.progressIcon
-                    }
-                  >
-                    {item.icon}
-                  </span>
-
-                  <span
-                    className={
-                      styles.progressName
-                    }
-                  >
-                    {item.name}
-                  </span>
-                </div>
-
-                <span
-                  className={
-                    item.statusClass
-                  }
-                >
-                  {item.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article
-          className={`${styles.panel} ${styles.startPanel}`}
-        >
-          <div>
-            <h3
-              className={styles.panelTitle}
-            >
-              Start with the project structure.
-            </h3>
-
-            <p
-              className={
-                styles.panelDescription
-              }
-            >
-              Register the project, define its
-              production locations, and prepare
-              the foundation for location-based
-              planning.
-            </p>
-          </div>
-
-          <Link
-            href="/projects/new"
-            className={
-              styles.primaryButton
-            }
-          >
-            Configure project
-          </Link>
-        </article>
-      </section>
-    </div>
-  )
-}
-
-
-
-
-
