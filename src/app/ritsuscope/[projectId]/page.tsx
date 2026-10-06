@@ -1,9 +1,9 @@
 'use client'
 
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { AppBar } from '../../fieldop/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
@@ -1414,11 +1414,13 @@ export default function TakeoffWorkspacePage() {
   )
 
   const workspace = (
-    <div style={{ position: 'fixed', inset: 0, background: '#f4f7f8', display: 'grid', gridTemplateRows: `56px ${toolbarShown ? '50px ' : ''}minmax(0,1fr) 30px` }} onClick={() => setMenu(null)}>
-      {/* HEADER */}
+    <div style={{ position: 'fixed', inset: 0, background: '#f4f7f8', display: 'grid', gridTemplateRows: `56px 56px ${toolbarShown ? '50px ' : ''}minmax(0,1fr) 30px` }} onClick={() => setMenu(null)}>
+      {/* RITSUFLOW HEADER (standard, compact) */}
+      <AppBar module="ritsuscope" compact standalone title={project.name} />
+      {/* EDITOR TOOLS */}
       <header style={headerBar}>
-        <Link href="/ritsuscope" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: '#173441' }} title={t('workspace.back')}>
-          <Image src="/ritsu-logo.png" alt="RitsuFlow" width={92} height={46} priority style={{ display: 'block', height: 46, width: 'auto' }} />
+        <Link href="/ritsuscope" style={{ display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: '#0b7f75', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }} title={t('workspace.back')}>
+          ← {t('workspace.back')}
         </Link>
         <span style={vRule} />
         <strong style={{ fontSize: 15, color: '#173441', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260 }}>{project.name}</strong>

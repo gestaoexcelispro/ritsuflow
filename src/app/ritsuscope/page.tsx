@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import RitsuScopeShell from './RitsuScopeShell'
+import { AppShell } from '../fieldop/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { ui } from './ui'
@@ -58,7 +58,7 @@ export default function TakeoffListPage() {
   })), [projects, sources, layers, elements])
 
   return (
-    <RitsuScopeShell>
+    <AppShell module="ritsuscope" active="projects" action={false} bare>
       <section style={ui.page}>
         <header style={ui.header}>
           <div style={ui.eyebrow}>{t('list.eyebrow')}</div>
@@ -97,6 +97,6 @@ export default function TakeoffListPage() {
           </div>
         )}
       </section>
-    </RitsuScopeShell>
+    </AppShell>
   )
 }

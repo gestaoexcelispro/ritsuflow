@@ -103,5 +103,17 @@
   "nav.commercialModule": "Comercial",
   "nav.commercialTagline": "Valore cómputos, envíe propuestas y gane obras.",
   "nav.commercialBids": "Licitaciones",
-  "nav.commercialLibrary": "Biblioteca"
+  "nav.commercialLibrary": "Biblioteca",
+  "nav.ritsuscopeModule": "RitsuScope",
+  "nav.ritsuscopeTagline": "Planos, ubicaciones y cantidades",
+  "nav.ritsuscopeProjects": "Proyectos",
+  "nav.adminModule": "Ritsu Admin",
+  "nav.adminTagline": "Propietario de la plataforma",
+  "nav.adminMap": "Mapa de la plataforma",
+  "nav.adminReports": "Informes",
+  "nav.adminOrganizations": "Organizaciones",
+  "nav.adminLicenses": "Licencias y pruebas",
+  "nav.adminStatus": "Estado del sistema",
+  "nav.adminAudit": "Registro de auditoría",
+  "nav.workspacesTagline": "Elige tu espacio de trabajo"
 }

@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../lib/supabase/client'
 import styles from './workspaces.module.css'
-import LanguageSelector from '../../components/LanguageSelector'
+import { AppBar } from '../fieldop/ui'
 import { useT } from '../../lib/i18n/useT'
 
 const supabase = createClient()
@@ -46,8 +46,6 @@ function WorkspaceCard({ workspace, t }) {
 export default function WorkspacesPage(){
   const t=useT('workspaces')
   const router=useRouter()
-  const [leaving,setLeaving]=useState(false)
-  async function logout(){setLeaving(true);const{error}=await supabase.auth.signOut();if(error){setLeaving(false);return}router.replace('/login');router.refresh()}
   const [checking,setChecking]=useState(true)
   const [isPlatformOwner,setIsPlatformOwner]=useState(false)
 
@@ -80,22 +78,13 @@ export default function WorkspacesPage(){
   // RitsuScope is open to every company (sheets, levels, zoning); its takeoff tools are licensed inside it.
   const visibleWorkspaces=isPlatformOwner?[...workspaces,adminWorkspace]:workspaces
 
-  return <main className={styles.page}>
+  return <><AppBar module="workspaces" standalone /><main className={styles.page}>
     <div className={styles.glow}/>
-    <header className={styles.header}>
-      <Image src="/logo-white.png" alt="RitsuFlow" width={220} height={82} priority className={styles.logo}/>
-      <div className={styles.headerRight}>
-        <div className={styles.platformLabel}>{t('platformLabel')}</div>
-        <div className={styles.langWrap}><LanguageSelector dark /></div>
-        <Link className={styles.settingsButton} href="/settings" aria-label={t('settingsAria')} title={t('settings')}><span aria-hidden="true">⚙</span><span>{t('settings')}</span></Link>
-        <button type="button" className={styles.settingsButton} onClick={logout} disabled={leaving} title={t('logout')} aria-label={t('logout')} style={{ font: 'inherit', cursor: 'pointer' }}><span aria-hidden="true">⏻</span><span>{t('logout')}</span></button>
-      </div>
-    </header>
     <section className={styles.hero}><div className={styles.kicker}>{t('kicker')}</div><h1>{t('title')}</h1></section>
     <section className={`${styles.grid} ${isPlatformOwner ? styles.gridOwner : styles.gridStandard}`} aria-label={t('gridAria')}>
       {visibleWorkspaces.map(workspace=><WorkspaceCard key={workspace.key} workspace={workspace} t={t}/>)}
     </section>
     <div aria-hidden="true"/>
     <footer className={styles.footer}><span>{t('footer1')}</span><i/><span>{t('footer2')}</span><i/><span>{t('footer3')}</span><strong>{t('footerTagline')}</strong></footer>
-  </main>
+  </main></>
 }

@@ -35,6 +35,8 @@
   -webkit-font-smoothing: antialiased;
 }
 .root *, .root *::before, .root *::after { box-sizing: border-box; }
+/* AppBar used on its own (full-screen tools, the Workspaces hub): the header's look without the page frame. */
+.barRoot { min-height: 0; background: transparent; }
 .root :focus-visible { outline: none; box-shadow: var(--fo-focus); border-radius: 4px; }
 .root input, .root select, .root textarea, .root button { font-family: inherit; }
 .root :where(input, select, textarea) { color: inherit; }
@@ -46,7 +48,7 @@
 .appLogo img { width: 132px; height: auto; display: block; }
 .appDivider { width: 1px; align-self: stretch; margin: 14px 0; background: rgba(255, 255, 255, 0.14); flex: none; }
 .moduleName { display: grid; gap: 2px; min-width: 0; }
-.moduleName strong { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.moduleName strong { font-size: 22px; font-weight: 700; line-height: 1.1; white-space: nowrap; }
 .moduleName span { color: #a9c2cc; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .appActions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .appBtn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.22); color: #fff; text-decoration: none; font-size: 15px; font-weight: 600; white-space: nowrap; background: transparent; }
@@ -54,6 +56,19 @@
 .appBtnPre { background: #1f6fd1; border-color: #1f6fd1; }
 .appBtnPre:hover { background: #1a62bb; }
 .appBtnPrj { background: #0f8a7c; border-color: #0f8a7c; }
+.appBtnScope { background: #0e6f8a; border-color: #0e6f8a; }
+.appBtnCom { background: #a3134f; border-color: #a3134f; }
+.appBtn:hover { filter: brightness(1.08); }
+.iconBtn { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; color: #fff; text-decoration: none; }
+.iconBtn:hover { background: rgba(255, 255, 255, 0.07); }
+/* Compact bar for full-screen tools (RitsuScope editor): one 56 px row. */
+.appbarCompact .appbarInner { height: 56px; padding: 0 16px; gap: 14px; }
+.appbarCompact .appLogo img { width: 104px; height: auto; }
+.appbarCompact .appDivider { margin: 10px 0; }
+.appbarCompact .moduleName strong { font-size: 17px; }
+.appbarCompact .moduleName span { font-size: 12px; }
+.appbarCompact .appBtn { min-height: 36px; padding: 0 12px; font-size: 14px; }
+.appbarCompact .avatar, .appbarCompact .logoutBtn, .appbarCompact .iconBtn { width: 34px; height: 34px; }
 .appBtnPrj:hover { background: #0c7a6d; }
 .appUser { display: flex; align-items: center; gap: 10px; padding-left: 8px; flex: none; }
 .avatar { width: 40px; height: 40px; flex: none; border-radius: 50%; background: #d9f3ef; color: var(--fo-teal-ink); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
@@ -172,10 +187,16 @@
 .segmentOn:hover { color: #fff; }
 
 /* ---------- Responsive ---------- */
-@media (max-width: 1180px) {
-  .moduleName span, .who { display: none; }
+/* Six workspace buttons fit with the user's name only on wide screens. */
+@media (max-width: 1560px) {
+  .who { display: none; }
 }
-@media (max-width: 960px) {
+.appbarCompact .who { display: none; }
+@media (max-width: 1360px) {
+  .moduleName span, .who { display: none; }
+  .appBtn { padding: 0 12px; font-size: 14px; }
+}
+@media (max-width: 1180px) {
   .appActions, .appUser { display: none; }
   .menuBtn { display: grid; }
   .menuPanel { display: grid; gap: 8px; position: absolute; right: 12px; top: calc(100% + 6px); width: min(320px, calc(100vw - 24px)); padding: 12px; border-radius: 12px; background: var(--fo-navy); box-shadow: 0 18px 40px rgba(6, 38, 55, 0.35); }
@@ -184,6 +205,8 @@
   .menuPanel .logoutBtn { display: inline-flex; gap: 8px; width: 100%; height: 44px; margin-top: 4px; justify-content: flex-start; padding: 0 14px; }
   .menuPanel .logoutBtn span { display: inline; }
   .menuPanel .who { display: block; }
+}
+@media (max-width: 960px) {
   .content { padding: 18px 20px 40px; }
 }
 @media (max-width: 760px) {
