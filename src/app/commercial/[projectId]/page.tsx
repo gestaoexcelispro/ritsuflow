@@ -86,7 +86,7 @@ export default function BidWorkspace() {
   return (
     <>
       <div style={{ background: '#fff', borderBottom: '1px solid #dfe7ea' }}>
-        <div style={{ maxWidth: 1240, margin: '0 auto', padding: '16px 20px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ padding: '16px 32px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Link href="/commercial" style={{ fontSize: 13, fontWeight: 700, color: '#0b7f75', textDecoration: 'none' }}>← {t('bid.back')}</Link>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
             <div style={{ flex: '1 1 360px', display: 'flex', flexDirection: 'column', gap: 4 }}>

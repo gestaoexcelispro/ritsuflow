@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react'
 // Shared inline styles for Commercial, in the RitsuFlow management palette
 // (teal #0b7f75 for actions, ink #173441, borders #dfe7ea), matching RitsuScope.
 export const ui = {
-  page: { display: 'flex', flexDirection: 'column', gap: 16, padding: '24px 20px 40px', maxWidth: 1240, margin: '0 auto', minWidth: 0 },
+  page: { display: 'flex', flexDirection: 'column', gap: 16, padding: '24px 32px 40px', width: '100%', boxSizing: 'border-box', minWidth: 0 },
   header: { display: 'flex', flexDirection: 'column', gap: 4 },
   eyebrow: { fontSize: 11, fontWeight: 800, letterSpacing: '.12em', color: '#0b7f75' },
   title: { margin: 0, fontSize: 24, color: '#173441' },

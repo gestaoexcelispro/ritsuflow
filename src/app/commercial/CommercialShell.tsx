@@ -19,7 +19,7 @@ export default function CommercialShell({ children }: { children: ReactNode }) {
   )
   return (
     <div style={{ minHeight: '100vh', background: '#f4f7f8' }}>
-      <header style={{ minHeight: 56, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, padding: '4px 20px', background: '#fff', borderBottom: '1px solid #dfe7ea' }}>
+      <header style={{ minHeight: 56, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, padding: '4px 32px', background: '#fff', borderBottom: '1px solid #dfe7ea' }}>
         <Link href="/workspaces" title="RitsuFlow" style={{ display: 'flex', alignItems: 'center' }}>
           <Image src="/ritsu-logo.png" alt="RitsuFlow" width={92} height={46} priority style={{ display: 'block', height: 46, width: 'auto' }} />
         </Link>

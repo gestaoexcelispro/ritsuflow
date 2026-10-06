@@ -39,7 +39,7 @@ export default function CommercialLayout({ children }: { children: ReactNode }) 
     <CommercialAccessProvider value={access}>
       <CommercialShell>
         {!access.licensed && (
-          <div role="status" style={{ maxWidth: 1240, margin: '16px auto 0', padding: '10px 14px', borderRadius: 8, background: '#fff4e8', color: '#6e3610', fontSize: 13 }}>
+          <div role="status" style={{ margin: '16px 32px 0', padding: '10px 14px', borderRadius: 8, background: '#fff4e8', color: '#6e3610', fontSize: 13 }}>
             {t('license.readOnly')}
           </div>
         )}
