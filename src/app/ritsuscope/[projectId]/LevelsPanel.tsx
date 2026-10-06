@@ -27,10 +27,14 @@ type Props = {
   onToggleBranch?: (id: string) => void
   /** Adds a "Floor" location to the Location Breakdown for every level without one. */
   onSyncFloors?: () => void
+  /** Levels ticked for editing or deleting several at once (a typical group is ticked by its master). */
+  checkedLevels?: ReadonlySet<string>
+  /** Ticks or unticks the given levels. */
+  onCheckLevels?: (ids: string[], checked: boolean) => void
 }
 
 /** Left sidebar: the building, roof to ground, with each level's sheets under it. */
-export default function LevelsPanel({ levels, sources, selectedSourceId, editingLevelId, onSelectSource, onEditLevel, onAddLevel, onGenerate, onAssign, onCopyLevel, renderItems, hiddenBranches, onToggleBranch, onSyncFloors }: Props) {
+export default function LevelsPanel({ levels, sources, selectedSourceId, editingLevelId, onSelectSource, onEditLevel, onAddLevel, onGenerate, onAssign, onCopyLevel, renderItems, hiddenBranches, onToggleBranch, onSyncFloors, checkedLevels, onCheckLevels }: Props) {
   const t = useTakeoffT()
   const { formatNumber } = useLanguage()
   const [open, setOpen] = useState(true)
@@ -43,6 +47,10 @@ export default function LevelsPanel({ levels, sources, selectedSourceId, editing
   const masters = groups.map(g => g.master)
   const known = new Set(levels.map(l => l.id))
   const unassigned = sources.filter(s => !s.level_id || !known.has(s.level_id) || followerIds.has(s.level_id))
+  const checking = !!onCheckLevels && !!checkedLevels
+  const groupIds = (g: (typeof groups)[number]) => [g.master.id, ...g.followers.map(f => f.id)]
+  const allIds = groups.flatMap(groupIds)
+  const checkedCount = checking ? allIds.filter(id => checkedLevels!.has(id)).length : 0
   const elev = (v: number) => `${v >= 0 ? '+' : ''}${formatNumber(v, 2)}`
 
   const sheetRow = (s: SourceRow) => {
@@ -94,6 +102,16 @@ export default function LevelsPanel({ levels, sources, selectedSourceId, editing
   return (
     <div style={{ borderBottom: '1px solid #e5ecee' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '12px 14px 8px' }}>
+        {checking && levels.length > 0 && (
+          <input
+            type="checkbox"
+            title={t(checkedCount === allIds.length ? 'levelBulk.selectNone' : 'levelBulk.selectAll')}
+            checked={checkedCount > 0 && checkedCount === allIds.length}
+            ref={el => { if (el) el.indeterminate = checkedCount > 0 && checkedCount < allIds.length }}
+            onChange={() => onCheckLevels!(allIds, checkedCount !== allIds.length)}
+            style={checkBox}
+          />
+        )}
         <button type="button" onClick={() => setOpen(o => !o)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 11, fontWeight: 800, color: '#173441', textTransform: 'uppercase', letterSpacing: '.06em' }}>
           <span style={{ display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }}><Icon name="chevron" size={12} /></span>
           {t('level.title')}
@@ -117,8 +135,17 @@ export default function LevelsPanel({ levels, sources, selectedSourceId, editing
             const editing = editingLevelId === g.master.id || g.followers.some(f => f.id === editingLevelId)
             return (
               <div key={g.master.id} style={{ marginBottom: 2 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, borderRadius: 6, background: editing ? '#f1f7f8' : 'transparent', opacity: hiddenBranches?.has(g.master.id) ? 0.5 : 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, borderRadius: 6, background: editing || checkedLevels?.has(g.master.id) ? '#f1f7f8' : 'transparent', opacity: hiddenBranches?.has(g.master.id) ? 0.5 : 1 }}>
                   {tree && branchControls(g.master.id)}
+                  {checking && (
+                    <input
+                      type="checkbox"
+                      title={t('levelBulk.check')}
+                      checked={checkedLevels!.has(g.master.id)}
+                      onChange={e => onCheckLevels!(groupIds(g), e.target.checked)}
+                      style={checkBox}
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={() => (sheets[0] ? onSelectSource(sheets[0].id) : onEditLevel(g.master.id))}
@@ -155,4 +182,5 @@ export default function LevelsPanel({ levels, sources, selectedSourceId, editing
 }
 
 const smallBtn = (primary: boolean) => ({ display: 'flex', alignItems: 'center', gap: 4, height: 24, padding: '0 8px', border: '1px solid ' + (primary ? '#109d91' : '#d3dfe2'), borderRadius: 6, background: primary ? '#109d91' : '#fff', color: primary ? '#fff' : '#294955', fontSize: 10, fontWeight: 800, cursor: 'pointer' }) as const
+const checkBox = { width: 13, height: 13, margin: '0 2px', accentColor: '#109d91', cursor: 'pointer', flex: 'none' } as const
 const iconBtn = { width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, borderRadius: 5, background: 'transparent', color: '#536d78', cursor: 'pointer' } as const
