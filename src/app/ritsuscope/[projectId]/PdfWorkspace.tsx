@@ -431,12 +431,7 @@ export default function PdfWorkspace(props: Props) {
     const found = detectRooms(vectors, texts, { ptPerM: scale, gapM: gap > 0 ? gap : 1, layers: allowed, region: box, boundaries: limits })
       // Skip rooms that already have a location drawn over them.
       .filter(r => !sheetZones.some(z => pointInPolygon(centroid(r.pts), z.points)))
-    const used = zones.map(z => z.name)
-    for (const r of found) {
-      if (!r.name) r.name = nextZoneName(used, t('zone.defaultWord'))
-      else if (used.includes(r.name)) r.name = nextZoneName(used, r.name)
-      used.push(r.name)
-    }
+    // r.name keeps the label printed on the sheet (or ''); the final names follow "Draw as" (namedRoomSugs).
     setRoomSugs(found)
     setRoomPicked(new Set(found.map(r => r.id)))
     clearTransient()
@@ -456,18 +451,35 @@ export default function PdfWorkspace(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detectRoomsRequest])
 
+  /**
+   * Detected outlines named for the kind chosen in "Draw as", like a hand-drawn location:
+   * rooms keep the label printed on the sheet (or "Room n"); blocks, zones and areas are "Area 1", "Area 2"…
+   */
+  const namedRoomSugs = useMemo(() => {
+    if (!roomSugs) return null
+    const macro = isMacroKind(zoneKind)
+    const word = macro ? t(`zone.kind.${zoneKind}` as TakeoffMessageKey) : t('zone.defaultWord')
+    const used = zones.map(z => z.name)
+    return roomSugs.map(r => {
+      const label = macro ? '' : r.name
+      const name = !label ? nextZoneName(used, word) : used.includes(label) ? nextZoneName(used, label) : label
+      used.push(name)
+      return { ...r, name }
+    })
+  }, [roomSugs, zoneKind, zones, t])
+
   async function acceptRooms() {
-    const chosen = (roomSugs || []).filter(r => roomPicked.has(r.id))
+    const chosen = (namedRoomSugs || []).filter(r => roomPicked.has(r.id))
     if (!chosen.length) return
     setSaving(true)
     const { data, error: e } = await createClient().from('takeoff_zones').insert(chosen.map((r, i) => ({
       project_id: projectId,
       source_id: source.id,
       name: r.name,
-      color: LAYER_PALETTE[(zones.length + i) % LAYER_PALETTE.length],
+      color: isMacroKind(zoneKind) ? KIND_COLOR[zoneKind] : LAYER_PALETTE[(zones.length + i) % LAYER_PALETTE.length],
       points: r.pts,
       sort_order: (zones.length + i + 1) * 10,
-      zone_kind: 'room',
+      zone_kind: zoneKind,
     }))).select('id')
     setSaving(false)
     if (e) { setError(t('workspace.error', { message: e.message })); return }
@@ -977,8 +989,8 @@ export default function PdfWorkspace(props: Props) {
       const a = scale > 0 ? polyArea(z.points) / (scale * scale) : 0
       return { id: z.id, name: z.name, color: z.color, pts: z.points, label: scale > 0 ? `${formatNumber(a, 2)} m²` : '', selected: z.id === selectedZoneId, macro: isMacroKind(z.zone_kind) }
     }),
-    ...(roomSugs || []).map(r => ({ id: `sug:${r.id}`, name: r.name, color: '#16A34A', pts: r.pts, label: `${formatNumber(r.areaM2, 2)} m²`, selected: false, suggested: true, on: roomPicked.has(r.id) })),
-  ], [sheetZones, scale, formatNumber, selectedZoneId, roomSugs, roomPicked])
+    ...(namedRoomSugs || []).map(r => ({ id: `sug:${r.id}`, name: r.name, color: '#16A34A', pts: r.pts, label: `${formatNumber(r.areaM2, 2)} m²`, selected: false, suggested: true, on: roomPicked.has(r.id) })),
+  ], [sheetZones, scale, formatNumber, selectedZoneId, namedRoomSugs, roomPicked])
 
   const isTool = (m: Mode, s?: Shape) => mode === m && (!s || shape === s)
   const tools: { key: string; icon: string; label: TakeoffMessageKey; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
@@ -1403,7 +1415,7 @@ export default function PdfWorkspace(props: Props) {
         {zoning && roomSugs && !roomPicking && (
           <div style={{ ...card, pointerEvents: 'auto', gap: 8, borderColor: '#bcd7f5', background: '#f8fbff', maxWidth: 560 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <strong style={{ fontSize: 12, color: '#173441', flex: 1 }}>{t('rooms.title')}</strong>
+              <strong style={{ fontSize: 12, color: '#173441', flex: 1 }}>{t('rooms.titleAs', { kind: t(`zone.kind.${zoneKind}` as TakeoffMessageKey) })}</strong>
               <span style={ui.small}>{t('detect.beta')}</span>
               <button type="button" style={smallBtn(false)} onClick={() => { setRoomSugs(null); setRoomPicked(new Set()) }}>×</button>
             </div>
@@ -1413,7 +1425,7 @@ export default function PdfWorkspace(props: Props) {
               <>
                 <div style={ui.small}>{t('rooms.found', { count: roomSugs.length, area: formatNumber(roomSugs.reduce((s2, r) => s2 + r.areaM2, 0), 2) })} {t('rooms.reviewHint')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 120, overflow: 'auto' }}>
-                  {roomSugs.map(r => (
+                  {(namedRoomSugs || []).map(r => (
                     <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: '1px solid #dfe7ea', borderRadius: 12, fontSize: 11, background: roomPicked.has(r.id) ? '#ecfdf3' : '#fff' }}>
                       <input type="checkbox" checked={roomPicked.has(r.id)} onChange={() => setRoomPicked(prev => { const next = new Set(prev); if (next.has(r.id)) next.delete(r.id); else next.add(r.id); return next })} />
                       {r.name} · {formatNumber(r.areaM2, 2)} m²
