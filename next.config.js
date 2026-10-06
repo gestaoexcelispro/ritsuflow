@@ -30,6 +30,7 @@ const nextConfig = {
       ['/dashboard/planning/pre-planning', '/dashboard/planning/master-plan'],
       ['/planning/pre-planning', '/dashboard/planning/master-plan'],
       ['/dashboard/projects/constraints', '/dashboard/planning/constraints'],
+      ['/dashboard/platform/organizations', '/ritsu-admin/organizations'],
     ]
 
     return moved.map(([source, destination]) => ({ source, destination, permanent: false }))

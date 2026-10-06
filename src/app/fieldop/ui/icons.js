@@ -23,6 +23,7 @@ const paths = {
   constraint: 'M12 3.5 2.5 20h19zM12 10v4.5M12 17.5v.01',
   weekly: 'M4 5h16v15H4zM8 3v4M16 3v4M4 10h16M7.5 14h1M11.5 14h1M15.5 14h1M7.5 17h1M11.5 17h1',
   chart: 'M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6',
+  logout: 'M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3M10 16l-4-4 4-4M6 12h10',
   package: 'M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9',
 }
 

@@ -4,9 +4,10 @@ import {
 
 import {
   createClient,
-} from '../../../../lib/supabase/server'
+} from '../../../lib/supabase/server'
 
 import AddOrganizationClient from './AddOrganizationClient'
+import AdminConsole from '../AdminConsole'
 
 
 function formatDate(value) {
@@ -164,7 +165,7 @@ export default async function PlatformOrganizationsPage() {
     platformAuthorizationError ||
     !isPlatformOwner
   ) {
-    redirect('/dashboard')
+    redirect('/workspaces')
   }
 
 
@@ -198,6 +199,7 @@ export default async function PlatformOrganizationsPage() {
 
 
   return (
+    <AdminConsole view="organizations">
     <div
       style={{
         display:
@@ -220,7 +222,7 @@ export default async function PlatformOrganizationsPage() {
             'flex',
 
           justifyContent:
-            'space-between',
+            'flex-end',
 
           alignItems:
             'flex-start',
@@ -232,41 +234,6 @@ export default async function PlatformOrganizationsPage() {
             'wrap',
         }}
       >
-        <div>
-          <h2
-            style={{
-              margin:
-                '0 0 8px',
-
-              color:
-                '#0f172a',
-
-              fontSize:
-                '1.6rem',
-            }}
-          >
-            Organizations
-          </h2>
-
-          <p
-            style={{
-              margin: 0,
-
-              color:
-                '#64748b',
-
-              lineHeight:
-                1.5,
-            }}
-          >
-            Manage RitsuFlow
-            customer organizations,
-            licenses and enabled
-            modules.
-          </p>
-        </div>
-
-
         <AddOrganizationClient />
       </section>
 
@@ -824,5 +791,6 @@ export default async function PlatformOrganizationsPage() {
           </section>
         )}
     </div>
+    </AdminConsole>
   )
 }

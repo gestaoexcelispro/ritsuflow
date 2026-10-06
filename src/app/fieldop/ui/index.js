@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import LanguageSelector from '../../../components/LanguageSelector'
 import { useT } from '../../../lib/i18n/useT'
 import { useFieldOpUser } from '../FieldOpChrome'
+import { createClient } from '../../../lib/supabase/client'
 import Icon from './icons'
 import { plex } from './font'
 import ui from './ui.module.css'
@@ -14,6 +15,7 @@ import ui from './ui.module.css'
 export { ui, Icon }
 
 const cx = (...names) => names.filter(Boolean).join(' ')
+const supabase = createClient()
 
 // Tabs of each RitsuFlow module that uses this shell. `labelKey` is in the fieldop namespace.
 const MODULES = {
@@ -93,6 +95,15 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
   const [open, setOpen] = useState(false)
   useEffect(() => { setOpen(false) }, [pathname])
   const config = MODULES[module]
+  const router = useRouter()
+  const [leaving, setLeaving] = useState(false)
+  async function logout() {
+    setLeaving(true)
+    const { error } = await supabase.auth.signOut()
+    if (error) { setLeaving(false); return }
+    router.replace('/login')
+    router.refresh()
+  }
 
   const switches = <>
     <Link href="/workspaces" className={ui.appBtn}><Icon name="back" size={16} />{t('nav.workspaces')}</Link>
@@ -104,6 +115,7 @@ export function AppShell({ module = 'fieldop', active, projectId, action, bare =
     <span className={ui.avatar}>{initials(user.name)}</span>
     <div className={ui.who}><strong>{user.name || t('user.fallbackName')}</strong><span>{user.role ? t(`role.${user.role}`) : ''}</span></div>
     <LanguageSelector compact dark />
+    <button type="button" className={ui.logoutBtn} onClick={logout} disabled={leaving} title={t('nav.logout')} aria-label={t('nav.logout')}><Icon name="logout" size={20} /><span>{t('nav.logout')}</span></button>
   </div>
   const defaultAction = module === 'settings' || module === 'precon' ? null : module === 'projects'
     ? <Link className={ui.btnPrimary} href="/projects/new"><Icon name="plus" size={18} />{t('nav.newProject')}</Link>

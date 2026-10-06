@@ -11,7 +11,7 @@ import styles from './ritsu-admin.module.css'
 
 const supabase = createClient()
 
-export default function AdminConsole({ view = 'map', initialNodeId }) {
+export default function AdminConsole({ view = 'map', initialNodeId, children }) {
   const router = useRouter()
   const [checking, setChecking] = useState(true)
   const [authorizationError, setAuthorizationError] = useState('')
@@ -19,6 +19,14 @@ export default function AdminConsole({ view = 'map', initialNodeId }) {
   const [filter, setFilter] = useState('All')
   const [query, setQuery] = useState('')
   const reports = view === 'reports'
+  const organizations = view === 'organizations'
+  const map = !reports && !organizations
+  const title = reports ? 'Reports' : organizations ? 'Organizations' : 'Platform Map'
+  const subtitle = reports
+    ? 'Architecture coverage, verified dependencies & implementation gaps'
+    : organizations
+      ? 'Customer organizations, licenses and enabled modules'
+      : 'RitsuFlow architecture & system flow'
 
   useEffect(() => {
     let active = true
@@ -55,18 +63,19 @@ export default function AdminConsole({ view = 'map', initialNodeId }) {
         <Link href="/ritsu-admin" className={styles.active}>⚙ Ritsu Admin</Link>
       </nav>
       <nav className={styles.subnav} aria-label="Ritsu Admin">
-        <Link href="/ritsu-admin" className={!reports ? styles.subnavActive : ''} aria-current={!reports ? 'page' : undefined}>Platform Map</Link>
+        <Link href="/ritsu-admin" className={map ? styles.subnavActive : ''} aria-current={map ? 'page' : undefined}>Platform Map</Link>
         <Link href="/ritsu-admin/reports" className={reports ? styles.subnavActive : ''} aria-current={reports ? 'page' : undefined}>Reports</Link>
-        <span>System Status · Coming Soon</span><span>Organizations · Coming Soon</span><span>Feature Flags · Coming Soon</span><span>Audit Log · Coming Soon</span>
+        <Link href="/ritsu-admin/organizations" className={organizations ? styles.subnavActive : ''} aria-current={organizations ? 'page' : undefined}>Organizations</Link>
+        <span>System Status · Coming Soon</span><span>Feature Flags · Coming Soon</span><span>Audit Log · Coming Soon</span>
       </nav>
       <Link href="/workspaces" className={styles.back}>← Workspaces</Link>
     </aside>
     <section className={styles.workspace}>
       <header className={styles.header}>
-        <div><h1>{reports ? 'Reports' : 'Platform Map'}</h1><p>{reports ? 'Architecture coverage, verified dependencies & implementation gaps' : 'RitsuFlow architecture & system flow'}</p></div>
-        <div className={styles.headerActions}><Link href={reports ? '/ritsu-admin' : '/ritsu-admin/reports'}>{reports ? 'Platform Map' : 'Reports'}</Link><span className={styles.ownerBadge}>🔒 Platform Owner</span></div>
+        <div><h1>{title}</h1><p>{subtitle}</p></div>
+        <div className={styles.headerActions}><Link href={map ? '/ritsu-admin/reports' : '/ritsu-admin'}>{map ? 'Reports' : 'Platform Map'}</Link><span className={styles.ownerBadge}>🔒 Platform Owner</span></div>
       </header>
-      {reports ? <PlatformReports /> : <>
+      {organizations ? children : reports ? <PlatformReports /> : <>
         <div className={styles.toolbar}>
           <div className={styles.filters} role="group" aria-label="Inventory node types">{mapFilters.map((item) => <button type="button" key={item} aria-pressed={filter === item} className={filter === item ? styles.selected : ''} onClick={() => setFilter(item)}>{item}</button>)}</div>
           <div className={styles.searchBox}><input type="search" aria-label="Search architecture inventory" placeholder="Search nodes, routes, data..." value={query} onChange={(event) => setQuery(event.target.value)} />{query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search">×</button>}</div>
