@@ -5883,7 +5883,7 @@ export default function LookaheadPage() {
                                       onClick={() => {
 
                                         window.location.href =
-                                          `/dashboard/projects/constraints?projectId=${selectedProjectId}&constraintId=${linkedConstraint.id}`;
+                                          `/dashboard/planning/constraints?projectId=${selectedProjectId}&constraintId=${linkedConstraint.id}`;
 
                                       }}
 

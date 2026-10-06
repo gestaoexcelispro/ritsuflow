@@ -10,6 +10,36 @@ import React, {
 
 import { supabase } from '../../../../lib/supabase';
 import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
+import { useT } from '../../../../lib/i18n/useT';
+import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
+
+
+// ============================================================
+// TRANSLATIONS
+// ============================================================
+// Texts: constraints.* in messages/precon.<language>.json. The page sets the
+// translator on every render, so the helpers and the module-level components
+// below always read the current language. Stored values (statuses,
+// categories, action types) stay in the database as they are.
+const I18N = {
+  translate: (key) => key,
+  language: 'en-US',
+};
+
+const tr = (key, vars) =>
+  I18N.translate(`constraints.${key}`, vars);
+
+const t = new Proxy({}, {
+  get: (_, key) => tr(String(key)),
+});
+
+// Option label read at render time from constraints.<group>.<value>.
+const option = (group, value) => ({
+  value,
+  get label() {
+    return tr(`${group}.${value || 'all'}`);
+  },
+});
 
 
 // ============================================================
@@ -37,261 +67,110 @@ const TERMINAL_CONSTRAINT_STATUSES = [
 
 
 const DRAWER_TABS = [
-  {
-    value: 'details',
-    label: 'Details',
-  },
-  {
-    value: 'forecast',
-    label: 'Forecast',
-  },
-  {
-    value: 'actions',
-    label: 'Action Plan',
-  },
-  {
-    value: 'work',
-    label: 'Affected Work',
-  },
-  {
-    value: 'history',
-    label: 'History',
-  },
+  option('tab', 'details'),
+  option('tab', 'forecast'),
+  option('tab', 'actions'),
+  option('tab', 'work'),
+  option('tab', 'history'),
 ];
 
 
 const STATUS_OPTIONS = [
-  {
-    value: '',
-    label: 'All Statuses',
-  },
-  {
-    value: 'open',
-    label: 'Open',
-  },
-  {
-    value: 'in_progress',
-    label: 'In Progress',
-  },
-  {
-    value: 'waiting',
-    label: 'Waiting',
-  },
-  {
-    value: 'resolved',
-    label: 'Resolved',
-  },
-  {
-    value: 'cleared',
-    label: 'Cleared',
-  },
-  {
-    value: 'cancelled',
-    label: 'Cancelled',
-  },
+  option('statusValue', ''),
+  option('statusValue', 'open'),
+  option('statusValue', 'in_progress'),
+  option('statusValue', 'waiting'),
+  option('statusValue', 'resolved'),
+  option('statusValue', 'cleared'),
+  option('statusValue', 'cancelled'),
 ];
 
 
 const CATEGORY_OPTIONS = [
-  {
-    value: 'projects_information',
-    label: 'Projects / Information',
-  },
-  {
-    value: 'materials',
-    label: 'Materials',
-  },
-  {
-    value: 'labor',
-    label: 'Labor',
-  },
-  {
-    value: 'equipment',
-    label: 'Equipment',
-  },
-  {
-    value: 'space',
-    label: 'Space',
-  },
-  {
-    value: 'predecessor',
-    label: 'Predecessor',
-  },
-  {
-    value: 'external_conditions',
-    label: 'External Conditions',
-  },
+  option('categoryValue', 'projects_information'),
+  option('categoryValue', 'materials'),
+  option('categoryValue', 'labor'),
+  option('categoryValue', 'equipment'),
+  option('categoryValue', 'space'),
+  option('categoryValue', 'predecessor'),
+  option('categoryValue', 'external_conditions'),
 ];
 
 
 const PRIORITY_OPTIONS = [
-  {
-    value: 'low',
-    label: 'Low',
-  },
-  {
-    value: 'normal',
-    label: 'Normal',
-  },
-  {
-    value: 'high',
-    label: 'High',
-  },
-  {
-    value: 'critical',
-    label: 'Critical',
-  },
+  option('priorityValue', 'low'),
+  option('priorityValue', 'normal'),
+  option('priorityValue', 'high'),
+  option('priorityValue', 'critical'),
 ];
 
 
 const IMPACT_OPTIONS = [
-  {
-    value: 'none',
-    label: 'None',
-  },
-  {
-    value: 'low',
-    label: 'Low',
-  },
-  {
-    value: 'moderate',
-    label: 'Moderate',
-  },
-  {
-    value: 'high',
-    label: 'High',
-  },
-  {
-    value: 'critical',
-    label: 'Critical',
-  },
+  option('impactValue', 'none'),
+  option('impactValue', 'low'),
+  option('impactValue', 'moderate'),
+  option('impactValue', 'high'),
+  option('impactValue', 'critical'),
 ];
 
 
 const RESPONSE_APPROACH_OPTIONS = [
-  {
-    value: 'eliminate_cause',
-    label: 'Eliminate Cause',
-  },
-  {
-    value: 'reduce_impact',
-    label: 'Reduce Impact',
-  },
-  {
-    value: 'alternative_solution',
-    label: 'Alternative Solution',
-  },
-  {
-    value: 'transfer_responsibility',
-    label: 'Transfer Responsibility',
-  },
-  {
-    value: 'accept_impact',
-    label: 'Accept Impact',
-  },
-  {
-    value: 'escalate',
-    label: 'Escalate',
-  },
+  option('approachValue', 'eliminate_cause'),
+  option('approachValue', 'reduce_impact'),
+  option('approachValue', 'alternative_solution'),
+  option('approachValue', 'transfer_responsibility'),
+  option('approachValue', 'accept_impact'),
+  option('approachValue', 'escalate'),
 ];
 
 
 const EXPECTED_IMPACT_OPTIONS = [
-  {
-    value: 'protect_required_by',
-    label: 'Protect Required By Date',
-  },
-  {
-    value: 'reduce_delay',
-    label: 'Reduce Schedule Exposure',
-  },
-  {
-    value: 'no_schedule_effect',
-    label: 'No Schedule Effect',
-  },
-  {
-    value: 'other',
-    label: 'Other',
-  },
+  option('expectedValue', 'protect_required_by'),
+  option('expectedValue', 'reduce_delay'),
+  option('expectedValue', 'no_schedule_effect'),
+  option('expectedValue', 'other'),
 ];
 
 
 const EFFECTIVENESS_OPTIONS = [
-  {
-    value: 'effective',
-    label: 'Effective',
-  },
-  {
-    value: 'partially_effective',
-    label: 'Partially Effective',
-  },
-  {
-    value: 'ineffective',
-    label: 'Ineffective',
-  },
+  option('effectivenessValue', 'effective'),
+  option('effectivenessValue', 'partially_effective'),
+  option('effectivenessValue', 'ineffective'),
 ];
 
 
-const CATEGORY_LABELS =
-  Object.fromEntries(
-    CATEGORY_OPTIONS.map(
-      (item) => [
-        item.value,
-        item.label,
-      ]
-    )
-  );
+const CATEGORY_VALUES = new Set(
+  CATEGORY_OPTIONS.map(
+    (item) => item.value
+  )
+);
 
 
-const ACTION_TYPE_LABELS = {
-  created:
-    'Constraint Created',
-
-  assigned:
-    'Assigned',
-
-  responsible_changed:
-    'Responsible Changed',
-
-  action_updated:
-    'Constraint Details Updated',
-
-  status_changed:
-    'Status Changed',
-
-  target_date_changed:
-    'Forecast Updated',
-
-  comment_added:
-    'Comment Added',
-
-  resolved:
-    'Resolution Reported',
-
-  verified:
-    'Resolution Verified',
-
-  cleared:
-    'Constraint Cleared',
-
-  cancelled:
-    'Constraint Cancelled',
-
-  action_plan_added:
-    'Recovery Action Added',
-
-  action_plan_completed:
-    'Recovery Action Completed',
-
-  action_effectiveness_evaluated:
-    'Recovery Effectiveness Evaluated',
-
-  priority_auto_escalated:
-    'Priority Auto-Escalated',
-
-  priority_auto_escalation_removed:
-    'Automatic Critical Escalation Removed',
+// Affected-work types are compared in code; only their display is translated.
+const WORK_TYPE_KEYS = {
+  'Master Plan': 'sourceMasterPlan',
+  Lookahead: 'sourceLookahead',
+  'Lookahead / Koskela': 'sourceKoskela',
 };
+
+const ACTION_TYPES = new Set([
+  'created',
+  'assigned',
+  'responsible_changed',
+  'action_updated',
+  'status_changed',
+  'target_date_changed',
+  'comment_added',
+  'resolved',
+  'verified',
+  'cleared',
+  'cancelled',
+  'action_plan_added',
+  'action_plan_completed',
+  'action_effectiveness_evaluated',
+  'priority_auto_escalated',
+  'priority_auto_escalation_removed',
+]);
 
 
 // ============================================================
@@ -310,8 +189,8 @@ function formatLabel(value) {
     return '—';
   }
 
-  if (CATEGORY_LABELS[value]) {
-    return CATEGORY_LABELS[value];
+  if (CATEGORY_VALUES.has(value)) {
+    return tr(`categoryValue.${value}`);
   }
 
   return String(value)
@@ -343,7 +222,7 @@ function formatDate(value) {
   }
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    I18N.language,
     {
       month: 'short',
       day: '2-digit',
@@ -370,7 +249,7 @@ function formatDateTime(value) {
   }
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    I18N.language,
     {
       month: 'short',
       day: '2-digit',
@@ -406,56 +285,56 @@ function getSourceLabel(
     constraint
       ?.sheet_readiness_assessment_id
   ) {
-    return 'Lookahead / Koskela';
+    return tr('sourceKoskela');
   }
 
   if (
     constraint
       ?.readiness_assessment_id
   ) {
-    return 'Lookahead';
+    return tr('sourceLookahead');
   }
 
   if (
     constraint
       ?.lookahead_work_item_id
   ) {
-    return 'Lookahead';
+    return tr('sourceLookahead');
   }
 
   if (
     constraint
       ?.master_plan_package_id
   ) {
-    return 'Master Plan';
+    return tr('sourceMasterPlan');
   }
 
-  return 'Manual / Project';
+  return tr('sourceManual');
 }
 
 
 function getStatusLabel(status) {
   switch (status) {
     case 'open':
-      return 'Open';
+      return tr('statusValue.open');
 
     case 'in_progress':
-      return 'In Progress';
+      return tr('statusValue.in_progress');
 
     case 'waiting':
-      return 'Waiting';
+      return tr('statusValue.waiting');
 
     case 'resolved':
-      return 'Resolved';
+      return tr('statusValue.resolved');
 
     case 'cleared':
-      return 'Cleared';
+      return tr('statusValue.cleared');
 
     case 'cancelled':
-      return 'Cancelled';
+      return tr('statusValue.cancelled');
 
     case 'completed':
-      return 'Completed';
+      return tr('statusValue.completed');
 
     default:
       return formatLabel(status);
@@ -467,15 +346,12 @@ function getActionTypeLabel(
   actionType
 ) {
   if (!actionType) {
-    return 'History Entry';
+    return tr('actionType.unknown');
   }
 
-  return (
-    ACTION_TYPE_LABELS[
-      actionType
-    ] ||
-    formatLabel(actionType)
-  );
+  return ACTION_TYPES.has(actionType)
+    ? tr(`actionType.${actionType}`)
+    : formatLabel(actionType);
 }
 
 
@@ -649,7 +525,7 @@ function formatResolvedDate(
   }
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    I18N.language,
     {
       month: 'short',
       day: '2-digit',
@@ -785,39 +661,40 @@ function getExposureLabel(
   }
 
   if (days > 0) {
-    return `+${days} day${days === 1 ? '' : 's'}`;
+    return tr(days === 1 ? 'exposureLateOne' : 'exposureLate', { count: days });
   }
 
   if (days === 0) {
-    return 'On required date';
+    return tr('exposureOnDate');
   }
 
-  return `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} early`;
+  const early = Math.abs(days);
+  return tr(early === 1 ? 'exposureEarlyOne' : 'exposureEarly', { count: early });
 }
 
 
 function getOutlookLabel(value) {
   switch (value) {
     case 'cleared':
-      return 'Cleared';
+      return tr('statusValue.cleared');
 
     case 'awaiting_verification':
-      return 'Awaiting Verification';
+      return tr('outlook.awaiting_verification');
 
     case 'awaiting_verification_exposed':
-      return 'Awaiting Verification · Exposed';
+      return tr('outlook.awaiting_verification_exposed');
 
     case 'recovery_possible':
-      return 'Recovery Possible';
+      return tr('outlook.recovery_possible');
 
     case 'schedule_exposed':
-      return 'Schedule Exposed';
+      return tr('outlook.schedule_exposed');
 
     case 'action_plan_active':
-      return 'Action Plan Active';
+      return tr('outlook.action_plan_active');
 
     case 'protected':
-      return 'Protected';
+      return tr('outlook.protected');
 
     default:
       return formatLabel(value);
@@ -969,6 +846,10 @@ function createRecoveryActionForm() {
 // ============================================================
 
 export default function ConstraintLogPage() {
+  const translate = useT('precon');
+  const { language } = useLanguage();
+  I18N.translate = translate;
+  I18N.language = language;
 
   // ==========================================================
   // DATA
@@ -1324,7 +1205,7 @@ export default function ConstraintLogPage() {
 
           setErrorMessage(
             error.message ||
-            'Projects could not be loaded.'
+            t.errProjects
           );
 
         }
@@ -1759,7 +1640,7 @@ export default function ConstraintLogPage() {
 
           setErrorMessage(
             error.message ||
-            'Constraint Log could not be loaded.'
+            t.errLog
           );
 
         } finally {
@@ -1846,7 +1727,7 @@ export default function ConstraintLogPage() {
 
           setHistoryError(
             error.message ||
-            'Action History could not be loaded.'
+            t.errHistory
           );
 
         } finally {
@@ -1943,7 +1824,7 @@ export default function ConstraintLogPage() {
 
           setHistoryError(
             error.message ||
-            'Action Plan could not be loaded.'
+            t.errPlan
           );
 
         } finally {
@@ -2364,7 +2245,7 @@ export default function ConstraintLogPage() {
         .replaceState(
           {},
           '',
-          `/dashboard/projects/constraints?projectId=${projectId}`
+          `/dashboard/planning/constraints?projectId=${projectId}`
         );
 
     } else {
@@ -2373,7 +2254,7 @@ export default function ConstraintLogPage() {
         .replaceState(
           {},
           '',
-          '/dashboard/projects/constraints'
+          '/dashboard/planning/constraints'
         );
 
     }
@@ -2442,7 +2323,7 @@ export default function ConstraintLogPage() {
     ) {
 
       setErrorMessage(
-        'Title, Responsible Party, Required Action and Required By Date are required.'
+        t.errCreateRequired
       );
 
       return;
@@ -2567,7 +2448,7 @@ export default function ConstraintLogPage() {
 
       setErrorMessage(
         error.message ||
-        'Constraint could not be created.'
+        t.errCreate
       );
 
     } finally {
@@ -2797,7 +2678,7 @@ export default function ConstraintLogPage() {
     ) {
 
       setHistoryError(
-        'Responsible Party and Required Action are required.'
+        t.errDetailsRequired
       );
 
       return;
@@ -2910,7 +2791,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Constraint details could not be saved.'
+        t.errDetails
       );
 
     } finally {
@@ -2938,7 +2819,7 @@ export default function ConstraintLogPage() {
     if (!note) {
 
       setHistoryError(
-        'Comment is required.'
+        t.errCommentRequired
       );
 
       return;
@@ -2993,7 +2874,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Comment could not be added.'
+        t.errComment
       );
 
     } finally {
@@ -3021,7 +2902,7 @@ export default function ConstraintLogPage() {
     if (!forecastDate) {
 
       setHistoryError(
-        'New Planned Resolution Date is required.'
+        t.errNewDateRequired
       );
 
       return;
@@ -3031,7 +2912,7 @@ export default function ConstraintLogPage() {
     if (!reason) {
 
       setHistoryError(
-        'Reason for Date Change is required.'
+        t.errDateReasonRequired
       );
 
       return;
@@ -3089,7 +2970,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Forecast could not be updated.'
+        t.errForecast
       );
 
     } finally {
@@ -3125,7 +3006,7 @@ export default function ConstraintLogPage() {
     if (!forecastDate) {
 
       setHistoryError(
-        'New Planned Resolution Date is required.'
+        t.errNewDateRequired
       );
 
       return;
@@ -3135,7 +3016,7 @@ export default function ConstraintLogPage() {
     if (!reason) {
 
       setHistoryError(
-        'Reason for Reopening and Date Change is required.'
+        t.errReopenReasonRequired
       );
 
       return;
@@ -3199,7 +3080,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Constraint could not be reopened.'
+        t.errReopen
       );
 
     } finally {
@@ -3264,7 +3145,7 @@ export default function ConstraintLogPage() {
         if (!note) {
 
           setHistoryError(
-            'Reason for Waiting is required.'
+            t.errWaitingReasonRequired
           );
 
           return;
@@ -3312,7 +3193,7 @@ export default function ConstraintLogPage() {
         if (!note) {
 
           setHistoryError(
-            'Resolution is required.'
+            t.errResolutionRequired
           );
 
           return;
@@ -3344,7 +3225,7 @@ export default function ConstraintLogPage() {
         if (!note) {
 
           setHistoryError(
-            'Verification Note is required.'
+            t.errVerificationRequired
           );
 
           return;
@@ -3373,7 +3254,7 @@ export default function ConstraintLogPage() {
         if (!note) {
 
           setHistoryError(
-            'Cancellation Reason is required.'
+            t.errCancelReasonRequired
           );
 
           return;
@@ -3437,7 +3318,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Constraint status could not be changed.'
+        t.errStatus
       );
 
     } finally {
@@ -3482,7 +3363,7 @@ export default function ConstraintLogPage() {
     if (!title) {
 
       setHistoryError(
-        'Recovery Action is required.'
+        t.errActionRequired
       );
 
       return;
@@ -3492,7 +3373,7 @@ export default function ConstraintLogPage() {
     if (!responsible) {
 
       setHistoryError(
-        'Recovery Action Responsible Party is required.'
+        t.errActionOwnerRequired
       );
 
       return;
@@ -3505,7 +3386,7 @@ export default function ConstraintLogPage() {
     ) {
 
       setHistoryError(
-        'Recovery Action Due Date is required.'
+        t.errActionDueRequired
       );
 
       return;
@@ -3586,7 +3467,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Recovery Action could not be created.'
+        t.errActionCreate
       );
 
     } finally {
@@ -3656,7 +3537,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Recovery Action could not be started.'
+        t.errActionStart
       );
 
     } finally {
@@ -3688,7 +3569,7 @@ export default function ConstraintLogPage() {
     if (!note) {
 
       setHistoryError(
-        'Completion Note is required.'
+        t.errCompletionRequired
       );
 
       return;
@@ -3742,7 +3623,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Recovery Action could not be completed.'
+        t.errActionComplete
       );
 
     } finally {
@@ -3774,7 +3655,7 @@ export default function ConstraintLogPage() {
     if (!note) {
 
       setHistoryError(
-        'Effectiveness Notes are required.'
+        t.errEffectivenessRequired
       );
 
       return;
@@ -3831,7 +3712,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Effectiveness could not be evaluated.'
+        t.errEffectiveness
       );
 
     } finally {
@@ -3863,7 +3744,7 @@ export default function ConstraintLogPage() {
     if (!reason) {
 
       setHistoryError(
-        'Cancellation Reason is required.'
+        t.errCancelReasonRequired
       );
 
       return;
@@ -3917,7 +3798,7 @@ export default function ConstraintLogPage() {
 
       setHistoryError(
         error.message ||
-        'Recovery Action could not be cancelled.'
+        t.errActionCancel
       );
 
     } finally {
@@ -4074,7 +3955,7 @@ export default function ConstraintLogPage() {
                   location:
                     item.location_path ||
                     item.location_name ||
-                    'Unassigned Location',
+                    tr('unassignedLocation'),
 
                   startDate:
                     item
@@ -4122,7 +4003,7 @@ export default function ConstraintLogPage() {
                   location:
                     item.location_path ||
                     item.location_name ||
-                    'Unassigned Location',
+                    tr('unassignedLocation'),
 
                   startDate:
                     item
@@ -4650,22 +4531,22 @@ export default function ConstraintLogPage() {
           ================================================== */}
 
           <SectionCard
-            title="Constraint Overview"
-            subtitle="Current readiness, schedule exposure and resolution status."
+            title={t.overviewTitle}
+            subtitle={t.overviewText}
           >
 
             <div style={summaryGridStyle}>
 
               <SummaryCard
-                label="Active Constraints"
+                label={t.statActive}
                 value={summary.active}
-                description="Still requiring management"
+                description={t.statActiveHint}
               />
 
               <SummaryCard
-                label="High / Critical Impact"
+                label={t.statHighImpact}
                 value={summary.highImpact}
-                description="Potentially significant production effect"
+                description={t.statHighImpactHint}
                 alert={
                   summary.highImpact >
                   0
@@ -4673,15 +4554,15 @@ export default function ConstraintLogPage() {
               />
 
               <SummaryCard
-                label="Resolved"
+                label={t.statResolved}
                 value={summary.resolved}
-                description="Awaiting verification"
+                description={t.statResolvedHint}
               />
 
               <SummaryCard
-                label="Cleared"
+                label={t.statCleared}
                 value={summary.cleared}
-                description="Verified and released"
+                description={t.statClearedHint}
                 positive
               />
 
@@ -4709,11 +4590,11 @@ export default function ConstraintLogPage() {
                   <div>
 
                     <div style={sectionHeadingStyle}>
-                      Constraint Register
+                      {t.registerTitle}
                     </div>
 
                     <div style={sectionSupportingTextStyle}>
-                      Review and manage project constraints.
+                      {t.registerText}
                     </div>
 
                   </div>
@@ -4721,7 +4602,7 @@ export default function ConstraintLogPage() {
 
                   <div style={registerCountStyle}>
                     {filteredConstraints.length}{' '}
-                    shown
+                    {t.shown}
                   </div>
 
                 </div>
@@ -4729,7 +4610,7 @@ export default function ConstraintLogPage() {
 
                 <div style={registerFiltersStyle}>
 
-                  <FilterField label="Status">
+                  <FilterField label={t.status}>
                     <select
                       value={statusFilter}
                       onChange={(
@@ -4760,7 +4641,7 @@ export default function ConstraintLogPage() {
                   </FilterField>
 
 
-                  <FilterField label="Category">
+                  <FilterField label={t.category}>
                     <select
                       value={
                         categoryFilter
@@ -4775,7 +4656,7 @@ export default function ConstraintLogPage() {
                       style={registerFilterInputStyle}
                     >
                       <option value="">
-                        All Categories
+                        {t.allCategories}
                       </option>
 
                       {categoryOptions.map(
@@ -4794,7 +4675,7 @@ export default function ConstraintLogPage() {
                   </FilterField>
 
 
-                  <FilterField label="Priority">
+                  <FilterField label={t.priority}>
                     <select
                       value={
                         priorityFilter
@@ -4810,7 +4691,7 @@ export default function ConstraintLogPage() {
                     >
 
                       <option value="">
-                        All Priorities
+                        {t.allPriorities}
                       </option>
 
                       {PRIORITY_OPTIONS.map(
@@ -4832,7 +4713,7 @@ export default function ConstraintLogPage() {
                   </FilterField>
 
 
-                  <FilterField label="Impact">
+                  <FilterField label={t.impact}>
                     <select
                       value={
                         impactFilter
@@ -4848,7 +4729,7 @@ export default function ConstraintLogPage() {
                     >
 
                       <option value="">
-                        All Impact
+                        {t.allImpacts}
                       </option>
 
                       {IMPACT_OPTIONS.map(
@@ -4870,7 +4751,7 @@ export default function ConstraintLogPage() {
                   </FilterField>
 
 
-                  <FilterField label="Responsible">
+                  <FilterField label={t.responsible}>
                     <select
                       value={
                         responsibleFilter
@@ -4886,7 +4767,7 @@ export default function ConstraintLogPage() {
                     >
 
                       <option value="">
-                        All Responsible
+                        {t.allResponsible}
                       </option>
 
                       {responsibleOptions.map(
@@ -4912,12 +4793,12 @@ export default function ConstraintLogPage() {
 
                 {loading ? (
                   <div style={emptyStyle}>
-                    Loading Constraint Log...
+                    {t.loading}
                   </div>
                 ) : filteredConstraints.length ===
                   0 ? (
                   <div style={emptyStyle}>
-                    No constraints found.
+                    {t.empty}
                   </div>
                 ) : (
                   <table style={tableStyle}>
@@ -5009,7 +4890,7 @@ export default function ConstraintLogPage() {
 
                                   {constraint.blocking && (
                                     <span style={blockingInlineStyle}>
-                                      BLOCKING
+                                      {t.blockingBadge}
                                     </span>
                                   )}
 
@@ -5030,13 +4911,13 @@ export default function ConstraintLogPage() {
                                 <strong>
                                   {affected[0]
                                     ?.packageCode ||
-                                    'Project-level'}
+                                    t.projectLevel}
                                 </strong>
 
                                 <div style={secondaryTextStyle}>
                                   {affected[0]
                                     ?.location ||
-                                    'Project-level'}
+                                    t.projectLevel}
                                 </div>
 
                               </td>
@@ -5152,7 +5033,7 @@ export default function ConstraintLogPage() {
                                     manageButtonStyle
                                   }
                                 >
-                                  Manage
+                                  {t.manage}
                                 </button>
 
                               </td>
@@ -5185,7 +5066,7 @@ export default function ConstraintLogPage() {
                   style={drawerStyle}
                   role="dialog"
                   aria-modal="true"
-                  aria-label="Constraint Management"
+                  aria-label={t.drawerAria}
                 >
 
                 <div style={drawerHeaderStyle}>
@@ -5193,7 +5074,7 @@ export default function ConstraintLogPage() {
                   <div>
 
                     <div style={drawerEyebrowStyle}>
-                      CONSTRAINT MANAGEMENT
+                      {t.drawerEyebrow}
                     </div>
 
 
@@ -5231,7 +5112,7 @@ export default function ConstraintLogPage() {
 
                       <div>
                         <span style={drawerMetaLabelStyle}>
-                          Priority
+                          {t.priority}
                         </span>
 
                         <StatusBadge
@@ -5257,7 +5138,7 @@ export default function ConstraintLogPage() {
 
                       <div>
                         <span style={drawerMetaLabelStyle}>
-                          Impact
+                          {t.impact}
                         </span>
 
                         <StatusBadge
@@ -5281,7 +5162,7 @@ export default function ConstraintLogPage() {
 
                       {managedConstraint.blocking && (
                         <span style={blockingPillStyle}>
-                          BLOCKING
+                          {t.blockingBadge}
                         </span>
                       )}
 
@@ -5308,7 +5189,7 @@ export default function ConstraintLogPage() {
                 <div style={drawerSummaryStyle}>
 
                   <DrawerMetric
-                    label="Planned Resolution"
+                    label={t.plannedResolution}
                     value={
                       formatDate(
                         managedConstraint
@@ -5321,7 +5202,7 @@ export default function ConstraintLogPage() {
 
 
                   <DrawerMetric
-                    label="Actual Resolution"
+                    label={t.actualResolution}
                     value={
                       formatResolvedDate(
                         managedConstraint
@@ -5332,7 +5213,7 @@ export default function ConstraintLogPage() {
 
 
                   <DrawerMetric
-                    label="Recovery Actions"
+                    label={t.recoveryActions}
                     value={
                       managedConstraint
                         .total_recovery_actions ??
@@ -5403,12 +5284,12 @@ export default function ConstraintLogPage() {
                     <>
 
                       <DrawerSection
-                        title="Constraint Details"
-                        subtitle="Operational ownership and required response."
+                        title={t.detailsTitle}
+                        subtitle={t.detailsText}
                       >
 
                         <ModalField
-                          label="Responsible Party"
+                          label={t.responsibleParty}
                         >
                           <input
                             disabled={
@@ -5444,7 +5325,7 @@ export default function ConstraintLogPage() {
 
 
                         <ModalField
-                          label="Priority"
+                          label={t.priority}
                         >
                           <select
                             disabled={
@@ -5497,7 +5378,7 @@ export default function ConstraintLogPage() {
 
 
                         <ModalField
-                          label="Impact"
+                          label={t.impact}
                         >
                           <select
                             disabled={
@@ -5550,7 +5431,7 @@ export default function ConstraintLogPage() {
 
 
                         <ModalField
-                          label="Required Action"
+                          label={t.requiredAction}
                         >
                           <textarea
                             disabled={
@@ -5586,7 +5467,7 @@ export default function ConstraintLogPage() {
 
 
                         <ModalField
-                          label="Description"
+                          label={t.description}
                         >
                           <textarea
                             disabled={
@@ -5652,13 +5533,13 @@ export default function ConstraintLogPage() {
                                 }
                               />
 
-                              Blocking Constraint
+                              {t.blockingConstraint}
 
                             </label>
 
 
                             <ModalField
-                              label="Reason / Comment for Changes"
+                              label={t.changeComment}
                             >
                               <textarea
                                 value={
@@ -5703,8 +5584,8 @@ export default function ConstraintLogPage() {
                                 }
                               >
                                 {savingDetails
-                                  ? 'Saving...'
-                                  : 'Save Details'}
+                                  ? t.saving
+                                  : t.saveDetails}
                               </button>
 
                             </div>
@@ -5716,16 +5597,14 @@ export default function ConstraintLogPage() {
 
 
                       <DrawerSection
-                        title="Status Management"
-                        subtitle={`Current Status: ${getStatusLabel(
-                          managedConstraint.status
-                        )}`}
+                        title={t.statusTitle}
+                        subtitle={tr('currentStatusValue', { status: getStatusLabel(managedConstraint.status) })}
                       >
 
                         <div style={lifecycleFlowStyle}>
 
                           <LifecycleStage
-                            label="Open"
+                            label={t.stageOpen}
                             active={
                               managedConstraint
                                 .status ===
@@ -5741,7 +5620,7 @@ export default function ConstraintLogPage() {
                           </span>
 
                           <LifecycleStage
-                            label="Resolved"
+                            label={t.stageResolved}
                             active={
                               managedConstraint
                                 .status ===
@@ -5754,7 +5633,7 @@ export default function ConstraintLogPage() {
                           </span>
 
                           <LifecycleStage
-                            label="Released"
+                            label={t.stageReleased}
                             active={
                               managedConstraint
                                 .status ===
@@ -5771,7 +5650,7 @@ export default function ConstraintLogPage() {
                               </span>
 
                               <LifecycleStage
-                                label="Waiting"
+                                label={t.stageWaiting}
                                 active
                               />
                             </>
@@ -5790,8 +5669,8 @@ export default function ConstraintLogPage() {
                             'in_progress') && (
                             <>
                               <LifecycleButton
-                                label="Resolve Constraint"
-                                description="Record how the constraint was solved"
+                                label={t.resolve}
+                                description={t.resolveHint}
                                 emphasis
                                 onClick={() =>
                                   toggleManagementPanel(
@@ -5801,8 +5680,8 @@ export default function ConstraintLogPage() {
                               />
 
                               <LifecycleButton
-                                label="Set Waiting"
-                                description="Temporarily blocked"
+                                label={t.setWaiting}
+                                description={t.setWaitingHint}
                                 onClick={() =>
                                   toggleManagementPanel(
                                     'waiting'
@@ -5818,8 +5697,8 @@ export default function ConstraintLogPage() {
                             'waiting' && (
                             <>
                               <LifecycleButton
-                                label="Resume"
-                                description="Continue management"
+                                label={t.resume}
+                                description={t.resumeHint}
                                 onClick={() =>
                                   toggleManagementPanel(
                                     'resume'
@@ -5828,8 +5707,8 @@ export default function ConstraintLogPage() {
                               />
 
                               <LifecycleButton
-                                label="Resolve Constraint"
-                                description="Record how the constraint was solved"
+                                label={t.resolve}
+                                description={t.resolveHint}
                                 emphasis
                                 onClick={() =>
                                   toggleManagementPanel(
@@ -5846,8 +5725,8 @@ export default function ConstraintLogPage() {
                             'resolved' && (
                             <>
                               <LifecycleButton
-                                label="Verify & Release"
-                                description="Confirm the solution and release readiness"
+                                label={t.verify}
+                                description={t.verifyHint}
                                 emphasis
                                 onClick={() =>
                                   toggleManagementPanel(
@@ -5857,8 +5736,8 @@ export default function ConstraintLogPage() {
                               />
 
                               <LifecycleButton
-                                label="Reopen"
-                                description="Problem remains"
+                                label={t.reopen}
+                                description={t.reopenHint}
                                 warning
                                 onClick={() => {
 
@@ -5880,8 +5759,8 @@ export default function ConstraintLogPage() {
                             managedConstraint.status
                           ) && (
                             <LifecycleButton
-                              label="Cancel"
-                              description="No longer applicable"
+                              label={t.cancelConstraintShort}
+                              description={t.cancelHint}
                               danger
                               onClick={() =>
                                 toggleManagementPanel(
@@ -5897,9 +5776,9 @@ export default function ConstraintLogPage() {
                         {activeManagementPanel ===
                           'waiting' && (
                           <LifecycleActionPanel
-                            title="Set Waiting"
-                            description="Explain what is temporarily preventing resolution."
-                            label="Reason for Waiting *"
+                            title={t.setWaiting}
+                            description={t.setWaitingText}
+                            label={t.waitingReason}
                             value={
                               managementNote
                             }
@@ -5909,7 +5788,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingAction
                             }
-                            confirmLabel="Set Waiting"
+                            confirmLabel={t.setWaiting}
                             onCancel={() =>
                               setActiveManagementPanel(
                                 null
@@ -5927,9 +5806,9 @@ export default function ConstraintLogPage() {
                         {activeManagementPanel ===
                           'resume' && (
                           <LifecycleActionPanel
-                            title="Resume Constraint"
-                            description="Return the constraint to active management."
-                            label="Optional Comment"
+                            title={t.resumeTitle}
+                            description={t.resumeText}
+                            label={t.optionalComment}
                             value={
                               managementNote
                             }
@@ -5939,7 +5818,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingAction
                             }
-                            confirmLabel="Resume"
+                            confirmLabel={t.resume}
                             onCancel={() =>
                               setActiveManagementPanel(
                                 null
@@ -5957,9 +5836,9 @@ export default function ConstraintLogPage() {
                         {activeManagementPanel ===
                           'resolve' && (
                           <LifecycleActionPanel
-                            title="Resolve Constraint"
-                            description="Briefly record what was done to remove this constraint. It will remain blocked until verification."
-                            label="Resolution *"
+                            title={t.resolve}
+                            description={t.resolveText}
+                            label={t.resolution}
                             value={
                               managementNote
                             }
@@ -5969,7 +5848,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingAction
                             }
-                            confirmLabel="Save Resolution"
+                            confirmLabel={t.saveResolution}
                             positive
                             onCancel={() =>
                               setActiveManagementPanel(
@@ -5988,9 +5867,9 @@ export default function ConstraintLogPage() {
                         {activeManagementPanel ===
                           'clear' && (
                           <LifecycleActionPanel
-                            title="Verify & Release"
-                            description="Confirm that the solution is effective and release this readiness condition."
-                            label="Verification Note *"
+                            title={t.verify}
+                            description={t.verifyText}
+                            label={t.verificationNote}
                             value={
                               managementNote
                             }
@@ -6000,7 +5879,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingAction
                             }
-                            confirmLabel="Verify & Release"
+                            confirmLabel={t.verify}
                             positive
                             onCancel={() =>
                               setActiveManagementPanel(
@@ -6019,9 +5898,9 @@ export default function ConstraintLogPage() {
                         {activeManagementPanel ===
                           'cancel' && (
                           <LifecycleActionPanel
-                            title="Cancel Constraint"
-                            description="Use when the constraint is no longer applicable."
-                            label="Cancellation Reason *"
+                            title={t.cancelConstraint}
+                            description={t.cancelText}
+                            label={t.cancelReason}
                             value={
                               managementNote
                             }
@@ -6031,7 +5910,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingAction
                             }
-                            confirmLabel="Cancel Constraint"
+                            confirmLabel={t.cancelConstraint}
                             danger
                             onCancel={() =>
                               setActiveManagementPanel(
@@ -6050,8 +5929,8 @@ export default function ConstraintLogPage() {
 
 
                       <DrawerSection
-                        title="Management Update"
-                        subtitle="Record progress without changing status."
+                        title={t.updateTitle}
+                        subtitle={t.updateText}
                       >
 
                         <textarea
@@ -6061,7 +5940,7 @@ export default function ConstraintLogPage() {
                               ? managementNote
                               : ''
                           }
-                          placeholder="Add a progress update..."
+                          placeholder={t.updatePlaceholder}
                           onFocus={() => {
 
                             setActiveManagementPanel(
@@ -6104,7 +5983,7 @@ export default function ConstraintLogPage() {
                               secondaryActionButtonStyle
                             }
                           >
-                            Add Comment
+                            {t.addComment}
                           </button>
 
                         </div>
@@ -6120,26 +5999,26 @@ export default function ConstraintLogPage() {
                   {drawerTab ===
                     'forecast' && (
                     <DrawerSection
-                      title="Resolution Forecast"
-                      subtitle="Forecast versus the date required to protect the plan."
+                      title={t.forecastTitle}
+                      subtitle={t.forecastText}
                     >
 
                       <div style={forecastStackStyle}>
 
                         <ForecastCard
-                          label="Required By"
+                          label={t.requiredBy}
                           value={
                             formatDate(
                               managedConstraint
                                 .required_by_date
                             )
                           }
-                          description="Date required by production"
+                          description={t.requiredByHint}
                         />
 
 
                         <ForecastCard
-                          label="Planned Resolution"
+                          label={t.plannedResolution}
                           value={
                             formatDate(
                               managedConstraint
@@ -6148,12 +6027,12 @@ export default function ConstraintLogPage() {
                                 .required_by_date
                             )
                           }
-                          description="Current expected resolution"
+                          description={t.plannedResolutionHint}
                         />
 
 
                         <ForecastCard
-                          label="Forecast Variance"
+                          label={t.forecastVariance}
                           value={
                             getExposureLabel(
                               managedConstraint
@@ -6164,8 +6043,8 @@ export default function ConstraintLogPage() {
                             managedConstraint
                               .schedule_exposure_status ===
                               'exposed'
-                              ? 'Current forecast is later than Required By'
-                              : 'Current forecast is on or before Required By'
+                              ? t.varianceLate
+                              : t.varianceOnTime
                           }
                           alert={
                             managedConstraint
@@ -6176,14 +6055,14 @@ export default function ConstraintLogPage() {
 
 
                         <ForecastCard
-                          label="Current Outlook"
+                          label={t.outlook}
                           value={
                             getOutlookLabel(
                               managedConstraint
                                 .current_outlook
                             )
                           }
-                          description="Current management position"
+                          description={t.outlookHint}
                           alert={
                             managedConstraint
                               .schedule_exposure_status ===
@@ -6212,7 +6091,7 @@ export default function ConstraintLogPage() {
                             forecastButtonStyle
                           }
                         >
-                          Update Forecast
+                          {t.updateForecast}
                         </button>
                       )}
 
@@ -6220,8 +6099,8 @@ export default function ConstraintLogPage() {
                       {activeManagementPanel ===
                         'forecast' && (
                         <ActionPanel
-                          title="Update Planned Resolution"
-                          description="A reason is mandatory whenever the Planned Resolution Date changes."
+                          title={t.updateForecastTitle}
+                          description={t.updateForecastText}
                         >
 
                           <ForecastDateFields
@@ -6242,7 +6121,7 @@ export default function ConstraintLogPage() {
 
 
                           <ModalField
-                            label="Reason for Date Change *"
+                            label={t.dateReason}
                           >
                             <textarea
                               value={
@@ -6255,7 +6134,7 @@ export default function ConstraintLogPage() {
                                   event.target.value
                                 )
                               }
-                              placeholder="Explain why the forecast is changing."
+                              placeholder={t.dateReasonPlaceholder}
                               style={
                                 smallTextareaStyle
                               }
@@ -6264,7 +6143,7 @@ export default function ConstraintLogPage() {
 
 
                           <div style={warningBoxStyle}>
-                            Required By remains unchanged. Previous date, new date and reason will be retained in Action History.
+                            {t.dateChangeNote}
                           </div>
 
 
@@ -6272,7 +6151,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingAction
                             }
-                            confirmLabel="Confirm Forecast Update"
+                            confirmLabel={t.confirmForecast}
                             onCancel={() =>
                               setActiveManagementPanel(
                                 null
@@ -6301,7 +6180,7 @@ export default function ConstraintLogPage() {
                             reopenButtonStyle
                           }
                         >
-                          Reopen Constraint
+                          {t.reopenTitle}
                         </button>
                       )}
 
@@ -6309,12 +6188,12 @@ export default function ConstraintLogPage() {
                       {activeManagementPanel ===
                         'reopen' && (
                         <ActionPanel
-                          title="Reopen Constraint"
-                          description="Use this when the previously reported resolution was unsuccessful."
+                          title={t.reopenTitle}
+                          description={t.reopenText}
                         >
 
                           <div style={reopenNoticeStyle}>
-                            Status will change from <strong>Resolved</strong> to <strong>In Progress</strong>. Required By remains unchanged.
+                            {t.statusChangeFrom} <strong>{t.stageResolved}</strong> {t.statusChangeTo} <strong>{t.stageInProgress}</strong>{t.statusChangeEnd}
                           </div>
 
 
@@ -6346,7 +6225,7 @@ export default function ConstraintLogPage() {
 
 
                           <ModalField
-                            label="Reason for Reopening and Date Change *"
+                            label={t.reopenReason}
                           >
                             <textarea
                               value={
@@ -6374,7 +6253,7 @@ export default function ConstraintLogPage() {
                                 }
 
                               }}
-                              placeholder="Example: Supplier did not deliver on the previously confirmed date."
+                              placeholder={t.reopenPlaceholder}
                               style={
                                 smallTextareaStyle
                               }
@@ -6384,7 +6263,7 @@ export default function ConstraintLogPage() {
                             {!reopenValidation
                               .hasReason && (
                               <div style={inlineValidationStyle}>
-                                A reason is required.
+                                {t.reasonRequired}
                               </div>
                             )}
 
@@ -6395,11 +6274,11 @@ export default function ConstraintLogPage() {
 
                             <div>
                               <div style={metaLabelStyle}>
-                                Current Status
+                                {t.currentStatus}
                               </div>
 
                               <strong>
-                                Resolved
+                                {t.stageResolved}
                               </strong>
                             </div>
 
@@ -6411,7 +6290,7 @@ export default function ConstraintLogPage() {
 
                             <div>
                               <div style={metaLabelStyle}>
-                                New Status
+                                {t.newStatus}
                               </div>
 
                               <strong
@@ -6420,7 +6299,7 @@ export default function ConstraintLogPage() {
                                     '#1d4ed8',
                                 }}
                               >
-                                In Progress
+                                {t.stageInProgress}
                               </strong>
                             </div>
 
@@ -6446,7 +6325,7 @@ export default function ConstraintLogPage() {
                                 secondaryButtonStyle
                               }
                             >
-                              Cancel
+                              {t.cancel}
                             </button>
 
 
@@ -6479,8 +6358,8 @@ export default function ConstraintLogPage() {
                               }}
                             >
                               {savingAction
-                                ? 'Reopening...'
-                                : 'Confirm Reopen'}
+                                ? t.reopening
+                                : t.confirmReopen}
                             </button>
 
                           </div>
@@ -6497,14 +6376,14 @@ export default function ConstraintLogPage() {
                   {drawerTab ===
                     'actions' && (
                     <DrawerSection
-                      title="Recovery Action Plan"
-                      subtitle="Management responses designed to eliminate or reduce the constraint's effect."
+                      title={t.planTitle}
+                      subtitle={t.planText}
                     >
 
                       <div style={actionSummaryGridStyle}>
 
                         <MiniSummary
-                          label="Total"
+                          label={t.planTotal}
                           value={
                             actionPlanSummary
                               .total
@@ -6512,7 +6391,7 @@ export default function ConstraintLogPage() {
                         />
 
                         <MiniSummary
-                          label="Active"
+                          label={t.planActive}
                           value={
                             actionPlanSummary
                               .active
@@ -6520,7 +6399,7 @@ export default function ConstraintLogPage() {
                         />
 
                         <MiniSummary
-                          label="Completed"
+                          label={t.planCompleted}
                           value={
                             actionPlanSummary
                               .completed
@@ -6528,7 +6407,7 @@ export default function ConstraintLogPage() {
                         />
 
                         <MiniSummary
-                          label="Effective"
+                          label={t.planEffective}
                           value={
                             actionPlanSummary
                               .effective
@@ -6536,7 +6415,7 @@ export default function ConstraintLogPage() {
                         />
 
                         <MiniSummary
-                          label="Plan Protection"
+                          label={t.planProtection}
                           value={
                             actionPlanSummary
                               .protectionActions
@@ -6544,7 +6423,7 @@ export default function ConstraintLogPage() {
                         />
 
                         <MiniSummary
-                          label="Next Due"
+                          label={t.planNextDue}
                           value={
                             formatDate(
                               actionPlanSummary
@@ -6585,7 +6464,7 @@ export default function ConstraintLogPage() {
                             addRecoveryButtonStyle
                           }
                         >
-                          + Add Recovery Action
+                          {t.addAction}
                         </button>
                       )}
 
@@ -6593,12 +6472,12 @@ export default function ConstraintLogPage() {
                       {recoveryActionPanel ===
                         'create' && (
                         <ActionPanel
-                          title="New Recovery Action"
-                          description="Define a specific action intended to protect or recover the production plan."
+                          title={t.newActionTitle}
+                          description={t.newActionText}
                         >
 
                           <ModalField
-                            label="Response Approach"
+                            label={t.responseApproach}
                           >
                             <select
                               value={
@@ -6646,7 +6525,7 @@ export default function ConstraintLogPage() {
 
 
                           <ModalField
-                            label="Recovery Action *"
+                            label={t.actionTitle}
                           >
                             <input
                               value={
@@ -6669,7 +6548,7 @@ export default function ConstraintLogPage() {
                                   })
                                 )
                               }
-                              placeholder="Example: Purchase from alternate supplier."
+                              placeholder={t.actionPlaceholder}
                               style={
                                 modalInputStyle
                               }
@@ -6678,7 +6557,7 @@ export default function ConstraintLogPage() {
 
 
                           <ModalField
-                            label="Action Description"
+                            label={t.actionDescription}
                           >
                             <textarea
                               value={
@@ -6709,7 +6588,7 @@ export default function ConstraintLogPage() {
 
 
                           <ModalField
-                            label="Responsible Party *"
+                            label={t.responsiblePartyRequired}
                           >
                             <input
                               value={
@@ -6732,7 +6611,7 @@ export default function ConstraintLogPage() {
                                   })
                                 )
                               }
-                              placeholder="Example: Procurement"
+                              placeholder={t.ownerPlaceholder}
                               style={
                                 modalInputStyle
                               }
@@ -6741,7 +6620,7 @@ export default function ConstraintLogPage() {
 
 
                           <ModalField
-                            label="Action Due Date *"
+                            label={t.actionDue}
                           >
                             <input
                               type="date"
@@ -6773,7 +6652,7 @@ export default function ConstraintLogPage() {
 
 
                           <ModalField
-                            label="Expected Impact"
+                            label={t.expectedImpact}
                           >
                             <select
                               value={
@@ -6824,7 +6703,7 @@ export default function ConstraintLogPage() {
                             saving={
                               savingRecoveryAction
                             }
-                            confirmLabel="Add Recovery Action"
+                            confirmLabel={t.addActionConfirm}
                             onCancel={() =>
                               setRecoveryActionPanel(
                                 null
@@ -6841,18 +6720,18 @@ export default function ConstraintLogPage() {
 
                       {loadingRecoveryActions ? (
                         <div style={emptyInnerStyle}>
-                          Loading Action Plan...
+                          {t.loadingPlan}
                         </div>
                       ) : recoveryActions.length ===
                         0 ? (
                         <div style={actionPlanEmptyStyle}>
 
                           <strong>
-                            No recovery actions yet.
+                            {t.planEmpty}
                           </strong>
 
                           <div style={emptyDescriptionStyle}>
-                            Create an Action Plan when management can eliminate, reduce or recover the constraint's effect.
+                            {t.planEmptyText}
                           </div>
 
                         </div>
@@ -6924,14 +6803,14 @@ export default function ConstraintLogPage() {
                   {drawerTab ===
                     'work' && (
                     <DrawerSection
-                      title="Affected Work"
-                      subtitle={`${managedAffectedWork.length} linked work item${managedAffectedWork.length === 1 ? '' : 's'}`}
+                      title={t.workTitle}
+                      subtitle={tr(managedAffectedWork.length === 1 ? 'linkedWorkOne' : 'linkedWork', { count: managedAffectedWork.length })}
                     >
 
                       {managedAffectedWork.length ===
                         0 ? (
                         <div style={emptyInnerStyle}>
-                          This is currently a project-level constraint.
+                          {t.workProjectLevel}
                         </div>
                       ) : (
                         managedAffectedWork.map(
@@ -6957,7 +6836,7 @@ export default function ConstraintLogPage() {
 
 
                                 <span style={sourceBadgeStyle}>
-                                  {item.type}
+                                  {tr(WORK_TYPE_KEYS[item.type] || 'sourceManual')}
                                 </span>
 
                               </div>
@@ -6997,18 +6876,18 @@ export default function ConstraintLogPage() {
                   {drawerTab ===
                     'history' && (
                     <DrawerSection
-                      title="Action History"
-                      subtitle="Read-only audit trail of constraint decisions, forecast changes and recovery actions."
+                      title={t.historyTitle}
+                      subtitle={t.historyText}
                     >
 
                       {loadingHistory ? (
                         <div style={emptyInnerStyle}>
-                          Loading Action History...
+                          {t.loadingHistory}
                         </div>
                       ) : constraintHistory.length ===
                         0 ? (
                         <div style={emptyInnerStyle}>
-                          No Action History recorded yet.
+                          {t.historyEmpty}
                         </div>
                       ) : (
                         constraintHistory.map(
@@ -7055,7 +6934,7 @@ export default function ConstraintLogPage() {
                       secondaryButtonStyle
                     }
                   >
-                    Close
+                    {t.close}
                   </button>
 
                 </div>
@@ -7086,11 +6965,11 @@ export default function ConstraintLogPage() {
               <div>
 
                 <div style={drawerEyebrowStyle}>
-                  PROJECT CONSTRAINT
+                  {t.createEyebrow}
                 </div>
 
                 <h2 style={createModalTitleStyle}>
-                  Add Constraint
+                  {t.addConstraint}
                 </h2>
 
               </div>
@@ -7121,7 +7000,7 @@ export default function ConstraintLogPage() {
             >
 
               <ModalField
-                label="Category"
+                label={t.category}
               >
                 <select
                   value={
@@ -7166,7 +7045,7 @@ export default function ConstraintLogPage() {
 
 
               <ModalField
-                label="Priority"
+                label={t.priority}
               >
                 <select
                   value={
@@ -7211,7 +7090,7 @@ export default function ConstraintLogPage() {
 
 
               <ModalField
-                label="Impact"
+                label={t.impact}
               >
                 <select
                   value={
@@ -7256,7 +7135,7 @@ export default function ConstraintLogPage() {
 
 
               <ModalField
-                label="What is blocking the work? *"
+                label={t.whatBlocks}
               >
                 <input
                   value={
@@ -7286,7 +7165,7 @@ export default function ConstraintLogPage() {
 
 
               <ModalField
-                label="Responsible Party *"
+                label={t.responsiblePartyRequired}
               >
                 <input
                   value={
@@ -7317,7 +7196,7 @@ export default function ConstraintLogPage() {
 
 
               <ModalField
-                label="Required By Date *"
+                label={t.requiredByRequired}
               >
                 <input
                   type="date"
@@ -7349,7 +7228,7 @@ export default function ConstraintLogPage() {
 
 
               <ModalField
-                label="Required Action *"
+                label={t.requiredActionRequired}
               >
                 <textarea
                   value={
@@ -7380,7 +7259,7 @@ export default function ConstraintLogPage() {
 
 
               <ModalField
-                label="Notes"
+                label={t.notes}
               >
                 <textarea
                   value={
@@ -7435,7 +7314,7 @@ export default function ConstraintLogPage() {
                   }
                 />
 
-                Blocking Constraint
+                {t.blockingConstraint}
 
               </label>
 
@@ -7453,7 +7332,7 @@ export default function ConstraintLogPage() {
                     secondaryButtonStyle
                   }
                 >
-                  Cancel
+                  {t.cancel}
                 </button>
 
 
@@ -7467,8 +7346,8 @@ export default function ConstraintLogPage() {
                   }
                 >
                   {creatingConstraint
-                    ? 'Creating...'
-                    : 'Create Constraint'}
+                    ? t.creating
+                    : t.createConstraint}
                 </button>
 
               </div>
@@ -7786,7 +7665,7 @@ function ForecastDateFields({
     <>
 
       <ModalField
-        label="New Planned Resolution Date *"
+        label={t.newPlannedDate}
       >
         <input
           type="date"
@@ -7814,16 +7693,16 @@ function ForecastDateFields({
       >
 
         <div style={metaLabelStyle}>
-          Schedule Exposure
+          {t.exposure}
         </div>
 
         <strong>
           {preview?.label ||
-            'Select a date'}
+            t.selectDate}
         </strong>
 
         <div style={helperTextStyle}>
-          Required By:{' '}
+          {t.requiredByColon}{' '}
           {formatDate(
             requiredBy
           )}
@@ -7902,8 +7781,8 @@ function ExposureBadge({
 
       <span style={exposureStatusTextStyle}>
         {exposed
-          ? 'EXPOSED'
-          : 'PROTECTED'}
+          ? t.exposed
+          : t.protected}
       </span>
 
     </div>
@@ -8155,7 +8034,7 @@ function ActionButtons({
           secondaryButtonStyle
         }
       >
-        Cancel
+        {t.cancel}
       </button>
 
 
@@ -8166,7 +8045,7 @@ function ActionButtons({
         style={style}
       >
         {saving
-          ? 'Processing...'
+          ? t.processing
           : confirmLabel}
       </button>
 
@@ -8240,7 +8119,7 @@ function RecoveryActionCard({
 
 
         <div style={recoveryActionDueStyle}>
-          Due{' '}
+          {t.due}{' '}
           <strong>
             {formatDate(
               action.due_date
@@ -8263,7 +8142,7 @@ function RecoveryActionCard({
         <div>
 
           <div style={metaLabelStyle}>
-            Responsible
+            {t.responsible}
           </div>
 
           <strong>
@@ -8277,14 +8156,14 @@ function RecoveryActionCard({
         <div>
 
           <div style={metaLabelStyle}>
-            Effectiveness
+            {t.effectiveness}
           </div>
 
           <StatusBadge
             label={
               action.effectiveness ===
                 'not_evaluated'
-                ? 'Not Evaluated'
+                ? t.notEvaluated
                 : formatLabel(
                     action.effectiveness
                   )
@@ -8324,7 +8203,7 @@ function RecoveryActionCard({
               smallActionButtonStyle
             }
           >
-            Start
+            {t.start}
           </button>
         )}
 
@@ -8347,7 +8226,7 @@ function RecoveryActionCard({
               smallPositiveButtonStyle
             }
           >
-            Complete
+            {t.complete}
           </button>
         )}
 
@@ -8368,7 +8247,7 @@ function RecoveryActionCard({
               smallEvaluationButtonStyle
             }
           >
-            Evaluate
+            {t.evaluate}
           </button>
         )}
 
@@ -8391,7 +8270,7 @@ function RecoveryActionCard({
               smallDangerButtonStyle
             }
           >
-            Cancel
+            {t.cancel}
           </button>
         )}
 
@@ -8402,12 +8281,12 @@ function RecoveryActionCard({
         activePanel ===
           'start' && (
         <ActionPanel
-          title="Start Recovery Action"
-          description="Move this action to In Progress."
+          title={t.startActionTitle}
+          description={t.startActionText}
         >
 
           <ModalField
-            label="Optional Comment"
+            label={t.optionalComment}
           >
             <textarea
               value={note}
@@ -8427,7 +8306,7 @@ function RecoveryActionCard({
 
           <ActionButtons
             saving={saving}
-            confirmLabel="Start"
+            confirmLabel={t.start}
             onCancel={
               onClosePanel
             }
@@ -8446,12 +8325,12 @@ function RecoveryActionCard({
         activePanel ===
           'complete' && (
         <ActionPanel
-          title="Complete Recovery Action"
-          description="Completion does not automatically resolve the parent constraint."
+          title={t.completeActionTitle}
+          description={t.completeActionText}
         >
 
           <ModalField
-            label="Completion Note *"
+            label={t.completionNote}
           >
             <textarea
               value={note}
@@ -8471,7 +8350,7 @@ function RecoveryActionCard({
 
           <ActionButtons
             saving={saving}
-            confirmLabel="Mark Completed"
+            confirmLabel={t.markCompleted}
             positive
             onCancel={
               onClosePanel
@@ -8491,12 +8370,12 @@ function RecoveryActionCard({
         activePanel ===
           'evaluate' && (
         <ActionPanel
-          title="Evaluate Effectiveness"
-          description="Determine whether this action actually protected or improved the plan."
+          title={t.evaluateTitle}
+          description={t.evaluateText}
         >
 
           <ModalField
-            label="Effectiveness *"
+            label={t.effectivenessRequired}
           >
             <select
               value={
@@ -8532,7 +8411,7 @@ function RecoveryActionCard({
 
 
           <ModalField
-            label="Effectiveness Notes *"
+            label={t.effectivenessNotes}
           >
             <textarea
               value={note}
@@ -8552,7 +8431,7 @@ function RecoveryActionCard({
 
           <ActionButtons
             saving={saving}
-            confirmLabel="Save Evaluation"
+            confirmLabel={t.saveEvaluation}
             onCancel={
               onClosePanel
             }
@@ -8571,12 +8450,12 @@ function RecoveryActionCard({
         activePanel ===
           'cancel' && (
         <ActionPanel
-          title="Cancel Recovery Action"
-          description="Use when this action is no longer applicable."
+          title={t.cancelActionTitle}
+          description={t.cancelActionText}
         >
 
           <ModalField
-            label="Cancellation Reason *"
+            label={t.cancelReason}
           >
             <textarea
               value={note}
@@ -8596,7 +8475,7 @@ function RecoveryActionCard({
 
           <ActionButtons
             saving={saving}
-            confirmLabel="Cancel Action"
+            confirmLabel={t.cancelAction}
             danger
             onCancel={
               onClosePanel
@@ -8657,7 +8536,7 @@ function HistoryEntry({
 
           <div style={historyActorStyle}>
             {entry.performed_by ||
-              'System / Legacy Record'}
+              t.systemRecord}
           </div>
 
         </div>
@@ -8676,7 +8555,7 @@ function HistoryEntry({
         <div style={historyChangeStyle}>
 
           <span>
-            Status
+            {t.status}
           </span>
 
           <strong>
@@ -8699,7 +8578,7 @@ function HistoryEntry({
         <div style={historyChangeStyle}>
 
           <span>
-            Forecast
+            {t.forecast}
           </span>
 
           <strong>

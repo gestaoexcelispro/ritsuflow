@@ -43,8 +43,8 @@ export const platformMapInventory = {
       "routes": [
         {
           "label": "Constraint Management",
-          "href": "/dashboard/projects/constraints",
-          "sourcePath": "src/app/dashboard/projects/constraints/page.js"
+          "href": "/dashboard/planning/constraints",
+          "sourcePath": "src/app/dashboard/planning/constraints/page.js"
         }
       ]
     },
@@ -743,7 +743,7 @@ export const platformMapInventory = {
       ]
     },
     "constraint-management": {
-      "sourcePath": "src/app/dashboard/projects/constraints/page.js",
+      "sourcePath": "src/app/dashboard/planning/constraints/page.js",
       "sourceRef": "9c322452ee8ccea7a9aaa60e991e809a4ae62238",
       "verifiedOn": "2026-10-03",
       "dataSources": [
@@ -755,7 +755,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1254
+              "line": 1135
             }
           ]
         },
@@ -767,7 +767,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1372
+              "line": 1253
             }
           ]
         },
@@ -779,7 +779,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1430
+              "line": 1311
             }
           ]
         },
@@ -791,7 +791,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1551
+              "line": 1432
             }
           ]
         },
@@ -803,7 +803,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1620
+              "line": 1501
             }
           ]
         },
@@ -815,7 +815,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1711
+              "line": 1592
             }
           ]
         },
@@ -827,7 +827,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1801
+              "line": 1682
             }
           ]
         },
@@ -839,7 +839,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1891
+              "line": 1772
             }
           ]
         }
@@ -850,7 +850,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_project_id uuid, target_category text, target_title text, target_description text, target_action_required text, target_responsible_party text, target_required_by_date date, target_priority text, target_blocking boolean DEFAULT true, target_performed_by text DEFAULT NULL::text",
           "returns": "uuid",
-          "line": 2467,
+          "line": 2348,
           "purpose": "Create a manual constraint with history."
         },
         {
@@ -858,7 +858,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_impact text, target_comment text DEFAULT NULL::text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 2526,
+          "line": 2407,
           "purpose": "Set the constraint impact with a history record."
         },
         {
@@ -866,7 +866,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_responsible_party text, target_action_required text, target_priority text, target_description text, target_blocking boolean, target_comment text DEFAULT NULL::text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 2820,
+          "line": 2701,
           "purpose": "Update constraint details with history."
         },
         {
@@ -874,7 +874,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_comment text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 2961,
+          "line": 2842,
           "purpose": "Add a comment to constraint history."
         },
         {
@@ -882,7 +882,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_new_resolution_date date, target_reason text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3054,
+          "line": 2935,
           "purpose": "Revise the resolution forecast with a reason."
         },
         {
@@ -890,7 +890,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_new_resolution_date date, target_reason text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3158,
+          "line": 3039,
           "purpose": "Reopen a constraint with a revised resolution date."
         },
         {
@@ -898,7 +898,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_comment text DEFAULT NULL::text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3245,
+          "line": 3126,
           "purpose": "Start work on a constraint."
         },
         {
@@ -906,7 +906,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_reason text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3274,
+          "line": 3155,
           "purpose": "Put a constraint into Waiting with a reason."
         },
         {
@@ -914,7 +914,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_comment text DEFAULT NULL::text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3293,
+          "line": 3174,
           "purpose": "Resume work on a waiting constraint."
         },
         {
@@ -922,7 +922,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_resolution_note text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3325,
+          "line": 3206,
           "purpose": "Record constraint resolution with history."
         },
         {
@@ -930,7 +930,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_verification_note text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3354,
+          "line": 3235,
           "purpose": "Verify and clear a resolved constraint."
         },
         {
@@ -938,7 +938,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_reason text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3383,
+          "line": 3264,
           "purpose": "Cancel a constraint with a reason."
         },
         {
@@ -946,7 +946,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_constraint_id uuid, target_response_approach text, target_action_title text, target_action_description text, target_responsible_party text, target_due_date date, target_expected_impact text, target_performed_by text DEFAULT NULL::text",
           "returns": "uuid",
-          "line": 3531,
+          "line": 3412,
           "purpose": "Create a recovery action in the constraint action plan."
         },
         {
@@ -954,7 +954,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_action_id uuid, target_comment text DEFAULT NULL::text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3627,
+          "line": 3508,
           "purpose": "Start a recovery action."
         },
         {
@@ -962,7 +962,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_action_id uuid, target_completion_note text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3714,
+          "line": 3595,
           "purpose": "Record recovery-action completion."
         },
         {
@@ -970,7 +970,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_action_id uuid, target_effectiveness text, target_notes text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3800,
+          "line": 3681,
           "purpose": "Record the effectiveness of a recovery action."
         },
         {
@@ -978,12 +978,12 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_action_id uuid, target_reason text, target_performed_by text DEFAULT NULL::text",
           "returns": "void",
-          "line": 3889,
+          "line": 3770,
           "purpose": "Cancel a recovery action with a reason."
         }
       ],
       "sourcePaths": [
-        "src/app/dashboard/projects/constraints/page.js"
+        "src/app/dashboard/planning/constraints/page.js"
       ]
     },
     "project-information": {
@@ -2641,7 +2641,7 @@ export const platformMapInventory = {
     },
     {
       "sourcePath": "src/app/dashboard/planning/lookahead/page.js",
-      "targetPath": "src/app/dashboard/projects/constraints/page.js",
+      "targetPath": "src/app/dashboard/planning/constraints/page.js",
       "type": "ROUTES TO",
       "line": 5885
     },
@@ -2803,7 +2803,7 @@ export const platformMapInventory = {
     },
     {
       "sourcePath": "src/app/fieldop/projects/page.js",
-      "targetPath": "src/app/dashboard/projects/constraints/page.js",
+      "targetPath": "src/app/dashboard/planning/constraints/page.js",
       "type": "ROUTES TO",
       "line": 51
     },
@@ -2839,7 +2839,7 @@ export const platformMapInventory = {
     },
     {
       "sourcePath": "src/app/fieldop/projects/[projectId]/page.js",
-      "targetPath": "src/app/dashboard/projects/constraints/page.js",
+      "targetPath": "src/app/dashboard/planning/constraints/page.js",
       "type": "ROUTES TO",
       "line": 147
     },

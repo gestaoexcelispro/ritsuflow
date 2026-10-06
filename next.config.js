@@ -29,6 +29,7 @@ const nextConfig = {
       ['/dashboard/projects/locations', '/projects'],
       ['/dashboard/planning/pre-planning', '/dashboard/planning/master-plan'],
       ['/planning/pre-planning', '/dashboard/planning/master-plan'],
+      ['/dashboard/projects/constraints', '/dashboard/planning/constraints'],
     ]
 
     return moved.map(([source, destination]) => ({ source, destination, permanent: false }))

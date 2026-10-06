@@ -87,7 +87,7 @@ export default function IssuesSection(props) {
   }
 
   const rowActions = (row) => links.has(row.id)
-    ? <a href="/dashboard/projects/constraints" className={styles.secondaryButton} style={{ minHeight: 30, marginRight: 6, textDecoration: 'none', color: 'var(--fo-teal-ink)' }} title={t('issues.inConstraintsHint')}>✓ {t('issues.inConstraints')}</a>
+    ? <a href={`/dashboard/planning/constraints?projectId=${report.projects.id}&constraintId=${links.get(row.id).id}`} className={styles.secondaryButton} style={{ minHeight: 30, marginRight: 6, textDecoration: 'none', color: 'var(--fo-teal-ink)' }} title={t('issues.inConstraintsHint')}>✓ {t('issues.inConstraints')}</a>
     : !['resolved', 'closed'].includes(row.status) && <button type="button" className={styles.secondaryButton} style={{ minHeight: 30, marginRight: 6 }} disabled={busy === row.id} onClick={() => sendToConstraints(row)}>{busy === row.id ? t('common.saving') : t('issues.sendToConstraints')}</button>
   const date = new Intl.DateTimeFormat(language, { dateStyle: 'medium' })
   const columns = [
