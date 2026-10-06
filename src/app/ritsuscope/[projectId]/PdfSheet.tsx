@@ -16,6 +16,23 @@ export type ZoneShape = { id: string; name: string; color: string; pts: Vec2[]; 
 
 /** Largest canvas side we render; beyond this the browser scales the bitmap. */
 const MAX_CANVAS_SIDE = 8192
+/** Extra area rendered on every side of the view (fraction of the view), so panning stays sharp without re-rendering. */
+const DETAIL_MARGIN = 1
+/** Re-render once less than this much (fraction of the view) of sharp area is left beyond the view's edge. */
+const DETAIL_KEEP = 0.35
+/** Cap on the sharp layer's size in device pixels (memory); the margin shrinks on very large screens. */
+const DETAIL_MAX_PIXELS = 24_000_000
+/** Short pause after scroll/zoom before rendering, so a fast pan or wheel zoom renders once. */
+const DETAIL_DELAY_MS = 50
+
+/** Nearest ancestor that scrolls; null means the window does. */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const { overflow, overflowX, overflowY } = getComputedStyle(node)
+    if (/(auto|scroll)/.test(overflow + overflowX + overflowY)) return node
+  }
+  return null
+}
 
 type Props = {
   url: string
@@ -85,6 +102,12 @@ type PdfPageProxy = {
 export default function PdfSheet(props: Props) {
   const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, onMovePoints, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const detailRef = useRef<HTMLCanvasElement>(null)
+  /** Sharp layer currently on screen: its box in CSS px on the sheet and the zoom it was drawn for. */
+  const [detail, setDetail] = useState<{ x: number; y: number; w: number; h: number; zoom: number } | null>(null)
+  /** Same as `detail`, readable from scroll handlers without re-subscribing. */
+  const shownRef = useRef<{ x: number; y: number; w: number; h: number; zoom: number } | null>(null)
   const [page, setPage] = useState<PdfPageProxy | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hover, setHover] = useState<Vec2 | null>(null)
@@ -171,6 +194,99 @@ export default function PdfSheet(props: Props) {
     return () => job.cancel()
   }, [page, zoom, size.width, size.height])
 
+  // Large sheets at high zoom: the full-page bitmap above hits MAX_CANVAS_SIDE and gets stretched (blurry).
+  // Render just the visible area again, at full resolution, in a screen-sized canvas on top of it.
+  useEffect(() => {
+    const wrap = wrapRef.current
+    const canvas = detailRef.current
+    if (!page || !wrap || !canvas || !size.width) return
+    const dpr = window.devicePixelRatio || 1
+    const want = zoom * dpr
+    const base = Math.min(want, MAX_CANVAS_SIDE / Math.max(size.width, size.height))
+    if (want <= base * 1.05) { shownRef.current = null; setDetail(null); return } // the full-page bitmap is already sharp
+    const scroller = scrollParent(wrap)
+    let job: { promise: Promise<void>; cancel: () => void } | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+    /** Area being rendered right now (null when idle). */
+    let pending: { x: number; y: number; w: number; h: number } | null = null
+
+    /** Visible part of the sheet, in CSS px relative to its top-left corner. */
+    const visible = () => {
+      const sheet = wrap.getBoundingClientRect()
+      const view = scroller ? scroller.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+      return {
+        x: view.left - sheet.left, y: view.top - sheet.top,
+        w: view.right - view.left, h: view.bottom - view.top,
+        sheetW: sheet.width, sheetH: sheet.height,
+      }
+    }
+
+    /** True when `box` still covers the view with room to pan before its edge shows (sheet edges count as covered). */
+    const covers = (box: { x: number; y: number; w: number; h: number }, v: ReturnType<typeof visible>) => {
+      const gx = v.w * DETAIL_KEEP
+      const gy = v.h * DETAIL_KEEP
+      return (box.x <= Math.max(0, v.x - gx) + 1)
+        && (box.y <= Math.max(0, v.y - gy) + 1)
+        && (box.x + box.w >= Math.min(v.sheetW, v.x + v.w + gx) - 1)
+        && (box.y + box.h >= Math.min(v.sheetH, v.y + v.h + gy) - 1)
+    }
+
+    const draw = () => {
+      const v = visible()
+      // Margin around the view, shrunk on very large screens so the canvas stays within DETAIL_MAX_PIXELS.
+      const fit = (Math.sqrt(DETAIL_MAX_PIXELS / Math.max(1, v.w * v.h * dpr * dpr)) - 1) / 2
+      const margin = Math.max(0, Math.min(DETAIL_MARGIN, fit))
+      const mx = v.w * margin
+      const my = v.h * margin
+      const maxSide = MAX_CANVAS_SIDE / dpr
+      const x0 = Math.max(0, Math.floor(v.x - mx))
+      const y0 = Math.max(0, Math.floor(v.y - my))
+      const x1 = Math.min(v.sheetW, Math.ceil(v.x + v.w + mx), x0 + maxSide)
+      const y1 = Math.min(v.sheetH, Math.ceil(v.y + v.h + my), y0 + maxSide)
+      if (x1 <= x0 || y1 <= y0) return
+      job?.cancel()
+      const box = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, zoom }
+      pending = box
+      // Draw into an offscreen canvas, then swap, so the old sharp layer stays until the new one is ready.
+      const off = document.createElement('canvas')
+      off.width = Math.round(box.w * dpr)
+      off.height = Math.round(box.h * dpr)
+      const ctx = off.getContext('2d')
+      if (!ctx) return
+      const viewport = page.getViewport({ scale: want })
+      const current = page.render({ canvasContext: ctx, canvas: off, viewport, transform: [1, 0, 0, 1, -x0 * dpr, -y0 * dpr] })
+      job = current
+      current.promise.then(() => {
+        canvas.width = off.width
+        canvas.height = off.height
+        canvas.getContext('2d')?.drawImage(off, 0, 0)
+        shownRef.current = box
+        pending = null
+        setDetail(box)
+      }).catch(() => { /* cancelled by a newer render */ })
+    }
+    // Panning inside the sharp area costs nothing; only re-render when the view nears its edge.
+    const schedule = () => {
+      const v = visible()
+      const shown = shownRef.current
+      if (shown && shown.zoom === zoom && covers(shown, v)) return
+      if (pending && covers(pending, v)) return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(draw, DETAIL_DELAY_MS)
+    }
+
+    schedule()
+    const target: HTMLElement | Window = scroller ?? window
+    target.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    return () => {
+      if (timer) clearTimeout(timer)
+      job?.cancel()
+      target.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+    }
+  }, [page, zoom, size.width, size.height])
+
   function rawPoint(event: MouseEvent<SVGSVGElement>): Vec2 {
     const rect = event.currentTarget.getBoundingClientRect()
     return [(event.clientX - rect.left) / zoom, (event.clientY - rect.top) / zoom]
@@ -230,9 +346,28 @@ export default function PdfSheet(props: Props) {
   )
 
   return (
-    <div style={{ position: 'relative', width: W * zoom || '100%', height: H * zoom || 200 }}>
+    <div ref={wrapRef} style={{ position: 'relative', width: W * zoom || '100%', height: H * zoom || 200 }}>
       {!page && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 12, color: '#6b8089' }}>{loadingLabel}</div>}
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: W * zoom, height: H * zoom, background: '#fff' }} />
+      {/* Sharp layer around the visible area. Right after a zoom it is stretched to the new zoom
+          (still far sharper than the full-page bitmap) until the new render swaps in. */}
+      {(() => {
+        const k = detail ? zoom / detail.zoom : 1
+        return (
+          <canvas
+            ref={detailRef}
+            style={{
+              position: 'absolute',
+              left: (detail?.x ?? 0) * k,
+              top: (detail?.y ?? 0) * k,
+              width: (detail?.w ?? 0) * k,
+              height: (detail?.h ?? 0) * k,
+              visibility: detail ? 'visible' : 'hidden',
+              pointerEvents: 'none',
+            }}
+          />
+        )
+      })()}
       {W > 0 && (
         <svg
           viewBox={`0 0 ${W} ${H}`}
