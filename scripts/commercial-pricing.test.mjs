@@ -339,6 +339,8 @@ test('cost amounts: locale thousands, accounting negatives', async () => {
   assert.equal(parseAmount('-150,00', true), -150)
   assert.equal(parseAmount('1.234.567', true), 1234567)
   assert.ok(Number.isNaN(parseAmount('abc', true)))
+})
+
 test('trial application: validation, honeypot, whitelists', async () => {
   const { readTrialApplication } = await import('../src/lib/trial.ts')
   const now = new Date('2026-10-06T12:00:00Z')
