@@ -65,3 +65,12 @@ export function localDay(iso: string): string {
   const d = new Date(iso)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
+/** Lost and declined bids by reason, most frequent first (bids without a reason are counted apart). */
+export function lossReasons(bids: BidRow[]): { reason: string; count: number; share: number }[] {
+  const lost = bids.filter(b => b.status === 'lost' || b.status === 'no_bid')
+  const counts = new Map<string, number>()
+  for (const b of lost) { const r = b.outcome_reason || 'unknown'; counts.set(r, (counts.get(r) || 0) + 1) }
+  return [...counts.entries()].map(([reason, count]) => ({ reason, count, share: lost.length ? (count / lost.length) * 100 : 0 }))
+    .sort((a, b) => Number(a.reason === 'unknown') - Number(b.reason === 'unknown') || b.count - a.count)
+}

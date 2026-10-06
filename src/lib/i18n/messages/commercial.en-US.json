@@ -360,5 +360,22 @@
   "insights.col.winRate": "Win rate",
   "insights.col.wonValue": "Value won",
   "insights.noDecision": "No decision yet",
-  "insights.note": "Win rate = won ÷ (won + lost); declined and open bids don't count. Markup = latest revision's selling price ÷ direct cost − 1. Clients are grouped by name."
+  "insights.note": "Win rate = won ÷ (won + lost); declined and open bids don't count. Markup = latest revision's selling price ÷ direct cost − 1. Clients are grouped by name.",
+  "outcome.title.won": "Bid won",
+  "outcome.title.lost": "Bid lost",
+  "outcome.title.no_bid": "Decline to bid",
+  "outcome.reason": "Main reason",
+  "outcome.note": "Note",
+  "outcome.errReason": "Pick the main reason.",
+  "reason.price": "Price",
+  "reason.scope": "Scope",
+  "reason.deadline": "Deadline",
+  "reason.relationship": "Relationship",
+  "reason.competitor": "Competitor chosen",
+  "reason.technical": "Technical",
+  "reason.capacity": "Our capacity",
+  "reason.cancelled": "Project cancelled",
+  "reason.other": "Other",
+  "reason.unknown": "Not recorded",
+  "insights.reasonsTitle": "Why bids are lost or declined"
 }

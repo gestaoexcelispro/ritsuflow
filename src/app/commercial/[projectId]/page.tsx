@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
-import { BID_COLUMNS, ESTIMATE_SUMMARY_COLUMNS, statusPatch, type BidRow, type BidStatus, type EstimateSummary } from '@/lib/commercial/bids'
+import { BID_COLUMNS, ESTIMATE_SUMMARY_COLUMNS, statusPatch, type BidRow, type BidStatus, type EstimateSummary, type OutcomeReason } from '@/lib/commercial/bids'
 import { formatDate, formatMoney } from '@/lib/commercial/format'
 import { useCommercialAccess } from '../license'
 import { statusStyle, ui } from '../ui'
@@ -14,6 +14,7 @@ import EstimateTab from './EstimateTab'
 import ProposalTab from './ProposalTab'
 import ConvertDialog from './ConvertDialog'
 import AbcTab from './AbcTab'
+import OutcomeDialog from './OutcomeDialog'
 
 type Tab = 'estimate' | 'takeoff' | 'proposal' | 'abc' | 'revisions'
 type Counts = { sheets: number; items: number; elements: number }
@@ -31,6 +32,7 @@ export default function BidWorkspace() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [converting, setConverting] = useState(false)
+  const [deciding, setDeciding] = useState<'won' | 'lost' | 'no_bid' | null>(null)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
@@ -50,17 +52,14 @@ export default function BidWorkspace() {
 
   useEffect(() => { void load() }, [load])
 
-  async function setStatus(status: BidStatus) {
+  async function setStatus(status: BidStatus, note: string | null = null, reason: OutcomeReason | null = null) {
     if (!bid) return
-    let note: string | null = null
-    if (status === 'won' || status === 'lost' || status === 'no_bid') {
-      const answer = window.prompt(t('bid.notePrompt'), bid.outcome_note || '')
-      if (answer === null) return
-      note = answer.trim() || null
-    }
+    // Won, lost and declined ask for a note (and, except won, a reason) first.
+    if ((status === 'won' || status === 'lost' || status === 'no_bid') && deciding !== status) { setDeciding(status); return }
     setBusy(true); setError('')
-    const { error: e } = await createClient().from('commercial_bids').update(statusPatch(status, note)).eq('project_id', bid.project_id)
+    const { error: e } = await createClient().from('commercial_bids').update(statusPatch(status, note, reason)).eq('project_id', bid.project_id)
     setBusy(false)
+    setDeciding(null)
     if (e) { setError(t('error.save', { message: e.message })); return }
     void load()
   }
@@ -98,7 +97,7 @@ export default function BidWorkspace() {
               </div>
               <h1 style={{ ...ui.title, fontSize: 22 }}>{p?.name}</h1>
               <span style={ui.small}>{[p?.client_name, p?.country_code, p?.currency_code].filter(Boolean).join(' · ')}</span>
-              {bid.outcome_note && <span style={ui.small}>{t('bid.note', { note: bid.outcome_note })}</span>}
+              {(bid.outcome_reason || bid.outcome_note) && <span style={ui.small}>{[bid.outcome_reason ? t(`reason.${bid.outcome_reason}`) : '', bid.outcome_note || ''].filter(Boolean).join(' · ')}</span>}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
               {latest && <span style={{ fontSize: 13, color: '#294955' }}>{t('bid.latestPrice')} <strong style={{ fontSize: 18, color: '#075a53' }}>{formatMoney(latest.price_total, latest.currency_code, numberFormat)}</strong></span>}
@@ -167,6 +166,7 @@ export default function BidWorkspace() {
           )
         )}
       </section>
+      {deciding && <OutcomeDialog status={deciding} initialNote={bid.outcome_note} initialReason={bid.outcome_reason} busy={busy} onCancel={() => setDeciding(null)} onConfirm={(note, reason) => void setStatus(deciding, note, reason)} />}
       {converting && <ConvertDialog bid={bid} estimates={estimates} counts={counts} onClose={() => setConverting(false)} />}
     </>
   )

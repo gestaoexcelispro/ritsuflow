@@ -223,3 +223,11 @@ test('insights: win rate by client, markup of won vs lost, month grid', async ()
   assert.deepEqual(g[0], [null, null, null, '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'])
   assert.equal(g.flat().filter(Boolean).length, 31)
 })
+
+test('loss reasons: counted over lost and declined bids, unrecorded last', async () => {
+  const { lossReasons } = await import('../src/lib/commercial/insights.ts')
+  const b = (status, outcome_reason = null) => ({ status, outcome_reason })
+  const r = lossReasons([b('lost', 'price'), b('lost', 'price'), b('no_bid', 'capacity'), b('lost'), b('won'), b('submitted')])
+  assert.deepEqual(r.map(x => [x.reason, x.count]), [['price', 2], ['capacity', 1], ['unknown', 1]])
+  assert.equal(r[0].share, 50)
+})

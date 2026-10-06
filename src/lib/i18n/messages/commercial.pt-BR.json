@@ -360,5 +360,22 @@
   "insights.col.winRate": "Taxa de sucesso",
   "insights.col.wonValue": "Valor ganho",
   "insights.noDecision": "Sem decisão ainda",
-  "insights.note": "Taxa de sucesso = ganhas ÷ (ganhas + perdidas); declinadas e em aberto não contam. Markup = preço de venda ÷ custo direto − 1, na última revisão. Clientes agrupados pelo nome."
+  "insights.note": "Taxa de sucesso = ganhas ÷ (ganhas + perdidas); declinadas e em aberto não contam. Markup = preço de venda ÷ custo direto − 1, na última revisão. Clientes agrupados pelo nome.",
+  "outcome.title.won": "Proposta ganha",
+  "outcome.title.lost": "Proposta perdida",
+  "outcome.title.no_bid": "Declinar a proposta",
+  "outcome.reason": "Motivo principal",
+  "outcome.note": "Observação",
+  "outcome.errReason": "Escolha o motivo principal.",
+  "reason.price": "Preço",
+  "reason.scope": "Escopo",
+  "reason.deadline": "Prazo",
+  "reason.relationship": "Relacionamento",
+  "reason.competitor": "Concorrente escolhido",
+  "reason.technical": "Técnico",
+  "reason.capacity": "Nossa capacidade",
+  "reason.cancelled": "Obra cancelada",
+  "reason.other": "Outro",
+  "reason.unknown": "Não informado",
+  "insights.reasonsTitle": "Por que perdemos ou declinamos"
 }
