@@ -28,6 +28,7 @@ import { detectRooms, type DetectedRoom } from '@/lib/takeoff/detect/rooms'
 import { findOpenings, placeOpenings, type PlannedOpening } from '@/lib/takeoff/detect/openings'
 import { applyFramingDefaults, defaultFraming, framingLabelsPtBR, type FramingDefaults } from '@/lib/takeoff/framing/framing'
 import { importLabelsEnUS } from '@/lib/takeoff/ifc/importIfcModel'
+import { boxSelect } from '@/lib/takeoff/boxSelect'
 
 const BUCKET = 'takeoff-files'
 
@@ -130,6 +131,12 @@ export default function PdfWorkspace(props: Props) {
   const [suggestions, setSuggestions] = useState<DetectedWall[]>([])
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
+  /** Box selection: elements picked, the drag in progress (client px) and the box drawn on screen. */
+  const [boxSel, setBoxSel] = useState<string[]>([])
+  const band = useRef<{ x: number; y: number; shift: boolean; active: boolean } | null>(null)
+  const [bandRect, setBandRect] = useState<{ left: number; top: number; width: number; height: number; crossing: boolean } | null>(null)
+  /** The click that ends a box drag must not change the selection. */
+  const swallowClick = useRef(false)
   /** Room detection: suggested outlines, which are ticked, the door width closed, and whether it ran. */
   const [roomSugs, setRoomSugs] = useState<DetectedRoom[] | null>(null)
   const [roomPicked, setRoomPicked] = useState<Set<string>>(new Set())
@@ -165,10 +172,13 @@ export default function PdfWorkspace(props: Props) {
   const zoning = workMode === 'zoning'
   const sheetZones = useMemo(() => zones.filter(z => z.source_id === source.id), [zones, source.id])
 
+  useEffect(() => { setBoxSel([]) }, [source.id, workMode])
+
   const clearTransient = () => { setDraft([]); setCalPts([]); setMeasurePts([]); setMeasureDone(false); setPickingRegion(false); setOriginPts([]); setOriginForm(null) }
 
   function chooseTool(next: Mode, nextShape?: Shape) {
     clearTransient()
+    setBoxSel([])
     setOpenSugs(null)
     setAreaTool(null)
     setMepTool(null)
@@ -687,7 +697,30 @@ export default function PdfWorkspace(props: Props) {
     await onChanged()
   }
 
+  /** Deletes every element picked with the selection box (one confirmation for all). */
+  async function deleteBoxSelection() {
+    const ids = boxSel
+    if (!ids.length) return
+    if (!window.confirm(t('element.confirmDeleteMany', { count: ids.length }))) return
+    const supabase = createClient()
+    const gone: string[] = []
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error: e } = await supabase.from('takeoff_elements').delete().in('id', ids.slice(i, i + 200)).select('id')
+      if (e) { setError(t('workspace.error', { message: e.message })); break }
+      for (const row of data || []) gone.push((row as { id: string }).id)
+    }
+    const goneSet = new Set(gone)
+    setCreated(prev => prev.filter(c => !goneSet.has(c.id)))
+    setBoxSel(prev => prev.filter(id => !goneSet.has(id)))
+    // RLS hides rows from non-owners, so they are skipped without an error.
+    if (gone.length === 0) setError(t('element.deleteDenied'))
+    else if (gone.length < ids.length) setError(t('element.deletedPartial', { done: gone.length, total: ids.length }))
+    else setMessage(t('element.deletedMany', { count: gone.length }))
+    if (gone.length) await onChanged()
+  }
+
   async function deleteSelected() {
+    if (!zoning && boxSel.length) { await deleteBoxSelection(); return }
     const table = zoning ? 'takeoff_zones' : 'takeoff_elements'
     const id = zoning ? selectedZoneId : selectedId
     if (!id) return
@@ -708,18 +741,18 @@ export default function PdfWorkspace(props: Props) {
       const target = event.target as HTMLElement | null
       if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
       if (event.key === 'Escape' && openingPick) { setPickHover(null); onOpeningPickCancel?.(); return }
-      if (event.key === 'Escape') { clearTransient(); onSelect(null); onSelectZone(null); setRoomPicking(false); setRoomPickPts([]) }
+      if (event.key === 'Escape') { clearTransient(); setBoxSel([]); onSelect(null); onSelectZone(null); setRoomPicking(false); setRoomPickPts([]) }
       if (event.key === 'Enter' && mode === 'draw' && !faceMode) void finishDraft()
       if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => prev.slice(0, -1)) }
       if (event.key === 'Backspace' && mode === 'measure') { event.preventDefault(); setMeasureDone(false); setMeasurePts(prev => prev.slice(0, -1)) }
-      if (event.key === 'Delete' && mode === 'select' && (zoning ? selectedZoneId : selectedId)) void deleteSelected()
+      if (event.key === 'Delete' && mode === 'select' && (zoning ? selectedZoneId : selectedId || boxSel.length)) void deleteSelected()
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && draft.length === 0) { event.preventDefault(); void undoLast() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // deleteSelected/undoLast are recreated each render; they read the values listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finishDraft, mode, selectedId, selectedZoneId, draft.length, created, zoning, faceMode, openingPick])
+  }, [finishDraft, mode, selectedId, selectedZoneId, draft.length, created, zoning, faceMode, openingPick, boxSel])
 
   // Edit / View menu commands from the header.
   useEffect(() => {
@@ -934,8 +967,9 @@ export default function PdfWorkspace(props: Props) {
     if (mode === 'detect') return ''
     if (mode === 'origin') return originPts.length === 0 ? t('origin.hint.point') : originPts.length === 1 ? t('origin.hint.direction') : t('origin.hint.done')
     if (zoning) return sheetZones.length ? t('zone.hint.select') : t('zone.hint.empty')
-    return selectedId ? t('move.hint') : t('pan.hint')
-  }, [mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length])
+    if (boxSel.length) return t('box.selectedHint')
+    return selectedId ? t('move.hint') : `${t('pan.hint')} ${t('box.hint')}`
+  }, [boxSel.length, mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length])
 
   const zoneShapes = useMemo(() => [
     // Largest first, so the rooms drawn inside a block or zone stay on top and clickable.
@@ -992,6 +1026,23 @@ export default function PdfWorkspace(props: Props) {
   ]
 
   const selectionActive = zoning ? !!selectedZoneId : !!selectedId
+  const canBox = mode === 'select' && !zoning && !openingPick
+  const boxSelSet = useMemo(() => new Set(boxSel), [boxSel])
+
+  /** Ends a box drag: picks the elements in the box (window or crossing) and selects them. */
+  function finishBox(b: { x: number; y: number; shift: boolean }, x: number, y: number) {
+    swallowClick.current = true
+    const sheet = sheetRef.current?.getBoundingClientRect()
+    if (!sheet || !zoom) return
+    const toPt = (cx: number, cy: number): Vec2 => [(cx - sheet.left) / zoom, (cy - sheet.top) / zoom]
+    const a = toPt(b.x, b.y)
+    const c = toPt(x, y)
+    const box = { x0: Math.min(a[0], c[0]), y0: Math.min(a[1], c[1]), x1: Math.max(a[0], c[0]), y1: Math.max(a[1], c[1]) }
+    let ids = boxSelect(items, box, x < b.x)
+    if (b.shift) ids = Array.from(new Set([...boxSel, ...(selectedId ? [selectedId] : []), ...ids]))
+    if (ids.length === 1) { setBoxSel([]); onSelect(ids[0]) }
+    else { setBoxSel(ids); onSelect(null) }
+  }
   const draftKind: LayerKind | null = zoning ? 'area' : activeLayer?.kind ?? null
   const zoneColor = isMacroKind(zoneKind) ? KIND_COLOR[zoneKind] : LAYER_PALETTE[zones.length % LAYER_PALETTE.length]
 
@@ -1005,6 +1056,21 @@ export default function PdfWorkspace(props: Props) {
         onMouseDown={event => { if (event.button === 1) event.preventDefault() /* no browser autoscroll */ }}
         onAuxClick={event => { if (event.button === 1) event.preventDefault() }}
         onPointerDown={event => {
+          swallowClick.current = false
+          // Left button on an empty spot (outside the drawing or on bare sheet), in Select: start a selection box.
+          if (event.button === 0 && canBox) {
+            // Clicks on the container's own scrollbars keep scrolling.
+            const el = containerRef.current
+            const r = el?.getBoundingClientRect()
+            if (el && r && (event.clientX - r.left >= el.clientWidth || event.clientY - r.top >= el.clientHeight)) return
+            const target = event.target as Element
+            const onShape = target instanceof SVGElement && !(target instanceof SVGSVGElement && !target.ownerSVGElement)
+            if (!onShape) {
+              event.preventDefault() // no text selection while dragging
+              band.current = { x: event.clientX, y: event.clientY, shift: event.shiftKey, active: false }
+            }
+            return
+          }
           if (event.button !== 1) return
           const el = containerRef.current
           if (!el) return
@@ -1014,6 +1080,16 @@ export default function PdfWorkspace(props: Props) {
           el.style.cursor = 'grabbing'
         }}
         onPointerMove={event => {
+          const b = band.current
+          if (b) {
+            const dx = event.clientX - b.x
+            const dy = event.clientY - b.y
+            // A few pixels of slack so a plain click still clicks.
+            if (!b.active && Math.hypot(dx, dy) < 5) return
+            if (!b.active) { b.active = true; (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId) }
+            setBandRect({ left: Math.min(b.x, event.clientX), top: Math.min(b.y, event.clientY), width: Math.abs(dx), height: Math.abs(dy), crossing: dx < 0 })
+            return
+          }
           const el = containerRef.current
           const start = pan.current
           if (!el || !start) return
@@ -1022,8 +1098,20 @@ export default function PdfWorkspace(props: Props) {
           el.scrollLeft = start.left - dx
           el.scrollTop = start.top - dy
         }}
-        onPointerUp={() => { pan.current = null; if (containerRef.current) containerRef.current.style.cursor = '' }}
-        onPointerCancel={() => { pan.current = null; if (containerRef.current) containerRef.current.style.cursor = '' }}
+        onPointerUp={event => {
+          const b = band.current
+          band.current = null
+          if (b?.active) { finishBox(b, event.clientX, event.clientY); setBandRect(null) }
+          pan.current = null
+          if (containerRef.current) containerRef.current.style.cursor = ''
+        }}
+        onPointerCancel={() => { band.current = null; setBandRect(null); pan.current = null; if (containerRef.current) containerRef.current.style.cursor = '' }}
+        onClickCapture={event => {
+          // The click that ends a box drag is not a click on the sheet.
+          if (swallowClick.current) { swallowClick.current = false; event.stopPropagation(); event.preventDefault(); return }
+          // A normal click selects one element (or nothing): drop the box selection.
+          if (boxSel.length && !event.shiftKey) setBoxSel([])
+        }}
       >
         {url ? (
           // Free space around the sheet (like CAD model space): you can pan and zoom past every edge.
@@ -1048,6 +1136,7 @@ export default function PdfWorkspace(props: Props) {
               selectable={mode === 'select' && !zoning && !openingPick}
               selectedId={selectedId}
               onSelect={onSelect}
+              multiSelected={boxSelSet}
               onMovePoints={(id, pts) => void movePoints(id, pts)}
               snap={snapOn}
               ortho={orthoOn}
@@ -1082,6 +1171,18 @@ export default function PdfWorkspace(props: Props) {
         )}
       </div>
 
+      {/* Selection box being dragged: blue = window (left → right), green dashed = crossing (right → left). */}
+      {bandRect && (
+        <div
+          style={{
+            position: 'fixed', left: bandRect.left, top: bandRect.top, width: bandRect.width, height: bandRect.height,
+            border: bandRect.crossing ? '1.5px dashed #16A34A' : '1.5px solid #2563EB',
+            background: bandRect.crossing ? 'rgba(22,163,74,.10)' : 'rgba(37,99,235,.10)',
+            pointerEvents: 'none', zIndex: 50,
+          }}
+        />
+      )}
+
       {/* Floating cards (top): hints, forms and results. */}
       <div style={{ position: 'absolute', top: barH + 10, left: 10, right: 10, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start', pointerEvents: 'none' }}>
         {hint && <div style={{ ...pill, pointerEvents: 'auto' }}>{hint}</div>}
@@ -1089,6 +1190,13 @@ export default function PdfWorkspace(props: Props) {
           <div style={{ ...pill, pointerEvents: 'auto', background: error ? '#fff5f5' : '#fff', color: error ? '#a44343' : '#294955', borderColor: error ? '#f1c7c7' : '#dfe7ea' }}>
             {error || message}
             <button type="button" style={xSmall} onClick={() => { setError(''); setMessage('') }}>×</button>
+          </div>
+        )}
+        {!zoning && boxSel.length > 0 && (
+          <div style={{ ...pill, pointerEvents: 'auto', fontWeight: 700 }}>
+            {t('box.count', { count: boxSel.length })}
+            <button type="button" style={{ ...smallBtn(false), height: 26, borderColor: '#e5b4b4', color: '#a44343' }} onClick={() => void deleteBoxSelection()}>{t('box.delete')}</button>
+            <button type="button" style={{ ...smallBtn(false), height: 26 }} onClick={() => setBoxSel([])}>{t('box.clear')}</button>
           </div>
         )}
 
