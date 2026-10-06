@@ -12,6 +12,7 @@ import { useCommercialAccess } from '../license'
 import { statusStyle, ui } from '../ui'
 import EstimateTab from './EstimateTab'
 import ProposalTab from './ProposalTab'
+import ConvertDialog from './ConvertDialog'
 
 type Tab = 'estimate' | 'takeoff' | 'proposal' | 'revisions'
 type Counts = { sheets: number; items: number; elements: number }
@@ -28,6 +29,7 @@ export default function BidWorkspace() {
   const [tab, setTab] = useState<Tab>('estimate')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [converting, setConverting] = useState(false)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
@@ -99,8 +101,9 @@ export default function BidWorkspace() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
               {latest && <span style={{ fontSize: 13, color: '#294955' }}>{t('bid.latestPrice')} <strong style={{ fontSize: 18, color: '#075a53' }}>{formatMoney(latest.price_total, latest.currency_code, numberFormat)}</strong></span>}
-              {licensed && actions.length > 0 && (
+              {licensed && (actions.length > 0 || (bid.status === 'won' && !converted)) && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {bid.status === 'won' && !converted && <button type="button" disabled={busy} onClick={() => setConverting(true)} style={ui.button}>{t('convert.open')}</button>}
                   {actions.map(a => (
                     <button key={a.status} type="button" disabled={busy} onClick={() => setStatus(a.status)} style={a.primary ? ui.button : ui.buttonGhost}>{a.label}</button>
                   ))}
@@ -162,6 +165,7 @@ export default function BidWorkspace() {
           )
         )}
       </section>
+      {converting && <ConvertDialog bid={bid} estimates={estimates} counts={counts} onClose={() => setConverting(false)} />}
     </>
   )
 }
