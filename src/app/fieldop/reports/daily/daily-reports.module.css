@@ -38,7 +38,7 @@
 
 /* ---------- Report workspace ---------- */
 .workspace { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 22px; align-items: start; }
-.rail { position: sticky; top: 20px; background: var(--fo-surface); border: 1px solid var(--fo-line); border-radius: var(--fo-radius); padding: 16px 12px 12px; }
+.rail { position: sticky; top: calc(var(--app-chrome, 137px) + 20px); background: var(--fo-surface); border: 1px solid var(--fo-line); border-radius: var(--fo-radius); padding: 16px 12px 12px; }
 .railProgress { padding: 0 8px 14px; border-bottom: 1px solid var(--fo-line-soft); margin-bottom: 8px; }
 .railProgress strong { font-size: 15px; }
 .railProgress span { display: block; color: var(--fo-muted); font-size: 13px; margin-top: 2px; }
