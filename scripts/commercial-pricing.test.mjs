@@ -251,6 +251,96 @@ test('estimate vs actual: progress, earned value, hours and materials', async ()
   assert.deepEqual(c.materials.map(m => [m.name, m.estimated, m.received]), [['Chapa ST', 210, 100], ['Fita', 0, 5]])
 })
 
+// ---------------------------------------------------------------- phase 4: alternates, allowances, actual costs
+import { inPrice, sellingPrices, totalsOf } from '../src/lib/commercial/estimates.ts'
+import { costPerformance, costVariance, readCostCsv, categoryOf } from '../src/lib/commercial/costs.ts'
+import { appendClause } from '../src/lib/commercial/clauses.ts'
+import { typeStats } from '../src/lib/commercial/insights.ts'
+
+const item = (id, kind, q, mat, lab, extra = {}) => ({
+  id, estimate_id: 'e', project_id: 'p', sort_order: 0, source: 'manual', takeoff_layer_id: null, recipe_id: null,
+  description: id, unit: 'm2', quantity: q, quantity_overridden: false, material_unit_cost: mat, labor_unit_cost: lab,
+  equipment_unit_cost: 0, subcontract_unit_cost: 0, breakdown: {}, notes: null, kind, organization_work_package_id: null, ...extra,
+})
+
+test('alternates stay out of the price; allowances stay in', () => {
+  const lines = [{ key: 'm', label: 'Markup', applies_to: 'direct', method: 'percent', rate: 20 }]
+  const items = [item('a', 'base', 10, 5, 5), item('b', 'allowance', 1, 100, 0), item('c', 'alternate', 2, 10, 0)]
+  assert.deepEqual(inPrice(items).map(i => i.id), ['a', 'b'])
+  const t = totalsOf(items, lines)
+  assert.equal(t.row.direct_total, 200)
+  assert.equal(t.row.price_total, 240)
+  const sp = sellingPrices(items, lines)
+  assert.equal(sp.get('c'), 24)          // alternate priced with the same markup
+  assert.equal(sp.get('a') + sp.get('b'), 240)
+  // rows from before item kinds count as base
+  assert.equal(inPrice([{ kind: undefined }, { kind: null }]).length, 2)
+})
+
+test('cost CSV: Brazilian export with semicolons, item match and categories', () => {
+  const csv = 'Data;Histórico;Valor;Natureza;Fornecedor;NF;Item\n06/10/2026;Chapas ST;4.580,00;Material;Forn A;1234;parede DRYWALL\n07/10/2026;Folha;3.200,00;Mão de obra;;;\n32/10/2026;x;1;;;;\n08/10/2026;Devolução;-150,00;material;;;Outra coisa\n'
+  const r = readCostCsv(csv, true, [{ id: 'i1', description: 'Parede drywall' }])
+  assert.deepEqual(r.missingColumns, [])
+  assert.equal(r.rows.length, 3)
+  assert.deepEqual(r.errors, [{ line: 4, reason: 'date' }])
+  assert.equal(r.rows[0].amount, 4580)
+  assert.equal(r.rows[0].itemId, 'i1')
+  assert.equal(r.rows[0].incurredOn, '2026-10-06')
+  assert.equal(r.rows[1].category, 'labor')
+  assert.equal(r.rows[2].amount, -150)
+  assert.equal(r.rows[2].itemUnmatched, true)
+  assert.deepEqual(readCostCsv('Foo,Bar\n1,2', true, []).missingColumns, ['incurredOn', 'description', 'amount'])
+  assert.equal(categoryOf('Subcontrato'), 'subcontract')
+})
+
+test('cost variance and earned-value cost performance', () => {
+  const items = [item('a', 'base', 10, 10, 5), item('alt', 'alternate', 1, 999, 0)]
+  const v = costVariance(items, [
+    { estimate_item_id: 'a', category: 'material', amount: 120 },
+    { estimate_item_id: null, category: 'labor', amount: 40 },
+    { estimate_item_id: null, category: 'other', amount: 10 },
+  ])
+  assert.equal(v.estimated, 150)
+  assert.equal(v.actual, 170)
+  assert.equal(v.unlinked, 50)
+  assert.equal(v.byItem.get('a'), 120)
+  assert.deepEqual(v.byCategory.map(c => c.category), ['material', 'labor', 'other'])
+  assert.deepEqual(costPerformance(100, 0), { cpi: null, cv: null })
+  const p = costPerformance(120, 100)
+  assert.equal(p.cpi, 1.2)
+  assert.equal(p.cv, 20)
+})
+
+test('clause library appends once', () => {
+  assert.equal(appendClause('', 'Taxas'), 'Taxas')
+  assert.equal(appendClause('- Licenças\n', 'Taxas'), '- Licenças\nTaxas')
+  assert.equal(appendClause('• Taxas', 'Taxas'), '• Taxas')
+})
+
+test('win rate by project type', () => {
+  const b = (id, status, type) => ({ project_id: id, status, project_type: type, projects: null })
+  const rows = typeStats([b('1', 'won', 'industrial'), b('2', 'lost', 'industrial'), b('3', 'draft', null), b('4', 'won', 'residential')], new Map(), k => k.toUpperCase())
+  assert.equal(rows[rows.length - 1].type, 'none')
+  const ind = rows.find(r => r.type === 'industrial')
+  assert.equal(ind.winRate, 50)
+  assert.equal(ind.client, 'INDUSTRIAL')
+})
+
+test('cost amounts: locale thousands, accounting negatives', async () => {
+  const { parseAmount } = await import('../src/lib/commercial/costs.ts')
+  assert.equal(parseAmount('4.580', true), 4580)
+  assert.equal(parseAmount('1,234', false), 1234)
+  assert.equal(parseAmount('1,234', true), 1.234)
+  assert.equal(parseAmount('12.50', true), 12.5)
+  assert.equal(parseAmount('R$ 1.234,56', true), 1234.56)
+  assert.equal(parseAmount('$1,234.56', false), 1234.56)
+  assert.equal(parseAmount('(1.234,56)', true), -1234.56)
+  assert.equal(parseAmount('1.234,56-', true), -1234.56)
+  assert.equal(parseAmount('-150,00', true), -150)
+  assert.equal(parseAmount('1.234.567', true), 1234567)
+  assert.ok(Number.isNaN(parseAmount('abc', true)))
+})
+
 test('trial application: validation, honeypot, whitelists', async () => {
   const { readTrialApplication } = await import('../src/lib/trial.ts')
   const now = new Date('2026-10-06T12:00:00Z')

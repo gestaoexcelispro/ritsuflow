@@ -1,6 +1,6 @@
 // Estimate revisions and their items (Supabase rows), and the refresh from takeoff.
 import type { createClient } from '@/lib/supabase/client'
-import { priceWithLines, directOf, money, priceLabor, priceNeedGroups, unitCost, type LaborRate, type PricedLine, type PriceItem, type PricingLine } from './pricing'
+import { priceWithLines, directOf, money, sellingFactors, priceLabor, priceNeedGroups, unitCost, type LaborRate, type PricedLine, type PriceItem, type PricingLine } from './pricing'
 import type { TakeoffLine } from './takeoffEstimate'
 
 type Supabase = ReturnType<typeof createClient>
@@ -29,6 +29,10 @@ export const ESTIMATE_COLUMNS = 'id, project_id, revision, name, status, is_base
 
 export type Breakdown = { materials?: PricedLine[]; labor?: PricedLine[]; equipment?: PricedLine[]; subcontract?: PricedLine[]; missing?: string[]; takeoffQuantity?: number; framed?: boolean }
 
+/** base: in the price · allowance: in the price, listed apart on the proposal · alternate: priced option outside the price. */
+export const ITEM_KINDS = ['base', 'allowance', 'alternate'] as const
+export type ItemKind = (typeof ITEM_KINDS)[number]
+
 export type ItemRow = {
   id: string
   estimate_id: string
@@ -47,13 +51,38 @@ export type ItemRow = {
   subcontract_unit_cost: number
   breakdown: Breakdown
   notes: string | null
+  kind: ItemKind
+  organization_work_package_id: string | null
 }
 
-export const ITEM_COLUMNS = 'id, estimate_id, project_id, sort_order, source, takeoff_layer_id, recipe_id, description, unit, quantity, quantity_overridden, material_unit_cost, labor_unit_cost, equipment_unit_cost, subcontract_unit_cost, breakdown, notes'
+export const ITEM_COLUMNS = 'id, estimate_id, project_id, sort_order, source, takeoff_layer_id, recipe_id, description, unit, quantity, quantity_overridden, material_unit_cost, labor_unit_cost, equipment_unit_cost, subcontract_unit_cost, breakdown, notes, kind, organization_work_package_id'
 
-/** Totals of a revision from its items and add-on lines (what is cached on the estimate row). */
+/** Items that make up the price (alternates are options outside it). Rows from before item kinds count as base. */
+export function inPrice<T extends { kind?: ItemKind | null }>(items: T[]): T[] {
+  return items.filter(i => i.kind !== 'alternate')
+}
+
+/** Direct cost of one item for its whole quantity. */
+export function itemDirect(i: Pick<ItemRow, 'quantity' | 'material_unit_cost' | 'labor_unit_cost' | 'equipment_unit_cost' | 'subcontract_unit_cost'>) {
+  const q = Number(i.quantity) || 0
+  const material = q * (Number(i.material_unit_cost) || 0)
+  const services = q * ((Number(i.labor_unit_cost) || 0) + (Number(i.equipment_unit_cost) || 0) + (Number(i.subcontract_unit_cost) || 0))
+  return { material, services, total: material + services }
+}
+
+/**
+ * Selling price of each item with the revision's BDI / markup (per-bucket factors of the base price,
+ * so material BDI applies to material). Alternates are priced with the same factors.
+ */
+export function sellingPrices(items: ItemRow[], lines: PricingLine[]): Map<string, number> {
+  let f = { material: 1, services: 1 }
+  try { f = sellingFactors(directOf(inPrice(items)), lines) } catch { /* invalid taxes: show cost */ }
+  return new Map(items.map(i => { const d = itemDirect(i); return [i.id, money(d.material * f.material + d.services * f.services)] }))
+}
+
+/** Totals of a revision from its items and add-on lines (what is cached on the estimate row). Alternates are left out. */
 export function totalsOf(items: ItemRow[], lines: PricingLine[]) {
-  const d = directOf(items)
+  const d = directOf(inPrice(items))
   let price = d.material + d.labor + d.equipment + d.subcontract
   let markupPct: number | null = null
   let problem = ''

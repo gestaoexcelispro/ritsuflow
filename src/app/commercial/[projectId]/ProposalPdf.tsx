@@ -20,6 +20,10 @@ export type ProposalPdfData = {
   notes: string
   items: { description: string; qty: string; unit: string; unitPrice: string; total: string }[] | null
   buildUp: { label: string; rate: string; amount: string }[] | null
+  /** In the price, listed apart (USA allowances / verbas). */
+  allowances: { description: string; amount: string }[]
+  /** Priced options outside the price. */
+  alternates: { description: string; amount: string }[]
   direct: string
   markup: string | null
   price: string
@@ -125,6 +129,22 @@ export default function ProposalPdf({ d }: { d: ProposalPdfData }) {
           </> : null}
           <View style={s.priceRow}><Text style={s.bold}>{L.total}</Text><Text style={s.price}>{d.price}</Text></View>
         </View>
+
+        {d.allowances.length ? (
+          <View style={[s.section, { marginTop: 12 }]} wrap={false}>
+            <Text style={s.h2}>{L.allowances}</Text>
+            {d.allowances.map((a, i) => <View key={i} style={s.totalRow}><Text style={{ flex: 1 }}>{a.description}</Text><Text>{a.amount}</Text></View>)}
+            <Text style={[s.small, { marginTop: 3 }]}>{L.allowancesNote}</Text>
+          </View>
+        ) : null}
+
+        {d.alternates.length ? (
+          <View style={[s.section, { marginTop: 12 }]} wrap={false}>
+            <Text style={s.h2}>{L.alternates}</Text>
+            {d.alternates.map((a, i) => <View key={i} style={s.totalRow}><Text style={{ flex: 1 }}>{L.alternate} {i + 1} · {a.description}</Text><Text>+ {a.amount}</Text></View>)}
+            <Text style={[s.small, { marginTop: 3 }]}>{L.alternatesNote}</Text>
+          </View>
+        ) : null}
 
         <View style={[s.grid, { marginTop: 14 }]} wrap={false}>
           {d.inclusions.length ? <View style={s.box}><Text style={s.h2}>{L.inclusions}</Text><Bullets items={d.inclusions} /></View> : null}

@@ -22,7 +22,7 @@ const SAMPLE = { material: 60000, labor: 40000, equipment: 0, subcontract: 0 }
 export default function PricingTemplates() {
   const t = useT('commercial')
   const { language, numberFormat } = useLanguage()
-  const { licensed, isPlatformOwner, organizationId } = useCommercialAccess()
+  const { canEditLibrary: licensed, isPlatformOwner, organizationId } = useCommercialAccess()
   const [country, setCountry] = useState('BR')
   const [rows, setRows] = useState<TemplateRow[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)

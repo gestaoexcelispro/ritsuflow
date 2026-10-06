@@ -6,14 +6,15 @@ import { ui } from '../ui'
 import PriceBook from './PriceBook'
 import LaborRates from './LaborRates'
 import PricingTemplates from './PricingTemplates'
+import Clauses from './Clauses'
 
-type Tab = 'prices' | 'labor' | 'templates'
+type Tab = 'prices' | 'labor' | 'templates' | 'clauses'
 
 /** Commercial → Library: what every estimate is priced from. */
 export default function LibraryPage() {
   const t = useT('commercial')
   const [tab, setTab] = useState<Tab>('prices')
-  const tabs: Tab[] = ['prices', 'labor', 'templates']
+  const tabs: Tab[] = ['prices', 'labor', 'templates', 'clauses']
   return (
     <section style={ui.page}>
       <div role="tablist" aria-label={t('library.title')} style={ui.tabs}>
@@ -26,6 +27,7 @@ export default function LibraryPage() {
       {tab === 'prices' && <PriceBook />}
       {tab === 'labor' && <LaborRates />}
       {tab === 'templates' && <PricingTemplates />}
+      {tab === 'clauses' && <Clauses />}
     </section>
   )
 }

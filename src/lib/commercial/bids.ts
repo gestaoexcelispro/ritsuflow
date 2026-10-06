@@ -12,6 +12,10 @@ export const OPEN_STATUSES: BidStatus[] = ['draft', 'submitted']
 export const OUTCOME_REASONS = ['price', 'scope', 'deadline', 'relationship', 'competitor', 'technical', 'capacity', 'cancelled', 'other'] as const
 export type OutcomeReason = (typeof OUTCOME_REASONS)[number]
 
+/** Kind of work, for win rate by type (commercial_bids.project_type). */
+export const PROJECT_TYPES = ['residential', 'commercial', 'industrial', 'institutional', 'infrastructure', 'renovation', 'other'] as const
+export type ProjectType = (typeof PROJECT_TYPES)[number]
+
 export type BidProject = {
   id: string
   name: string
@@ -32,11 +36,12 @@ export type BidRow = {
   outcome_note: string | null
   outcome_reason: OutcomeReason | null
   pricing_template_id: string | null
+  project_type: ProjectType | null
   created_at: string
   projects: BidProject | null
 }
 
-export const BID_COLUMNS = 'project_id, bid_number, status, due_at, submitted_at, decided_at, outcome_note, outcome_reason, pricing_template_id, created_at, projects(id, name, client_name, country_code, currency_code, stage, organization_id)'
+export const BID_COLUMNS = 'project_id, bid_number, status, due_at, submitted_at, decided_at, outcome_note, outcome_reason, pricing_template_id, project_type, created_at, projects(id, name, client_name, country_code, currency_code, stage, organization_id)'
 
 export type EstimateSummary = { id: string; project_id: string; revision: number; name: string; status: 'draft' | 'issued'; price_total: number; direct_total: number; currency_code: string; is_baseline: boolean }
 
@@ -60,6 +65,7 @@ export type NewBid = {
   country: string
   currency: string
   dueDate: string
+  projectType: ProjectType | null
   templateId: string | null
   templateLines: PricingLine[]
 }
@@ -80,6 +86,7 @@ export async function createBid(supabase: Supabase, b: NewBid): Promise<{ projec
     project_id: projectId,
     due_at: b.dueDate ? new Date(`${b.dueDate}T18:00:00`).toISOString() : null,
     pricing_template_id: b.templateId,
+    project_type: b.projectType,
   })
   const estimate = bid.error ? null : await supabase.from('commercial_estimates').insert({
     project_id: projectId, revision: 0, name: 'Rev 0', currency_code: b.currency, pricing_lines: b.templateLines,

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
 import { abcOfInputs, abcOfItems, type AbcRow } from '@/lib/commercial/abc'
-import { ESTIMATE_COLUMNS, ITEM_COLUMNS, type EstimateRow, type ItemRow } from '@/lib/commercial/estimates'
+import { ESTIMATE_COLUMNS, ITEM_COLUMNS, type EstimateRow, type ItemRow, inPrice } from '@/lib/commercial/estimates'
 import { formatMoney, formatPct, formatQty } from '@/lib/commercial/format'
 import { ui } from '../ui'
 
@@ -43,7 +43,7 @@ export default function AbcTab({ projectId, bidNumber }: { projectId: string; bi
       .then(({ data, error: e }) => { if (e) setError(t('error.load', { message: e.message })); else setItems(((data || []) as ItemRow[]).map(i => ({ ...i, breakdown: i.breakdown || {} }))) })
   }, [estimate?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const rows = useMemo(() => (view === 'inputs' ? abcOfInputs(items) : abcOfItems(items)), [items, view])
+  const rows = useMemo(() => { const base = inPrice(items); return view === 'inputs' ? abcOfInputs(base) : abcOfItems(base) }, [items, view])
   const cur = estimate?.currency_code || 'BRL'
   const summary = useMemo(() => (['A', 'B', 'C'] as const).map(c => {
     const list = rows.filter(r => r.cls === c)

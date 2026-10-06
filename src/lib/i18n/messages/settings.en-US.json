@@ -396,5 +396,9 @@
   "plan.authority": "Who provisions",
   "plan.authorityValue": "RitsuFlow platform operator",
   "plan.chainTitle": "Governance chain.",
-  "plan.chainText": "Plan & usage → Workspace access → Users & access → Project access → Roles & permissions. Each level can never go beyond the one before it."
+  "plan.chainText": "Plan & usage → Workspace access → Users & access → Project access → Roles & permissions. Each level can never go beyond the one before it.",
+  "users.workspace.commercial": "Commercial",
+  "users.commercialEditor": "Commercial editor",
+  "users.commercialEditorHint": "Edits prices, labor rates, BDI templates and clauses, and creates and manages every bid of the company (including its RitsuScope takeoff), whatever the role. Contract projects keep their normal access.",
+  "users.commercialEditorBadge": "Commercial editor"
 }

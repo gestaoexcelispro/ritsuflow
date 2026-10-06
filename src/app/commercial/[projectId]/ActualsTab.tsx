@@ -1,17 +1,19 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
 import { compare, loadActuals, type Comparison } from '@/lib/commercial/actuals'
-import { ESTIMATE_COLUMNS, ITEM_COLUMNS, type EstimateRow, type ItemRow } from '@/lib/commercial/estimates'
+import { ESTIMATE_COLUMNS, ITEM_COLUMNS, inPrice, type EstimateRow, type ItemRow } from '@/lib/commercial/estimates'
+import { COST_COLUMNS, costPerformance, costVariance, type CostRow } from '@/lib/commercial/costs'
+import CostsSection from './CostsSection'
 import { formatMoney, formatPct, formatQty } from '@/lib/commercial/format'
 import { ui } from '../ui'
 
 /** Converted project → estimate vs. actual: the baseline revision against what FieldOp records. */
-export default function ActualsTab({ projectId }: { projectId: string }) {
+export default function ActualsTab({ projectId, editable }: { projectId: string; editable: boolean }) {
   const t = useT('commercial')
   const { numberFormat } = useLanguage()
   const [baseline, setBaseline] = useState<EstimateRow | null>(null)
@@ -19,6 +21,24 @@ export default function ActualsTab({ projectId }: { projectId: string }) {
   const [reports, setReports] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<ItemRow[]>([])
+  const [costs, setCosts] = useState<CostRow[]>([])
+  const [costError, setCostError] = useState('')
+
+  const loadCosts = useCallback(async () => {
+    // Page through all rows: the API returns at most 1000 per request.
+    const all: CostRow[] = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error: e } = await createClient().from('commercial_actual_costs').select(COST_COLUMNS).eq('project_id', projectId)
+        .order('incurred_on', { ascending: false }).order('id').range(from, from + 999)
+      if (e) { setCostError(t('error.load', { message: e.message })); return }
+      all.push(...((data || []) as CostRow[]))
+      if (!data || data.length < 1000) break
+    }
+    setCostError(''); setCosts(all)
+  }, [projectId, t])
+
+  useEffect(() => { void loadCosts() }, [loadCosts])
 
   useEffect(() => {
     let active = true
@@ -38,7 +58,9 @@ export default function ActualsTab({ projectId }: { projectId: string }) {
         if (!active) return
         setBaseline(base)
         setReports(actuals.reportCount)
-        setCmp(compare(((items.data || []) as ItemRow[]).map(i => ({ ...i, breakdown: i.breakdown || {} })), actuals))
+        const lines = inPrice(((items.data || []) as ItemRow[]).map(i => ({ ...i, breakdown: i.breakdown || {} })))
+        setItems(lines)
+        setCmp(compare(lines, actuals))
       } catch (err) {
         if (active) setError(t('error.load', { message: err instanceof Error ? err.message : String(err) }))
       } finally {
@@ -47,6 +69,15 @@ export default function ActualsTab({ projectId }: { projectId: string }) {
     })()
     return () => { active = false }
   }, [projectId, t])
+
+  const variance = useMemo(() => costVariance(items, costs), [items, costs])
+  // CPI / CV only where both are known: lines with FieldOp progress and the costs linked to them.
+  const performance = useMemo(() => {
+    const withProgress = (cmp?.items || []).filter(r => r.progress != null)
+    const earned = withProgress.reduce((s, r) => s + r.earned, 0)
+    const actual = withProgress.reduce((s, r) => s + (variance.byItem.get(r.id) || 0), 0)
+    return { earned, actual }
+  }, [cmp, variance])
 
   if (loading) return <div style={ui.muted}>{t('loading')}</div>
   if (error) return <div role="alert" style={ui.error}>{error}</div>
@@ -90,6 +121,8 @@ export default function ActualsTab({ projectId }: { projectId: string }) {
               <th style={{ ...ui.th, minWidth: 160 }}>{t('actuals.col.progress')}</th>
               <th style={{ ...ui.th, ...ui.num }}>{t('actuals.col.earned')}</th>
               <th style={{ ...ui.th, ...ui.num }}>{t('actuals.col.hours')}</th>
+              {costs.length > 0 && <th style={{ ...ui.th, ...ui.num }}>{t('costs.col.actual')}</th>}
+              {costs.length > 0 && <th style={{ ...ui.th, ...ui.num }} title={t('costs.cvHint')}>{t('costs.col.cv')}</th>}
             </tr>
           </thead>
           <tbody>
@@ -110,6 +143,11 @@ export default function ActualsTab({ projectId }: { projectId: string }) {
                 </td>
                 <td style={{ ...ui.td, ...ui.num }}>{formatMoney(r.earned, cur, numberFormat)}</td>
                 <td style={{ ...ui.td, ...ui.num }}>{r.estimatedHours ? `${h(r.earnedHours)} / ${h(r.estimatedHours)}` : '—'}</td>
+                {costs.length > 0 && <td style={{ ...ui.td, ...ui.num }}>{variance.byItem.has(r.id) ? formatMoney(variance.byItem.get(r.id)!, cur, numberFormat) : '—'}</td>}
+                {costs.length > 0 && (() => {
+                  const cv = variance.byItem.has(r.id) && r.progress != null ? costPerformance(r.earned, variance.byItem.get(r.id)!).cv : null
+                  return <td style={{ ...ui.td, ...ui.num, color: cv == null ? undefined : cv >= 0 ? '#075a53' : '#a8521f' }}>{cv == null ? '—' : formatMoney(cv, cur, numberFormat)}</td>
+                })()}
               </tr>
             ))}
           </tbody>
@@ -144,6 +182,9 @@ export default function ActualsTab({ projectId }: { projectId: string }) {
         </section>
       )}
       <p style={{ ...ui.small, margin: 0 }}>{t('actuals.note')}</p>
+      {costError ? <div role="alert" style={ui.error}>{costError}</div> : (
+        <CostsSection projectId={projectId} currency={cur} items={items} costs={costs} variance={variance} performance={performance} editable={editable} onChanged={() => void loadCosts()} />
+      )}
     </div>
   )
 }

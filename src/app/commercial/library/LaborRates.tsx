@@ -23,7 +23,7 @@ function tradeCode(name: string): string {
 export default function LaborRates() {
   const t = useT('commercial')
   const { language, numberFormat } = useLanguage()
-  const { licensed, organizationId } = useCommercialAccess()
+  const { canEditLibrary: licensed, organizationId } = useCommercialAccess()
   const [country, setCountry] = useState('BR')
   const [rows, setRows] = useState<LaborRateRow[]>([])
   const [form, setForm] = useState<Form | null>(null)

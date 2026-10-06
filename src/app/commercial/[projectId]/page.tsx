@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useT } from '@/lib/i18n/useT'
-import { BID_COLUMNS, ESTIMATE_SUMMARY_COLUMNS, statusPatch, type BidRow, type BidStatus, type EstimateSummary, type OutcomeReason } from '@/lib/commercial/bids'
+import { BID_COLUMNS, ESTIMATE_SUMMARY_COLUMNS, PROJECT_TYPES, statusPatch, type BidRow, type BidStatus, type EstimateSummary, type OutcomeReason, type ProjectType } from '@/lib/commercial/bids'
 import { formatDate, formatMoney } from '@/lib/commercial/format'
 import { useCommercialAccess } from '../license'
 import { statusStyle, ui } from '../ui'
@@ -24,7 +24,9 @@ type Counts = { sheets: number; items: number; elements: number }
 export default function BidWorkspace() {
   const t = useT('commercial')
   const { language, numberFormat } = useLanguage()
-  const { licensed } = useCommercialAccess()
+  const { licensed, organizationId } = useCommercialAccess()
+  // Licensed and allowed to manage this bid (role, project membership or Commercial editor switch).
+  const [canManage, setCanManage] = useState<boolean | null>(null)
   const { projectId } = useParams<{ projectId: string }>()
   const [bid, setBid] = useState<BidRow | null>(null)
   const [estimates, setEstimates] = useState<EstimateSummary[]>([])
@@ -60,6 +62,25 @@ export default function BidWorkspace() {
 
   useEffect(() => { void load() }, [load])
 
+  useEffect(() => {
+    let active = true
+    createClient().rpc('commercial_permissions', { p_organization_id: organizationId, p_project_id: projectId }).then(({ data, error: e }) => {
+      if (!active) return
+      // Before the permissions function exists, the license decides (as before).
+      setCanManage(e ? null : (data as { manage_bid?: boolean } | null)?.manage_bid === true)
+    })
+    return () => { active = false }
+  }, [organizationId, projectId])
+
+  async function setProjectType(value: ProjectType | '') {
+    if (!bid) return
+    setBusy(true); setError('')
+    const { error: e } = await createClient().from('commercial_bids').update({ project_type: value || null }).eq('project_id', bid.project_id)
+    setBusy(false)
+    if (e) { setError(t('error.save', { message: e.message })); return }
+    void load()
+  }
+
   async function setStatus(status: BidStatus, note: string | null = null, reason: OutcomeReason | null = null) {
     if (!bid) return
     // Won, lost and declined ask for a note (and, except won, a reason) first.
@@ -81,6 +102,7 @@ export default function BidWorkspace() {
   )
 
   const p = bid.projects
+  const manage = licensed && canManage !== false
   const latest = estimates[0] || null
   const converted = p?.stage === 'contract'
   const actions: { status: BidStatus; label: string; primary?: boolean }[] =
@@ -102,6 +124,13 @@ export default function BidWorkspace() {
                 <span style={statusStyle[bid.status]}>{t(`status.${bid.status}`)}</span>
                 {converted && <span style={ui.chipTeal}>{t('bids.converted')}</span>}
                 <span style={ui.small}>{bid.bid_number}{bid.due_at ? ` · ${t('bid.due', { date: formatDate(bid.due_at, language) })}` : ''}</span>
+                {manage && !converted ? (
+                  <select aria-label={t('field.projectType')} value={bid.project_type || ''} disabled={busy} onChange={e => void setProjectType(e.target.value as ProjectType | '')}
+                    style={{ ...ui.input, height: 28, padding: '0 8px', fontSize: 12, width: 'auto' }}>
+                    <option value="">{t('projectType.none')}</option>
+                    {PROJECT_TYPES.map(k => <option key={k} value={k}>{t(`projectType.${k}`)}</option>)}
+                  </select>
+                ) : bid.project_type && <span style={ui.chip}>{t(`projectType.${bid.project_type}`)}</span>}
               </div>
               <h1 style={{ ...ui.title, fontSize: 22 }}>{p?.name}</h1>
               <span style={ui.small}>{[p?.client_name, p?.country_code, p?.currency_code].filter(Boolean).join(' · ')}</span>
@@ -109,7 +138,7 @@ export default function BidWorkspace() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
               {latest && <span style={{ fontSize: 13, color: '#294955' }}>{t('bid.latestPrice')} <strong style={{ fontSize: 18, color: '#075a53' }}>{formatMoney(latest.price_total, latest.currency_code, numberFormat)}</strong></span>}
-              {licensed && (actions.length > 0 || (bid.status === 'won' && !converted)) && (
+              {manage && (actions.length > 0 || (bid.status === 'won' && !converted)) && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {bid.status === 'won' && !converted && <button type="button" disabled={busy} onClick={() => setConverting(true)} style={ui.button}>{t('convert.open')}</button>}
                   {actions.map(a => (
@@ -143,10 +172,10 @@ export default function BidWorkspace() {
           </div>
         )}
 
-        {tab === 'estimate' && <EstimateTab projectId={projectId} country={p?.country_code || 'BR'} editable={licensed && !converted} onChanged={() => void load()} />}
-        {tab === 'actuals' && <ActualsTab projectId={projectId} />}
+        {tab === 'estimate' && <EstimateTab projectId={projectId} country={p?.country_code || 'BR'} editable={manage && !converted} onChanged={() => void load()} />}
+        {tab === 'actuals' && <ActualsTab projectId={projectId} editable={manage} />}
         {tab === 'abc' && <AbcTab projectId={projectId} bidNumber={bid.bid_number} />}
-        {tab === 'proposal' && <ProposalTab bid={bid} editable={licensed && !converted} />}
+        {tab === 'proposal' && <ProposalTab bid={bid} editable={manage && !converted} />}
 
         {tab === 'revisions' && (
           estimates.length === 0 ? <div style={ui.empty}>{t('revisions.empty')}</div> : (

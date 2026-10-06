@@ -32,7 +32,7 @@ type Form = {
 export default function PriceBook() {
   const t = useT('commercial')
   const { language, numberFormat } = useLanguage()
-  const { licensed, organizationId } = useCommercialAccess()
+  const { canEditLibrary: licensed, organizationId } = useCommercialAccess()
   const [country, setCountry] = useState('BR')
   const [kind, setKind] = useState<PriceKind | 'all'>('all')
   const [search, setSearch] = useState('')
