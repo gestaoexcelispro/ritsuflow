@@ -34,3 +34,12 @@ export const ui = {
   chipTeal: { display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: '#e3f3f1', color: '#075a53' },
   chipOrange: { display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: '#fff4e8', color: '#8a4413' },
 } satisfies Record<string, CSSProperties>
+
+/** Chip style per bid status. */
+export const statusStyle: Record<'draft' | 'submitted' | 'won' | 'lost' | 'no_bid', CSSProperties> = {
+  draft: ui.chip,
+  submitted: { ...ui.chip, background: '#e6eef9', color: '#1f4f8a' },
+  won: ui.chipTeal,
+  lost: ui.chipOrange,
+  no_bid: ui.chip,
+}

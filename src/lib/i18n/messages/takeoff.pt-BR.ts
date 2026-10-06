@@ -15,6 +15,8 @@ const takeoffPtBR = {
   'list.col.layers': 'Camadas',
   'list.col.elements': 'Elementos',
   'list.open': 'Abrir',
+  'list.bid': 'Proposta',
+  'workspace.backToEstimate': 'Voltar ao orçamento',
   'list.error': 'Erro ao carregar o levantamento.',
 
   'workspace.back': 'Voltar ao levantamento',
