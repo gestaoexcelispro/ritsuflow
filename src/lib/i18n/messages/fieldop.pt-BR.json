@@ -103,5 +103,17 @@
   "nav.commercialModule": "Comercial",
   "nav.commercialTagline": "Orce levantamentos, envie propostas e ganhe obras.",
   "nav.commercialBids": "Propostas",
-  "nav.commercialLibrary": "Biblioteca"
+  "nav.commercialLibrary": "Biblioteca",
+  "nav.ritsuscopeModule": "RitsuScope",
+  "nav.ritsuscopeTagline": "Pranchas, locais e quantitativos",
+  "nav.ritsuscopeProjects": "Projetos",
+  "nav.adminModule": "Ritsu Admin",
+  "nav.adminTagline": "Proprietário da plataforma",
+  "nav.adminMap": "Mapa da plataforma",
+  "nav.adminReports": "Relatórios",
+  "nav.adminOrganizations": "Organizações",
+  "nav.adminLicenses": "Licenças e testes",
+  "nav.adminStatus": "Status do sistema",
+  "nav.adminAudit": "Log de auditoria",
+  "nav.workspacesTagline": "Escolha seu espaço de trabalho"
 }
