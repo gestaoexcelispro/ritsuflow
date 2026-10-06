@@ -16,6 +16,7 @@ export type ZoneShape = { id: string; name: string; color: string; pts: Vec2[]; 
 
 /** Largest canvas side we render; beyond this the browser scales the bitmap. */
 const MAX_CANVAS_SIDE = 8192
+const NO_IDS: ReadonlySet<string> = new Set()
 /** Extra area rendered on every side of the view (fraction of the view), so panning stays sharp without re-rendering. */
 const DETAIL_MARGIN = 1
 /** Re-render once less than this much (fraction of the view) of sharp area is left beyond the view's edge. */
@@ -60,6 +61,8 @@ type Props = {
   selectable: boolean
   selectedId: string | null
   onSelect: (elementId: string | null) => void
+  /** Elements picked with a selection box (highlighted like the selected one). */
+  multiSelected?: ReadonlySet<string>
   /** Select mode: a vertex of the selected element was dragged to a new position. */
   onMovePoints?: (elementId: string, points: Vec2[]) => void
   onSize: (size: { width: number; height: number }) => void
@@ -100,7 +103,7 @@ type PdfPageProxy = {
 
 /** One PDF page with the takeoff overlay. Coordinates are PDF points (viewport at scale 1). */
 export default function PdfSheet(props: Props) {
-  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, onMovePoints, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
+  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLCanvasElement>(null)
@@ -467,7 +470,7 @@ export default function PdfSheet(props: Props) {
               const pts = drag && shape.id === drag.id ? drag.pts : shape.pts
               const points = pts.map(p => `${p[0]},${p[1]}`).join(' ')
               const key = `${item.key}-${index}`
-              const selected = !!shape.id && shape.id === selectedId
+              const selected = !!shape.id && (shape.id === selectedId || multiSelected.has(shape.id))
               const color = selected ? '#111827' : item.color
               const pick = selectable && shape.id
                 ? {
