@@ -8,6 +8,10 @@ export const BID_STATUSES = ['draft', 'submitted', 'won', 'lost', 'no_bid'] as c
 export type BidStatus = (typeof BID_STATUSES)[number]
 export const OPEN_STATUSES: BidStatus[] = ['draft', 'submitted']
 
+/** Why a bid was lost or declined (commercial_bids.outcome_reason). */
+export const OUTCOME_REASONS = ['price', 'scope', 'deadline', 'relationship', 'competitor', 'technical', 'capacity', 'cancelled', 'other'] as const
+export type OutcomeReason = (typeof OUTCOME_REASONS)[number]
+
 export type BidProject = {
   id: string
   name: string
@@ -26,12 +30,13 @@ export type BidRow = {
   submitted_at: string | null
   decided_at: string | null
   outcome_note: string | null
+  outcome_reason: OutcomeReason | null
   pricing_template_id: string | null
   created_at: string
   projects: BidProject | null
 }
 
-export const BID_COLUMNS = 'project_id, bid_number, status, due_at, submitted_at, decided_at, outcome_note, pricing_template_id, created_at, projects(id, name, client_name, country_code, currency_code, stage, organization_id)'
+export const BID_COLUMNS = 'project_id, bid_number, status, due_at, submitted_at, decided_at, outcome_note, outcome_reason, pricing_template_id, created_at, projects(id, name, client_name, country_code, currency_code, stage, organization_id)'
 
 export type EstimateSummary = { id: string; project_id: string; revision: number; name: string; status: 'draft' | 'issued'; price_total: number; direct_total: number; currency_code: string; is_baseline: boolean }
 
@@ -88,9 +93,9 @@ export async function createBid(supabase: Supabase, b: NewBid): Promise<{ projec
 }
 
 /** Status change with its dates: submitted sets submitted_at; won / lost / no bid set decided_at. */
-export function statusPatch(status: BidStatus, note?: string | null) {
+export function statusPatch(status: BidStatus, note?: string | null, reason?: OutcomeReason | null) {
   const now = new Date().toISOString()
-  if (status === 'submitted') return { status, submitted_at: now, decided_at: null }
-  if (status === 'draft') return { status, submitted_at: null, decided_at: null, outcome_note: null }
-  return { status, decided_at: now, outcome_note: note ?? null }
+  if (status === 'submitted') return { status, submitted_at: now, decided_at: null, outcome_reason: null }
+  if (status === 'draft') return { status, submitted_at: null, decided_at: null, outcome_note: null, outcome_reason: null }
+  return { status, decided_at: now, outcome_note: note ?? null, outcome_reason: status === 'won' ? null : reason ?? null }
 }
