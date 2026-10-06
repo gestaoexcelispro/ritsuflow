@@ -12,6 +12,7 @@ import { formatDate, formatMoney, formatPct, formatQty } from '@/lib/commercial/
 import type { BidRow } from '@/lib/commercial/bids'
 import { ui } from '../ui'
 import type { ProposalPdfData } from './ProposalPdf'
+import { appendPdfs, listAttachments, uploadAttachment, ATTACH_BUCKET, type AttachmentFile } from '@/lib/commercial/attachments'
 
 type Company = { name: string; legal_name: string | null; tax_id: string | null; email: string | null; phone: string | null; website: string | null; city: string | null; state_region: string | null; logo_url: string | null }
 
@@ -30,6 +31,9 @@ export default function ProposalTab({ bid, editable }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [files, setFiles] = useState<AttachmentFile[]>([])
+  const [attached, setAttached] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
 
   const estimate = revisions.find(r => r.id === selectedId) || revisions[0] || null
   const canEdit = editable && estimate?.status === 'draft'
@@ -55,7 +59,14 @@ export default function ProposalTab({ bid, editable }: Props) {
 
   useEffect(() => {
     if (!estimate) return
-    setDraft(readProposal(estimate.proposal))
+    const prop = readProposal(estimate.proposal)
+    setDraft(prop)
+    listAttachments(createClient(), projectId).then(list => {
+      setFiles(list)
+      const exists = new Set(list.map(f => f.path))
+      // First time: attach the full takeoff export when RitsuScope has made one.
+      setAttached(prop.attachments ? prop.attachments.filter(p => exists.has(p)) : list.filter(f => f.path.endsWith('/exports/takeoff.pdf')).map(f => f.path))
+    }).catch(e => setError(t('error.load', { message: e instanceof Error ? e.message : String(e) })))
     createClient().from('commercial_estimate_items').select(ITEM_COLUMNS).eq('estimate_id', estimate.id).order('sort_order').order('created_at')
       .then(({ data, error: e }) => { if (e) setError(t('error.load', { message: e.message })); else setItems((data || []) as ItemRow[]) })
   }, [estimate?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -123,14 +134,15 @@ export default function ProposalTab({ bid, editable }: Props) {
         price: formatMoney(totals.row.price_total, cur, numberFormat),
       }
       const [{ pdf }, { default: ProposalPdf }] = await Promise.all([import('@react-pdf/renderer'), import('./ProposalPdf')])
-      const blob = await pdf(<ProposalPdf d={data} />).toBlob()
+      const own = await pdf(<ProposalPdf d={data} />).toBlob()
+      const { blob, missing } = await appendPdfs(createClient(), own, attached)
       const name = `${bid.bid_number} ${bid.projects?.name || ''} ${estimate.name}`.replace(/[\\/:*?"<>|]+/g, '_').trim()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url; a.download = `${name}.pdf`
       document.body.appendChild(a); a.click(); a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
-      setMessage(estimate.status === 'draft' ? t('proposal.exportedDraft') : t('proposal.exported'))
+      setMessage([estimate.status === 'draft' ? t('proposal.exportedDraft') : t('proposal.exported'), missing.length ? t('attach.missing', { names: missing.join(', ') }) : ''].filter(Boolean).join(' '))
     } catch (e) {
       setError(t('proposal.errPdf', { message: e instanceof Error ? e.message : String(e) }))
     } finally {
@@ -190,6 +202,56 @@ export default function ProposalTab({ bid, editable }: Props) {
             {t('proposal.showBuildUp')}
           </label>
         </fieldset>
+        <section aria-labelledby="attach-title" style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid #edf1f2' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+            <strong id="attach-title" style={{ fontSize: 13, color: '#173441' }}>{t('attach.title')}</strong>
+            <span style={ui.small}>{t('attach.hint')}</span>
+            <span style={{ flex: 1 }} />
+            {editable && (
+              <label style={{ ...ui.buttonSmall, display: 'inline-flex', alignItems: 'center', cursor: uploading ? 'wait' : 'pointer' }}>
+                {uploading ? t('attach.uploading') : t('attach.upload')}
+                <input type="file" accept="application/pdf" disabled={uploading} style={{ display: 'none' }} onChange={async e => {
+                  const file = e.target.files?.[0]; e.target.value = ''
+                  if (!file) return
+                  setUploading(true); setError('')
+                  try {
+                    const path = await uploadAttachment(createClient(), projectId, file)
+                    setFiles(await listAttachments(createClient(), projectId))
+                    const next = [...attached, path]; setAttached(next)
+                    if (canEdit) void save({ ...draft, attachments: next })
+                  } catch (err) { setError(t('error.save', { message: err instanceof Error ? err.message : String(err) })) } finally { setUploading(false) }
+                }} />
+              </label>
+            )}
+          </div>
+          {files.length === 0 ? <div style={{ ...ui.small, padding: '6px 0' }}>{t('attach.none')}</div> : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {files.map(f => {
+                const what = f.kind === 'export' ? f.name.replace(/\.pdf$/i, '') : ''
+                const label = f.kind === 'export' ? t('attach.export', { kind: t(`attach.kind.${what}`) }) : f.name.replace(/^[a-z0-9]+-/, '')
+                const on = attached.includes(f.path)
+                return (
+                  <li key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #edf1f2', borderRadius: 8 }}>
+                    <input type="checkbox" checked={on} aria-label={label} style={{ width: 18, height: 18, accentColor: '#0b7f75' }} onChange={() => {
+                      const next = on ? attached.filter(x => x !== f.path) : [...attached, f.path]
+                      setAttached(next)
+                      if (canEdit) void save({ ...draft, attachments: next })
+                    }} />
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#294955' }}>
+                      {label}
+                      <small style={{ display: 'block', color: '#4f6670' }}>{f.kind === 'export' ? t('attach.fromRitsuScope') : t('attach.uploaded')}{f.updatedAt ? ` · ${formatDate(f.updatedAt.slice(0, 10), language)}` : ''}</small>
+                    </span>
+                    <button type="button" style={ui.buttonSmall} onClick={async () => {
+                      const { data } = await createClient().storage.from(ATTACH_BUCKET).createSignedUrl(f.path, 300)
+                      if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener')
+                    }}>{t('attach.view')}</button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          <span style={ui.small}>{t('attach.howTo')}</span>
+        </section>
       </div>
     </div>
   )

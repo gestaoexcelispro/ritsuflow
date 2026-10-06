@@ -891,6 +891,10 @@ export default function TakeoffWorkspacePage() {
       })
       const href = URL.createObjectURL(blob)
       const fileName = `${project!.project_code || project!.name} - ${kind}.pdf`.replace(/[\\/:*?"<>|]+/g, '_')
+      // Bids keep the latest export of each kind so Commercial can attach it to the proposal.
+      if (project!.stage === 'bid') {
+        void createClient().storage.from(BUCKET).upload(`${projectId}/exports/${what}.pdf`, blob, { upsert: true, contentType: 'application/pdf' })
+      }
       if (win && !win.closed) win.location.href = href
       else {
         const a = document.createElement('a')

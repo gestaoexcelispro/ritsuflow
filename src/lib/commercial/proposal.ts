@@ -10,10 +10,12 @@ export type Proposal = {
   showItems: boolean
   /** Show the price build-up (BDI / markup lines) in the PDF. */
   showBuildUp: boolean
+  /** Storage paths of PDFs appended to the proposal (RitsuScope exports, uploaded files). Null = never chosen. */
+  attachments: string[] | null
 }
 
 export const EMPTY_PROPOSAL: Proposal = {
-  scope: '', inclusions: '', exclusions: '', validityDays: 30, paymentTerms: '', notes: '', showItems: true, showBuildUp: false,
+  scope: '', inclusions: '', exclusions: '', validityDays: 30, paymentTerms: '', notes: '', showItems: true, showBuildUp: false, attachments: null,
 }
 
 export function readProposal(raw: Record<string, unknown> | null | undefined): Proposal {
@@ -25,6 +27,7 @@ export function readProposal(raw: Record<string, unknown> | null | undefined): P
     scope: str('scope'), inclusions: str('inclusions'), exclusions: str('exclusions'), validityDays: days,
     paymentTerms: str('paymentTerms'), notes: str('notes'),
     showItems: bool('showItems', EMPTY_PROPOSAL.showItems), showBuildUp: bool('showBuildUp', EMPTY_PROPOSAL.showBuildUp),
+    attachments: Array.isArray(r.attachments) ? (r.attachments as unknown[]).filter((x): x is string => typeof x === 'string') : null,
   }
 }
 
