@@ -45,6 +45,8 @@ function WorkspaceCard({ workspace, t }) {
 export default function WorkspacesPage(){
   const t=useT('workspaces')
   const router=useRouter()
+  const [leaving,setLeaving]=useState(false)
+  async function logout(){setLeaving(true);const{error}=await supabase.auth.signOut();if(error){setLeaving(false);return}router.replace('/login');router.refresh()}
   const [checking,setChecking]=useState(true)
   const [isPlatformOwner,setIsPlatformOwner]=useState(false)
 
@@ -85,6 +87,7 @@ export default function WorkspacesPage(){
         <div className={styles.platformLabel}>{t('platformLabel')}</div>
         <div className={styles.langWrap}><LanguageSelector dark /></div>
         <Link className={styles.settingsButton} href="/settings" aria-label={t('settingsAria')} title={t('settings')}><span aria-hidden="true">⚙</span><span>{t('settings')}</span></Link>
+        <button type="button" className={styles.settingsButton} onClick={logout} disabled={leaving} title={t('logout')} aria-label={t('logout')} style={{ font: 'inherit', cursor: 'pointer' }}><span aria-hidden="true">⏻</span><span>{t('logout')}</span></button>
       </div>
     </header>
     <section className={styles.hero}><div className={styles.kicker}>{t('kicker')}</div><h1>{t('title')}</h1></section>

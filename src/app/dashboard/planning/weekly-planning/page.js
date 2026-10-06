@@ -27,7 +27,22 @@ import pc from '../../precon.module.css';
 const I18N = {
   translate: (key) => key,
   language: 'en-US',
+  numberFormat: 'en-US',
 };
+
+// Numbers follow the user's number format (Settings › Language & units).
+const formatOneDecimal = (value) =>
+  new Intl.NumberFormat(I18N.numberFormat, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(Number(value));
+
+const formatQuantity = (value) =>
+  value === null || value === undefined || value === ''
+    ? '—'
+    : new Intl.NumberFormat(I18N.numberFormat, {
+      maximumFractionDigits: 3,
+    }).format(Number(value));
 
 const tr = (key, vars) =>
   I18N.translate(`weekly.${key}`, vars);
@@ -422,9 +437,10 @@ function constraintLifecycleLabel(
 
 export default function WeeklyPlanningPage() {
   const translate = useT('precon');
-  const { language } = useLanguage();
+  const { language, numberFormat } = useLanguage();
   I18N.translate = translate;
   I18N.language = language;
+  I18N.numberFormat = numberFormat;
   const dialogs = usePageDialogs();
   const initialMonday = useMemo(
     () =>
@@ -2418,9 +2434,7 @@ export default function WeeklyPlanningPage() {
               value={
                 ppc === null
                   ? '—'
-                  : `${Number(
-                      ppc,
-                    ).toFixed(1)}%`
+                  : `${formatOneDecimal(ppc)}%`
               }
               accent={
                 ppcTargetMet ===
@@ -2553,9 +2567,7 @@ export default function WeeklyPlanningPage() {
                       styles.secondaryMetricValue
                     }
                   >
-                    {Number(
-                      ppcTarget,
-                    ).toFixed(1)}
+                    {formatOneDecimal(ppcTarget)}
                     %
                   </div>
                 )}
@@ -2584,11 +2596,7 @@ export default function WeeklyPlanningPage() {
                   trend?.previous_week_ppc ===
                     undefined
                     ? '—'
-                    : `${Number(
-                        trend.previous_week_ppc,
-                      ).toFixed(
-                        1,
-                      )}%`}
+                    : `${formatOneDecimal(trend.previous_week_ppc)}%`}
                 </div>
               </div>
 
@@ -2619,11 +2627,7 @@ export default function WeeklyPlanningPage() {
                         trend.ppc_change_vs_previous_week,
                       ) >= 0
                         ? '+'
-                        : ''}${Number(
-                        trend.ppc_change_vs_previous_week,
-                      ).toFixed(
-                        1,
-                      )} pp`}
+                        : ''}${formatOneDecimal(trend.ppc_change_vs_previous_week)} pp`}
                 </div>
               </div>
 
@@ -2650,11 +2654,7 @@ export default function WeeklyPlanningPage() {
                   trend?.rolling_4_week_ppc ===
                     undefined
                     ? '—'
-                    : `${Number(
-                        trend.rolling_4_week_ppc,
-                      ).toFixed(
-                        1,
-                      )}%`}
+                    : `${formatOneDecimal(trend.rolling_4_week_ppc)}%`}
                 </div>
               </div>
             </div>
@@ -3108,10 +3108,7 @@ export default function WeeklyPlanningPage() {
                                       styles.tableNumberInput
                                     }
                                   />
-                                ) : (
-                                  item.planned_quantity ??
-                                  '—'
-                                )}
+                                ) : formatQuantity(item.planned_quantity)}
                               </TableCell>
 
                               <TableCell>
@@ -3157,9 +3154,7 @@ export default function WeeklyPlanningPage() {
                                             '4px',
                                         }}
                                       >
-                                        {quantityAchievement.toFixed(
-                                          1,
-                                        )}
+                                        {formatOneDecimal(quantityAchievement)}
                                         %
                                       </div>
                                     )}
@@ -3225,9 +3220,7 @@ export default function WeeklyPlanningPage() {
                                             '4px',
                                         }}
                                       >
-                                        {quantityAchievement.toFixed(
-                                          1,
-                                        )}
+                                        {formatOneDecimal(quantityAchievement)}
                                         %
                                       </div>
                                     )}
@@ -3235,8 +3228,7 @@ export default function WeeklyPlanningPage() {
                                 ) : (
                                   <div>
                                     <div>
-                                      {item.actual_quantity ??
-                                        '—'}
+                                      {formatQuantity(item.actual_quantity)}
                                     </div>
 
                                     {quantityAchievement !==
@@ -3251,9 +3243,7 @@ export default function WeeklyPlanningPage() {
                                             '4px',
                                         }}
                                       >
-                                        {quantityAchievement.toFixed(
-                                          1,
-                                        )}
+                                        {formatOneDecimal(quantityAchievement)}
                                         %
                                       </div>
                                     )}
@@ -3779,20 +3769,12 @@ export default function WeeklyPlanningPage() {
                         </span>
 
                         <span>
-                          {Number(
-                            row.variance_percent,
-                          ).toFixed(
-                            1,
-                          )}
+                          {formatOneDecimal(row.variance_percent)}
                           %
                         </span>
 
                         <span>
-                          {Number(
-                            row.cumulative_variance_percent,
-                          ).toFixed(
-                            1,
-                          )}
+                          {formatOneDecimal(row.cumulative_variance_percent)}
                           {t.cumulative}
                         </span>
                       </div>
@@ -3886,8 +3868,7 @@ export default function WeeklyPlanningPage() {
                                 }}
                               >
                                 {t.plannedColon}{' '}
-                                {item.planned_quantity ??
-                                  '—'}{' '}
+                                {formatQuantity(item.planned_quantity)}{' '}
                                 {item.unit ||
                                   ''}
                               </div>
