@@ -4,11 +4,16 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
 import { supabase } from '../../../../lib/supabase';
 import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
+import { useT } from '../../../../lib/i18n/useT';
+import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
+import { Dialog, usePageDialogs } from '../../../fieldop/ui/dialogs';
+import { ui } from '../../../fieldop/ui';
 
 
 // ============================================================
@@ -48,14 +53,15 @@ const DAY_WIDTH = 38;
 const KOSKELA_WIDTH = 128;
 
 
+// Labels: lookahead.koskela.<key> in messages/precon.<language>.json.
 const KOSKELA_COLUMNS = [
-  { key: 'projects_information', label: 'Projects / Information' },
-  { key: 'materials', label: 'Materials' },
-  { key: 'labor', label: 'Labor' },
-  { key: 'equipment', label: 'Equipment' },
-  { key: 'space', label: 'Space' },
-  { key: 'predecessor', label: 'Predecessor' },
-  { key: 'external_conditions', label: 'External Conditions' },
+  { key: 'projects_information' },
+  { key: 'materials' },
+  { key: 'labor' },
+  { key: 'equipment' },
+  { key: 'space' },
+  { key: 'predecessor' },
+  { key: 'external_conditions' },
 ];
 
 
@@ -121,14 +127,15 @@ function addDays(
 
 
 function formatShortDate(
-  date
+  date,
+  locale = 'en-US'
 ) {
   if (!date) {
     return '';
   }
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    locale,
     {
       month: '2-digit',
       day: '2-digit',
@@ -137,19 +144,40 @@ function formatShortDate(
 }
 
 
+function formatLongDate(
+  isoDate,
+  locale = 'en-US'
+) {
+  const date = parseDate(isoDate);
+  if (!date) {
+    return isoDate || '';
+  }
+
+  return new Intl.DateTimeFormat(
+    locale,
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }
+  ).format(date);
+}
+
+
 function getDayLabel(
-  date
+  date,
+  locale = 'en-US'
 ) {
   if (!date) {
     return '';
   }
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    locale,
     {
       weekday: 'short',
     }
-  ).format(date);
+  ).format(date).replace('.', '');
 }
 
 
@@ -387,6 +415,20 @@ function readinessStyle(
 // ============================================================
 
 export default function LookaheadPage() {
+  // Texts: lookahead.* in messages/precon.<language>.json. `t` is stable (callbacks keep working)
+  // and always reads the current language.
+  const translate = useT('precon');
+  const { language } = useLanguage();
+  const translateRef = useRef(translate);
+  translateRef.current = translate;
+  const t = useMemo(
+    () => new Proxy({}, { get: (_, key) => translateRef.current(`lookahead.${String(key)}`) }),
+    []
+  );
+  const tv = useCallback((key, vars) => translateRef.current(`lookahead.${key}`, vars), []);
+  const koskelaLabel = useCallback((key) => translateRef.current(`lookahead.koskela.${key}`), []);
+  const dialogs = usePageDialogs();
+  const [showHolidays, setShowHolidays] = useState(false);
 
   const [
     projects,
@@ -722,7 +764,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'Projects could not be loaded.'
+            t.errProjects
           );
 
         }
@@ -852,7 +894,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'Lookahead plans could not be loaded.'
+            t.errPlans
           );
 
         }
@@ -950,7 +992,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'Master Plan reference data could not be loaded.'
+            t.errMasterPlan
           );
 
         }
@@ -1009,7 +1051,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'The company Work Package Library could not be loaded.'
+            t.errLibrary
           );
         }
       },
@@ -1582,7 +1624,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'The Lookahead workspace could not be loaded.'
+            t.errWorkspace
           );
 
         } finally {
@@ -1721,7 +1763,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'Start of Week 1 is required.'
+          t.errWeekStart
         );
 
         return;
@@ -1743,7 +1785,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'Horizon must be at least 1 week.'
+          t.errHorizon
         );
 
         return;
@@ -1984,7 +2026,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Lookahead could not be saved.'
+          t.errSave
         );
 
       } finally {
@@ -2216,7 +2258,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Work Package could not be assigned to this Lookahead row.'
+          t.errAssignPackage
         );
 
       } finally {
@@ -2258,7 +2300,7 @@ export default function LookaheadPage() {
               date,
 
               holiday.description ||
-              'Holiday'
+              t.holiday
             );
 
           }
@@ -2909,7 +2951,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The row description could not be saved.'
+          t.errDescription
         );
 
       } finally {
@@ -2997,7 +3039,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The row could not be inserted.'
+          t.errInsertRow
         );
 
       } finally {
@@ -3110,7 +3152,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'Line ID must be a valid row number.'
+          t.errLineId
         );
 
         return;
@@ -3126,7 +3168,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'Duration must be at least 1 working day.'
+          t.errDuration
         );
 
         return;
@@ -3200,7 +3242,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Lookahead package could not be inserted.'
+          t.errInsertPackage
         );
 
       } finally {
@@ -3233,8 +3275,9 @@ export default function LookaheadPage() {
       }
 
       const confirmed =
-        window.confirm(
-          'Delete this user-created Lookahead row? Its grouped Koskela assessments will also be removed.'
+        await dialogs.confirm(
+          t.confirmDeleteRow,
+          { danger: true }
         );
 
       if (!confirmed) {
@@ -3275,7 +3318,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The user-created Lookahead row could not be deleted.'
+          t.errDeleteRow
         );
 
       } finally {
@@ -3452,7 +3495,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Lookahead timeline cell could not be saved.'
+          t.errCell
         );
 
       } finally {
@@ -3544,7 +3587,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'This Koskela criterion is managed by Constraint Management and cannot be changed directly from the Matrix.'
+          t.errManagedCriterion
         );
 
         return;
@@ -3558,24 +3601,22 @@ export default function LookaheadPage() {
       ) {
 
         const categoryLabel =
-          KOSKELA_COLUMNS.find(
+          KOSKELA_COLUMNS.some(
             (column) =>
               column.key ===
               category
-          )?.label || category;
+          )
+            ? koskelaLabel(category)
+            : category;
 
 
         const packageLabel =
           row.package_code ||
-          'this Work Package';
+          t.thisPackage;
 
 
-        const confirmed = window.confirm(
-          `${packageLabel} · ${categoryLabel} will be marked No.
-
-A Constraint Log record will be created and this criterion will be managed through Constraint Management until it is cleared.
-
-Continue?`
+        const confirmed = await dialogs.confirm(
+          tv('confirmConstraint', { package: packageLabel, category: categoryLabel })
         );
 
 
@@ -3801,10 +3842,11 @@ Continue?`
 
 
             setErrorMessage(
-              `The Koskela assessment was saved, but the Constraint Log could not be synchronized. ${
-                constraintSyncError.message ||
-                'Please try again.'
-              }`
+              tv('errSyncConstraint', {
+                message:
+                  constraintSyncError.message ||
+                  t.tryAgain,
+              })
             );
 
 
@@ -3875,7 +3917,7 @@ Continue?`
 
         setErrorMessage(
           error.message ||
-          'The Koskela assessment could not be saved.'
+          t.errAssessment
         );
 
       } finally {
@@ -3995,7 +4037,7 @@ Continue?`
               800,
           }}
         >
-          LOOKAHEAD (MEDIUM TERM) &amp; KOSKELA MATRIX
+          {t.title}
         </h1>
 
       </div>
@@ -4036,7 +4078,7 @@ Continue?`
               labelStyle
             }
           >
-            Project
+            {t.project}
           </label>
 
 
@@ -4060,7 +4102,7 @@ Continue?`
           >
 
             <option value="">
-              -- Select a Project --
+              {t.selectProject}
             </option>
 
 
@@ -4107,7 +4149,7 @@ Continue?`
               labelStyle
             }
           >
-            Scenario / Version (Lookahead)
+            {t.planLabel}
           </label>
 
 
@@ -4136,7 +4178,7 @@ Continue?`
           >
 
             <option value="">
-              -- Select --
+              {t.select}
             </option>
 
 
@@ -4159,7 +4201,7 @@ Continue?`
 
                   {plan.status ===
                   'active'
-                    ? ' · Active'
+                    ? t.activeSuffix
                     : ''}
 
                 </option>
@@ -4193,8 +4235,8 @@ Continue?`
           }
         >
           {savingLookahead
-            ? ' Saving...'
-            : ' Save'}
+            ? t.saving
+            : t.save}
         </button>
 
 
@@ -4218,7 +4260,7 @@ Continue?`
               : disabledButtonStyle
           }
         >
-          Insert Package
+          {t.insertPackage}
         </button>
 
 
@@ -4229,7 +4271,7 @@ Continue?`
             disabledButtonStyle
           }
         >
-          Undo
+          {t.undo}
         </button>
 
 
@@ -4244,34 +4286,16 @@ Continue?`
               0
             ) {
 
-              alert(
-                'No holidays are registered in the originating Master Plan.'
+              dialogs.notify(
+                t.noHolidays,
+                'warn'
               );
 
               return;
 
             }
 
-
-            const message =
-              masterPlanHolidays
-                .map(
-                  (
-                    holiday
-                  ) =>
-                    `${holiday.date} · ${
-                      holiday.description ||
-                      'Holiday'
-                    }`
-                )
-                .join(
-                  '\n'
-                );
-
-
-            alert(
-              `Master Plan Holidays\n\n${message}`
-            );
+            setShowHolidays(true);
 
           }}
 
@@ -4283,7 +4307,7 @@ Continue?`
           }
         >
 
-           Holidays
+           {t.holidays}
 
           {masterPlanHolidays.length >
           0
@@ -4312,8 +4336,8 @@ Continue?`
         >
 
           {showWeekends
-            ? 'Hide Weekends'
-            : 'Show Weekends'}
+            ? t.hideWeekends
+            : t.showWeekends}
 
         </button>
 
@@ -4325,7 +4349,7 @@ Continue?`
               labelStyle
             }
           >
-            Start of Week 1
+            {t.weekStart}
           </label>
 
 
@@ -4361,7 +4385,7 @@ Continue?`
               labelStyle
             }
           >
-            Horizon
+            {t.horizon}
           </label>
 
 
@@ -4411,7 +4435,7 @@ Continue?`
                   }
                 >
 
-                  {weeks} Weeks
+                  {weeks} {t.weeks}
 
                 </option>
 
@@ -4495,7 +4519,7 @@ Continue?`
               : tabStyle
           }
         >
-           Lookahead &amp; Koskela Sheet
+           {t.tabSheet}
         </button>
 
 
@@ -4516,7 +4540,7 @@ Continue?`
               : tabStyle
           }
         >
-          📍 Location Sequence
+          {t.tabLocations}
         </button>
 
 
@@ -4537,7 +4561,7 @@ Continue?`
               : tabStyle
           }
         >
-          Constraints Details
+          {t.tabConstraints}
         </button>
 
       </div>
@@ -4552,7 +4576,7 @@ Continue?`
         >
 
           <strong>
-            No Project Selected
+            {t.noProject}
           </strong>
 
 
@@ -4568,7 +4592,7 @@ Continue?`
                 '12px',
             }}
           >
-            Select a project to open the Lookahead.
+            {t.noProjectText}
           </div>
 
         </div>
@@ -4615,7 +4639,7 @@ Continue?`
                     '#64748b',
                 }}
               >
-                Loading Lookahead...
+                {t.loading}
               </div>
 
             ) : (
@@ -4680,7 +4704,7 @@ Continue?`
                           ID_WIDTH,
                       }}
                     >
-                      ID
+                      {t.colId}
                     </th>
 
 
@@ -4698,7 +4722,7 @@ Continue?`
                           PACKAGE_WIDTH,
                       }}
                     >
-                      PACKAGE
+                      {t.colPackage}
                     </th>
 
 
@@ -4716,7 +4740,7 @@ Continue?`
                           DESCRIPTION_WIDTH,
                       }}
                     >
-                      DESCRIPTION
+                      {t.colDescription}
                     </th>
 
 
@@ -4743,7 +4767,7 @@ Continue?`
                           }}
                         >
 
-                          WEEK{' '}
+                          {t.colWeek}{' '}
                           {
                             week.weekNumber
                           }
@@ -4772,7 +4796,7 @@ Continue?`
                           '0.02em',
                       }}
                     >
-                      KOSKELA FLOW MATRIX
+                      {t.koskelaMatrix}
                     </th>
 
                   </tr>
@@ -4812,9 +4836,10 @@ Continue?`
                         >
 
                           {day.isHoliday
-                            ? 'HOL'
+                            ? t.holAbbr
                             : getDayLabel(
-                                day.date
+                                day.date,
+                                language
                               )}
 
                         </th>
@@ -4872,7 +4897,7 @@ Continue?`
                           }}
                         >
 
-                          {column.label}
+                          {koskelaLabel(column.key)}
 
                         </th>
 
@@ -4916,7 +4941,8 @@ Continue?`
                         >
 
                           {formatShortDate(
-                            day.date
+                            day.date,
+                            language
                           )}
 
                         </th>
@@ -5040,7 +5066,7 @@ Continue?`
                                   'pointer',
                               }}
 
-                              title="Row actions"
+                              title={t.rowActions}
                             >
                               ⋮
                             </button>
@@ -5101,7 +5127,7 @@ Continue?`
                                     menuButtonStyle
                                   }
                                 >
-                                  Insert Row Above
+                                  {t.insertAbove}
                                 </button>
 
 
@@ -5123,7 +5149,7 @@ Continue?`
                                     menuButtonStyle
                                   }
                                 >
-                                  Insert Row Below
+                                  {t.insertBelow}
                                 </button>
 
                                 {row.row_type ===
@@ -5150,8 +5176,8 @@ Continue?`
                                   >
                                     {deletingRowId ===
                                     row.id
-                                      ? 'Deleting...'
-                                      : 'Delete Row'}
+                                      ? t.deleting
+                                      : t.deleteRow}
                                   </button>
                                 )}
 
@@ -5225,8 +5251,8 @@ Continue?`
 
                                   title={
                                     code
-                                      ? `Selected Work Package: ${code}`
-                                      : 'Select Work Package'
+                                      ? tv('selectedPackage', { code })
+                                      : t.selectWorkPackage
                                   }
 
                                   style={{
@@ -5271,7 +5297,7 @@ Continue?`
                                         : 'pointer',
                                   }}
                                 >
-                                  {code || 'Select...'}
+                                  {code || t.select}
                                 </button>
 
 
@@ -5474,7 +5500,7 @@ Continue?`
                                             'center',
                                         }}
                                       >
-                                        No active Work Packages are registered.
+                                        {t.noWorkPackages}
                                       </div>
 
                                     )}
@@ -5573,8 +5599,8 @@ Continue?`
                               placeholder={
                                 row.row_type ===
                                 'manual'
-                                  ? 'Enter Lookahead description...'
-                                  : 'Description'
+                                  ? t.descriptionPlaceholder
+                                  : t.colDescription
                               }
 
                               onChange={(
@@ -5684,7 +5710,7 @@ Continue?`
                               >
 
                                 {occurrences.length}{' '}
-                                package occurrence
+                                {t.packageOccurrence}
 
                                 {occurrences.length ===
                                 1
@@ -5774,7 +5800,7 @@ Continue?`
 
                                     <td
                                       key={`${row.id}-${day.iso}`}
-                                      title="Weekend - non-working day"
+                                      title={t.weekendHint}
                                       style={{
                                         ...bodyCellStyle,
                                         width: DAY_WIDTH,
@@ -5788,7 +5814,7 @@ Continue?`
                                         textAlign: 'center',
                                       }}
                                     >
-                                      OFF
+                                      {t.offAbbr}
                                     </td>
 
                                   );
@@ -5856,7 +5882,7 @@ Continue?`
 
                                     {day.isHoliday &&
                                     !cellCode ? (
-                                      'HOL'
+                                      t.holAbbr
                                     ) : (
                                       <>
 
@@ -6021,7 +6047,7 @@ Continue?`
                                                     'pointer',
                                                 }}
                                               >
-                                                Clear cell
+                                                {t.clearCell}
                                               </button>
 
                                             )}
@@ -6288,7 +6314,7 @@ Continue?`
                                   {active
                                     ? code
                                     : day.isHoliday
-                                      ? 'HOL'
+                                      ? t.holAbbr
                                       : ''}
 
                                 </td>
@@ -6377,8 +6403,8 @@ Continue?`
                                       title={
                                         assessment?.readiness_source ===
                                         'constraint_cleared'
-                                          ? `Ready after Constraint Log verification · ${linkedConstraint.status}. Click to open the Constraint Log.`
-                                          : `Managed in Constraint Log · ${linkedConstraint.status}. Click to open the Constraint Log.`
+                                          ? tv('readyAfterHint', { status: linkedConstraint.status })
+                                          : tv('managedHint', { status: linkedConstraint.status })
                                       }
 
                                       onClick={() => {
@@ -6424,10 +6450,10 @@ Continue?`
                                       }}
                                     >
                                       {status === 'constrained'
-                                        ? 'No 🔒'
+                                        ? t.noLocked
                                         : status === 'clear'
-                                          ? 'Yes 🔒'
-                                          : 'Managed 🔒'}
+                                          ? t.yesLocked
+                                          : t.managedLocked}
                                     </button>
 
                                   ) : (
@@ -6447,7 +6473,7 @@ Continue?`
                                         )
                                       }
 
-                                      title="Selecting No creates a governed Constraint Log record."
+                                      title={t.noCreatesConstraint}
 
                                       style={{
                                         width:
@@ -6487,8 +6513,8 @@ Continue?`
                                       }}
                                     >
                                       <option value="not_assessed">—</option>
-                                      <option value="clear">Yes</option>
-                                      <option value="constrained">No</option>
+                                      <option value="clear">{t.yes}</option>
+                                      <option value="constrained">{t.no}</option>
                                       <option value="not_applicable">N/A</option>
                                     </select>
 
@@ -6542,40 +6568,40 @@ Continue?`
             >
 
               <strong>
-                LEGEND:
+                {t.legend}
               </strong>
 
               <span>
-                🟢 Yes - Ready Directly
+                {t.legendReady}
               </span>
 
               <span>
-                🔵 Yes - Ready After Constraint Cleared
+                {t.legendReadyAfter}
               </span>
 
               <span>
-                🔴 No - Active Constraint
+                {t.legendConstraint}
               </span>
 
               <span>
-                🔒 Managed in Constraint Log
+                {t.legendManaged}
               </span>
 
               <span>
-                Not Assessed
+                {t.legendNotAssessed}
               </span>
 
               <span>
-                🟥 HOL - Master Plan Holiday
+                {t.legendHoliday}
               </span>
 
               <span>
-                Each row = one Work Package
+                {t.legendRow}
               </span>
 
 
               <span>
-                Manual row timeline ▼ = select Work Package
+                {t.legendManual}
               </span>
 
             </div>
@@ -6624,7 +6650,7 @@ Continue?`
                     '#64748b',
                 }}
               >
-                Loading Location Sequence...
+                {t.loadingLocations}
               </div>
 
             ) : (
@@ -6667,7 +6693,7 @@ Continue?`
                           '54px',
                       }}
                     >
-                      ID
+                      {t.colId}
                     </th>
 
 
@@ -6692,7 +6718,7 @@ Continue?`
                           '14px',
                       }}
                     >
-                      LOCATION
+                      {t.colLocation}
                     </th>
 
 
@@ -6723,7 +6749,7 @@ Continue?`
                               900,
                           }}
                         >
-                          WEEK {week.weekNumber}
+                          {t.colWeek} {week.weekNumber}
                         </th>
 
                       )
@@ -6767,8 +6793,8 @@ Continue?`
                           }}
                         >
                           {day.isHoliday
-                            ? 'HOL'
-                            : day.weekdayShort}
+                            ? t.holAbbr
+                            : getDayLabel(day.date, language)}
                         </th>
 
                       )
@@ -6814,7 +6840,7 @@ Continue?`
                               '9px',
                           }}
                         >
-                          {day.label}
+                          {formatShortDate(day.date, language)}
                         </th>
 
                       )
@@ -6852,7 +6878,7 @@ Continue?`
                             '1px solid #e2e8f0',
                         }}
                       >
-                        No Master Plan locations are available in this Lookahead window.
+                        {t.noLocations}
                       </td>
 
                     </tr>
@@ -7104,9 +7130,9 @@ Continue?`
                                   {code
                                     ? code
                                     : day.isHoliday
-                                      ? 'HOL'
+                                      ? t.holAbbr
                                       : day.isWeekend
-                                        ? 'OFF'
+                                        ? t.offAbbr
                                         : ''}
                                 </td>
 
@@ -7157,27 +7183,27 @@ Continue?`
               }}
             >
               <strong>
-                LOCATION VIEW:
+                {t.locationView}
               </strong>
 
               <span>
-                Each row = one Master Plan location
+                {t.locationRow}
               </span>
 
               <span>
-                Cell = Work Package planned at that location/day
+                {t.locationCell}
               </span>
 
               <span>
-                OFF = Weekend
+                {t.locationOff}
               </span>
 
               <span>
-                HOL = Master Plan Holiday
+                {t.locationHol}
               </span>
 
               <span>
-                Lookahead-only manual activities without a location are not shown here
+                {t.locationManualHidden}
               </span>
             </div>
 
@@ -7220,7 +7246,7 @@ Continue?`
                   '12px',
               }}
             >
-              CONSTRAINTS DETAILS
+              {t.constraintsTitle}
             </div>
 
 
@@ -7242,7 +7268,7 @@ Continue?`
                     '12px',
                 }}
               >
-                🎉 No active constraints at the moment.
+                {t.noConstraints}
               </div>
 
             ) : (
@@ -7265,23 +7291,23 @@ Continue?`
                   <tr>
 
                     <th style={headerCellStyle}>
-                      PACKAGE
+                      {t.colPackage}
                     </th>
 
                     <th style={headerCellStyle}>
-                      DESCRIPTION
+                      {t.colDescription}
                     </th>
 
                     <th style={headerCellStyle}>
-                      CONSTRAINT
+                      {t.colConstraint}
                     </th>
 
                     <th style={headerCellStyle}>
-                      STATUS
+                      {t.colStatus}
                     </th>
 
                     <th style={headerCellStyle}>
-                      SOURCE
+                      {t.colSource}
                     </th>
 
                   </tr>
@@ -7325,12 +7351,12 @@ Continue?`
 
 
                         <td style={bodyCellStyle}>
-                          {column.label}
+                          {koskelaLabel(column.key)}
                         </td>
 
 
                         <td style={bodyCellStyle}>
-                          Active
+                          {t.active}
                         </td>
 
 
@@ -7338,8 +7364,8 @@ Continue?`
 
                           {row.row_type ===
                           'manual'
-                            ? 'Lookahead'
-                            : 'Master Plan'}
+                            ? t.sourceLookahead
+                            : t.sourceMasterPlan}
 
                         </td>
 
@@ -7440,7 +7466,7 @@ Continue?`
                     'uppercase',
                 }}
               >
-                LOOKAHEAD-ONLY ACTIVITY
+                {t.insertEyebrow}
               </div>
 
 
@@ -7459,7 +7485,7 @@ Continue?`
                     900,
                 }}
               >
-                Insert Package
+                {t.insertPackage}
               </h2>
 
 
@@ -7478,8 +7504,7 @@ Continue?`
                     1.5,
                 }}
               >
-                Add an activity directly to the Lookahead without
-                changing the Master Plan.
+                {t.insertHelp}
               </p>
 
             </div>
@@ -7510,7 +7535,7 @@ Continue?`
                     modalFieldLabelStyle
                   }
                 >
-                  Work Package
+                  {t.workPackage}
                 </label>
 
 
@@ -7535,7 +7560,7 @@ Continue?`
                 >
 
                   <option value="">
-                    -- Select Work Package --
+                    {t.selectWorkPackage}
                   </option>
 
 
@@ -7578,7 +7603,7 @@ Continue?`
                     modalFieldLabelStyle
                   }
                 >
-                  Line ID
+                  {t.lineId}
                 </label>
 
 
@@ -7626,10 +7651,10 @@ Continue?`
                           lineId
                         }
                       >
-                        Line {lineId}
+                        {t.line} {lineId}
                         {lineId ===
                         sheetRows.length + 1
-                          ? ' · Bottom'
+                          ? t.bottomSuffix
                           : ''}
                       </option>
 
@@ -7651,7 +7676,7 @@ Continue?`
                       '9px',
                   }}
                 >
-                  Existing rows at this position and below will move down.
+                  {t.lineHelp}
                 </div>
 
               </div>
@@ -7682,7 +7707,7 @@ Continue?`
                       modalFieldLabelStyle
                     }
                   >
-                    Start Date
+                    {t.startDate}
                   </label>
 
 
@@ -7729,7 +7754,7 @@ Continue?`
                       modalFieldLabelStyle
                     }
                   >
-                    Duration
+                    {t.duration}
                   </label>
 
 
@@ -7797,7 +7822,7 @@ Continue?`
                           'nowrap',
                       }}
                     >
-                      working days
+                      {t.workingDays}
                     </span>
 
                   </div>
@@ -7834,9 +7859,7 @@ Continue?`
                     1.45,
                 }}
               >
-                RitsuFlow will create the manual row and populate its
-                timeline automatically, skipping weekends and registered
-                holidays.
+                {t.insertFoot}
               </div>
 
 
@@ -7870,7 +7893,7 @@ Continue?`
                     secondaryButtonStyle
                   }
                 >
-                  Cancel
+                  {t.cancel}
                 </button>
 
 
@@ -7900,8 +7923,8 @@ Continue?`
                   }
                 >
                   {insertingPackage
-                    ? 'Inserting...'
-                    : 'Insert Package'}
+                    ? t.inserting
+                    : t.insertPackage}
                 </button>
 
               </div>
@@ -7924,10 +7947,37 @@ Continue?`
               emptyStyle
             }
           >
-            This project does not have a Lookahead plan yet.
+            {t.noPlan}
           </div>
 
         )}
+
+      {showHolidays && (
+        <Dialog
+          size="small"
+          title={t.holidaysTitle}
+          text={t.holidaysText}
+          onClose={() => setShowHolidays(false)}
+          footer={<button type="button" className={ui.btnPrimary} onClick={() => setShowHolidays(false)}>{t.close}</button>}
+        >
+          <div className={ui.tableWrap}>
+            <table className={ui.table}>
+              <tbody>
+                {[...masterPlanHolidays]
+                  .sort((x, y) => String(x.date).localeCompare(String(y.date)))
+                  .map((holiday) => (
+                    <tr key={holiday.date}>
+                      <td>{formatLongDate(holiday.date, language)}</td>
+                      <td>{holiday.description || t.holiday}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </Dialog>
+      )}
+
+      {dialogs.element}
 
     </div>
   );
