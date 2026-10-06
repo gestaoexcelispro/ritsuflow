@@ -91,6 +91,8 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [layered, setLayered] = useState(true)
   const [explode, setExplode] = useState(false)
+  /** Construction layers: which board sides are drawn (none = framing only). */
+  const [boards, setBoards] = useState<BoardSides>('both')
   const [isolate, setIsolate] = useState(false)
   const [hiddenPages, setHiddenPages] = useState<Set<number>>(new Set())
   const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(new Set())
@@ -207,9 +209,9 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
   useEffect(() => {
     const s = sceneRef.current
     if (!s || status !== 'ready' || !ptPerM) return
-    build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items })
+    build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards })
     if (!fittedRef.current) { fit(s, items, ptPerM, elevationOf); fittedRef.current = true }
-  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf])
+  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards])
 
 
   const toggle = (active: boolean) => ({
@@ -226,6 +228,20 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', minWidth: 0 }}>
         <button type="button" style={toggle(layered)} onClick={() => setLayered(v => !v)}>{t('view3d.layers')}</button>
         <button type="button" style={toggle(explode)} disabled={!layered} onClick={() => setExplode(v => !v)}>{t('view3d.explode')}</button>
+        <span title={t('view3d.boardsHint')} style={{ display: 'flex', alignItems: 'center', gap: 0, opacity: layered ? 1 : 0.45 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#536d78', marginRight: 6 }}>{t('view3d.boards')}</span>
+          {BOARD_SIDES.map((v, i) => (
+            <button
+              key={v}
+              type="button"
+              disabled={!layered}
+              onClick={() => setBoards(v)}
+              style={{ ...toggle(layered && boards === v), padding: '0 10px', borderRadius: i === 0 ? '7px 0 0 7px' : i === BOARD_SIDES.length - 1 ? '0 7px 7px 0' : 0, marginLeft: i ? -1 : 0 }}
+            >
+              {t(`view3d.boards.${v}` as const)}
+            </button>
+          ))}
+        </span>
         <button type="button" style={toggle(isolate)} disabled={!selectedId && !isolate} onClick={() => setIsolate(v => !v)}>{t('view3d.isolate')}</button>
         <button type="button" style={toggle(false)} onClick={() => { const s = sceneRef.current; if (s) fit(s, items, ptPerM, elevationOf) }}>{t('tool.fit')}</button>
         <button type="button" style={toggle(showPanel || hiddenCount > 0)} onClick={() => setShowPanel(v => !v)}>
@@ -307,6 +323,8 @@ function fit(s: Scene, _items?: TakeoffItem[], _k?: number, _elevationOf?: (page
 
 type BuildOptions = {
   selectedId: string | null
+  /** Construction layers: board sides drawn (default both). */
+  boards?: BoardSides
   layered: boolean
   explode: number
   isolate: boolean
@@ -340,7 +358,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
       if (!show(sh)) continue
       const selected = !!sh.id && sh.id === o.selectedId
       if (it.kind === 'linear' && o.layered && it.framing?.on) {
-        addLayered(s, it, sh, M, k, segs, selected, o.explode, junctions, o.elevationOf(sh.page))
+        addLayered(s, it, sh, M, k, segs, selected, o.explode, junctions, o.elevationOf(sh.page), o.boards || 'both')
       } else if (it.kind === 'linear') {
         const th = it.thickness || 0.1
         const h = shapeHeight(it, sh) || 2.8
@@ -437,7 +455,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
 }
 
 /** Framing + Face A + Face B as separate solids, optionally pulled apart (exploded). */
-function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) => Vec2, k: number, segs: { a: Vec2; b: Vec2; t: number; ang: number }[], selected: boolean, ex: number, junctions: Junction[], baseElevation = 0) {
+function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) => Vec2, k: number, segs: { a: Vec2; b: Vec2; t: number; ang: number }[], selected: boolean, ex: number, junctions: Junction[], baseElevation = 0, boards: BoardSides = 'both') {
   const { THREE, group: g } = s
   const F = it.framing!
   const lay = layoutWall(it, sh, k)
@@ -501,6 +519,7 @@ function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) =>
   for (const h of lay.headers) put(h.x0, h.x1, h.y - 0.015, h.y + 0.015, 0, core, hdr, false)
   const ops = lay.segs.flatMap(sg => sg.ops.map(op => ({ x0: sg.start + op.x0, x1: sg.start + op.x1, y0: op.y0, y1: op.y1 })))
   for (const [f, sgn] of [['A', 1], ['B', -1]] as const) {
+    if (boards === 'none' || (boards === 'A' && f === 'B') || (boards === 'B' && f === 'A')) continue
     const name = (f === 'A' ? sh.faceA : sh.faceB) || lay.boardName[f]
     const m = mat(boardColor(name), 0.97)
     const nl = f === 'A' ? F.layersA : F.layersB
@@ -525,6 +544,10 @@ function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) =>
     }
   }
 }
+
+/** Board sides shown in Construction layers: both, one side, or none (framing only). */
+const BOARD_SIDES = ['both', 'A', 'B', 'none'] as const
+type BoardSides = (typeof BOARD_SIDES)[number]
 
 const checkRow = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#294955', cursor: 'pointer' } as const
 
