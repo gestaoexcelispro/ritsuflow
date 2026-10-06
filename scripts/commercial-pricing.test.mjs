@@ -206,3 +206,20 @@ test('ABC curve: classes, cumulative share and totals', async () => {
   assert.equal(inputs[0].label, 'Board'); assert.equal(inputs[0].amount, 8400)
   assert.ok(inputs.some(x => x.label === 'Walls' && x.bucket === 'material'))
 })
+
+test('insights: win rate by client, markup of won vs lost, month grid', async () => {
+  const { clientStats, markupStats, monthGrid } = await import('../src/lib/commercial/insights.ts')
+  const bid = (id, client, status) => ({ project_id: id, status, projects: { client_name: client } })
+  const bids = [bid('1', 'Horizonte', 'won'), bid('2', 'horizonte ', 'lost'), bid('3', 'Horizonte', 'submitted'), bid('4', '', 'lost'), bid('5', 'CG', 'won')]
+  const est = (id, direct, price) => [id, { project_id: id, revision: 0, direct_total: direct, price_total: price, currency_code: 'BRL' }]
+  const latest = new Map([est('1', 100, 125), est('2', 100, 135), est('4', 100, 140), est('5', 200, 240)])
+  const s = clientStats(bids, latest, 'No client')
+  assert.equal(s[0].client, 'Horizonte'); assert.equal(s[0].bids, 3); assert.equal(s[0].open, 1); assert.equal(s[0].winRate, 50)
+  assert.equal(s[0].wonValue.get('BRL'), 125)
+  assert.ok(s.some(x => x.client === 'No client' && x.winRate === 0))
+  const m = markupStats(bids, latest)
+  assert.equal(m.won, 22.5); assert.equal(m.lost, 37.5)
+  const g = monthGrid(2026, 9) // October 2026 starts on a Thursday
+  assert.deepEqual(g[0], [null, null, null, '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'])
+  assert.equal(g.flat().filter(Boolean).length, 31)
+})

@@ -9,6 +9,8 @@ import { BID_COLUMNS, BID_STATUSES, ESTIMATE_SUMMARY_COLUMNS, OPEN_STATUSES, lat
 import { formatDate, formatMoney } from '@/lib/commercial/format'
 import { useCommercialAccess } from './license'
 import NewBidDialog from './NewBidDialog'
+import BidsCalendar from './BidsCalendar'
+import BidsInsights from './BidsInsights'
 import { statusStyle, ui } from './ui'
 
 type Filter = 'open' | 'all' | BidStatus
@@ -23,6 +25,7 @@ export default function BidsPage() {
   const [bids, setBids] = useState<BidRow[]>([])
   const [estimates, setEstimates] = useState<Map<string, EstimateSummary>>(new Map())
   const [filter, setFilter] = useState<Filter>('open')
+  const [view, setView] = useState<'list' | 'calendar' | 'insights'>('list')
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -96,6 +99,16 @@ export default function BidsPage() {
         {tile(t('bids.stat.dueSoon'), stats.dueSoon, stats.dueSoon > 0)}
       </div>
 
+      <div role="tablist" aria-label={t('bids.views')} style={{ ...ui.tabs, alignSelf: 'flex-start' }}>
+        {(['list', 'calendar', 'insights'] as const).map(v => (
+          <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} style={view === v ? ui.tabOn : ui.tab}>{t(`bids.view.${v}`)}</button>
+        ))}
+      </div>
+
+      {view === 'calendar' && !loading && <BidsCalendar bids={bids} />}
+      {view === 'insights' && !loading && <BidsInsights bids={bids} estimates={estimates} />}
+
+      {view === 'list' && <>
       <div style={ui.toolbar}>
         <div role="tablist" aria-label={t('bids.filter')} style={ui.tabs}>
           {(['open', 'all', ...BID_STATUSES] as Filter[]).map(f => (
@@ -151,6 +164,7 @@ export default function BidsPage() {
           </table>
         </div>
       )}
+      </>}
       {creating && <NewBidDialog onClose={() => setCreating(false)} />}
     </section>
   )
