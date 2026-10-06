@@ -8,7 +8,7 @@ import { usePreconProjectId } from './preconProject'
 const TABS = [
   ['/dashboard/planning/master-plan', 'masterPlan'],
   ['/dashboard/planning/lookahead', 'lookahead'],
-  ['/dashboard/projects/constraints', 'constraints'],
+  ['/dashboard/planning/constraints', 'constraints'],
   ['/dashboard/planning/weekly-planning', 'weekly'],
 ]
 
