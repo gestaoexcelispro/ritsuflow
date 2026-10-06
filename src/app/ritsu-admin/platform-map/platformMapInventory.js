@@ -591,7 +591,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 700
+              "line": 701
             }
           ]
         },
@@ -603,11 +603,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 804
+              "line": 805
             },
             {
               "method": "update",
-              "line": 1825
+              "line": 1826
             }
           ]
         },
@@ -619,7 +619,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 943
+              "line": 944
             }
           ]
         },
@@ -631,7 +631,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1117
+              "line": 1118
             }
           ]
         },
@@ -643,11 +643,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1232
+              "line": 1233
             },
             {
               "method": "update",
-              "line": 1903
+              "line": 1904
             }
           ]
         },
@@ -659,11 +659,11 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1415
+              "line": 1416
             },
             {
               "method": "upsert",
-              "line": 3701
+              "line": 3702
             }
           ]
         },
@@ -675,7 +675,7 @@ export const platformMapInventory = {
           "operations": [
             {
               "method": "select",
-              "line": 1510
+              "line": 1511
             }
           ]
         }
@@ -686,7 +686,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_organization_id uuid",
           "returns": "TABLE(id uuid, organization_id uuid, code text, description text, color text, is_active boolean, created_at timestamp with time zone, updated_at timestamp with time zone)",
-          "line": 1025,
+          "line": 1026,
           "purpose": "Load the organization work-package catalog for manual rows."
         },
         {
@@ -694,7 +694,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_lookahead_plan_id uuid",
           "returns": "TABLE(id uuid, sheet_row_id uuid, work_date date, organization_work_package_id uuid, package_code text, package_description text, package_color text)",
-          "line": 1577,
+          "line": 1578,
           "purpose": "Load manual-row timeline cells."
         },
         {
@@ -702,7 +702,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_lookahead_plan_id uuid, target_anchor_row_id uuid, target_direction text",
           "returns": "uuid",
-          "line": 3005,
+          "line": 3006,
           "purpose": "Insert a manual sheet row around the selected anchor."
         },
         {
@@ -710,7 +710,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_lookahead_plan_id uuid, target_organization_work_package_id uuid, target_line_id integer, target_start_date date, target_duration_working_days integer",
           "returns": "TABLE(sheet_row_id uuid, package_code text, row_order numeric, scheduled_start_date date, scheduled_finish_date date, scheduled_working_days integer)",
-          "line": 3193,
+          "line": 3194,
           "purpose": "Insert a manually scheduled work package."
         },
         {
@@ -718,7 +718,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_lookahead_plan_id uuid, target_sheet_row_id uuid",
           "returns": "void",
-          "line": 3295,
+          "line": 3296,
           "purpose": "Delete the selected manual row from its Lookahead plan."
         },
         {
@@ -726,7 +726,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_sheet_row_id uuid, target_work_date date, target_organization_work_package_id uuid",
           "returns": "TABLE(id uuid, sheet_row_id uuid, work_date date, organization_work_package_id uuid, package_code text)",
-          "line": 3379,
+          "line": 3380,
           "purpose": "Set the work package for a manual timeline cell."
         },
         {
@@ -734,7 +734,7 @@ export const platformMapInventory = {
           "schema": "public",
           "arguments": "target_readiness_assessment_id uuid",
           "returns": "uuid",
-          "line": 3825,
+          "line": 3826,
           "purpose": "Synchronize a constraint from a Koskela readiness assessment."
         }
       ],
@@ -2643,7 +2643,7 @@ export const platformMapInventory = {
       "sourcePath": "src/app/dashboard/planning/lookahead/page.js",
       "targetPath": "src/app/dashboard/projects/constraints/page.js",
       "type": "ROUTES TO",
-      "line": 6412
+      "line": 5885
     },
     {
       "sourcePath": "src/app/projects/page.js",

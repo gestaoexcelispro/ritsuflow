@@ -76,3 +76,8 @@
   .grid2 { grid-template-columns: 1fr; }
   .dialogFootNote { width: 100%; }
 }
+
+/* Scrolling planning sheets (Lookahead): bordered surface, horizontal scroll for wide calendars. */
+.sheet { overflow-x: auto; background: var(--fo-surface); border: 1px solid var(--fo-line); border-radius: var(--fo-radius); }
+.sheetTitle { padding: 12px 16px; border-bottom: 1px solid var(--fo-line-soft); font-weight: 600; }
+.loadingBox { padding: 40px 20px; text-align: center; color: var(--fo-muted); }

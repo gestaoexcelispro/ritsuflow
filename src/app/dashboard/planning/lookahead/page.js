@@ -13,7 +13,8 @@ import { readPreconProjectId, rememberPreconProjectId } from '../../preconProjec
 import { useT } from '../../../../lib/i18n/useT';
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
 import { Dialog, usePageDialogs } from '../../../fieldop/ui/dialogs';
-import { ui } from '../../../fieldop/ui';
+import { Empty, Icon, Notice, Segments, ui } from '../../../fieldop/ui';
+import styles from '../../precon.module.css';
 
 
 // ============================================================
@@ -3480,7 +3481,7 @@ export default function LookaheadPage() {
 
               package_color:
                 selectedPackage?.color ||
-                '#64748b',
+                'var(--fo-muted)',
             },
           })
         );
@@ -3997,608 +3998,105 @@ export default function LookaheadPage() {
   // RENDER
   // ==========================================================
 
+  const cx = (...names) => names.filter(Boolean).join(' ');
+
   return (
-    <div
-      style={{
-        padding:
-          '18px 20px 40px',
-
-        minHeight:
-          '100%',
-
-        background:
-          '#f8fafc',
-
-        color:
-          '#0f172a',
-      }}
-    >
+    <div>
 
       {/* ====================================================
-          TITLE
+          TOOLBAR
       ===================================================== */}
 
-      <div
-        style={{
-          marginBottom:
-            '18px',
-        }}
-      >
-
-        <h1
-          style={{
-            margin:
-              0,
-
-            fontSize:
-              '22px',
-
-            fontWeight:
-              800,
-          }}
-        >
-          {t.title}
-        </h1>
-
-      </div>
-
-
-      {/* ====================================================
-          CONTROLS
-      ===================================================== */}
-
-      <div
-        style={{
-          display:
-            'flex',
-
-          alignItems:
-            'flex-end',
-
-          gap:
-            '12px',
-
-          flexWrap:
-            'wrap',
-
-          marginBottom:
-            '14px',
-        }}
-      >
-
-        <div
-          style={{
-            minWidth:
-              '250px',
-          }}
-        >
-
-          <label
-            style={
-              labelStyle
-            }
-          >
-            {t.project}
-          </label>
-
-
-          <select
-
-            value={
-              selectedProjectId
-            }
-
-            onChange={(
-              event
-            ) =>
-              handleProjectChange(
-                event.target.value
-              )
-            }
-
-            style={
-              selectStyle
-            }
-          >
-
-            <option value="">
-              {t.selectProject}
-            </option>
-
-
-            {projects.map(
-              (
-                project
-              ) => (
-
-                <option
-                  key={
-                    project.id
-                  }
-
-                  value={
-                    project.id
-                  }
-                >
-
-                  {project.code
-                    ? `${project.code} - `
-                    : ''}
-
-                  {project.name}
-
+      <div className={styles.toolbar} style={{ marginBottom: 12 }}>
+        <div className={styles.group}>
+          <label className={styles.control}>
+            <span>{t.project}</span>
+            <select className={styles.projectSelect} value={selectedProjectId} onChange={(event) => handleProjectChange(event.target.value)}>
+              <option value="">{t.selectProject}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.code ? `${project.code} – ` : ''}{project.name}
                 </option>
-
-              )
-            )}
-
-          </select>
-
-        </div>
-
-
-        <div
-          style={{
-            minWidth:
-              '280px',
-          }}
-        >
-
-          <label
-            style={
-              labelStyle
-            }
-          >
-            {t.planLabel}
+              ))}
+            </select>
           </label>
-
-
-          <select
-
-            value={
-              selectedPlanId
-            }
-
-            disabled={
-              !selectedProjectId
-            }
-
-            onChange={(
-              event
-            ) =>
-              handlePlanChange(
-                event.target
-                  .value
-              )
-            }
-
-            style={
-              selectStyle
-            }
-          >
-
-            <option value="">
-              {t.select}
-            </option>
-
-
-            {plans.map(
-              (
-                plan
-              ) => (
-
-                <option
-                  key={
-                    plan.id
-                  }
-
-                  value={
-                    plan.id
-                  }
-                >
-
-                  {plan.name}
-
-                  {plan.status ===
-                  'active'
-                    ? t.activeSuffix
-                    : ''}
-
+          <label className={styles.control}>
+            <span>{t.planLabel}</span>
+            <select className={styles.scenarioSelect} value={selectedPlanId} disabled={!selectedProjectId} onChange={(event) => handlePlanChange(event.target.value)}>
+              <option value="">{t.select}</option>
+              {plans.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name}{plan.status === 'active' ? t.activeSuffix : ''}
                 </option>
-
-              )
-            )}
-
-          </select>
-
-        </div>
-
-
-        <button
-
-          type="button"
-
-          disabled={
-            !selectedPlanId ||
-            savingLookahead
-          }
-
-          onClick={
-            saveLookahead
-          }
-
-          style={
-            selectedPlanId &&
-            !savingLookahead
-              ? secondaryButtonStyle
-              : disabledButtonStyle
-          }
-        >
-          {savingLookahead
-            ? t.saving
-            : t.save}
-        </button>
-
-
-        <button
-
-          type="button"
-
-          disabled={
-            !selectedPlanId ||
-            insertingPackage
-          }
-
-          onClick={
-            openInsertPackageModal
-          }
-
-          style={
-            selectedPlanId &&
-            !insertingPackage
-              ? primaryButtonStyle
-              : disabledButtonStyle
-          }
-        >
-          {t.insertPackage}
-        </button>
-
-
-        <button
-          type="button"
-          disabled
-          style={
-            disabledButtonStyle
-          }
-        >
-          {t.undo}
-        </button>
-
-
-        <button
-
-          type="button"
-
-          onClick={() => {
-
-            if (
-              masterPlanHolidays.length ===
-              0
-            ) {
-
-              dialogs.notify(
-                t.noHolidays,
-                'warn'
-              );
-
-              return;
-
-            }
-
-            setShowHolidays(true);
-
-          }}
-
-          style={
-            masterPlanHolidays.length >
-            0
-              ? holidayButtonStyle
-              : secondaryButtonStyle
-          }
-        >
-
-           {t.holidays}
-
-          {masterPlanHolidays.length >
-          0
-            ? ` (${masterPlanHolidays.length})`
-            : ''}
-
-        </button>
-
-
-        <button
-
-          type="button"
-
-          onClick={() =>
-            setShowWeekends(
-              (
-                current
-              ) =>
-                !current
-            )
-          }
-
-          style={
-            secondaryButtonStyle
-          }
-        >
-
-          {showWeekends
-            ? t.hideWeekends
-            : t.showWeekends}
-
-        </button>
-
-
-        <div>
-
-          <label
-            style={
-              labelStyle
-            }
-          >
-            {t.weekStart}
+              ))}
+            </select>
           </label>
-
-
-          <input
-
-            type="date"
-
-            value={
-              windowStart
-            }
-
-            onChange={(
-              event
-            ) =>
-              setWindowStart(
-                event.target
-                  .value
-              )
-            }
-
-            style={
-              inputStyle
-            }
-          />
-
+          <button type="button" className={ui.btn} disabled={!selectedPlanId || savingLookahead} onClick={saveLookahead}>
+            {savingLookahead ? t.saving : t.save}
+          </button>
         </div>
 
-
-        <div>
-
-          <label
-            style={
-              labelStyle
-            }
-          >
-            {t.horizon}
+        <div className={styles.group}>
+          <label className={styles.control}>
+            <span>{t.weekStart}</span>
+            <input type="date" value={windowStart} onChange={(event) => setWindowStart(event.target.value)} />
           </label>
-
-
-          <select
-
-            value={
-              horizonWeeks
-            }
-
-            onChange={(
-              event
-            ) =>
-              setHorizonWeeks(
-                Number(
-                  event.target
-                    .value
-                )
-              )
-            }
-
-            style={
-              inputStyle
-            }
-          >
-
-            {[
-              2,
-              3,
-              4,
-              5,
-              6,
-              8,
-              10,
-              12,
-            ].map(
-              (
-                weeks
-              ) => (
-
-                <option
-                  key={
-                    weeks
-                  }
-
-                  value={
-                    weeks
-                  }
-                >
-
-                  {weeks} {t.weeks}
-
-                </option>
-
-              )
-            )}
-
-          </select>
-
+          <label className={styles.control}>
+            <span>{t.horizon}</span>
+            <select value={horizonWeeks} onChange={(event) => setHorizonWeeks(Number(event.target.value))}>
+              {[2, 3, 4, 5, 6, 8, 10, 12].map((weeks) => (
+                <option key={weeks} value={weeks}>{weeks} {t.weeks}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
-      </div>
-
-
-      {/* ====================================================
-          ERROR
-      ===================================================== */}
-
-      {errorMessage && (
-
-        <div
-          style={{
-            marginBottom:
-              '12px',
-
-            padding:
-              '10px 12px',
-
-            border:
-              '1px solid #fecaca',
-
-            borderRadius:
-              '6px',
-
-            background:
-              '#fef2f2',
-
-            color:
-              '#b91c1c',
-
-            fontSize:
-              '12px',
-          }}
-        >
-          {errorMessage}
-        </div>
-
-      )}
-
-
-      {/* ====================================================
-          TABS
-      ===================================================== */}
-
-      <div
-        style={{
-          display:
-            'flex',
-
-          gap:
-            '4px',
-
-          marginTop:
-            '8px',
-        }}
-      >
-
-        <button
-
-          type="button"
-
-          onClick={() =>
-            setActiveTab(
-              'sheet'
-            )
-          }
-
-          style={
-            activeTab ===
-            'sheet'
-              ? activeTabStyle
-              : tabStyle
-          }
-        >
-           {t.tabSheet}
-        </button>
-
-
-        <button
-
-          type="button"
-
-          onClick={() =>
-            setActiveTab(
-              'locations'
-            )
-          }
-
-          style={
-            activeTab ===
-            'locations'
-              ? activeTabStyle
-              : tabStyle
-          }
-        >
-          {t.tabLocations}
-        </button>
-
-
-        <button
-
-          type="button"
-
-          onClick={() =>
-            setActiveTab(
-              'constraints'
-            )
-          }
-
-          style={
-            activeTab ===
-            'constraints'
-              ? activeTabStyle
-              : tabStyle
-          }
-        >
-          {t.tabConstraints}
-        </button>
-
-      </div>
-
-
-      {!selectedProjectId && (
-
-        <div
-          style={
-            emptyStyle
-          }
-        >
-
-          <strong>
-            {t.noProject}
-          </strong>
-
-
-          <div
-            style={{
-              marginTop:
-                '6px',
-
-              color:
-                '#64748b',
-
-              fontSize:
-                '12px',
+        <div className={cx(styles.group, styles.push)}>
+          <button type="button" className={ui.btnGhost} onClick={() => setShowWeekends((current) => !current)}>
+            {showWeekends ? t.hideWeekends : t.showWeekends}
+          </button>
+          <button
+            type="button"
+            className={ui.btnGhost}
+            onClick={() => {
+              if (masterPlanHolidays.length === 0) {
+                dialogs.notify(t.noHolidays, 'warn');
+                return;
+              }
+              setShowHolidays(true);
             }}
           >
-            {t.noProjectText}
-          </div>
-
+            {t.holidays}{masterPlanHolidays.length > 0 ? ` (${masterPlanHolidays.length})` : ''}
+          </button>
+          <button type="button" className={ui.btnPrimary} disabled={!selectedPlanId || insertingPackage} onClick={openInsertPackageModal}>
+            <Icon name="plus" size={18} />{t.insertPackage}
+          </button>
         </div>
+      </div>
 
+      {errorMessage && (
+        <div style={{ marginBottom: 12 }}>
+          <Notice>{errorMessage}</Notice>
+        </div>
       )}
 
+      {selectedProjectId && (
+        <div style={{ marginBottom: 12 }}>
+          <Segments
+            items={[
+              { value: 'sheet', label: t.tabSheet },
+              { value: 'locations', label: t.tabLocations },
+              { value: 'constraints', label: t.tabConstraints },
+            ]}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
+        </div>
+      )}
+
+      {!selectedProjectId && (
+        <Empty title={t.noProject} text={t.noProjectText} />
+      )}
 
       {/* ====================================================
           LOOKAHEAD SHEET
@@ -4610,34 +4108,13 @@ export default function LookaheadPage() {
           'sheet' && (
 
           <div
-            style={{
-              overflowX:
-                'auto',
-
-              overflowY:
-                'visible',
-
-              border:
-                '1px solid #cbd5e1',
-
-              background:
-                '#fff',
-            }}
+            className={styles.sheet}
           >
 
             {loading ? (
 
               <div
-                style={{
-                  padding:
-                    '40px',
-
-                  textAlign:
-                    'center',
-
-                  color:
-                    '#64748b',
-                }}
+                className={styles.loadingBox}
               >
                 {t.loading}
               </div>
@@ -4662,11 +4139,7 @@ export default function LookaheadPage() {
                   width:
                     '100%',
 
-                  tableLayout:
-                    'fixed',
-
-                  fontSize:
-                    '10px',
+                  tableLayout: 'fixed', fontSize: '12px',
                 }}
               >
 
@@ -4763,7 +4236,7 @@ export default function LookaheadPage() {
                             ...headerCellStyle,
 
                             background:
-                              '#e2e8f0',
+                              'var(--fo-line-soft)',
                           }}
                         >
 
@@ -4787,7 +4260,7 @@ export default function LookaheadPage() {
                         ...headerCellStyle,
 
                         background:
-                          '#f1f5f9',
+                          'var(--fo-sunken)',
 
                         fontSize:
                           '10px',
@@ -4823,15 +4296,15 @@ export default function LookaheadPage() {
 
                             background:
                               day.isHoliday
-                                ? '#fee2e2'
+                                ? 'var(--fo-bad-wash)'
                                 : day.isWeekend
-                                  ? '#e2e8f0'
-                                  : '#f8fafc',
+                                  ? 'var(--fo-line-soft)'
+                                  : 'var(--fo-sunken)',
 
                             color:
                               day.isHoliday
-                                ? '#991b1b'
-                                : '#334155',
+                                ? 'var(--fo-bad)'
+                                : 'var(--fo-ink)',
                           }}
                         >
 
@@ -4930,13 +4403,13 @@ export default function LookaheadPage() {
                               day.isHoliday
                                 ? '#fecaca'
                                 : day.isWeekend
-                                  ? '#e2e8f0'
+                                  ? 'var(--fo-line-soft)'
                                   : '#ffffff',
 
                             color:
                               day.isHoliday
-                                ? '#991b1b'
-                                : '#334155',
+                                ? 'var(--fo-bad)'
+                                : 'var(--fo-ink)',
                           }}
                         >
 
@@ -5057,7 +4530,7 @@ export default function LookaheadPage() {
                                   'transparent',
 
                                 color:
-                                  '#64748b',
+                                  'var(--fo-muted)',
 
                                 fontSize:
                                   '17px',
@@ -5096,7 +4569,7 @@ export default function LookaheadPage() {
                                     '4px',
 
                                   border:
-                                    '1px solid #cbd5e1',
+                                    '1px solid var(--fo-line)',
 
                                   borderRadius:
                                     '6px',
@@ -5171,7 +4644,7 @@ export default function LookaheadPage() {
                                     style={{
                                       ...menuButtonStyle,
                                       color: '#b91c1c',
-                                      borderTop: '1px solid #e2e8f0',
+                                      borderTop: '1px solid var(--fo-line-soft)',
                                     }}
                                   >
                                     {deletingRowId ===
@@ -5266,7 +4739,7 @@ export default function LookaheadPage() {
                                       '0 6px',
 
                                     border:
-                                      '1px solid #cbd5e1',
+                                      '1px solid var(--fo-line)',
 
                                     borderRadius:
                                       '4px',
@@ -5279,7 +4752,7 @@ export default function LookaheadPage() {
                                     color:
                                       code
                                         ? textColor
-                                        : '#475569',
+                                        : 'var(--fo-muted)',
 
                                     fontSize:
                                       '10px',
@@ -5328,7 +4801,7 @@ export default function LookaheadPage() {
                                         'auto',
 
                                       border:
-                                        '1px solid #cbd5e1',
+                                        '1px solid var(--fo-line)',
 
                                       borderRadius:
                                         '6px',
@@ -5348,7 +4821,7 @@ export default function LookaheadPage() {
 
                                         const optionColor =
                                           workPackage.color ||
-                                          '#64748b';
+                                          'var(--fo-muted)';
 
 
                                         const optionTextColor =
@@ -5406,7 +4879,7 @@ export default function LookaheadPage() {
                                                 '#ffffff',
 
                                               color:
-                                                '#0f172a',
+                                                'var(--fo-ink)',
 
                                               textAlign:
                                                 'left',
@@ -5459,7 +4932,7 @@ export default function LookaheadPage() {
                                                   1,
 
                                                 color:
-                                                  '#334155',
+                                                  'var(--fo-ink)',
 
                                                 fontSize:
                                                   '10px',
@@ -5491,7 +4964,7 @@ export default function LookaheadPage() {
                                             '12px',
 
                                           color:
-                                            '#64748b',
+                                            'var(--fo-muted)',
 
                                           fontSize:
                                             '10px',
@@ -5551,7 +5024,7 @@ export default function LookaheadPage() {
                               <span
                                 style={{
                                   color:
-                                    '#94a3b8',
+                                    'var(--fo-muted)',
 
                                   fontWeight:
                                     700,
@@ -5672,11 +5145,11 @@ export default function LookaheadPage() {
                                 background:
                                   savingDescriptionId ===
                                   row.id
-                                    ? '#f8fafc'
+                                    ? 'var(--fo-sunken)'
                                     : '#ffffff',
 
                                 color:
-                                  '#1e293b',
+                                  'var(--fo-ink)',
 
                                 fontSize:
                                   '10px',
@@ -5702,7 +5175,7 @@ export default function LookaheadPage() {
                                     '6px',
 
                                   color:
-                                    '#94a3b8',
+                                    'var(--fo-muted)',
 
                                   fontSize:
                                     '8px',
@@ -5778,7 +5251,7 @@ export default function LookaheadPage() {
                                 const cellColor =
                                   selectedPackage?.color ||
                                   manualCell?.package_color ||
-                                  '#64748b';
+                                  'var(--fo-muted)';
 
 
                                 const cellTextColor =
@@ -5807,8 +5280,8 @@ export default function LookaheadPage() {
                                         minWidth: DAY_WIDTH,
                                         height: '34px',
                                         padding: 0,
-                                        background: '#f1f5f9',
-                                        color: '#94a3b8',
+                                        background: 'var(--fo-sunken)',
+                                        color: 'var(--fo-muted)',
                                         fontSize: '9px',
                                         fontWeight: 800,
                                         textAlign: 'center',
@@ -5861,17 +5334,17 @@ export default function LookaheadPage() {
                                         cellCode
                                           ? cellColor
                                           : day.isHoliday
-                                            ? '#fee2e2'
+                                            ? 'var(--fo-bad-wash)'
                                             : day.isWeekend
-                                              ? '#f1f5f9'
+                                              ? 'var(--fo-sunken)'
                                               : '#ffffff',
 
                                       color:
                                         cellCode
                                           ? cellTextColor
                                           : day.isHoliday
-                                            ? '#991b1b'
-                                            : '#64748b',
+                                            ? 'var(--fo-bad)'
+                                            : 'var(--fo-muted)',
 
                                       boxShadow:
                                         day.isHoliday
@@ -5936,7 +5409,7 @@ export default function LookaheadPage() {
                                             color:
                                               cellCode
                                                 ? cellTextColor
-                                                : '#64748b',
+                                                : 'var(--fo-muted)',
 
                                             fontSize:
                                               cellCode
@@ -5986,7 +5459,7 @@ export default function LookaheadPage() {
                                                 'auto',
 
                                               border:
-                                                '1px solid #cbd5e1',
+                                                '1px solid var(--fo-line)',
 
                                               borderRadius:
                                                 '6px',
@@ -6026,7 +5499,7 @@ export default function LookaheadPage() {
                                                     0,
 
                                                   borderBottom:
-                                                    '1px solid #e2e8f0',
+                                                    '1px solid var(--fo-line-soft)',
 
                                                   background:
                                                     '#fff7ed',
@@ -6060,7 +5533,7 @@ export default function LookaheadPage() {
 
                                                 const optionColor =
                                                   workPackage.color ||
-                                                  '#64748b';
+                                                  'var(--fo-muted)';
 
 
                                                 const optionTextColor =
@@ -6112,7 +5585,7 @@ export default function LookaheadPage() {
                                                         '#ffffff',
 
                                                       color:
-                                                        '#0f172a',
+                                                        'var(--fo-ink)',
 
                                                       textAlign:
                                                         'left',
@@ -6165,7 +5638,7 @@ export default function LookaheadPage() {
                                                           1,
 
                                                         color:
-                                                          '#334155',
+                                                          'var(--fo-ink)',
 
                                                         fontSize:
                                                           '10px',
@@ -6287,17 +5760,17 @@ export default function LookaheadPage() {
                                       active
                                         ? color
                                         : day.isHoliday
-                                          ? '#fee2e2'
+                                          ? 'var(--fo-bad-wash)'
                                           : day.isWeekend
-                                            ? '#f1f5f9'
+                                            ? 'var(--fo-sunken)'
                                             : '#ffffff',
 
                                     color:
                                       active
                                         ? textColor
                                         : day.isHoliday
-                                          ? '#991b1b'
-                                          : '#94a3b8',
+                                          ? 'var(--fo-bad)'
+                                          : 'var(--fo-muted)',
 
                                     fontWeight:
                                       active
@@ -6560,7 +6033,7 @@ export default function LookaheadPage() {
                   '10px 12px',
 
                 borderTop:
-                  '1px solid #cbd5e1',
+                  '1px solid var(--fo-line)',
 
                 fontSize:
                   '9px',
@@ -6621,34 +6094,13 @@ export default function LookaheadPage() {
           'locations' && (
 
           <div
-            style={{
-              overflowX:
-                'auto',
-
-              overflowY:
-                'visible',
-
-              border:
-                '1px solid #cbd5e1',
-
-              background:
-                '#fff',
-            }}
+            className={styles.sheet}
           >
 
             {loading ? (
 
               <div
-                style={{
-                  padding:
-                    '40px',
-
-                  textAlign:
-                    'center',
-
-                  color:
-                    '#64748b',
-                }}
+                className={styles.loadingBox}
               >
                 {t.loadingLocations}
               </div>
@@ -6666,11 +6118,7 @@ export default function LookaheadPage() {
                   borderCollapse:
                     'collapse',
 
-                  tableLayout:
-                    'fixed',
-
-                  fontSize:
-                    '10px',
+                  tableLayout: 'fixed', fontSize: '12px',
                 }}
               >
 
@@ -6781,15 +6229,15 @@ export default function LookaheadPage() {
 
                             background:
                               day.isHoliday
-                                ? '#fee2e2'
+                                ? 'var(--fo-bad-wash)'
                                 : day.isWeekend
-                                  ? '#eef2f7'
-                                  : '#f8fafc',
+                                  ? 'var(--fo-sunken)'
+                                  : 'var(--fo-sunken)',
 
                             color:
                               day.isHoliday
-                                ? '#991b1b'
-                                : '#334155',
+                                ? 'var(--fo-bad)'
+                                : 'var(--fo-ink)',
                           }}
                         >
                           {day.isHoliday
@@ -6826,15 +6274,15 @@ export default function LookaheadPage() {
 
                             background:
                               day.isHoliday
-                                ? '#fee2e2'
+                                ? 'var(--fo-bad-wash)'
                                 : day.isWeekend
-                                  ? '#eef2f7'
+                                  ? 'var(--fo-sunken)'
                                   : '#ffffff',
 
                             color:
                               day.isHoliday
-                                ? '#991b1b'
-                                : '#0f172a',
+                                ? 'var(--fo-bad)'
+                                : 'var(--fo-ink)',
 
                             fontSize:
                               '9px',
@@ -6869,13 +6317,13 @@ export default function LookaheadPage() {
                             '40px 20px',
 
                           color:
-                            '#64748b',
+                            'var(--fo-muted)',
 
                           textAlign:
                             'center',
 
                           borderBottom:
-                            '1px solid #e2e8f0',
+                            '1px solid var(--fo-line-soft)',
                         }}
                       >
                         {t.noLocations}
@@ -6943,7 +6391,7 @@ export default function LookaheadPage() {
                             <div
                               style={{
                                 color:
-                                  '#0f172a',
+                                  'var(--fo-ink)',
 
                                 fontSize:
                                   '11px',
@@ -6966,7 +6414,7 @@ export default function LookaheadPage() {
                                     '3px',
 
                                   color:
-                                    '#94a3b8',
+                                    'var(--fo-muted)',
 
                                   fontSize:
                                     '9px',
@@ -7045,7 +6493,7 @@ export default function LookaheadPage() {
                                   ? getTextColor(
                                       color
                                     )
-                                  : '#64748b';
+                                  : 'var(--fo-muted)';
 
 
                               const tooltip =
@@ -7101,17 +6549,17 @@ export default function LookaheadPage() {
                                       code
                                         ? color
                                         : day.isHoliday
-                                          ? '#fee2e2'
+                                          ? 'var(--fo-bad-wash)'
                                           : day.isWeekend
-                                            ? '#eef2f7'
+                                            ? 'var(--fo-sunken)'
                                             : '#ffffff',
 
                                     color:
                                       code
                                         ? textColor
                                         : day.isHoliday
-                                          ? '#991b1b'
-                                          : '#94a3b8',
+                                          ? 'var(--fo-bad)'
+                                          : 'var(--fo-muted)',
 
                                     fontSize:
                                       '10px',
@@ -7173,10 +6621,10 @@ export default function LookaheadPage() {
                   '10px 12px',
 
                 borderTop:
-                  '1px solid #cbd5e1',
+                  '1px solid var(--fo-line)',
 
                 color:
-                  '#475569',
+                  'var(--fo-muted)',
 
                 fontSize:
                   '9px',
@@ -7222,29 +6670,11 @@ export default function LookaheadPage() {
           'constraints' && (
 
           <div
-            style={{
-              border:
-                '1px solid #cbd5e1',
-
-              background:
-                '#fff',
-            }}
+            className={styles.sheet}
           >
 
             <div
-              style={{
-                padding:
-                  '12px 14px',
-
-                borderBottom:
-                  '1px solid #e2e8f0',
-
-                fontWeight:
-                  800,
-
-                fontSize:
-                  '12px',
-              }}
+              className={styles.sheetTitle}
             >
               {t.constraintsTitle}
             </div>
@@ -7262,7 +6692,7 @@ export default function LookaheadPage() {
                     'center',
 
                   color:
-                    '#64748b',
+                    'var(--fo-muted)',
 
                   fontSize:
                     '12px',
@@ -7386,569 +6816,82 @@ export default function LookaheadPage() {
 
 
       {/* ====================================================
-          INSERT PACKAGE MODAL
+          INSERT PACKAGE (lookahead only)
       ===================================================== */}
 
       {showInsertPackageModal && (
-
-        <div
-          style={{
-            position:
-              'fixed',
-
-            inset:
-              0,
-
-            zIndex:
-              6000,
-
-            display:
-              'flex',
-
-            alignItems:
-              'center',
-
-            justifyContent:
-              'center',
-
-            padding:
-              '20px',
-
-            background:
-              'rgba(6,27,47,0.58)',
-          }}
+        <Dialog
+          as="form"
+          onSubmit={submitInsertPackage}
+          title={t.insertPackage}
+          text={t.insertHelp}
+          onClose={() => { if (!insertingPackage) setShowInsertPackageModal(false); }}
+          footer={(
+            <>
+              <button type="button" className={ui.btn} disabled={insertingPackage} onClick={() => setShowInsertPackageModal(false)}>
+                {t.cancel}
+              </button>
+              <button
+                type="submit"
+                className={ui.btnPrimary}
+                disabled={insertingPackage || !insertPackageWorkPackageId || !insertPackageLineId || !insertPackageStartDate || Number(insertPackageDuration) < 1}
+              >
+                {insertingPackage ? t.inserting : t.insertPackage}
+              </button>
+            </>
+          )}
         >
-
-          <div
-            style={{
-              width:
-                'min(520px, 96vw)',
-
-              borderRadius:
-                '10px',
-
-              background:
-                '#ffffff',
-
-              boxShadow:
-                '0 24px 70px rgba(15,23,42,0.30)',
-
-              overflow:
-                'hidden',
-            }}
-          >
-
-            <div
-              style={{
-                padding:
-                  '18px 20px',
-
-                borderBottom:
-                  '1px solid #e2e8f0',
-              }}
-            >
-
-              <div
-                style={{
-                  color:
-                    '#2563eb',
-
-                  fontSize:
-                    '10px',
-
-                  fontWeight:
-                    900,
-
-                  letterSpacing:
-                    '0.08em',
-
-                  textTransform:
-                    'uppercase',
-                }}
-              >
-                {t.insertEyebrow}
-              </div>
-
-
-              <h2
-                style={{
-                  margin:
-                    '5px 0 0',
-
-                  color:
-                    '#0f172a',
-
-                  fontSize:
-                    '18px',
-
-                  fontWeight:
-                    900,
-                }}
-              >
-                {t.insertPackage}
-              </h2>
-
-
-              <p
-                style={{
-                  margin:
-                    '7px 0 0',
-
-                  color:
-                    '#64748b',
-
-                  fontSize:
-                    '11px',
-
-                  lineHeight:
-                    1.5,
-                }}
-              >
-                {t.insertHelp}
-              </p>
-
-            </div>
-
-
-            <form
-              onSubmit={
-                submitInsertPackage
-              }
-
-              style={{
-                padding:
-                  '20px',
-              }}
-            >
-
-              {/* WORK PACKAGE */}
-
-              <div
-                style={{
-                  marginBottom:
-                    '15px',
-                }}
-              >
-
-                <label
-                  style={
-                    modalFieldLabelStyle
-                  }
-                >
-                  {t.workPackage}
-                </label>
-
-
-                <select
-                  value={
-                    insertPackageWorkPackageId
-                  }
-
-                  required
-
-                  onChange={(
-                    event
-                  ) =>
-                    setInsertPackageWorkPackageId(
-                      event.target.value
-                    )
-                  }
-
-                  style={
-                    modalFieldInputStyle
-                  }
-                >
-
-                  <option value="">
-                    {t.selectWorkPackage}
-                  </option>
-
-
-                  {organizationWorkPackages.map(
-                    (
-                      workPackage
-                    ) => (
-
-                      <option
-                        key={
-                          workPackage.id
-                        }
-
-                        value={
-                          workPackage.id
-                        }
-                      >
-                        {workPackage.code} · {workPackage.description}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </div>
-
-
-              {/* LINE ID */}
-
-              <div
-                style={{
-                  marginBottom:
-                    '15px',
-                }}
-              >
-
-                <label
-                  style={
-                    modalFieldLabelStyle
-                  }
-                >
-                  {t.lineId}
-                </label>
-
-
-                <select
-                  value={
-                    insertPackageLineId
-                  }
-
-                  required
-
-                  onChange={(
-                    event
-                  ) =>
-                    setInsertPackageLineId(
-                      event.target.value
-                    )
-                  }
-
-                  style={
-                    modalFieldInputStyle
-                  }
-                >
-
-                  {Array.from(
-                    {
-                      length:
-                        sheetRows.length + 1,
-                    },
-                    (
-                      _,
-                      index
-                    ) =>
-                      index + 1
-                  ).map(
-                    (
-                      lineId
-                    ) => (
-
-                      <option
-                        key={
-                          lineId
-                        }
-
-                        value={
-                          lineId
-                        }
-                      >
-                        {t.line} {lineId}
-                        {lineId ===
-                        sheetRows.length + 1
-                          ? t.bottomSuffix
-                          : ''}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-
-                <div
-                  style={{
-                    marginTop:
-                      '5px',
-
-                    color:
-                      '#94a3b8',
-
-                    fontSize:
-                      '9px',
-                  }}
-                >
-                  {t.lineHelp}
-                </div>
-
-              </div>
-
-
-              {/* START + DURATION */}
-
-              <div
-                style={{
-                  display:
-                    'grid',
-
-                  gridTemplateColumns:
-                    '1fr 1fr',
-
-                  gap:
-                    '12px',
-
-                  marginBottom:
-                    '18px',
-                }}
-              >
-
-                <div>
-
-                  <label
-                    style={
-                      modalFieldLabelStyle
-                    }
-                  >
-                    {t.startDate}
-                  </label>
-
-
-                  <input
-                    type="date"
-
-                    value={
-                      insertPackageStartDate
-                    }
-
-                    min={
-                      selectedPlan?.window_start_date ||
-                      windowStart ||
-                      undefined
-                    }
-
-                    max={
-                      selectedPlan?.window_finish_date ||
-                      undefined
-                    }
-
-                    required
-
-                    onChange={(
-                      event
-                    ) =>
-                      setInsertPackageStartDate(
-                        event.target.value
-                      )
-                    }
-
-                    style={
-                      modalFieldInputStyle
-                    }
-                  />
-
-                </div>
-
-
-                <div>
-
-                  <label
-                    style={
-                      modalFieldLabelStyle
-                    }
-                  >
-                    {t.duration}
-                  </label>
-
-
-                  <div
-                    style={{
-                      display:
-                        'flex',
-
-                      alignItems:
-                        'center',
-
-                      gap:
-                        '7px',
-                    }}
-                  >
-
-                    <input
-                      type="number"
-
-                      min={
-                        1
-                      }
-
-                      step={
-                        1
-                      }
-
-                      value={
-                        insertPackageDuration
-                      }
-
-                      required
-
-                      onChange={(
-                        event
-                      ) =>
-                        setInsertPackageDuration(
-                          Number(
-                            event.target.value
-                          )
-                        )
-                      }
-
-                      style={{
-                        ...modalFieldInputStyle,
-
-                        flex:
-                          1,
-                      }}
-                    />
-
-
-                    <span
-                      style={{
-                        color:
-                          '#64748b',
-
-                        fontSize:
-                          '10px',
-
-                        fontWeight:
-                          700,
-
-                        whiteSpace:
-                          'nowrap',
-                      }}
-                    >
-                      {t.workingDays}
-                    </span>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-
-              <div
-                style={{
-                  padding:
-                    '10px 11px',
-
-                  marginBottom:
-                    '18px',
-
-                  border:
-                    '1px solid #dbeafe',
-
-                  borderRadius:
-                    '6px',
-
-                  background:
-                    '#eff6ff',
-
-                  color:
-                    '#1e40af',
-
-                  fontSize:
-                    '10px',
-
-                  lineHeight:
-                    1.45,
-                }}
-              >
-                {t.insertFoot}
-              </div>
-
-
-              <div
-                style={{
-                  display:
-                    'flex',
-
-                  justifyContent:
-                    'flex-end',
-
-                  gap:
-                    '8px',
-                }}
-              >
-
-                <button
-                  type="button"
-
-                  disabled={
-                    insertingPackage
-                  }
-
-                  onClick={() =>
-                    setShowInsertPackageModal(
-                      false
-                    )
-                  }
-
-                  style={
-                    secondaryButtonStyle
-                  }
-                >
-                  {t.cancel}
-                </button>
-
-
-                <button
-                  type="submit"
-
-                  disabled={
-                    insertingPackage ||
-                    !insertPackageWorkPackageId ||
-                    !insertPackageLineId ||
-                    !insertPackageStartDate ||
-                    Number(
-                      insertPackageDuration
-                    ) < 1
-                  }
-
-                  style={
-                    insertingPackage ||
-                    !insertPackageWorkPackageId ||
-                    !insertPackageLineId ||
-                    !insertPackageStartDate ||
-                    Number(
-                      insertPackageDuration
-                    ) < 1
-                      ? disabledButtonStyle
-                      : primaryButtonStyle
-                  }
-                >
-                  {insertingPackage
-                    ? t.inserting
-                    : t.insertPackage}
-                </button>
-
-              </div>
-
-            </form>
-
+          <label className={ui.field}>
+            <span className={ui.fieldLabel}>{t.workPackage}</span>
+            <select value={insertPackageWorkPackageId} required onChange={(event) => setInsertPackageWorkPackageId(event.target.value)}>
+              <option value="">{t.selectWorkPackage}</option>
+              {organizationWorkPackages.map((workPackage) => (
+                <option key={workPackage.id} value={workPackage.id}>
+                  {workPackage.code} · {workPackage.description}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={ui.field}>
+            <span className={ui.fieldLabel}>{t.lineId}</span>
+            <select value={insertPackageLineId} required onChange={(event) => setInsertPackageLineId(event.target.value)}>
+              {Array.from({ length: sheetRows.length + 1 }, (_, index) => index + 1).map((lineId) => (
+                <option key={lineId} value={lineId}>
+                  {t.line} {lineId}{lineId === sheetRows.length + 1 ? t.bottomSuffix : ''}
+                </option>
+              ))}
+            </select>
+            <span className={styles.hint}>{t.lineHelp}</span>
+          </label>
+
+          <div className={styles.grid2}>
+            <label className={ui.field}>
+              <span className={ui.fieldLabel}>{t.startDate}</span>
+              <input
+                type="date"
+                value={insertPackageStartDate}
+                min={selectedPlan?.window_start_date || windowStart || undefined}
+                max={selectedPlan?.window_finish_date || undefined}
+                required
+                onChange={(event) => setInsertPackageStartDate(event.target.value)}
+              />
+            </label>
+            <label className={ui.field}>
+              <span className={ui.fieldLabel}>{t.duration} ({t.workingDays})</span>
+              <input type="number" min={1} step={1} value={insertPackageDuration} required onChange={(event) => setInsertPackageDuration(Number(event.target.value))} />
+            </label>
           </div>
 
-        </div>
-
+          <p className={styles.hint}>{t.insertFoot}</p>
+        </Dialog>
       )}
-
 
       {selectedProjectId &&
         !selectedPlanId &&
         !loading && (
 
-          <div
-            style={
-              emptyStyle
-            }
-          >
-            {t.noPlan}
-          </div>
+          <Empty title={t.noPlan} />
 
         )}
 
@@ -7988,351 +6931,70 @@ export default function LookaheadPage() {
 // STYLES
 // ============================================================
 
-const modalFieldLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '6px',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    800,
-};
-
-
-const modalFieldInputStyle = {
-  width:
-    '100%',
-
-  height:
-    '38px',
-
-  padding:
-    '0 9px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '11px',
-
-  outline:
-    'none',
-};
-
-
-const labelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '5px',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-};
-
-
-const selectStyle = {
-  width:
-    '100%',
-
-  height:
-    '36px',
-
-  padding:
-    '0 10px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff',
-};
-
-
-const inputStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 8px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff',
-};
-
-
 const headerCellStyle = {
-  border:
-    '1px solid #cbd5e1',
-
-  padding:
-    '5px 4px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'center',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    800,
+  border: '1px solid var(--fo-line-soft)',
+  padding: '6px 4px',
+  background: 'var(--fo-sunken)',
+  color: 'var(--fo-muted)',
+  textAlign: 'center',
+  fontSize: '11px',
+  fontWeight: 600,
 };
 
 
 const calendarHeaderStyle = {
   ...headerCellStyle,
-
-  width:
-    DAY_WIDTH,
-
-  minWidth:
-    DAY_WIDTH,
-
-  padding:
-    '3px 1px',
-
-  fontSize:
-    '8px',
+  width: DAY_WIDTH,
+  minWidth: DAY_WIDTH,
+  padding: '3px 1px',
+  fontSize: '10px',
 };
 
 
 const bodyCellStyle = {
-  border:
-    '1px solid #e2e8f0',
-
-  padding:
-    '3px',
-
-  background:
-    '#fff',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'center',
-
-  verticalAlign:
-    'middle',
+  border: '1px solid var(--fo-line-soft)',
+  padding: '3px',
+  background: 'var(--fo-surface)',
+  color: 'var(--fo-ink)',
+  textAlign: 'center',
+  verticalAlign: 'middle',
 };
 
 
-const primaryButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 12px',
-
-  border:
-    '1px solid #2563eb',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#2563eb',
-
-  color:
-    '#fff',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
-};
 
 
-const secondaryButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 12px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
-};
 
 
-const holidayButtonStyle = {
-  ...secondaryButtonStyle,
-
-  border:
-    '1px solid #fca5a5',
-
-  background:
-    '#fff1f2',
-
-  color:
-    '#b91c1c',
-};
 
 
-const disabledButtonStyle = {
-  ...secondaryButtonStyle,
-
-  opacity:
-    0.45,
-
-  cursor:
-    'not-allowed',
-};
 
 
-const tabStyle = {
-  padding:
-    '9px 14px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderBottom:
-    0,
-
-  borderRadius:
-    '6px 6px 0 0',
-
-  background:
-    '#e2e8f0',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
-};
 
 
-const activeTabStyle = {
-  ...tabStyle,
 
-  background:
-    '#fff',
 
-  color:
-    '#0f172a',
-};
+
+
+
+
 
 
 const menuButtonStyle = {
-  display:
-    'block',
-
-  width:
-    '100%',
-
-  padding:
-    '7px 8px',
-
-  border:
-    0,
-
-  borderRadius:
-    '4px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'left',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    600,
-
-  cursor:
-    'pointer',
+  display: 'block',
+  width: '100%',
+  padding: '8px 10px',
+  border: 0,
+  borderRadius: '6px',
+  background: 'transparent',
+  color: 'var(--fo-ink)',
+  textAlign: 'left',
+  fontSize: '13px',
+  fontWeight: 500,
+  cursor: 'pointer',
 };
 
 
-const emptyStyle = {
-  padding:
-    '50px 20px',
 
-  border:
-    '1px solid #e2e8f0',
-
-  background:
-    '#fff',
-
-  textAlign:
-    'center',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '12px',
-};
 
 
 
