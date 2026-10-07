@@ -104,6 +104,13 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
     return spec
   }
 
+  /** Form build-up merged over the stored one, so settings the form doesn't show (imperial units, grid sizes…) are kept. */
+  function fullSpec(f: Form): Record<string, unknown> {
+    const prev = (selected && family.specOf(selected.framing)) || {}
+    const hidden = Object.fromEntries(Object.entries(prev).filter(([k]) => k !== 'system' && !family.fields.some(x => x.key === k)))
+    return { ...hidden, ...specOf(f) }
+  }
+
   async function create() {
     setBusy(true)
     setError('')
@@ -151,7 +158,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
     const { error: e } = await createClient().from('takeoff_wall_types').update({
       code: form.code.trim() || null, name: form.name.trim(), category: family.category, status: form.status, country_code: form.country,
       project_id: form.scope === 'project' ? projectId : null, thickness_m: num(form.thickness) ?? null,
-      framing: { ...(selected.framing || {}), [family.specKey]: specOf(form), color: form.color }, notes: form.notes.trim() || null,
+      framing: { ...(selected.framing || {}), [family.specKey]: fullSpec(form), color: form.color }, notes: form.notes.trim() || null,
     }).eq('id', selected.id)
     setBusy(false)
     if (e) { setError(/duplicate|unique/i.test(e.message) ? t('walltype.duplicateExists') : t('workspace.error', { message: e.message })); return }
@@ -180,7 +187,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
   }
 
   // Materials for 100 m² with 40 m of edges, so the build-up can be checked at a glance.
-  const preview = form ? family.lines(specOf(form) as { system: string }, 100, 40, labels) : []
+  const preview = form ? family.lines(fullSpec(form) as { system: string }, 100, 40, labels) : []
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

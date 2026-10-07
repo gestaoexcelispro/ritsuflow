@@ -4,6 +4,7 @@
 // setting materials (adhesive, grout, primer…) are net.
 import { perimeter, polyArea, type TakeoffItem } from './geometry'
 import type { MaterialRequirement } from './recipes'
+import { toImperial } from './surfaceUnits'
 
 export const FLOOR_CATEGORY = 'floor' as const
 export const FLOOR_IFC = 'IfcCovering.FLOORING'
@@ -21,9 +22,11 @@ export type FloorSpec = {
   /** Tiles: joint width and tile thickness (mm), for the grout estimate. */
   joint_mm?: number
   tile_mm?: number
-  /** Setting adhesive (kg/m²) and its product name. */
+  /** Setting adhesive (kg/m², or `adhesive_unit` per m²) and its product name. */
   adhesive_kg_m2?: number
   adhesive?: string
+  /** Unit of the adhesive rate when it is not kg (e.g. 'gal' per m² for US vinyl adhesives). */
+  adhesive_unit?: string
   /** Vinyl sheet: roll width (m), for the weld rod along the seams. */
   roll_w_m?: number
   /** Resin / screed: thickness (mm); resin consumption (kg per m² per mm). */
@@ -35,6 +38,8 @@ export type FloorSpec = {
   skirting?: string
   /** Cutting waste on the covering (%). */
   waste_pct?: number
+  /** Show the estimate in ft, sf, lb and yd³ (US). */
+  imperial?: boolean
 }
 
 export type FloorTypeLike = { id?: string; code: string | null; name: string; thickness_m: number | null; framing: Record<string, unknown> | null; notes?: string | null }
@@ -107,12 +112,13 @@ export function floorLines(spec: FloorSpec, areaM2: number, perimeterM: number, 
   const product = spec.product || ''
   const w = spec.tile_w_m && spec.tile_w_m > 0 ? spec.tile_w_m : 0
   const l = spec.tile_l_m && spec.tile_l_m > 0 ? spec.tile_l_m : w
+  const adhUnit = spec.adhesive_unit || 'kg'
   const pieces = (name: string) => { if (w > 0) push(`${name} (${L.pieces})`, 'un', Math.ceil((A * waste) / (w * l))) }
   switch (spec.system) {
     case 'tile': {
       push(product || 'Revestimento', 'm²', A * waste)
       pieces(product || 'Revestimento')
-      if (spec.adhesive_kg_m2) push(spec.adhesive || 'Argamassa colante', 'kg', A * spec.adhesive_kg_m2)
+      if (spec.adhesive_kg_m2) push(spec.adhesive || 'Argamassa colante', adhUnit, A * spec.adhesive_kg_m2)
       // Grout (kg/m²) = (C + L) × joint × thickness × 1,58 / (C × L), sizes in mm.
       if (w > 0 && spec.joint_mm && spec.tile_mm) {
         const C = w * 1000
@@ -123,7 +129,7 @@ export function floorLines(spec: FloorSpec, areaM2: number, perimeterM: number, 
     }
     case 'vinyl_sheet':
       push(product || 'Manta vinílica', 'm²', A * waste)
-      if (spec.adhesive_kg_m2) push(spec.adhesive || 'Adesivo', 'kg', A * spec.adhesive_kg_m2)
+      if (spec.adhesive_kg_m2) push(spec.adhesive || 'Adesivo', adhUnit, A * spec.adhesive_kg_m2)
       // Weld rod along the seams between rolls (and up the coved skirting joints, ignored here).
       push(L.weldRod, 'm', A / (spec.roll_w_m && spec.roll_w_m > 0 ? spec.roll_w_m : 2))
       break
@@ -131,7 +137,7 @@ export function floorLines(spec: FloorSpec, areaM2: number, perimeterM: number, 
     case 'carpet':
       push(product || 'Revestimento', 'm²', A * waste)
       pieces(product || 'Revestimento')
-      if (spec.adhesive_kg_m2) push(spec.adhesive || 'Adesivo', 'kg', A * spec.adhesive_kg_m2)
+      if (spec.adhesive_kg_m2) push(spec.adhesive || 'Adesivo', adhUnit, A * spec.adhesive_kg_m2)
       break
     case 'raised': {
       const pw = w || 0.6
@@ -161,7 +167,7 @@ export function floorLines(spec: FloorSpec, areaM2: number, perimeterM: number, 
       push(product || 'Piso', 'm²', A)
   }
   if (spec.skirting) push(spec.skirting, 'm', P * waste)
-  return out
+  return spec.imperial ? toImperial(out) : out
 }
 
 /** Floor materials of every floor-type area in `items`, summed by material. */

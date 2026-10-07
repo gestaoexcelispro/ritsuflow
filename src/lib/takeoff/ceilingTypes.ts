@@ -3,6 +3,7 @@
 // The material quantities are estimates from the build-up: net quantities, no waste (add waste in purchasing).
 import { perimeter, polyArea, type TakeoffItem } from './geometry'
 import type { MaterialRequirement } from './recipes'
+import { toImperial } from './surfaceUnits'
 
 export const CEILING_CATEGORY = 'ceiling' as const
 export const CEILING_IFC = 'IfcCovering.CEILING'
@@ -27,6 +28,23 @@ export type CeilingSpec = {
   tile?: string
   /** Insulation over the ceiling (e.g. "Lã de vidro 50 mm"); empty = none. */
   insulation?: string | null
+  /** Monolithic: board sheet size (m), default 1,20 × 2,40; when set, the board name is shown as is (put the size in it). */
+  sheet_w_m?: number
+  sheet_l_m?: number
+  /** Exposed grid: main tee spacing and length, cross and short tee lengths (m); default 1,25 / 3,75 / 1,25 / 0,625. */
+  main_spacing_m?: number
+  main_len_m?: number
+  cross_len_m?: number
+  short_len_m?: number
+  /** Exposed grid: full product names of the tees (e.g. 15/16" main tee 12'), instead of the generic label + length. */
+  main_name?: string
+  cross_name?: string
+  short_name?: string
+  /** Suspended drywall hung from carrying channels (US): their spacing (m) and name; hangers then sit on them. */
+  carrier_m?: number
+  carrier_name?: string
+  /** Show the estimate in ft, sf and lb (US). */
+  imperial?: boolean
 }
 
 /** Ceiling type as stored (subset of a takeoff_wall_types row). */
@@ -101,11 +119,15 @@ export function ceilingLines(spec: CeilingSpec, areaM2: number, perimeterM: numb
   if (isMonolithic(spec.system)) {
     const layers = Math.max(1, Math.round(spec.layers || 1))
     push(spec.profile || 'Perfil F530', 'm', A / s)
-    if (spec.system === 'suspended') push(L.hangers, 'un', Math.ceil(A / (s * h)))
+    const carrier = spec.system === 'suspended' && spec.carrier_m && spec.carrier_m > 0 ? spec.carrier_m : 0
+    if (carrier) push(spec.carrier_name || L.carrier, 'm', A / carrier)
+    if (spec.system === 'suspended') push(L.hangers, 'un', Math.ceil(A / ((carrier || s) * h)))
     if (spec.system === 'direct') push(L.brackets, 'un', Math.ceil(A / (s * h)))
     push(spec.system === 'self' ? L.perimeterTrack : L.perimeterAngle, 'm', P)
     const board = spec.board || 'Chapa ST 12,5 mm'
-    push(`${board} · 1,20 × 2,40 m`, L.sheets, Math.ceil((A * layers) / 2.88))
+    const sized = !!(spec.sheet_w_m && spec.sheet_l_m)
+    const sheet = sized ? spec.sheet_w_m! * spec.sheet_l_m! : 2.88
+    push(sized ? board : `${board} · 1,20 × 2,40 m`, L.sheets, Math.ceil((A * layers) / sheet))
     // Screws every ~30 cm along each profile, per board layer.
     push(L.screws, 'un', Math.ceil((A / s / 0.3) * layers))
   } else if (isModular(spec.system)) {
@@ -113,11 +135,17 @@ export function ceilingLines(spec: CeilingSpec, areaM2: number, perimeterM: numb
     const l = spec.tile_l_m && spec.tile_l_m > 0 ? spec.tile_l_m : w
     push(spec.tile || `${w * 1000}×${l * 1000}`, 'un', Math.ceil(A / (w * l)))
     if (spec.system === 'grid') {
-      // Main tees every 1,25 m; 1,25 m cross tees every tile width; short tees between them on square modules.
-      const main = A / 1.25
-      push(`${L.mainTee} 3,75 m`, 'un', Math.ceil(main / 3.75))
-      push(`${L.crossTee} 1,25 m`, 'un', Math.ceil(A / w / 1.25))
-      if (Math.abs(w - l) < 1e-6 && w < 1) push(`${L.shortTee} 0,625 m`, 'un', Math.ceil(main / 0.625))
+      // Main tees every main spacing; cross tees (as long as the main spacing) every tile width;
+      // short tees between them, mid-way between mains, on square modules smaller than the main spacing.
+      const ms = spec.main_spacing_m && spec.main_spacing_m > 0 ? spec.main_spacing_m : 1.25
+      const ml = spec.main_len_m && spec.main_len_m > 0 ? spec.main_len_m : 3.75
+      const cl = spec.cross_len_m && spec.cross_len_m > 0 ? spec.cross_len_m : ms
+      const sl = spec.short_len_m && spec.short_len_m > 0 ? spec.short_len_m : 0.625
+      const len = (v: number) => `${String(Math.round(v * 1000) / 1000).replace('.', ',')} m`
+      const main = A / ms
+      push(spec.main_name || `${L.mainTee} ${len(ml)}`, 'un', Math.ceil(main / ml))
+      push(spec.cross_name || `${L.crossTee} ${len(cl)}`, 'un', Math.ceil(A / w / cl))
+      if (Math.abs(w - l) < 1e-6 && w < ms - 1e-6) push(spec.short_name || `${L.shortTee} ${len(sl)}`, 'un', Math.ceil(main / sl))
       push(L.hangers, 'un', Math.ceil(main / h))
     } else {
       push(L.carrier, 'm', A / 1.2)
@@ -133,7 +161,7 @@ export function ceilingLines(spec: CeilingSpec, areaM2: number, perimeterM: numb
     push(L.hangers, 'un', Math.ceil(A / (1.2 * h)))
   }
   if (spec.insulation) push(spec.insulation, 'm²', A)
-  return out
+  return spec.imperial ? toImperial(out) : out
 }
 
 /** Ceiling materials of every ceiling-type area in `items`, summed by material. */
