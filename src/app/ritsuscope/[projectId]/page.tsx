@@ -582,6 +582,31 @@ export default function TakeoffWorkspacePage() {
   const shownItems = levelHidden ? [] : hiddenLayerIds.size ? sourceItems.filter(it => !hiddenLayerIds.has(it.key)) : sourceItems
   const levelShownModel = isIfcModel ? modelData.items : withoutHiddenStoreys(modelData.items, modelData.storeys, hiddenBranches, levels)
   const shownModelItems = hiddenLayerIds.size ? levelShownModel.filter(it => !hiddenLayerIds.has(it.key)) : levelShownModel
+  /** Items of the same library type at the same level/height (duplicates that should be one item), by key. */
+  const sameTypeKey = (l: LayerRow) => (l.wall_type_id ? `${l.wall_type_id}|${l.kind}|${l.kind === 'area' ? Number(l.elevation_m) || 0 : l.kind === 'linear' ? Number(l.height_m) || 0 : ''}` : null)
+  /** Merges duplicate items (same type, same level): their drawings move to the first one, the others are removed. */
+  async function mergeDuplicates(ids: string[]) {
+    const groups = new Map<string, LayerRow[]>()
+    for (const l of layers.filter(x => ids.includes(x.id))) {
+      const k = sameTypeKey(l)
+      if (k) groups.set(k, [...(groups.get(k) || []), l])
+    }
+    const dupes = [...groups.values()].filter(g => g.length > 1)
+    if (!dupes.length) return
+    if (!window.confirm(t('group.mergeConfirm', { names: dupes.map(g => `${g[0].name} ×${g.length}`).join(', ') }))) return
+    const supabase = createClient()
+    for (const g of dupes) {
+      const [keep, ...rest] = [...g].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      const restIds = rest.map(x => x.id)
+      const { error: e } = await supabase.from('takeoff_elements').update({ layer_id: keep.id }).in('layer_id', restIds)
+      if (e) { setError(t('workspace.error', { message: e.message })); return }
+      const { error: e2 } = await supabase.from('takeoff_layers').delete().in('id', restIds)
+      if (e2) { setError(t('workspace.error', { message: e2.message })); return }
+    }
+    await load()
+    setStatus(t('group.merged'))
+  }
+
   /** Shows or hides several items at once (a whole list group). */
   async function setLayersVisible(ids: string[], visible: boolean) {
     if (!ids.length) return
@@ -1321,7 +1346,7 @@ export default function TakeoffWorkspacePage() {
               <span style={{ width: 12, height: 12, borderRadius: 3, background: item.color }} />
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 12, fontWeight: 650, color: '#173441', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                <span style={{ fontSize: 10, color: '#6b8089' }}>{t(layerKindKey[item.kind])}</span>
+                <span style={{ fontSize: 10, color: '#6b8089' }}>{t(layerKindKey[item.kind])}{item.kind === 'area' && (item.elevation ?? 0) > 0 ? ` · h ${formatNumber(item.elevation ?? 0, 2)} m` : ''}</span>
               </span>
               <span style={{ textAlign: 'right' }}>
                 <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#0d7f77' }}>{q.main}</span>
@@ -1404,6 +1429,10 @@ export default function TakeoffWorkspacePage() {
       const sums = new Map<string, number>()
       for (const r of list) { const v = qtyValue(r.item, r.q); if (v) sums.set(v.u, (sums.get(v.u) || 0) + v.v) }
       const total = [...sums.entries()].map(([u, v]) => `${formatNumber(v, u === t('unit.un') ? 0 : 2)} ${u}`).join(' · ')
+      // Same library type at the same level split over several items: offer to merge them into one.
+      const seen = new Map<string, number>()
+      for (const id of ids) { const l = layers.find(x => x.id === id); const k = l && sameTypeKey(l); if (k) seen.set(k, (seen.get(k) || 0) + 1) }
+      const dupCount = [...seen.values()].filter(n => n > 1).length
       return (
         <div
           key={`h:${key}`}
@@ -1422,6 +1451,12 @@ export default function TakeoffWorkspacePage() {
           <Icon name="chevron" size={12} style={{ color: '#536d78', transform: folded ? 'rotate(-90deg)' : 'none', transition: 'transform .12s' }} />
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: level === 0 ? 10 : 10, fontWeight: 800, letterSpacing: level === 0 ? '.06em' : '.02em', textTransform: level === 0 ? 'uppercase' : 'none', color: level === 0 ? '#294955' : '#536d78' }}>
             {label} <span style={{ fontWeight: 650, color: '#8aa0a8' }}>· {t('group.types', { count: list.length })}</span>
+            {dupCount > 0 && (
+              <button type="button" title={t('group.mergeHint')} onClick={event => { event.stopPropagation(); void mergeDuplicates(ids) }}
+                style={{ marginLeft: 6, height: 18, padding: '0 6px', border: '1px solid #f3d19c', borderRadius: 9, background: '#fffaf0', color: '#8a5a12', fontSize: 9, fontWeight: 800, cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
+                {t('group.merge')}
+              </button>
+            )}
           </span>
           <span style={{ fontSize: 10, fontWeight: 800, color: '#0d7f77', whiteSpace: 'nowrap' }}>{total}</span>
           <button

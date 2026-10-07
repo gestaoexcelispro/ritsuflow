@@ -90,6 +90,9 @@ export default function SurfaceTypePicker({ family, projectId, projectCountry, l
     setBusy(true)
     setError('')
     const row = family.layerFrom(pick, { projectId, color: LAYER_PALETTE[layerCount % LAYER_PALETTE.length], sortOrder: (layerCount + 1) * 10, elevationM: h })
+    // Same type at the same level already in the project: draw into that item instead of a duplicate.
+    const { data: same } = await createClient().from('takeoff_layers').select('id').eq('project_id', projectId).eq('kind', 'area').eq('wall_type_id', pick.id).eq('elevation_m', row.elevation_m as number).limit(1)
+    if (same && same.length) { setBusy(false); await onCreated((same[0] as { id: string }).id); return }
     const { data, error: e } = await createClient().from('takeoff_layers').insert(row).select('id').single()
     setBusy(false)
     if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return }

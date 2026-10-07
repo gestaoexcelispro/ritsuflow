@@ -91,6 +91,11 @@ export default function WallTypePicker({ projectId, projectCountry, layerCount, 
       setBusy(false)
       return
     }
+    // Same type with the same height already in the project: draw into that item instead of a duplicate.
+    let sameQ = createClient().from('takeoff_layers').select('id').eq('project_id', projectId).eq('kind', 'linear').eq('wall_type_id', pick.id)
+    sameQ = row.height_m ? sameQ.eq('height_m', row.height_m) : sameQ.is('height_m', null)
+    const { data: same } = await sameQ.limit(1)
+    if (same && same.length) { setBusy(false); await onCreated((same[0] as { id: string }).id); return }
     const { data, error: e } = await createClient().from('takeoff_layers').insert(row).select('id').single()
     setBusy(false)
     if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return }
