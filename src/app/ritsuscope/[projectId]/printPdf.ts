@@ -73,6 +73,10 @@ export type PrintLabels = {
   colMaterial: string
   colPacks: string
   materialKind: Record<MaterialKind, string>
+  /** Materials by location: heading, the "outside any location" bucket and the rounding note. */
+  byLocation: string
+  noLocation: string
+  byLocationNote: string
   /** Tag table (one row per wall stretch, area or point). */
   tags: string
   colTag: string
@@ -98,6 +102,8 @@ export type PrintSheet = {
   backgroundFade?: number
   /** Materials of this sheet, one group per item / type (framing layout, recipes, ceiling / floor build-ups). */
   materialGroups?: MaterialGroup[]
+  /** The same materials split by location (room / area…), each with its types. */
+  locationMaterials?: { name: string; color: [number, number, number]; groups: MaterialGroup[] }[]
 }
 
 const svgPath = (pts: [number, number][], close: boolean) =>
@@ -305,13 +311,13 @@ export async function buildProjectPdf(opts: {
   const withDetail = (r: { sub: string; detail?: 'length' | 'perimeter' | 'height' | 'sill' }) => (r.detail && r.sub ? `${labels.detail[r.detail]} ${r.sub}` : r.sub)
   const tagCols = [{ label: labels.colTag, x: M + 16 }, { label: labels.colItem, x: M + 110 }, { label: labels.colQty, x: M + 530 }, { label: labels.colExtra, x: M + 640 }]
   /** Materials under one heading per type (its colour and name), project or sheet. */
-  const materialsTable = (groups: MaterialGroup[]) => {
+  const materialsTable = (groups: MaterialGroup[], heading = labels.materials) => {
     const list = groups.filter(g => g.rows.length)
     if (!list.length) return
     const anyPacks = list.some(g => g.rows.some(r => r.packs != null))
     const cols = matCols.filter((_, i) => i < 3 || anyPacks)
     need(56)
-    page.drawText(winAnsi(labels.materials).toUpperCase(), { x: M, y, size: 8.5, font: bold, color: ink }); y -= 14
+    page.drawText(winAnsi(heading).toUpperCase(), { x: M, y, size: 8.5, font: bold, color: ink }); y -= 14
     cols.forEach(c => page.drawText(winAnsi(c.label), { x: c.x, y, size: 8, font: bold, color: grey }))
     y -= 6
     page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.5, color: rgb(0.85, 0.89, 0.9) })
@@ -337,6 +343,21 @@ export async function buildProjectPdf(opts: {
     table(labels.items, itemCols, legendRows(sheet.items, sheet.ptPerM, fmt, labels.unit, labels.formwork).map(r => ({ swatch: r.color, cells: [r.name, labels.kind[r.kind], r.main, withDetail(r)] })))
     table(labels.openings, openCols, openingRows(sheet.items).map(openCells))
     materialsTable(sheet.materialGroups || [])
+    // Materials by location: each room (or area…) with its types and their materials.
+    const locs = (sheet.locationMaterials || []).filter(l => l.groups.some(g => g.rows.length))
+    if (locs.length) {
+      need(60)
+      page.drawText(winAnsi(labels.byLocation).toUpperCase(), { x: M, y, size: 8.5, font: bold, color: ink }); y -= 12
+      page.drawText(winAnsi(labels.byLocationNote), { x: M, y, size: 7.5, font, color: grey }); y -= 16
+      for (const l of locs) {
+        need(70)
+        page.drawRectangle({ x: M, y: y - 4, width: W - 2 * M, height: 16, color: rgb(0.96, 0.97, 0.98) })
+        page.drawRectangle({ x: M, y: y - 4, width: 4, height: 16, color: color(l.color) })
+        page.drawText(winAnsi(l.name), { x: M + 10, y, size: 9, font: bold, color: ink })
+        y -= 22
+        materialsTable(l.groups, `${labels.materials} · ${l.name}`)
+      }
+    }
     table(labels.tags, tagCols, tagTableRows(sheet.items, sheet.ptPerM, fmt, labels.unit).map(r => ({ swatch: r.color, cells: [r.tag, r.name, r.main, withDetail(r)] })))
     table(labels.locations,
       [{ label: labels.colItem, x: M + 16 }, { label: labels.colArea, x: M + 420 }, { label: labels.colPerimeter, x: M + 530 }],

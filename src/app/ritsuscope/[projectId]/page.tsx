@@ -69,7 +69,8 @@ import DeleteFromLevelsDialog from './DeleteFromLevelsDialog'
 import { NO_LEVEL, branchItems, branchOfLevel, levelBranches, withoutHiddenStoreys, type LevelBranch } from '@/lib/takeoff/levelTree'
 import type { Quantities } from '@/lib/takeoff/geometry'
 import { groupRows, type GroupKey, type SubKey } from '@/lib/takeoff/itemGroups'
-import { materialRows } from '@/lib/takeoff/materialList'
+import { materialRows, scaleGroup } from '@/lib/takeoff/materialList'
+import { itemShareByZone, NONE } from '@/lib/takeoff/locationShare'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
 
@@ -1101,6 +1102,36 @@ export default function TakeoffWorkspacePage() {
         const r = scaleRatio(k)
         const scale = r ? `1:${pfmt(Math.round(r), 0)}` : pt('workspace.source.notCalibrated')
         const mult = ps.branch.count
+        // One group per item (its type): framing layout, recipe and ceiling / floor build-up.
+        const typeGroups = k > 0 ? ps.items.map(it => {
+          const surf = surfaceMaterials([it], k, pSurface)
+          return {
+            key: it.key,
+            group: {
+              name: it.name,
+              color: hexToRgb(it.color),
+              rows: materialRows([it], k, {
+                recipe: recipeMaterials([it], k, recipeOfItem, projectRecipeCtx),
+                ceiling: surf.find(x => x.family.id === 'ceiling')?.materials || [],
+                floor: surf.find(x => x.family.id === 'floor')?.materials || [],
+              }, { bars: pt('csv.bars'), sheets: pt('csv.sheets'), un: pt('unit.un') }, v => pfmt(v, 2), (len, unit) => pt('print.stockBars', { len: pfmt(len, 2), unit })),
+            },
+          }
+        }).filter(x => x.group.rows.length) : []
+        // The same materials by location: the sheet's most detailed locations (rooms before areas, zones, blocks),
+        // each type's share inside it (walls on a shared edge split between the two rooms).
+        const sheetZones = zones.filter(z => z.source_id === ps.source.id && z.is_visible && z.points.length >= 3)
+        const zKind = ['room', 'area', 'zone', 'block'].find(kd => sheetZones.some(z => (z.zone_kind || 'room') === kd))
+        const locZones = sheetZones.filter(z => (z.zone_kind || 'room') === zKind).sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }))
+        const share = locZones.length && typeGroups.length ? itemShareByZone(ps.items, locZones.map(z => ({ id: z.id, points: z.points })), k) : null
+        const locationMaterials = share ? [
+          ...locZones.map(z => ({ id: z.id, name: z.name, color: hexToRgb(z.color) })),
+          { id: NONE, name: pt('print.noLocation'), color: [0.6, 0.65, 0.68] as [number, number, number] },
+        ].map(l => ({
+          name: l.name,
+          color: l.color,
+          groups: typeGroups.map(x => scaleGroup(x.group, share.get(x.key)?.get(l.id) || 0)).filter(g => g.rows.length),
+        })).filter(l => l.groups.length) : []
         return {
           url: urlOf.get(ps.source.file_path)!,
           pageNumber: ps.source.page_number || 1,
@@ -1112,19 +1143,8 @@ export default function TakeoffWorkspacePage() {
           subtitle: pt('print.subtitle', { scale, date }),
           heading: `${ps.levelName} · ${ps.source.name}${mult > 1 ? ` · ${pt('print.perFloor')}` : ''}`,
           backgroundFade: fadeOf(ps.source),
-          materialGroups: k > 0 ? ps.items.map(it => {
-            // One group per item (its type): framing layout, recipe and ceiling / floor build-up.
-            const surf = surfaceMaterials([it], k, pSurface)
-            return {
-              name: it.name,
-              color: hexToRgb(it.color),
-              rows: materialRows([it], k, {
-                recipe: recipeMaterials([it], k, recipeOfItem, projectRecipeCtx),
-                ceiling: surf.find(x => x.family.id === 'ceiling')?.materials || [],
-                floor: surf.find(x => x.family.id === 'floor')?.materials || [],
-              }, { bars: pt('csv.bars'), sheets: pt('csv.sheets'), un: pt('unit.un') }, v => pfmt(v, 2), (len, unit) => pt('print.stockBars', { len: pfmt(len, 2), unit })),
-            }
-          }).filter(g => g.rows.length) : [],
+          materialGroups: typeGroups.map(x => x.group),
+          locationMaterials,
         }
       })
       // 3D page: the building with this PDF's items (everything for locations and the full takeoff).
@@ -1190,6 +1210,9 @@ export default function TakeoffWorkspacePage() {
           openingKind: { door: pt('opening.kind.door'), window: pt('opening.kind.window'), void: pt('opening.kind.void'), other: pt('opening.kind.void') },
           formwork: pt('struct.formwork'),
           view3d: pt('print.view3d'),
+          byLocation: pt('print.byLocation'),
+          noLocation: pt('print.noLocation'),
+          byLocationNote: pt('print.byLocationNote'),
           totals: pt('print.totals'),
           totalsNote: pt('print.totalsNote'),
           materials: pt('print.materials'),
