@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import type { TakeoffMessageKey } from '@/lib/i18n/messages/takeoff.pt-BR'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
@@ -13,10 +14,9 @@ import { statusColor, statusKey } from './WallTypesLibrary'
 /** A ceiling or floor type is a wall-type row with its own category and the build-up in framing[specKey]. */
 export type SurfaceTypeRow = Omit<WallTypeRow, 'category'> & { category: string }
 
-/** Translated words for the ceiling and floor material lines. */
-export function useSurfaceLabels(): SurfaceLabels {
-  const t = useTakeoffT()
-  return useMemo(() => ({
+/** Words for the ceiling and floor material lines, from any translator (screen or report language). */
+export function surfaceLabelsFrom(t: (key: TakeoffMessageKey) => string): SurfaceLabels {
+  return {
     ceiling: {
       hangers: t('ceiling.mat.hangers'), brackets: t('ceiling.mat.brackets'), perimeterAngle: t('ceiling.mat.perimeterAngle'),
       perimeterTrack: t('ceiling.mat.perimeterTrack'), mainTee: t('ceiling.mat.mainTee'), crossTee: t('ceiling.mat.crossTee'),
@@ -27,7 +27,13 @@ export function useSurfaceLabels(): SurfaceLabels {
       pieces: t('ceiling.mat.pieces'), grout: t('floortype.mat.grout'), primer: t('floortype.mat.primer'), weldRod: t('floortype.mat.weldRod'),
       pedestals: t('floortype.mat.pedestals'), underlay: t('floortype.mat.underlay'), mortar: t('floortype.mat.mortar'),
     },
-  }), [t])
+  }
+}
+
+/** Translated words for the ceiling and floor material lines. */
+export function useSurfaceLabels(): SurfaceLabels {
+  const t = useTakeoffT()
+  return useMemo(() => surfaceLabelsFrom(t), [t])
 }
 
 const shows = (f: SpecField, system: string) => f.systems === 'all' || f.systems.includes(system)

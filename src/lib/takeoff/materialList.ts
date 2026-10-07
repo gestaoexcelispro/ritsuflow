@@ -6,6 +6,12 @@ import type { MaterialRequirement } from './recipes'
 import { framingTotals, packBars, packSheets } from './framing/framing'
 
 export type MaterialKind = 'profile' | 'board' | 'screws' | 'recipe' | 'ceiling' | 'floor'
+/** Stock length of ceiling profiles, angles and tracks: 3 m bars (metric), 12 ft (imperial). */
+export const STOCK_BAR: Record<string, number> = { m: 3, ft: 12 }
+
+/** Materials of one item / type, for the report (its name and colour head the group). */
+export type MaterialGroup = { name: string; color: [number, number, number]; rows: MaterialRow[] }
+
 export type MaterialRow = { mat: string; kind: MaterialKind; qty: number; unit: string; packs: number | null; packName: string | null }
 
 export function materialRows(
@@ -14,6 +20,8 @@ export function materialRows(
   extra: { recipe: MaterialRequirement[]; ceiling: MaterialRequirement[]; floor: MaterialRequirement[] },
   units: { bars: string; sheets: string; un: string },
   fmt: (v: number) => string,
+  /** Name of the stock bar a ceiling profile is bought in ("3 m bars"); ceiling profiles in m / ft get a bar count. */
+  barName?: (len: number, unit: string) => string,
 ): MaterialRow[] {
   const rows: MaterialRow[] = []
   if (ptPerM > 0) {
@@ -29,7 +37,13 @@ export function materialRows(
     for (const [name, n] of T.screws) rows.push({ mat: name, kind: 'screws', qty: Math.ceil(n), unit: units.un, packs: null, packName: null })
   }
   const add = (list: MaterialRequirement[], kind: MaterialKind) => {
-    for (const m of list) if (m.qty > 0) rows.push({ mat: m.mat, kind, qty: m.qty, unit: m.unit, packs: m.packs, packName: m.packName })
+    for (const m of list) {
+      if (!(m.qty > 0)) continue
+      const bar = kind === 'ceiling' && barName && m.packs == null ? STOCK_BAR[m.unit] : undefined
+      rows.push(bar
+        ? { mat: m.mat, kind, qty: m.qty, unit: m.unit, packs: Math.ceil(m.qty / bar - 1e-9), packName: barName!(bar, m.unit) }
+        : { mat: m.mat, kind, qty: m.qty, unit: m.unit, packs: m.packs, packName: m.packName })
+    }
   }
   add(extra.recipe, 'recipe')
   add(extra.ceiling, 'ceiling')
@@ -52,4 +66,15 @@ export function projectMaterials(sheets: { rows: MaterialRow[]; multiplier: numb
     }
   }
   return [...by.values()]
+}
+
+/** Project total per type: groups with the same name merged over the sheets, each × its floors. */
+export function projectMaterialGroups(sheets: { groups: MaterialGroup[]; multiplier: number }[]): MaterialGroup[] {
+  const order: string[] = []
+  const by = new Map<string, { color: MaterialGroup['color']; parts: { rows: MaterialRow[]; multiplier: number }[] }>()
+  for (const s of sheets) for (const g of s.groups) {
+    if (!by.has(g.name)) { by.set(g.name, { color: g.color, parts: [] }); order.push(g.name) }
+    by.get(g.name)!.parts.push({ rows: g.rows, multiplier: s.multiplier })
+  }
+  return order.map(name => ({ name, color: by.get(name)!.color, rows: projectMaterials(by.get(name)!.parts) }))
 }

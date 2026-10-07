@@ -6,7 +6,9 @@ import { useParams } from 'next/navigation'
 import { AppBar } from '../../fieldop/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
-import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
+import { takeoffTranslator, useTakeoffT } from '@/lib/i18n/useTakeoffT'
+import { formatNumber as formatNumberWith } from '@/lib/i18n/translate'
+import type { AppLanguage } from '@/lib/i18n/settings'
 import type { TakeoffMessageKey } from '@/lib/i18n/messages/takeoff.pt-BR'
 import { layerQuantities } from '@/lib/takeoff/geometry'
 import { openingRows } from '@/lib/takeoff/printMarkup'
@@ -57,7 +59,8 @@ import LevelsBulkEdit from './LevelsBulkEdit'
 import TagsEditor from './TagsEditor'
 import SurfaceTypePicker from './SurfaceTypePicker'
 import type { SurfaceTypeRow } from './SurfaceTypesLibrary'
-import SurfaceTypesLibrary, { useSurfaceLabels } from './SurfaceTypesLibrary'
+import SurfaceTypesLibrary, { surfaceLabelsFrom, useSurfaceLabels } from './SurfaceTypesLibrary'
+import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { CEILING_FAMILY, FAMILIES, FLOOR_FAMILY, surfaceMaterials, type FamilyId } from './surfaceFamilies'
 import GenerateLevelsDialog from './GenerateLevelsDialog'
 import CopyToLevelsDialog from './CopyToLevelsDialog'
@@ -1037,9 +1040,16 @@ export default function TakeoffWorkspacePage() {
     setPrinting(true)
     setError('')
     try {
-      const date = new Date().toLocaleString(language, { dateStyle: 'short', timeStyle: 'short' })
+      // The report follows the project's country (a Brazilian job prints in Portuguese, a US job in English),
+      // so the words and numbers match the library types' own names.
+      const pc = projectCountry(project)
+      const printLang: AppLanguage = pc === 'BR' ? 'pt-BR' : pc === 'US' ? 'en-US' : language
+      const pt = takeoffTranslator(printLang)
+      const pfmt = (v: number, d = 2) => formatNumberWith(v, printLang === 'pt-BR' ? 'pt-BR' : 'en-US', d)
+      const pSurface = surfaceLabelsFrom(pt)
+      const date = new Date().toLocaleString(printLang, { dateStyle: 'short', timeStyle: 'short' })
       const projectTitle = `${project!.name}${project!.project_code ? ` (${project!.project_code})` : ''}`
-      const kind = t(printKindKey[what])
+      const kind = pt(printKindKey[what])
       const chosen = printSheets
         .map(ps => ({ ...ps, items: what === 'locations' ? [] : ps.items.filter(printFilter[what]), zones: what === 'locations' ? ps.zones : [] }))
         .filter(ps => ps.items.length > 0 || ps.zones.length > 0)
@@ -1052,7 +1062,7 @@ export default function TakeoffWorkspacePage() {
       const sheetsOut: PrintSheet[] = chosen.map(ps => {
         const k = Number(ps.source.scale_pt_per_m) || 0
         const r = scaleRatio(k)
-        const scale = r ? `1:${formatNumber(Math.round(r), 0)}` : t('workspace.source.notCalibrated')
+        const scale = r ? `1:${pfmt(Math.round(r), 0)}` : pt('workspace.source.notCalibrated')
         const mult = ps.branch.count
         return {
           url: urlOf.get(ps.source.file_path)!,
@@ -1062,17 +1072,22 @@ export default function TakeoffWorkspacePage() {
           ptPerM: k,
           multiplier: mult,
           title: `${projectTitle} · ${ps.levelName} · ${ps.source.name} · ${kind}`,
-          subtitle: t('print.subtitle', { scale, date }),
-          heading: `${ps.levelName} · ${ps.source.name}${mult > 1 ? ` · ${t('print.perFloor')}` : ''}`,
+          subtitle: pt('print.subtitle', { scale, date }),
+          heading: `${ps.levelName} · ${ps.source.name}${mult > 1 ? ` · ${pt('print.perFloor')}` : ''}`,
           backgroundFade: fadeOf(ps.source),
-          materials: k > 0 ? (() => {
-            const surf = surfaceMaterials(ps.items, k, surfaceLabels)
-            return materialRows(ps.items, k, {
-              recipe: recipeMaterials(ps.items, k, recipeOfItem, projectRecipeCtx),
-              ceiling: surf.find(x => x.family.id === 'ceiling')?.materials || [],
-              floor: surf.find(x => x.family.id === 'floor')?.materials || [],
-            }, { bars: t('csv.bars'), sheets: t('csv.sheets'), un: t('unit.un') }, v => formatNumber(v, 2))
-          })() : [],
+          materialGroups: k > 0 ? ps.items.map(it => {
+            // One group per item (its type): framing layout, recipe and ceiling / floor build-up.
+            const surf = surfaceMaterials([it], k, pSurface)
+            return {
+              name: it.name,
+              color: hexToRgb(it.color),
+              rows: materialRows([it], k, {
+                recipe: recipeMaterials([it], k, recipeOfItem, projectRecipeCtx),
+                ceiling: surf.find(x => x.family.id === 'ceiling')?.materials || [],
+                floor: surf.find(x => x.family.id === 'floor')?.materials || [],
+              }, { bars: pt('csv.bars'), sheets: pt('csv.sheets'), un: pt('unit.un') }, v => pfmt(v, 2), (len, unit) => pt('print.stockBars', { len: pfmt(len, 2), unit })),
+            }
+          }).filter(g => g.rows.length) : [],
         }
       })
       // 3D page: the building with this PDF's items (everything for locations and the full takeoff).
@@ -1088,35 +1103,38 @@ export default function TakeoffWorkspacePage() {
         sheets: sheetsOut,
         image3d,
         title: `${projectTitle} · ${kind}`,
-        subtitle: t('print.projectSubtitle', { sheets: sheetsOut.length, date }),
-        fmt: v => formatNumber(v, 2),
+        subtitle: pt(sheetsOut.length === 1 ? 'print.projectSubtitleOne' : 'print.projectSubtitle', { sheets: sheetsOut.length, date }),
+        fmt: v => pfmt(v, 2),
         logoUrl: '/ritsu-logo.png',
         labels: {
           title: `${projectTitle} · ${kind}`,
           subtitle: '',
-          items: t('print.items'),
-          locations: t('print.locations'),
-          colItem: t('print.colItem'),
-          colKind: t('print.colKind'),
-          colQty: t('print.colQty'),
-          colExtra: t('print.colExtra'),
-          colArea: t('zone.area'),
-          colPerimeter: t('zone.perimeter'),
-          kind: { linear: t('workspace.layer.linear'), area: t('workspace.layer.area'), count: t('workspace.layer.count') },
-          unit: t('unit.un'),
-          footer: t('print.footer'),
-          openings: t('print.openings'),
-          colWall: t('print.colWall'),
-          colOpenArea: t('print.colOpenArea'),
-          openingKind: { door: t('opening.kind.door'), window: t('opening.kind.window'), void: t('opening.kind.void'), other: t('opening.kind.void') },
-          formwork: t('struct.formwork'),
-          view3d: t('print.view3d'),
-          totals: t('print.totals'),
-          totalsNote: t('print.totalsNote'),
-          materials: t('print.materials'),
-          colMaterial: t('csv.material'),
-          colPacks: t('csv.packages'),
-          materialKind: { profile: t('csv.profile'), board: t('csv.board'), screws: t('csv.screws'), recipe: t('csv.recipe'), ceiling: t('group.ceilings'), floor: t('group.floors') },
+          items: pt('print.items'),
+          locations: pt('print.locations'),
+          colItem: pt('print.colItem'),
+          colKind: pt('print.colKind'),
+          colQty: pt('print.colQty'),
+          colExtra: pt('print.colExtra'),
+          colArea: pt('zone.area'),
+          colPerimeter: pt('zone.perimeter'),
+          kind: { linear: pt('workspace.layer.linear'), area: pt('workspace.layer.area'), count: pt('workspace.layer.count') },
+          unit: pt('unit.un'),
+          footer: pt('print.footer'),
+          openings: pt('print.openings'),
+          colWall: pt('print.colWall'),
+          colOpenArea: pt('print.colOpenArea'),
+          openingKind: { door: pt('opening.kind.door'), window: pt('opening.kind.window'), void: pt('opening.kind.void'), other: pt('opening.kind.void') },
+          formwork: pt('struct.formwork'),
+          view3d: pt('print.view3d'),
+          totals: pt('print.totals'),
+          totalsNote: pt('print.totalsNote'),
+          materials: pt('print.materials'),
+          colMaterial: pt('csv.material'),
+          colPacks: pt('csv.packages'),
+          materialKind: { profile: pt('csv.profile'), board: pt('csv.board'), screws: pt('csv.screws'), recipe: pt('csv.recipe'), ceiling: pt('print.buildUp'), floor: pt('print.buildUp') },
+          tags: pt('print.tags'),
+          colTag: pt('csv.tag'),
+          detail: { length: pt('print.detailLength'), perimeter: pt('print.detailPerimeter'), height: pt('print.detailHeight') },
         },
       })
       const href = URL.createObjectURL(blob)

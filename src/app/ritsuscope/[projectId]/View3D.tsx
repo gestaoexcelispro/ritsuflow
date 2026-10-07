@@ -660,12 +660,14 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
     const elevationOf = (page: number) => elev.get(page) || 0
     build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags })
     if (tags) {
-      // Tags stay readable on paper: on big models they grow with the model (they are 0,32 m tall by default).
-      const box = new THREE.Box3()
-      for (const c of group.children) if (c.type !== 'GridHelper' && c.type !== 'Sprite') box.expandByObject(c)
-      const span = box.isEmpty() ? 0 : Math.max(box.max.x - box.min.x, box.max.z - box.min.z)
-      const k = Math.max(1, span / 20)
-      if (k > 1) for (const c of group.children) if (c.type === 'Sprite') c.scale.multiplyScalar(k)
+      // On paper every tag is the same size wherever it sits (no shrinking with distance):
+      // about 2,2 % of the picture height. Non-attenuated sprites are sized at 1 unit from the camera.
+      const h = 2 * Math.tan((cam.fov * Math.PI) / 360) * 0.022
+      for (const c of group.children) if (c.type === 'Sprite') {
+        const aspect = c.scale.x / c.scale.y
+        c.material.sizeAttenuation = false
+        c.scale.set(h * aspect, h, 1)
+      }
     }
     fitWhole(THREE, cam, group, width / height)
     renderer.render(scene, cam)

@@ -3,7 +3,7 @@
 // Sheet points are pdf.js viewport points at scale 1 (y down); the PDF page uses its user
 // space (y up, origin at the MediaBox corner, possibly rotated). The viewport transform maps
 // user space → sheet; we apply its inverse.
-import { layerQuantities, perimeter, polyArea, type ElementOpening, type TakeoffItem, type Vec2 } from './geometry'
+import { dist, layerQuantities, perimeter, polyArea, shapeHeight, type ElementOpening, type TakeoffItem, type Vec2 } from './geometry'
 import { openingMarks } from './openingMarks'
 import { mepExtra } from './mep'
 import { structExtra } from './struct'
@@ -40,7 +40,7 @@ export type Mark =
   /** Tag of a wall stretch (DW01-03), in a small box at the middle of the stretch. */
   | { type: 'tag'; at: Vec2; text: string; color: [number, number, number] }
 
-export type LegendRow = { color: [number, number, number]; name: string; kind: TakeoffItem['kind']; main: string; sub: string }
+export type LegendRow = { color: [number, number, number]; name: string; kind: TakeoffItem['kind']; main: string; sub: string; /** What `sub` is, when it is a plain measure. */ detail?: 'length' | 'perimeter' }
 
 export type ZoneLike = { name: string; color: string; points: Vec2[]; is_visible?: boolean }
 
@@ -140,14 +140,15 @@ export function legendRows(items: TakeoffItem[], ptPerM: number, fmt: (v: number
     const q = ptPerM > 0 ? layerQuantities(it, ptPerM) : null
     let main = '—'
     let sub = ''
+    let detail: LegendRow['detail']
     // Walls lead with their area (net of openings), length below; lines without a height keep metres.
     if (q && it.kind === 'linear') {
-      if (!it.struct && q.net != null && q.net > 0) { main = `${fmt(q.net)} m²`; sub = `${fmt(q.len)} m` } else { main = `${fmt(q.len)} m`; sub = '' }
+      if (!it.struct && q.net != null && q.net > 0) { main = `${fmt(q.net)} m²`; sub = `${fmt(q.len)} m`; detail = 'length' } else { main = `${fmt(q.len)} m`; sub = '' }
     }
-    else if (q && it.kind === 'area') { main = `${fmt(q.area)} m²`; sub = `${fmt(q.per)} m` }
+    else if (q && it.kind === 'area') { main = `${fmt(q.area)} m²`; sub = `${fmt(q.per)} m`; detail = 'perimeter' }
     else if (q) { main = `${q.n} ${unitLabel}`; sub = blockingText(it, q.n, fmt) }
-    if (q && it.struct) sub = structText(it, q, fmt, formworkLabel) || sub
-    rows.push({ color: hexToRgb(it.color), name: it.name, kind: it.kind, main, sub })
+    if (q && it.struct) { sub = structText(it, q, fmt, formworkLabel) || sub; detail = undefined }
+    rows.push({ color: hexToRgb(it.color), name: it.name, kind: it.kind, main, sub, detail })
   }
   return rows
 }
@@ -200,13 +201,14 @@ export function projectTotals(sheets: PrintSheetQty[], fmt: (v: number) => strin
   return [...acc.values()].map(r => {
     let main = '—'
     let sub = ''
+    let detail: LegendRow['detail']
     if (r.measured && r.it.kind === 'linear') {
-      if (!r.it.struct && r.hasNet && r.net > 0) { main = `${fmt(r.net)} m²`; sub = `${fmt(r.len)} m` } else { main = `${fmt(r.len)} m`; sub = '' }
+      if (!r.it.struct && r.hasNet && r.net > 0) { main = `${fmt(r.net)} m²`; sub = `${fmt(r.len)} m`; detail = 'length' } else { main = `${fmt(r.len)} m`; sub = '' }
     }
-    else if (r.measured && r.it.kind === 'area') { main = `${fmt(r.area)} m²`; sub = `${fmt(r.per)} m` }
+    else if (r.measured && r.it.kind === 'area') { main = `${fmt(r.area)} m²`; sub = `${fmt(r.per)} m`; detail = 'perimeter' }
     else if (r.measured) { main = `${r.n} ${unitLabel}`; sub = blockingText(r.it, r.n, fmt) }
-    if (r.measured && r.it.struct) sub = structText(r.it, r, fmt, formworkLabel) || sub
-    return { color: hexToRgb(r.it.color), name: r.it.name, kind: r.it.kind, main, sub }
+    if (r.measured && r.it.struct) { sub = structText(r.it, r, fmt, formworkLabel) || sub; detail = undefined }
+    return { color: hexToRgb(r.it.color), name: r.it.name, kind: r.it.kind, main, sub, detail }
   })
 }
 
@@ -237,4 +239,26 @@ export function structText(it: TakeoffItem, q: { n: number; len: number; area: n
   const e = structExtra(it, q)
   if (!e) return ''
   return e.formworkM2 > 0 ? `${fmt(e.concreteM3)} m³ · ${fmt(e.formworkM2)} m² ${formworkLabel}` : `${fmt(e.concreteM3)} m³`
+}
+
+/** One row per tag (wall stretch, area, counted point), sorted by tag, for the report's tag table. */
+export function tagTableRows(items: TakeoffItem[], ptPerM: number, fmt: (v: number) => string, unitLabel: string): { color: [number, number, number]; tag: string; name: string; main: string; sub: string; detail?: 'length' | 'perimeter' | 'height' }[] {
+  const rows: ReturnType<typeof tagTableRows> = []
+  const k2 = ptPerM * ptPerM
+  for (const it of items) for (const sh of it.shapes) (sh.tags || []).forEach((tag, i) => {
+    if (!tag) return
+    const color = hexToRgb(it.color)
+    if (it.kind === 'linear') {
+      const len = ptPerM > 0 && sh.pts[i + 1] ? dist(sh.pts[i], sh.pts[i + 1]) / ptPerM : 0
+      const h = shapeHeight(it, sh)
+      rows.push(h && !it.struct
+        ? { color, tag, name: it.name, main: `${fmt(len * h)} m²`, sub: `${fmt(len)} m`, detail: 'length' }
+        : { color, tag, name: it.name, main: `${fmt(len)} m`, sub: '' })
+    } else if (it.kind === 'area') {
+      rows.push(ptPerM > 0 && sh.pts.length >= 3
+        ? { color, tag, name: it.name, main: `${fmt(polyArea(sh.pts) / k2)} m²`, sub: `${fmt(perimeter(sh.pts) / ptPerM)} m`, detail: 'perimeter' }
+        : { color, tag, name: it.name, main: '—', sub: '' })
+    } else rows.push({ color, tag, name: it.name, main: `1 ${unitLabel}`, sub: '' })
+  })
+  return rows.sort((a, b) => a.tag.localeCompare(b.tag, undefined, { numeric: true }))
 }

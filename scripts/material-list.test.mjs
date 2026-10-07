@@ -18,3 +18,13 @@ test('project total multiplies typical floors and sums the same material', () =>
   assert.equal(t[0].qty, 8)
   assert.equal(t[0].packs, 4)
 })
+
+test('ceiling profiles in metres get a 3 m bar count; groups merge by type over sheets', async () => {
+  const { projectMaterialGroups } = await import('../src/lib/takeoff/materialList.ts')
+  const rows = materialRows([], 0, { recipe: [], ceiling: [m('Perfil F530', 261.27, 'm')], floor: [] }, U, String, (len, u) => `barras de ${len} ${u}`)
+  assert.equal(rows[0].packs, 88)
+  assert.equal(rows[0].packName, 'barras de 3 m')
+  const g = projectMaterialGroups([{ groups: [{ name: 'CL01', color: [0, 0, 0], rows }], multiplier: 2 }, { groups: [{ name: 'CL01', color: [0, 0, 0], rows }], multiplier: 1 }])
+  assert.equal(g.length, 1)
+  assert.equal(g[0].rows[0].packs, 264)
+})
