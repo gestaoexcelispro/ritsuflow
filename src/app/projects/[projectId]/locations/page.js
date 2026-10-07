@@ -17,7 +17,7 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [projectResult, locationsResult, activitiesResult, allocationsResult, zonesResult, sheetsResult, levelsResult, scopeResult] = await Promise.all([
+  const [projectResult, locationsResult, activitiesResult, allocationsResult, zonesResult, sheetsResult, levelsResult, scopeResult, tasksResult] = await Promise.all([
     supabase.from('projects').select('id, project_id, code, name').eq('id', projectId).maybeSingle(),
     supabase.from('locations').select('id, project_id, parent_id, name, location_type, environment_type, sequence_number, qr_token, created_at, updated_at').eq('project_id', projectId).order('sequence_number', { ascending: true }),
     supabase.from('fieldop_project_activities').select('id, project_id, source, scope_item_id, activity_name, unit, quantity, notes, is_active, created_at, scope_item:project_scopes(id, scope_code, scope_name, item_type, unit, quantity, notes, takeoff_layer_id)').eq('project_id', projectId).order('created_at', { ascending: true }),
@@ -28,6 +28,8 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
     supabase.from('takeoff_levels').select('id, name, elevation_m, location_id').eq('project_id', projectId),
     // Allocation starts from the contracted scope: every measurable scope item, before or after FieldOp.
     supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, notes, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code', { ascending: true }),
+    // Task view: lines drawn in RitsuScope for a scope item in a location (their quantity replaces the automatic split there).
+    supabase.from('location_task_drawings').select('id, scope_item_id, location_id, source_id, points, quantity').eq('project_id', projectId),
   ])
 
   const project = projectResult.data
@@ -84,6 +86,10 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
         scopeItems={scopeItems}
         allocations={allocationsResult.data || []}
         spatial={spatial}
+        taskDrawings={tasksResult.error ? [] : tasksResult.data || []}
+        initialTab={query?.tab === 'allocation' ? 'allocation' : 'locations'}
+        initialScopeItemId={typeof query?.scope === 'string' ? query.scope : ''}
+        returnedFromDraw={typeof query?.drawn === 'string' ? query.drawn : ''}
         loadError={loadError?.message || ''}
       />
     </AppShell>

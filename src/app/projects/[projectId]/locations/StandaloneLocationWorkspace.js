@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../../lib/supabase/client'
 import { Icon, Notice, Segments, ui } from '../../../fieldop/ui'
@@ -12,6 +12,7 @@ import LocationQrCard from './LocationQrCard'
 import { isQrEligibleLocation } from './locationQr'
 import styles from './standalone-location-workspace.module.css'
 import { allocateFromTakeoff, loadTakeoffData } from '../../../../lib/takeoff/scopeAllocation'
+import { drawnTotals } from '../../../../lib/takeoff/taskDrawings'
 
 const TYPES = ['building', 'floor', 'zone', 'area', 'room', 'custom']
 const SHORT = { building: 'B', floor: 'F', zone: 'Z', area: 'A', room: 'R', custom: 'C' }
@@ -25,7 +26,7 @@ function Field({ label, children }) {
   return <label className={ui.field}><span className={ui.fieldLabel}>{label}</span>{children}</label>
 }
 
-export default function StandaloneLocationWorkspace({ projectId, projectName, projectCode = '', userId, initialLocations = [], scopeItems: initialScopeItems = [], allocations = [], spatial = {}, loadError = '' }) {
+export default function StandaloneLocationWorkspace({ projectId, projectName, projectCode = '', userId, initialLocations = [], scopeItems: initialScopeItems = [], allocations = [], spatial = {}, loadError = '', taskDrawings = [], initialTab = 'locations', initialScopeItemId = '', returnedFromDraw = '' }) {
   const t = useT('projects')
   const { language } = useLanguage()
   const router = useRouter()
@@ -34,9 +35,11 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
   const [allocationRows, setAllocationRows] = useState(allocations)
   const [scopeItems, setScopeItems] = useState(initialScopeItems)
   useEffect(() => { setScopeItems(initialScopeItems) }, [initialScopeItems])
-  const [activeTab, setActiveTab] = useState('locations')
+  const [activeTab, setActiveTab] = useState(initialTab === 'allocation' ? 'allocation' : 'locations')
   const [selectedId, setSelectedId] = useState('')
-  const [selectedServiceId, setSelectedServiceId] = useState(scopeItems[0]?.id || '')
+  const [selectedServiceId, setSelectedServiceId] = useState((initialScopeItemId && scopeItems.find((s) => s.source_scope_item_id === initialScopeItemId)?.id) || scopeItems[0]?.id || '')
+  /** Came back from the task view: refresh that activity's draft once the takeoff is loaded. */
+  const pendingRedraw = useRef(returnedFromDraw ? initialScopeItemId : '')
   const [searchTerm, setSearchTerm] = useState('')
   const [scopeSearch, setScopeSearch] = useState('')
   const [showAllocatedOnly, setShowAllocatedOnly] = useState(false)
@@ -94,7 +97,8 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
   const draftSelectedTotal = useMemo(() => { if (!selectedServiceId) return 0; return locations.reduce((sum, location) => sum + number(draftAllocations[`${selectedServiceId}:${location.id}`]), 0) }, [draftAllocations, locations, selectedServiceId])
   const remaining = selectedServiceTotal - draftSelectedTotal
   const allocationPercent = selectedServiceTotal > 0 ? (draftSelectedTotal / selectedServiceTotal) * 100 : 0
-  const overAllocated = selectedServiceTotal > 0 && draftSelectedTotal > selectedServiceTotal + 0.01 // quantities are rounded to 0.01 per location
+  // Rounding to 0.01 per location, and drawn openings measured on the line rather than spread along the wall, leave small gaps.
+  const overAllocated = selectedServiceTotal > 0 && draftSelectedTotal > selectedServiceTotal * 1.005 + 0.01
 
   // ---------- RitsuScope → locations ----------
   const productionIds = useMemo(() => new Set(locations.filter((l) => !nonProductionTypes.has(l.location_type)).map((l) => l.id)), [locations])
@@ -105,21 +109,60 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     const manual = service ? layers.filter((l) => l.scope_activity_id === service.id && l.id !== auto?.id) : []
     return { auto, manual, all: auto ? [auto, ...manual] : manual }
   }
+  // Task view drawings: a location drawn for a scope item uses its drawn quantity; the automatic split
+  // leaves that location out and skips the wall stretches already drawn ("complement").
+  const drawnBy = useMemo(() => drawnTotals(taskDrawings), [taskDrawings])
+  const drawnOf = (service, locationId) => (service?.source_scope_item_id ? drawnBy.get(`${service.source_scope_item_id}:${locationId}`) : undefined)
+  const drawnLocations = (service) => new Set(locations.filter((loc) => drawnOf(service, loc.id) !== undefined).map((loc) => loc.id))
+  const claimedOf = (service) => (service?.source_scope_item_id ? taskDrawings.filter((d) => d.scope_item_id === service.source_scope_item_id).map((d) => ({ source_id: d.source_id, points: d.points })) : [])
   function splitFor(service) {
     const { all } = feedOf(service)
     if (!takeoff || !all.length) return null
-    return allocateFromTakeoff(takeoff, { layerIds: all.map((l) => l.id), unit: service.unit, productionLocationIds: productionIds })
+    const drawn = drawnLocations(service)
+    return allocateFromTakeoff(takeoff, { layerIds: all.map((l) => l.id), unit: service.unit, productionLocationIds: new Set([...productionIds].filter((id) => !drawn.has(id))), claimed: claimedOf(service) })
+  }
+  /** Drawn quantity where a location is drawn, otherwise the automatic split (or blank). */
+  function plannedFor(service, r) {
+    const out = new Map()
+    locations.forEach((loc) => {
+      if (!productionIds.has(loc.id)) return
+      const drawn = drawnOf(service, loc.id)
+      const v = round2(drawn !== undefined ? drawn : (r?.byLocation.get(loc.id) || 0))
+      if (v > 0) out.set(loc.id, v)
+    })
+    return out
   }
   function fillDraft(service, r) {
-    setDraftAllocations((current) => { const next = { ...current }; locations.forEach((loc) => { if (!productionIds.has(loc.id)) return; const v = round2(r.byLocation.get(loc.id) || 0); next[`${service.id}:${loc.id}`] = v > 0 ? String(v) : '' }); return next })
+    const planned = plannedFor(service, r)
+    setDraftAllocations((current) => { const next = { ...current }; locations.forEach((loc) => { if (!productionIds.has(loc.id)) return; const v = planned.get(loc.id); next[`${service.id}:${loc.id}`] = v ? String(v) : '' }); return next })
   }
+  // Drawn locations always show their drawn quantity.
+  useEffect(() => {
+    if (!selectedService) return
+    setDraftAllocations((current) => {
+      let changed = false
+      const next = { ...current }
+      locations.forEach((loc) => { const d = drawnOf(selectedService, loc.id); if (d === undefined) return; const key = `${selectedService.id}:${loc.id}`; const v = String(round2(d)); if (next[key] !== v) { next[key] = v; changed = true } })
+      return changed ? next : current
+    })
+  }, [selectedServiceId, drawnBy]) // eslint-disable-line react-hooks/exhaustive-deps
   function filledMessage(service, r) {
     const allocated = [...r.byLocation.values()].reduce((a, b) => a + b, 0)
-    return `${t('loc.ritsu.filled', { allocated: `${qty(allocated)} ${service.unit || ''}`, count: r.byLocation.size, total: qty(r.total), outside: qty(r.unallocated) })}${r.uncalibratedSheets.length ? ` ${t('loc.ritsu.noScaleSheets', { sheets: r.uncalibratedSheets.join(', ') })}` : ''}`
+    const drawn = drawnLocations(service)
+    const drawnSum = [...drawn].reduce((a, id) => a + (drawnOf(service, id) || 0), 0)
+    const drawnText = drawn.size ? ` ${t('loc.task.drawnPart', { value: `${qty(drawnSum)} ${service.unit || ''}`, count: drawn.size })}` : ''
+    return `${t('loc.ritsu.filled', { allocated: `${qty(allocated)} ${service.unit || ''}`, count: r.byLocation.size, total: qty(r.total), outside: qty(r.unallocated) })}${drawnText}${r.uncalibratedSheets.length ? ` ${t('loc.ritsu.noScaleSheets', { sheets: r.uncalibratedSheets.join(', ') })}` : ''}`
   }
   // Opening an activity with nothing saved or typed yet: draft its split from RitsuScope (saved only on Save).
   useEffect(() => {
     if (!takeoff || !selectedService) return
+    if (pendingRedraw.current && pendingRedraw.current === selectedService.source_scope_item_id) {
+      pendingRedraw.current = ''
+      const r = splitFor(selectedService)
+      if (r) { fillDraft(selectedService, r); setAllocationMessage(`${t('loc.task.backFromDraw')} ${filledMessage(selectedService, r)} ${t('loc.ritsu.reviewThenSave')}`) }
+      else setAllocationMessage(`${t('loc.task.backFromDraw')} ${t('loc.ritsu.reviewThenSave')}`)
+      return
+    }
     if (allocationRows.some((row) => row.service_id === selectedService.id)) return
     if (locations.some((loc) => draftAllocations[`${selectedService.id}:${loc.id}`])) return
     const r = splitFor(selectedService)
@@ -173,18 +216,19 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     const rows = scopeItems.map((service) => {
       const r = splitFor(service)
       if (!r) return null
-      const allocated = [...r.byLocation.values()].reduce((a, b) => a + round2(b), 0)
-      return { service, r, allocated, saved: allocationRows.some((row) => row.service_id === service.id) }
+      const planned = plannedFor(service, r)
+      const allocated = [...planned.values()].reduce((a, b) => a + b, 0)
+      return { service, r, planned, allocated, drawn: drawnLocations(service).size, saved: allocationRows.some((row) => row.service_id === service.id) }
     }).filter(Boolean)
     setBulk({ rows, replace: false })
   }
   async function applyBulk() {
     if (!bulk) return
-    const todo = bulk.rows.filter((x) => x.r.byLocation.size > 0 && (!x.saved || bulk.replace))
+    const todo = bulk.rows.filter((x) => x.planned.size > 0 && (!x.saved || bulk.replace))
     setBulkSaving(true); setAllocationMessage('')
     try {
       for (const x of todo) {
-        const desired = [...x.r.byLocation].map(([locationId, v]) => ({ locationId, quantity: round2(v) })).filter((d) => d.quantity > 0)
+        const desired = [...x.planned].map(([locationId, quantity]) => ({ locationId, quantity }))
         const id = await ensureActivity(x.service)
         await writeAllocation(id, desired)
         fillDraft({ ...x.service, id }, x.r)
@@ -278,13 +322,17 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
         {children.length ? <button type="button" className={styles.chevron} onClick={() => toggleAllocation(item.id)} aria-label={isCollapsed ? t('loc.expand') : t('loc.collapse')}><Icon name={isCollapsed ? 'right' : 'down'} size={16} strokeWidth={2.2} /></button> : <span className={styles.chevron} />}
         <span className={`${styles.mark} ${styles[`mark_${item.location_type}`] || ''}`} aria-hidden="true">{SHORT[item.location_type] || '·'}</span>
         <span className={styles.allocationName}><strong>{item.name}</strong><small>{typeLabel(item.location_type)}</small></span>
-        {isProduction ? <span className={styles.quantityField}><input type="number" min="0" step="any" inputMode="decimal" value={draftAllocations[key] ?? ''} onChange={(event) => { setAllocationMessage(''); setDraftAllocations((current) => ({ ...current, [key]: event.target.value })) }} placeholder="0" aria-label={t('loc.alloc.quantityFor', { name: item.name })} /><span>{selectedService?.unit || ''}</span></span> : <span className={styles.groupLabel}>{t('loc.alloc.group')}</span>}
+        {isProduction ? <span className={styles.rowEnd}>
+          {selectedService?.source_scope_item_id ? <Link className={`${ui.btn} ${ui.small} ${styles.drawBtn}`} href={`/ritsuscope/${projectId}/task?scope=${selectedService.source_scope_item_id}&location=${item.id}`} title={t('loc.task.drawHint')}>{drawnOf(selectedService, item.id) !== undefined ? t('loc.task.editDrawing') : t('loc.task.draw')}</Link> : null}
+          {drawnOf(selectedService, item.id) !== undefined ? <em className={styles.drawnChip} title={t('loc.task.drawnHint')}>{t('loc.task.drawn')}</em> : null}
+          <span className={styles.quantityField}><input type="number" min="0" step="any" inputMode="decimal" value={draftAllocations[key] ?? ''} readOnly={drawnOf(selectedService, item.id) !== undefined} onChange={(event) => { setAllocationMessage(''); setDraftAllocations((current) => ({ ...current, [key]: event.target.value })) }} placeholder="0" aria-label={t('loc.alloc.quantityFor', { name: item.name })} /><span>{selectedService?.unit || ''}</span></span>
+        </span> : <span className={styles.groupLabel}>{t('loc.alloc.group')}</span>}
       </div>
       {!isCollapsed && children.map((child) => renderAllocationNode(child, depth + 1))}
     </div>
   }
 
-  function clearSelectedAllocation() { if (!selectedServiceId) return; setDraftAllocations((current) => { const next = { ...current }; locations.forEach((location) => { next[`${selectedServiceId}:${location.id}`] = '' }); return next }); setAllocationMessage(t('loc.alloc.cleared')) }
+  function clearSelectedAllocation() { if (!selectedServiceId) return; setDraftAllocations((current) => { const next = { ...current }; locations.forEach((location) => { const d = drawnOf(selectedService, location.id); next[`${selectedServiceId}:${location.id}`] = d !== undefined ? String(round2(d)) : '' }); return next }); setAllocationMessage(t('loc.alloc.cleared')) }
 
   async function saveAllocation() {
     if (!selectedService) return; if (overAllocated) { setAllocationMessage(t('loc.alloc.errOver')); return }
@@ -459,20 +507,20 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
             <thead><tr><th>{t('loc.alloc.activity')}</th><th>{t('loc.bulk.allocated')}</th><th>{t('loc.bulk.outside')}</th><th>{t('loc.bulk.locations')}</th><th /></tr></thead>
             <tbody>{bulk.rows.map((x) => {
               const skip = x.saved && !bulk.replace
-              const none = !x.r.byLocation.size
+              const none = !x.planned.size
               return <tr key={x.service.id} className={skip || none ? styles.bulkSkip : ''}>
                 <td><small>{x.service.service_code}</small> {x.service.service_name}</td>
                 <td>{qty(x.allocated)} / {qty(x.r.total)} {x.service.unit || ''}</td>
                 <td className={x.r.unallocated > 0.005 ? styles.bad : ''}>{qty(x.r.unallocated)}</td>
-                <td>{x.r.byLocation.size}</td>
+                <td>{x.planned.size}{x.drawn ? ` · ${t('loc.task.drawnCount', { count: x.drawn })}` : ''}</td>
                 <td>{none ? t('loc.bulk.noZones') : skip ? t('loc.bulk.keepSaved') : x.saved ? t('loc.bulk.replace') : t('loc.bulk.new')}</td>
               </tr>
             })}</tbody>
           </table> : <p className={styles.muted}>{t('loc.bulk.nothing')}</p>}
-          {bulk.rows.some((x) => !x.r.byLocation.size) ? <p className={styles.muted}>{t('loc.bulk.noZonesHint')}</p> : null}
+          {bulk.rows.some((x) => !x.planned.size) ? <p className={styles.muted}>{t('loc.bulk.noZonesHint')}</p> : null}
           {bulk.rows.some((x) => x.saved) ? <label className={styles.check}><input type="checkbox" checked={bulk.replace} onChange={(event) => setBulk((b) => ({ ...b, replace: event.target.checked }))} />{t('loc.bulk.replaceSaved')}</label> : null}
         </div>
-        <footer className={styles.dialogFoot}><button type="button" className={ui.btn} disabled={bulkSaving} onClick={() => setBulk(null)}>{t('loc.cancel')}</button><button type="button" className={ui.btnPrimary} disabled={bulkSaving || !bulk.rows.some((x) => x.r.byLocation.size > 0 && (!x.saved || bulk.replace))} onClick={() => void applyBulk()}>{bulkSaving ? t('loc.saving') : t('loc.bulk.confirm', { count: bulk.rows.filter((x) => x.r.byLocation.size > 0 && (!x.saved || bulk.replace)).length })}</button></footer>
+        <footer className={styles.dialogFoot}><button type="button" className={ui.btn} disabled={bulkSaving} onClick={() => setBulk(null)}>{t('loc.cancel')}</button><button type="button" className={ui.btnPrimary} disabled={bulkSaving || !bulk.rows.some((x) => x.planned.size > 0 && (!x.saved || bulk.replace))} onClick={() => void applyBulk()}>{bulkSaving ? t('loc.saving') : t('loc.bulk.confirm', { count: bulk.rows.filter((x) => x.planned.size > 0 && (!x.saved || bulk.replace)).length })}</button></footer>
       </section>
     </div> : null}
 

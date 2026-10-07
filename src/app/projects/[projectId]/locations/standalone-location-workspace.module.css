@@ -174,3 +174,9 @@ button.chevron:hover { background: var(--fo-line-soft); color: var(--fo-ink); }
 .bulkTable td small { color: var(--fo-muted); margin-right: 4px; }
 .bulkSkip td { color: var(--fo-faint); }
 .notInFieldop { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-style: normal; font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; background: var(--fo-sunken); color: var(--fo-muted); }
+
+/* Task view (Draw in RitsuScope) */
+.rowEnd { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.drawBtn { white-space: nowrap; }
+.drawnChip { padding: 2px 8px; border-radius: 999px; font-style: normal; font-size: 11.5px; font-weight: 700; background: #fdf2f4; color: #be123c; white-space: nowrap; }
+.rowEnd input[readonly] { background: #fdf2f4; color: #9f1239; font-weight: 600; }

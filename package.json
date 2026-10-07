@@ -14,6 +14,7 @@
     "test:floors": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/floor-types.test.mjs",
     "test:pull": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/pull-schedule.test.mjs",
     "test:scope-import": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/scope-import.test.mjs",
+    "test:task-drawings": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/task-drawings.test.mjs",
     "test:library": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/standard-library.test.mjs",
     "library:sql": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/standard-library/generate.mjs"
   },
