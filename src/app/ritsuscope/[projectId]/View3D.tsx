@@ -217,7 +217,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
           if (octx) {
             const dpr = window.devicePixelRatio || 1
             octx.setTransform(1, 0, 0, 1, 0, 0)
-            drawTagOverlay(octx, THREE, cam, anchorsRef.current, overlay.width, overlay.height, dpr)
+            drawTagOverlay(octx, THREE, cam, anchorsRef.current, overlay.width, overlay.height, dpr, group)
           }
         }
         loop()
@@ -524,8 +524,10 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.6 })
     const leafMat = new THREE.MeshStandardMaterial({ color: 0xb7793f, roughness: 0.7 })
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.45 })
+    let owner: string | undefined
     const put = (geo: unknown, mat: unknown, at: Vec2, ang: number, along: number, y: number, across = 0) => {
       const mesh = new THREE.Mesh(geo, mat)
+      mesh.userData = { owner }
       const c = Math.cos(ang), sn = Math.sin(ang)
       mesh.position.set(at[0] + c * along - sn * across, y, at[1] + sn * along + c * across)
       mesh.rotation.y = -ang
@@ -537,6 +539,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
       for (const sh of it.shapes) {
         if (!show(sh) || !sh.openings?.length) continue
         const base = (sh.zrel || 0) + o.elevationOf(sh.page)
+        owner = sh.id
         for (const m of openingMarks(sh.pts, sh.openings, k)) {
           const op = sh.openings[m.index]
           if (!op || (op.kind !== 'door' && op.kind !== 'window')) continue
@@ -574,10 +577,10 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
           if (it.kind === 'area') {
             const ms = sh.pts.map(M)
             const at: Vec2 = [ms.reduce((t, q) => t + q[0], 0) / ms.length, ms.reduce((t, q) => t + q[1], 0) / ms.length]
-            anchors.push({ id: `${sh.id || it.key}-a`, text: tag, color: it.color, p: [at[0], (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02), at[1]] })
+            anchors.push({ id: `${sh.id || it.key}-a`, owner: sh.id, text: tag, color: it.color, p: [at[0], (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02), at[1]] })
           } else {
             const at = M(sh.pts[0])
-            anchors.push({ id: `${sh.id || it.key}-c`, text: tag, color: it.color, p: [at[0], (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1), at[1]] })
+            anchors.push({ id: `${sh.id || it.key}-c`, owner: sh.id, text: tag, color: it.color, p: [at[0], (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1), at[1]] })
           }
         }
         continue
@@ -592,7 +595,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
           const a = M(sh.pts[i - 1])
           const bb = M(sh.pts[i])
           if (Math.hypot(bb[0] - a[0], bb[1] - a[1]) < 0.3) continue
-          anchors.push({ id: `${sh.id || it.key + si}-s${i}`, text: tag, color: it.color, p: [(a[0] + bb[0]) / 2, wallTop, (a[1] + bb[1]) / 2] })
+          anchors.push({ id: `${sh.id || it.key + si}-s${i}`, owner: sh.id, text: tag, color: it.color, p: [(a[0] + bb[0]) / 2, wallTop, (a[1] + bb[1]) / 2] })
         }
         if (!sh.openingTags?.length) continue
         for (const m of openingMarks(sh.pts, sh.openings, k)) {
@@ -600,7 +603,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
           const op = sh.openings?.[m.index]
           if (!tag || !op) continue
           const at = M([(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2])
-          anchors.push({ id: `${sh.id || it.key + si}-o${m.index}`, text: tag, color: m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B', p: [at[0], base + (op.sill || 0) + (op.h || 2.1), at[1]] })
+          anchors.push({ id: `${sh.id || it.key + si}-o${m.index}`, owner: sh.id, text: tag, color: m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B', p: [at[0], base + (op.sill || 0) + (op.h || 2.1), at[1]] })
         }
       }
     }
@@ -639,7 +642,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
       g.add(line)
       if (o.tags && z.name) {
         const ms = z.pts.map(M)
-        anchors.push({ id: `zone-${z.page}-${z.name}-${ms.length}-${Math.round(ms[0][0] * 100)}`, text: z.name, color: z.color, p: [ms.reduce((t, q) => t + q[0], 0) / ms.length, o.elevationOf(z.page), ms.reduce((t, q) => t + q[1], 0) / ms.length] })
+        anchors.push({ id: `zone-${z.page}-${z.name}-${ms.length}-${Math.round(ms[0][0] * 100)}`, text: z.name, color: z.color, p: [ms.reduce((t, q) => t + q[0], 0) / ms.length, o.elevationOf(z.page) + 0.06, ms.reduce((t, q) => t + q[1], 0) / ms.length] })
       }
     }
   }
@@ -754,20 +757,41 @@ const checkRow = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, 
  * Returns PNG bytes, or null when WebGL or three.js is not available.
  */
 /** A tag's exact spot in the model (world coordinates) with its text and colour. */
-export type TagAnchor = { id: string; text: string; color: string; p: [number, number, number] }
+export type TagAnchor = { id: string; text: string; color: string; p: [number, number, number]; /** Element the anchor sits on (its own surfaces don't hide it). */ owner?: string }
 
 /**
  * Draws the tags on a 2D canvas over the 3D picture: each label placed so labels, anchors and
  * leader lines never collide (layoutLabels), with a leader line down to a dot on its spot.
  */
-function drawTagOverlay(ctx: CanvasRenderingContext2D, THREE: Three, cam: any, anchors: TagAnchor[], width: number, height: number, scale: number) {
+function drawTagOverlay(ctx: CanvasRenderingContext2D, THREE: Three, cam: any, anchors: TagAnchor[], width: number, height: number, scale: number, group?: any) {
   ctx.clearRect(0, 0, width, height)
   if (!anchors.length) return
   const fontPx = 11 * scale
   ctx.font = `700 ${fontPx}px system-ui, -apple-system, Segoe UI, sans-serif`
   const v = new THREE.Vector3()
   const ins: (LabelIn & { a: TagAnchor })[] = []
+  // Tags whose spot is hidden behind something (a wall in front of a room…) are left out:
+  // a ray from the camera to the spot must not hit another element first.
+  const solids: any[] = []
+  group?.traverse((c: any) => { if (c.isMesh && !c.userData?.noFit && c.material && !c.material.transparent) solids.push(c) })
+  const ray = new THREE.Raycaster()
+  const camPos = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld)
+  const hidden = (a: TagAnchor) => {
+    if (!solids.length) return false
+    const target = new THREE.Vector3(a.p[0], a.p[1], a.p[2])
+    const dir = target.clone().sub(camPos)
+    const dist = dir.length()
+    ray.set(camPos, dir.normalize())
+    ray.far = dist - 0.03
+    for (const h of ray.intersectObjects(solids, false)) {
+      const ud = h.object.userData || {}
+      if (a.owner && (ud.id === a.owner || ud.owner === a.owner)) continue
+      return true
+    }
+    return false
+  }
   for (const a of anchors) {
+    if (hidden(a)) continue
     v.set(a.p[0], a.p[1], a.p[2]).project(cam)
     if (v.z > 1 || v.z < -1 || Math.abs(v.x) > 1.02 || Math.abs(v.y) > 1.02) continue
     ins.push({ id: a.id, a, x: (v.x + 1) / 2 * width, y: (1 - v.y) / 2 * height, w: ctx.measureText(a.text).width + 12 * scale, h: 17 * scale })
@@ -842,7 +866,7 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
       const over = document.createElement('canvas')
       over.width = width
       over.height = height
-      drawTagOverlay(over.getContext('2d')!, THREE, cam, anchors, width, height, width / 900)
+      drawTagOverlay(over.getContext('2d')!, THREE, cam, anchors, width, height, width / 900, group)
       ctx.drawImage(renderer.domElement, 0, 0)
       ctx.drawImage(over, 0, 0)
       url = out.toDataURL('image/png')
