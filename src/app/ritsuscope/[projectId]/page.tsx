@@ -190,7 +190,6 @@ export default function TakeoffWorkspacePage() {
   const [taskHeight, setTaskHeight] = useState('')
   const [taskWalls, setTaskWalls] = useState(true)
   const [taskFrameTick, setTaskFrameTick] = useState(0)
-  const [taskFrom, setTaskFrom] = useState(false)
   const [tasksLoaded, setTasksLoaded] = useState(false)
   /** Kind given to the next zone drawn in Zoning. */
   const [drawKind, setDrawKind] = useState<ZoneKind>('room')
@@ -307,7 +306,6 @@ export default function TakeoffWorkspacePage() {
     setSection('tasks')
     setTaskScopeId(scope)
     setTaskLocationId(q.get('location'))
-    setTaskFrom(q.get('from') === 'allocation')
   }, [])
 
   const selectedSource = sources.find(s => s.id === selectedSourceId) || null
@@ -1957,11 +1955,11 @@ export default function TakeoffWorkspacePage() {
     </div>
   )
 
-  const backToAllocation = taskFrom && taskScopeId ? `/projects/${projectId}/locations?tab=allocation&scope=${taskScopeId}${taskLocationId ? `&drawn=${taskLocationId}` : ''}` : null
+  const backToAllocation = `/projects/${projectId}/locations?tab=allocation${taskScopeId ? `&scope=${taskScopeId}` : ''}${taskScopeId && taskLocationId ? `&drawn=${taskLocationId}` : ''}`
   const taskOthers = taskScopeId ? taskProduction.filter(l => l.id !== taskLocationId).map(l => ({ l, q: drawnOf(taskScopeId, l.id) })).filter(x => x.q > 0) : []
   const tasksRight = (
     <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
-      {backToAllocation && <a href={backToAllocation} style={{ ...ui.backLink, fontSize: 12 }}>← {t('task.panel.back')}</a>}
+      <a href={backToAllocation} style={{ ...ui.backLink, fontSize: 12 }}>← {t('task.panel.back')}</a>
       {!taskScope || !taskLocation ? <div style={{ ...ui.small, lineHeight: 1.5 }}>{t('task.panel.pick')}</div> : <>
         <div>
           <div style={{ fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}>{taskScope.scope_code} · {t('task.panel.in', { location: taskLocation.name })}</div>
@@ -2065,9 +2063,16 @@ export default function TakeoffWorkspacePage() {
       <AppBar module="ritsuscope" compact standalone title={project.name} />
       {/* EDITOR TOOLS */}
       <header style={headerBar}>
-        <Link href="/ritsuscope" style={{ display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: '#0b7f75', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }} title={t('workspace.back')}>
-          ← {t('workspace.back')}
-        </Link>
+        {section === 'tasks' ? (
+          // Tarefas: straight back to Projects › Locations › Scope allocation (that activity, re-split with the new drawing).
+          <a href={backToAllocation} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', borderRadius: 8, background: '#109d91', color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }} title={t('task.panel.back')}>
+            ← {t('task.panel.back')}
+          </a>
+        ) : (
+          <Link href="/ritsuscope" style={{ display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: '#0b7f75', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }} title={t('workspace.back')}>
+            ← {t('workspace.back')}
+          </Link>
+        )}
         <span style={vRule} />
         <strong style={{ fontSize: 15, color: '#173441', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260 }}>{project.name}</strong>
         {project.project_code && <small style={codeChip}>{project.project_code}</small>}
