@@ -20,7 +20,7 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
   const [projectResult, locationsResult, activitiesResult, allocationsResult, zonesResult, sheetsResult, levelsResult] = await Promise.all([
     supabase.from('projects').select('id, project_id, code, name').eq('id', projectId).maybeSingle(),
     supabase.from('locations').select('id, project_id, parent_id, name, location_type, environment_type, sequence_number, qr_token, created_at, updated_at').eq('project_id', projectId).order('sequence_number', { ascending: true }),
-    supabase.from('fieldop_project_activities').select('id, project_id, source, scope_item_id, activity_name, unit, quantity, notes, is_active, created_at, scope_item:project_scopes(id, scope_code, scope_name, item_type, unit, quantity, notes)').eq('project_id', projectId).eq('is_active', true).order('created_at', { ascending: true }),
+    supabase.from('fieldop_project_activities').select('id, project_id, source, scope_item_id, activity_name, unit, quantity, notes, is_active, created_at, scope_item:project_scopes(id, scope_code, scope_name, item_type, unit, quantity, notes, takeoff_layer_id)').eq('project_id', projectId).eq('is_active', true).order('created_at', { ascending: true }),
     supabase.from('location_service_quantities').select('id, project_id, location_id, service_id, quantity, source_scope_item_id, created_at, updated_at').eq('project_id', projectId),
     // RitsuScope: the outlines drawn for each location, their sheets (scale, level) and the levels linked as floors.
     supabase.from('takeoff_zones').select('id, name, location_id, points, source_id, zone_kind').eq('project_id', projectId).not('location_id', 'is', null),
@@ -45,6 +45,8 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
       sequence_number: index + 1,
       is_active: activity.is_active !== false,
       source_scope_item_id: activity.scope_item_id || null,
+      // Scope lines imported from RitsuScope know their takeoff item: it feeds this activity automatically.
+      takeoff_layer_id: fromProjectScope ? (scope?.takeoff_layer_id || null) : null,
       scope_name: fromProjectScope ? (scope?.scope_name || '') : '',
       source: activity.source,
       notes: activity.notes || null,

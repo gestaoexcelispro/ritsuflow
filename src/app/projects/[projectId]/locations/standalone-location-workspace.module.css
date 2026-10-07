@@ -160,3 +160,16 @@ button.chevron:hover { background: var(--fo-line-soft); color: var(--fo-ink); }
   .quantityField { width: 140px; }
   .typeBadge { display: none; }
 }
+
+/* Allocate all from RitsuScope */
+.bulkButton { margin: 0 16px 8px; }
+.bulkDialog { width: min(880px, 100%); }
+.bulkBody { display: flex; flex-direction: column; gap: 10px; padding: 12px 20px 16px; overflow: auto; }
+.bulkBody .muted { padding: 0; font-size: 13.5px; }
+.bulkTable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.bulkTable th { text-align: left; font-size: 12.5px; font-weight: 600; color: var(--fo-muted); padding: 6px 8px; border-bottom: 1px solid var(--fo-line); white-space: nowrap; }
+.bulkTable td { padding: 8px; border-bottom: 1px solid var(--fo-line-soft); vertical-align: top; }
+.bulkTable td:nth-child(2), .bulkTable td:nth-child(3), .bulkTable td:nth-child(4) { text-align: right; white-space: nowrap; }
+.bulkTable td:last-child { color: var(--fo-muted); font-size: 13px; white-space: nowrap; }
+.bulkTable td small { color: var(--fo-muted); margin-right: 4px; }
+.bulkSkip td { color: var(--fo-faint); }

@@ -18,6 +18,7 @@ const SHORT = { building: 'B', floor: 'F', zone: 'Z', area: 'A', room: 'R', cust
 const emptyForm = { id: null, location_type: 'floor', name: '', parent_id: '', environment_type: '' }
 const nonProductionTypes = new Set(['building', 'floor', 'zone'])
 const number = (value) => { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0 }
+const round2 = (value) => Math.round(value * 100) / 100
 
 /** Label + control. Module-level so inputs keep focus while typing. */
 function Field({ label, children }) {
@@ -54,6 +55,8 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkDraft, setLinkDraft] = useState(new Set())
   const [linkSaving, setLinkSaving] = useState(false)
+  const [bulk, setBulk] = useState(null) // { rows, replace } — 'Allocate all from RitsuScope' preview
+  const [bulkSaving, setBulkSaving] = useState(false)
   useEffect(() => { let alive = true; supabase.rpc('has_workspace_access', { p_workspace_key: 'ritsuscope' }).then(({ data }) => { if (alive) setRitsuLicensed(data === true) }); return () => { alive = false } }, [supabase])
   async function refreshTakeoff() { try { setTakeoffError(''); setTakeoff(await loadTakeoffData(supabase, projectId)) } catch (e) { setTakeoffError(e?.message || t('loc.ritsu.loadError')) } }
   useEffect(() => { if (activeTab === 'allocation' && ritsuLicensed && !takeoff) refreshTakeoff() }, [activeTab, ritsuLicensed]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -89,7 +92,88 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
   const draftSelectedTotal = useMemo(() => { if (!selectedServiceId) return 0; return locations.reduce((sum, location) => sum + number(draftAllocations[`${selectedServiceId}:${location.id}`]), 0) }, [draftAllocations, locations, selectedServiceId])
   const remaining = selectedServiceTotal - draftSelectedTotal
   const allocationPercent = selectedServiceTotal > 0 ? (draftSelectedTotal / selectedServiceTotal) * 100 : 0
-  const overAllocated = selectedServiceTotal > 0 && draftSelectedTotal > selectedServiceTotal + 0.000001
+  const overAllocated = selectedServiceTotal > 0 && draftSelectedTotal > selectedServiceTotal + 0.01 // quantities are rounded to 0.01 per location
+
+  // ---------- RitsuScope → locations ----------
+  const productionIds = useMemo(() => new Set(locations.filter((l) => !nonProductionTypes.has(l.location_type)).map((l) => l.id)), [locations])
+  /** Takeoff items feeding an activity: its own scope line's item (imported from RitsuScope) plus any chosen by hand. */
+  function feedOf(service) {
+    const layers = takeoff?.layers || []
+    const auto = service?.takeoff_layer_id ? layers.find((l) => l.id === service.takeoff_layer_id) || null : null
+    const manual = service ? layers.filter((l) => l.scope_activity_id === service.id && l.id !== auto?.id) : []
+    return { auto, manual, all: auto ? [auto, ...manual] : manual }
+  }
+  function splitFor(service) {
+    const { all } = feedOf(service)
+    if (!takeoff || !all.length) return null
+    return allocateFromTakeoff(takeoff, { layerIds: all.map((l) => l.id), unit: service.unit, productionLocationIds: productionIds })
+  }
+  function fillDraft(service, r) {
+    setDraftAllocations((current) => { const next = { ...current }; locations.forEach((loc) => { if (!productionIds.has(loc.id)) return; const v = round2(r.byLocation.get(loc.id) || 0); next[`${service.id}:${loc.id}`] = v > 0 ? String(v) : '' }); return next })
+  }
+  function filledMessage(service, r) {
+    const allocated = [...r.byLocation.values()].reduce((a, b) => a + b, 0)
+    return `${t('loc.ritsu.filled', { allocated: `${qty(allocated)} ${service.unit || ''}`, count: r.byLocation.size, total: qty(r.total), outside: qty(r.unallocated) })}${r.uncalibratedSheets.length ? ` ${t('loc.ritsu.noScaleSheets', { sheets: r.uncalibratedSheets.join(', ') })}` : ''}`
+  }
+  // Opening an activity with nothing saved or typed yet: draft its split from RitsuScope (saved only on Save).
+  useEffect(() => {
+    if (!takeoff || !selectedService) return
+    if (allocationRows.some((row) => row.service_id === selectedService.id)) return
+    if (locations.some((loc) => draftAllocations[`${selectedService.id}:${loc.id}`])) return
+    const r = splitFor(selectedService)
+    if (!r || !r.byLocation.size) return
+    fillDraft(selectedService, r)
+    setAllocationMessage(`${filledMessage(selectedService, r)} ${t('loc.ritsu.reviewThenSave')}`)
+  }, [takeoff, selectedServiceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Replaces one activity's quantities by location (updates, inserts, then removes locations no longer used). */
+  async function writeAllocation(serviceId, desired) {
+    const existing = allocationRows.filter((row) => row.service_id === serviceId)
+    const byLocation = new Map(existing.map((row) => [row.location_id, row]))
+    const keep = new Set(desired.map((d) => d.locationId))
+    for (const d of desired) {
+      const row = byLocation.get(d.locationId)
+      const { error: e } = row
+        ? await supabase.from('location_service_quantities').update({ quantity: d.quantity }).eq('id', row.id).eq('project_id', projectId)
+        : await supabase.from('location_service_quantities').insert({ project_id: projectId, location_id: d.locationId, service_id: serviceId, quantity: d.quantity, created_by: userId })
+      if (e) throw e
+    }
+    const drop = existing.filter((row) => !keep.has(row.location_id)).map((row) => row.id)
+    if (drop.length) { const { error: e } = await supabase.from('location_service_quantities').delete().in('id', drop).eq('project_id', projectId); if (e) throw e }
+  }
+  async function reloadAllocations() {
+    const { data, error: e } = await supabase.from('location_service_quantities').select('id, project_id, location_id, service_id, quantity, source_scope_item_id, created_at, updated_at').eq('project_id', projectId)
+    if (e) throw new Error(t('loc.alloc.errRefresh', { message: e.message }))
+    setAllocationRows(data || [])
+  }
+
+  function openBulk() {
+    const rows = scopeItems.map((service) => {
+      const r = splitFor(service)
+      if (!r) return null
+      const allocated = [...r.byLocation.values()].reduce((a, b) => a + round2(b), 0)
+      return { service, r, allocated, saved: allocationRows.some((row) => row.service_id === service.id) }
+    }).filter(Boolean)
+    setBulk({ rows, replace: false })
+  }
+  async function applyBulk() {
+    if (!bulk) return
+    const todo = bulk.rows.filter((x) => x.r.byLocation.size > 0 && (!x.saved || bulk.replace))
+    setBulkSaving(true); setAllocationMessage('')
+    try {
+      for (const x of todo) {
+        const desired = [...x.r.byLocation].map(([locationId, v]) => ({ locationId, quantity: round2(v) })).filter((d) => d.quantity > 0)
+        await writeAllocation(x.service.id, desired)
+        fillDraft(x.service, x.r)
+      }
+      await reloadAllocations()
+      await history('scope_location_allocation_bulk', 'Scope allocated from RitsuScope', `${todo.length} activities were allocated by production location from RitsuScope`, projectId, { activities: todo.map((x) => ({ service_id: x.service.id, service_name: x.service.service_name, allocated: x.allocated, total: x.r.total, outside: x.r.unallocated, unit: x.service.unit })) })
+      setBulk(null); setAllocationMessage(t('loc.bulk.done', { count: todo.length })); router.refresh()
+    } catch (e) {
+      try { await reloadAllocations() } catch { /* keep the first error */ }
+      setBulk(null); setAllocationMessage(e?.message || String(e))
+    } finally { setBulkSaving(false) }
+  }
 
   async function history(actionType, actionLabel, description, entityId, metadata = {}) {
     const { data: { user } } = await supabase.auth.getUser(); const actorId = user?.id || userId; let actorName = user?.email || 'RitsuFlow User'
@@ -182,34 +266,28 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
   async function saveAllocation() {
     if (!selectedService) return; if (overAllocated) { setAllocationMessage(t('loc.alloc.errOver')); return }
     setAllocationSaving(true); setAllocationMessage('')
-    const existingForService = allocationRows.filter((item) => item.service_id === selectedService.id); const existingByLocation = new Map(existingForService.map((item) => [item.location_id, item])); const desired = locations.filter((location) => !nonProductionTypes.has(location.location_type)).map((location) => ({ location, quantity: number(draftAllocations[`${selectedService.id}:${location.id}`]) })).filter((item) => item.quantity > 0); const desiredIds = new Set(desired.map((item) => item.location.id)); const deleteIds = existingForService.filter((item) => !desiredIds.has(item.location_id)).map((item) => item.id)
-    if (deleteIds.length) { const { error: deleteError } = await supabase.from('location_service_quantities').delete().in('id', deleteIds).eq('project_id', projectId); if (deleteError) { setAllocationMessage(deleteError.message); setAllocationSaving(false); return } }
-    for (const item of desired) { const existing = existingByLocation.get(item.location.id); if (existing) { const { error: updateError } = await supabase.from('location_service_quantities').update({ quantity: item.quantity }).eq('id', existing.id).eq('project_id', projectId); if (updateError) { setAllocationMessage(updateError.message); setAllocationSaving(false); return } } else { const { error: insertError } = await supabase.from('location_service_quantities').insert({ project_id: projectId, location_id: item.location.id, service_id: selectedService.id, quantity: item.quantity, created_by: userId }); if (insertError) { setAllocationMessage(insertError.message); setAllocationSaving(false); return } } }
-    const { data: refreshed, error: refreshError } = await supabase.from('location_service_quantities').select('id, project_id, location_id, service_id, quantity, source_scope_item_id, created_at, updated_at').eq('project_id', projectId)
-    if (refreshError) { setAllocationMessage(t('loc.alloc.errRefresh', { message: refreshError.message })); setAllocationSaving(false); return }
-    setAllocationRows(refreshed || [])
+    const desired = locations.filter((location) => !nonProductionTypes.has(location.location_type)).map((location) => ({ location, quantity: number(draftAllocations[`${selectedService.id}:${location.id}`]) })).filter((item) => item.quantity > 0)
+    try { await writeAllocation(selectedService.id, desired.map((d) => ({ locationId: d.location.id, quantity: d.quantity }))); await reloadAllocations() } catch (e) { setAllocationMessage(e?.message || String(e)); setAllocationSaving(false); return }
     try { await history('scope_location_allocation_updated', 'Scope allocation updated', `${selectedService.service_name} was allocated by production location`, selectedService.id, { service_id: selectedService.id, service_name: selectedService.service_name, scope_quantity: selectedServiceTotal, allocated_quantity: draftSelectedTotal, unit: selectedService.unit, locations: desired.map((item) => ({ location_id: item.location.id, location_name: item.location.name, quantity: item.quantity })) }) } catch (historyError) { setAllocationMessage(historyError.message); setAllocationSaving(false); return }
     setAllocationMessage(t('loc.alloc.saved')); setAllocationSaving(false); router.refresh()
   }
 
   function ritsuScopeBox() {
-    const linked = (takeoff?.layers || []).filter((l) => l.scope_activity_id === selectedService.id)
+    const { auto, manual, all: linked } = feedOf(selectedService)
     if (!ritsuLicensed) return <div className={styles.ritsuBox}><strong>{t('loc.ritsu.quantitiesTitle')}</strong><span>{t('loc.ritsu.locked')}</span></div>
     if (takeoffError) return <div className={styles.ritsuBox}><strong>{t('loc.ritsu.quantitiesTitle')}</strong><span className={styles.bad}>{takeoffError}</span></div>
     if (!takeoff) return <div className={styles.ritsuBox}><strong>{t('loc.ritsu.quantitiesTitle')}</strong><span>{t('loc.ritsu.loading')}</span></div>
     const fill = () => {
-      const production = new Set(locations.filter((l) => !nonProductionTypes.has(l.location_type)).map((l) => l.id))
-      const r = allocateFromTakeoff(takeoff, { layerIds: linked.map((l) => l.id), unit: selectedService.unit, productionLocationIds: production })
-      setDraftAllocations((current) => { const next = { ...current }; locations.forEach((loc) => { if (!production.has(loc.id)) return; const v = r.byLocation.get(loc.id) || 0; next[`${selectedService.id}:${loc.id}`] = v > 0 ? String(Math.round(v * 100) / 100) : '' }); return next })
-      const allocated = [...r.byLocation.values()].reduce((a, b) => a + b, 0)
-      const unit = selectedService.unit || ''
-      setAllocationMessage(`${t('loc.ritsu.filled', { allocated: `${qty(allocated)} ${unit}`, count: r.byLocation.size, total: qty(r.total), outside: qty(r.unallocated) })}${r.uncalibratedSheets.length ? ` ${t('loc.ritsu.noScaleSheets', { sheets: r.uncalibratedSheets.join(', ') })}` : ''} ${t('loc.ritsu.reviewThenSave')}`)
+      const r = splitFor(selectedService)
+      if (!r) return
+      fillDraft(selectedService, r)
+      setAllocationMessage(`${filledMessage(selectedService, r)} ${t('loc.ritsu.reviewThenSave')}`)
     }
     const saveLinks = async () => {
       setLinkSaving(true)
       try {
-        const add = [...linkDraft].filter((id) => !linked.some((l) => l.id === id))
-        const remove = linked.filter((l) => !linkDraft.has(l.id)).map((l) => l.id)
+        const add = [...linkDraft].filter((id) => id !== auto?.id && !manual.some((l) => l.id === id))
+        const remove = manual.filter((l) => !linkDraft.has(l.id)).map((l) => l.id)
         if (add.length) { const { error: e1 } = await supabase.from('takeoff_layers').update({ scope_activity_id: selectedService.id }).in('id', add); if (e1) throw e1 }
         if (remove.length) { const { error: e2 } = await supabase.from('takeoff_layers').update({ scope_activity_id: null }).in('id', remove); if (e2) throw e2 }
         await refreshTakeoff(); setLinkOpen(false)
@@ -218,13 +296,14 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     return <div className={styles.ritsuBox}>
       <div className={styles.ritsuHead}>
         <strong>{t('loc.ritsu.quantitiesTitle')}</strong>
-        <button type="button" className={`${ui.btn} ${ui.small}`} onClick={() => { setLinkDraft(new Set(linked.map((l) => l.id))); setLinkOpen((v) => !v) }}>{linkOpen ? t('loc.ritsu.close') : t('loc.ritsu.chooseItems')}</button>
+        <button type="button" className={`${ui.btn} ${ui.small}`} onClick={() => { setLinkDraft(new Set(manual.map((l) => l.id))); setLinkOpen((v) => !v) }}>{linkOpen ? t('loc.ritsu.close') : t('loc.ritsu.chooseItems')}</button>
         <button type="button" className={`${ui.btnPrimary} ${ui.small}`} disabled={!linked.length} onClick={fill}>{t('loc.ritsu.fill')}</button>
       </div>
-      <span>{linked.length ? t('loc.ritsu.fedBy', { items: linked.map((l) => l.name).join(', ') }) : t('loc.ritsu.notFed')} {t('loc.ritsu.sharedWalls')}</span>
+      <span>{linked.length ? t('loc.ritsu.fedBy', { items: linked.map((l) => l.name).join(', ') }) : t('loc.ritsu.notFed')}{auto ? ` ${t('loc.ritsu.fromScopeLine')}` : ''} {t('loc.ritsu.sharedWalls')}</span>
       {linkOpen ? <div className={styles.linkList}>
         {takeoff.layers.length ? takeoff.layers.map((l) => {
           const other = l.scope_activity_id && l.scope_activity_id !== selectedService.id ? scopeItems.find((x) => x.id === l.scope_activity_id) : null
+          if (auto && l.id === auto.id) return <label key={l.id}><input type="checkbox" checked disabled /><i style={{ background: l.color }} /><span>{l.name}</span><small>{t('loc.ritsu.viaScopeLine')}</small></label>
           return <label key={l.id}><input type="checkbox" checked={linkDraft.has(l.id)} onChange={() => setLinkDraft((cur) => { const n = new Set(cur); n.has(l.id) ? n.delete(l.id) : n.add(l.id); return n })} /><i style={{ background: l.color }} /><span>{l.name}</span><small>{t(`loc.ritsu.kind.${l.kind === 'linear' ? 'linear' : l.kind === 'area' ? 'area' : 'count'}`)}{other ? ` · ${t('loc.ritsu.nowFeeds', { name: other.service_name })}` : ''}</small></label>
         }) : <span>{t('loc.ritsu.noItems')}</span>}
         <button type="button" className={`${ui.btnPrimary} ${ui.small}`} disabled={linkSaving} onClick={() => void saveLinks()}>{linkSaving ? t('loc.saving') : t('loc.ritsu.saveItems')}</button>
@@ -306,6 +385,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
           <div><small>{t('loc.alloc.productionScope')}</small><strong>{t('loc.alloc.activities', { count: scopeItems.length })}</strong></div>
           <label className={styles.check}><input type="checkbox" checked={showAllocatedOnly} onChange={(event) => setShowAllocatedOnly(event.target.checked)} />{t('loc.alloc.allocatedOnly')}</label>
         </div>
+        {ritsuLicensed && takeoff && scopeItems.some((s) => feedOf(s).all.length) ? <button type="button" className={`${ui.btnPrimary} ${ui.small} ${styles.bulkButton}`} onClick={openBulk}>{t('loc.bulk.button')}</button> : null}
         <label className={`${styles.search} ${styles.serviceSearch}`}><Icon name="search" size={17} /><input value={scopeSearch} onChange={(event) => setScopeSearch(event.target.value)} placeholder={t('loc.alloc.search')} aria-label={t('loc.alloc.search')} /></label>
         <div className={styles.serviceList}>
           {visibleScopeItems.length ? visibleScopeItems.map((item) => {
@@ -345,6 +425,31 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
         </div>
       </> : <div className={styles.emptyDetail}><strong>{t('loc.alloc.selectTitle')}</strong><p>{t('loc.alloc.selectText')}</p></div>}</div>
     </section>}
+
+    {bulk ? <div className={styles.overlay} onMouseDown={(event) => { if (event.target === event.currentTarget && !bulkSaving) setBulk(null) }}>
+      <section className={`${styles.dialog} ${styles.bulkDialog}`} role="dialog" aria-modal="true" aria-labelledby="bulk-title">
+        <header className={styles.dialogHead}><div><h2 id="bulk-title">{t('loc.bulk.title')}</h2><p>{t('loc.bulk.help')}</p></div><button type="button" className={styles.close} onClick={() => !bulkSaving && setBulk(null)} aria-label={t('loc.close')}><Icon name="close" /></button></header>
+        <div className={styles.bulkBody}>
+          {bulk.rows.length ? <table className={styles.bulkTable}>
+            <thead><tr><th>{t('loc.alloc.activity')}</th><th>{t('loc.bulk.allocated')}</th><th>{t('loc.bulk.outside')}</th><th>{t('loc.bulk.locations')}</th><th /></tr></thead>
+            <tbody>{bulk.rows.map((x) => {
+              const skip = x.saved && !bulk.replace
+              const none = !x.r.byLocation.size
+              return <tr key={x.service.id} className={skip || none ? styles.bulkSkip : ''}>
+                <td><small>{x.service.service_code}</small> {x.service.service_name}</td>
+                <td>{qty(x.allocated)} / {qty(x.r.total)} {x.service.unit || ''}</td>
+                <td className={x.r.unallocated > 0.005 ? styles.bad : ''}>{qty(x.r.unallocated)}</td>
+                <td>{x.r.byLocation.size}</td>
+                <td>{none ? t('loc.bulk.noZones') : skip ? t('loc.bulk.keepSaved') : x.saved ? t('loc.bulk.replace') : t('loc.bulk.new')}</td>
+              </tr>
+            })}</tbody>
+          </table> : <p className={styles.muted}>{t('loc.bulk.nothing')}</p>}
+          {bulk.rows.some((x) => !x.r.byLocation.size) ? <p className={styles.muted}>{t('loc.bulk.noZonesHint')}</p> : null}
+          {bulk.rows.some((x) => x.saved) ? <label className={styles.check}><input type="checkbox" checked={bulk.replace} onChange={(event) => setBulk((b) => ({ ...b, replace: event.target.checked }))} />{t('loc.bulk.replaceSaved')}</label> : null}
+        </div>
+        <footer className={styles.dialogFoot}><button type="button" className={ui.btn} disabled={bulkSaving} onClick={() => setBulk(null)}>{t('loc.cancel')}</button><button type="button" className={ui.btnPrimary} disabled={bulkSaving || !bulk.rows.some((x) => x.r.byLocation.size > 0 && (!x.saved || bulk.replace))} onClick={() => void applyBulk()}>{bulkSaving ? t('loc.saving') : t('loc.bulk.confirm', { count: bulk.rows.filter((x) => x.r.byLocation.size > 0 && (!x.saved || bulk.replace)).length })}</button></footer>
+      </section>
+    </div> : null}
 
     {modalOpen ? <div className={styles.overlay} onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false) }}>
       <form className={styles.dialog} onSubmit={saveLocation} role="dialog" aria-modal="true" aria-labelledby="location-dialog-title">
