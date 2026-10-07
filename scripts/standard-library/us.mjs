@@ -29,8 +29,8 @@ const X58 = '5/8" Type X gypsum board 4\'×12\''
 const X58_8 = '5/8" Type X gypsum board 4\'×8\''
 const walls = [
   { code: 'PT01', name: '3-5/8" 25 ga @ 16" · 1× 5/8" Type X each side', category: 'non_rated', stc: [38, 40],
-    stud: '3-5/8" 25 ga (18 mil) stud', track: '3-5/8" 25 ga (18 mil) track', studIn: 3.625, spacingIn: 16, a: [X58, 0.625, 1], b: [X58, 0.625, 1], faces: 2,
-    notes: 'Standard interior partition. Check stud limiting height for the wall height and deflection criteria.' },
+    stud: '3-5/8" 25 ga (18 mil) stud', track: '3-5/8" 25 ga (18 mil) track', studIn: 3.625, spacingIn: 16, a: [X58, 0.625, 1], b: [X58, 0.625, 1], faces: 2, acoustic: true,
+    notes: 'Standard interior partition. STC assumes the perimeter sealed with acoustical sealant. Check stud limiting height for the wall height and deflection criteria.' },
   { code: 'PT02', name: '3-5/8" 25 ga @ 16" · 1× 5/8" Type X each side · 3" mineral wool', category: 'non_rated', stc: [45, 47],
     stud: '3-5/8" 25 ga (18 mil) stud', track: '3-5/8" 25 ga (18 mil) track', studIn: 3.625, spacingIn: 16, a: [X58, 0.625, 1], b: [X58, 0.625, 1], faces: 2,
     insulation: '3" mineral wool batt (sound attenuation)', acoustic: true,
@@ -75,7 +75,7 @@ const walls = [
     notes: 'Exterior steel-stud wall behind the cladding. Studs per the structural design (wind load); add continuous insulation per energy code.' },
   { code: 'PT12', name: 'Chase wall double 2-1/2" 25 ga @ 16" · 1× 5/8" Type X each side', category: 'chase', stc: [42, 46],
     stud: '2-1/2" 25 ga (18 mil) stud', track: '2-1/2" 25 ga (18 mil) track', studIn: 2.5, spacingIn: 16, a: [X58, 0.625, 1], b: [X58, 0.625, 1], faces: 2,
-    double: true, thicknessIn: 8,
+    double: true, thicknessIn: 8, acoustic: true,
     notes: 'Plumbing chase between restrooms: two rows of studs, cavity sized for the pipes (8" overall by default).' },
 ]
 
@@ -103,6 +103,8 @@ function wallRecipe(w) {
     lines.push({ mat: 'Thin-set mortar for cement backer joints', unit: 'lb', coef: r(0.05 * SF), base: 'm2', waste: 10, packSize: 50, packName: 'bag' })
   }
   if (w.insulation) lines.push({ mat: w.insulation, unit: 'sf', coef: r(SF), base: 'm2', waste: 5 })
+  // Control joints at 30 ft max. on runs of wall (GA-216), full height on each finished face.
+  lines.push({ mat: 'Control joint, zinc (#093), every 30 ft on each finished face', unit: 'ft', coef: r((w.faces / (30 * FT)) * LF), base: 'm2', waste: 5, packSize: 10, packName: 'piece' })
   if (w.acoustic) lines.push({ mat: 'Acoustical sealant, 28 oz tube (top and bottom, both sides)', unit: 'tube', coef: r(4 * SEALANT_TUBE_M), base: 'm', waste: 10 })
   if (w.headJoint) lines.push({ mat: 'Fire-rated head-of-wall joint (listed system), both sides', unit: 'ft', coef: r(2 * LF), base: 'm', waste: 5 })
   if (w.exterior) {
