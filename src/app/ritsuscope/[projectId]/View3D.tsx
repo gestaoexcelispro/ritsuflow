@@ -497,53 +497,66 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
   }
 
   if (o.tags) {
+    // Each tag floats above its element with a leader line down to the exact spot it names
+    // (wall stretch, opening head, area centre, point), so the 3D reads like a marked-up drawing.
+    const leaderMat = (color: string) => new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.9 })
+    const dotGeo = new THREE.SphereGeometry(0.05, 10, 8)
+    const label = (tag: string, color: string, anchor: [number, number, number], lift: number) => {
+      const top: [number, number, number] = [anchor[0], anchor[1] + lift, anchor[2]]
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...anchor), new THREE.Vector3(...top)]), leaderMat(color))
+      line.renderOrder = 9
+      line.raycast = () => {}
+      g.add(line)
+      const dot = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color, depthTest: false }))
+      dot.position.set(...anchor)
+      dot.renderOrder = 9
+      dot.raycast = () => {}
+      g.add(dot)
+      const sprite = tagSprite(THREE, tag, color)
+      sprite.position.set(...top)
+      g.add(sprite)
+    }
     for (const it of items) {
-      // Areas: above their centre; counted points: above the item's box.
+      // Areas: from their centre; counted points: from the top of the item's box.
       if (it.kind !== 'linear') {
         for (const sh of it.shapes) {
           const tag = sh.tags?.[0]
           if (!show(sh) || !tag || !sh.pts.length || (it.kind === 'area' && sh.pts.length < 3)) continue
-          let at: Vec2
-          let y: number
           if (it.kind === 'area') {
             const ms = sh.pts.map(M)
-            at = [ms.reduce((t, q) => t + q[0], 0) / ms.length, ms.reduce((t, q) => t + q[1], 0) / ms.length]
-            y = (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02) + 0.3
+            const at: Vec2 = [ms.reduce((t, q) => t + q[0], 0) / ms.length, ms.reduce((t, q) => t + q[1], 0) / ms.length]
+            const y = (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02)
+            label(tag, it.color, [at[0], y, at[1]], 0.9)
           } else {
-            at = M(sh.pts[0])
-            y = (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1) + 0.3
+            const at = M(sh.pts[0])
+            const y = (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1)
+            label(tag, it.color, [at[0], y, at[1]], 0.7)
           }
-          const sprite = tagSprite(THREE, tag, it.color)
-          sprite.position.set(at[0], y, at[1])
-          g.add(sprite)
         }
         continue
       }
-      // Doors, windows and openings: their tag just above the opening's head.
       for (const sh of it.shapes) {
-        if (!show(sh) || !sh.openingTags?.length) continue
-        for (const m of openingMarks(sh.pts, sh.openings, k)) {
-          const tag = sh.openingTags[m.index]
-          const op = sh.openings?.[m.index]
-          if (!tag || !op) continue
-          const at = M([(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2])
-          const sprite = tagSprite(THREE, tag, m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B')
-          sprite.position.set(at[0], (sh.zrel || 0) + o.elevationOf(sh.page) + (op.sill || 0) + (op.h || 2.1) + 0.25, at[1])
-          g.add(sprite)
-        }
-      }
-      for (const sh of it.shapes) {
-        if (!show(sh) || !sh.tags?.length) continue
-        const top = (sh.zrel || 0) + o.elevationOf(sh.page) + (shapeHeight(it, sh) || 2.8) + 0.3
-        for (let i = 1; i < sh.pts.length; i++) {
+        if (!show(sh)) continue
+        const base = (sh.zrel || 0) + o.elevationOf(sh.page)
+        const wallTop = base + (shapeHeight(it, sh) || 2.8)
+        // Wall stretches: from the middle of the stretch's top, label well above.
+        for (let i = 1; i < sh.pts.length && sh.tags?.length; i++) {
           const tag = sh.tags[i - 1]
           if (!tag) continue
           const a = M(sh.pts[i - 1])
           const bb = M(sh.pts[i])
           if (Math.hypot(bb[0] - a[0], bb[1] - a[1]) < 0.3) continue
-          const sprite = tagSprite(THREE, tag, it.color)
-          sprite.position.set((a[0] + bb[0]) / 2, top, (a[1] + bb[1]) / 2)
-          g.add(sprite)
+          label(tag, it.color, [(a[0] + bb[0]) / 2, wallTop, (a[1] + bb[1]) / 2], 1.1)
+        }
+        // Doors, windows and openings: from the middle of the opening's head, label just above the wall.
+        if (!sh.openingTags?.length) continue
+        for (const m of openingMarks(sh.pts, sh.openings, k)) {
+          const tag = sh.openingTags[m.index]
+          const op = sh.openings?.[m.index]
+          if (!tag || !op) continue
+          const at = M([(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2])
+          const head = base + (op.sill || 0) + (op.h || 2.1)
+          label(tag, m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B', [at[0], head, at[1]], Math.max(0.5, wallTop - head + 0.5))
         }
       }
     }
