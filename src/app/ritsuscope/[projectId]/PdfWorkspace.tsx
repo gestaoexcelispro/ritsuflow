@@ -85,6 +85,8 @@ type Props = {
   footerSlot?: HTMLElement | null
   /** Free stretch of the footer (between the cursor and the switches) for the tool hint and the active-item bar. */
   statusSlot?: HTMLElement | null
+  /** Fade of the source drawing on this sheet (0…0.8). */
+  backgroundFade?: number
 }
 
 const kindKey: Record<LayerKind, TakeoffMessageKey> = {
@@ -100,7 +102,7 @@ function dedupe(points: Vec2[]): Vec2[] {
 }
 
 export default function PdfWorkspace(props: Props) {
-  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, levelLabel = null, quickActions = [], exportActions = [] } = props
+  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, backgroundFade = 0, levelLabel = null, quickActions = [], exportActions = [] } = props
   const barH = toolbarSlot ? 0 : TOOLBAR_H
   const t = useTakeoffT()
   const { formatNumber, language } = useLanguage()
@@ -1257,6 +1259,7 @@ export default function PdfWorkspace(props: Props) {
               onMovePoints={(id, pts) => void movePoints(id, pts)}
               snap={snapOn}
               showTags={tagsOn && !zoning}
+              backgroundFade={backgroundFade}
               ortho={orthoOn}
               onSize={setPageSize}
               onPoint={p => void handlePoint(p)}

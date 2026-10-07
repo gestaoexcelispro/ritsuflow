@@ -247,6 +247,20 @@ export default function TakeoffWorkspacePage() {
   useEffect(() => { load() }, [load])
 
   const selectedSource = sources.find(s => s.id === selectedSourceId) || null
+  /** Fade of a sheet's own drawing (white wash, 0…0.8), kept in the sheet's metadata. */
+  const fadeOf = (src: SourceRow | null | undefined) => Math.max(0, Math.min(0.8, Number((src?.metadata as { background_fade?: number } | undefined)?.background_fade) || 0))
+  const backgroundFade = fadeOf(selectedSource)
+  const fadeSave = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function setBackgroundFade(value: number) {
+    const src = selectedSource
+    if (!src) return
+    const metadata = { ...(src.metadata || {}), background_fade: value }
+    setSources(prev => prev.map(x => (x.id === src.id ? { ...x, metadata } : x)))
+    if (fadeSave.current) clearTimeout(fadeSave.current)
+    fadeSave.current = setTimeout(() => {
+      void createClient().from('takeoff_sources').update({ metadata }).eq('id', src.id).then(({ error: e }) => { if (e) setError(t('workspace.error', { message: e.message })) })
+    }, 400)
+  }
 
   // Engine items for the selected source only.
   // Every layer, with only this source's elements; layers without elements stay listed so they can be edited.
@@ -617,6 +631,7 @@ export default function TakeoffWorkspacePage() {
       toolbarSlot={toolbarShown ? toolbarSlot : null}
       footerSlot={toolbarShown ? footerSlot : null}
       statusSlot={toolbarShown ? statusSlot : null}
+      backgroundFade={backgroundFade}
       quickActions={section === 'zoning' ? [] : [
         { key: 'wall', icon: 'wall', label: t('quick.wall'), title: t('quick.wallHint'), onClick: () => setPickerOpen(true) },
         { key: 'ceiling', icon: 'ceiling', label: t('quick.ceiling'), title: t('quick.ceilingHint'), onClick: () => setSurfacePicker('ceiling') },
@@ -936,6 +951,7 @@ export default function TakeoffWorkspacePage() {
           title: `${projectTitle} · ${ps.levelName} · ${ps.source.name} · ${kind}`,
           subtitle: t('print.subtitle', { scale, date }),
           heading: `${ps.levelName} · ${ps.source.name}${mult > 1 ? ` · ${t('print.perFloor')}` : ''}`,
+          backgroundFade: fadeOf(ps.source),
         }
       })
       // 3D page: the building with this PDF's items (everything for locations and the full takeoff).
@@ -1664,6 +1680,13 @@ export default function TakeoffWorkspacePage() {
           : <span style={{ flex: 1 }} />}
         {isPdf && canvasMode && viewMode === 'plan' && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {selectedSource && (
+              <label title={t('fade.hint')} style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 10, fontWeight: 700, color: '#294955' }}>
+                {t('fade.label')}
+                <input type="range" min={0} max={80} step={10} value={Math.round(backgroundFade * 100)} onChange={e => setBackgroundFade(Number(e.target.value) / 100)} style={{ width: 80, accentColor: '#109d91' }} />
+                <span style={{ minWidth: 28, textAlign: 'right', fontWeight: 600 }}>{Math.round(backgroundFade * 100)}%</span>
+              </label>
+            )}
             <span ref={setFooterSlot} style={{ display: 'flex', alignItems: 'center', gap: 14, marginRight: 8 }} />
             <span style={{ minWidth: 40, textAlign: 'right' }}>{Math.round(zoom * 100)}%</span>
             <button type="button" style={footBtn} onClick={() => run('zoomOut')}>–</button>

@@ -396,6 +396,8 @@ const takeoffPtBR = {
   'csv.hint': 'Baixar os itens de levantamento desta folha em CSV (Excel)',
   'layout.hideRight': 'Ocultar o painel direito',
   'layout.showRight': 'Mostrar o painel direito',
+  'fade.label': "Desbotar fundo",
+  'fade.hint': "Clareia o desenho desta folha (na tela e no Imprimir PDF) para as cores do levantamento aparecerem fiéis em PDFs coloridos. Salvo por folha.",
   'quick.wall': '+ Parede',
   'quick.ceiling': '+ Forro',
   'quick.floor': '+ Piso',

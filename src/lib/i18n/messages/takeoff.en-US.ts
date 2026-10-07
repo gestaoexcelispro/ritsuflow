@@ -395,6 +395,8 @@ const takeoffEnUS: TakeoffMessages = {
   'csv.hint': 'Download the takeoff items of this sheet as a CSV file (Excel)',
   'layout.hideRight': 'Hide the right panel',
   'layout.showRight': 'Show the right panel',
+  'fade.label': "Fade background",
+  'fade.hint': "Fades this sheet's own drawing (on screen and in Print PDF) so the takeoff colours read true on coloured PDFs. Saved per sheet.",
   'quick.wall': '+ Wall',
   'quick.ceiling': '+ Ceiling',
   'quick.floor': '+ Floor',

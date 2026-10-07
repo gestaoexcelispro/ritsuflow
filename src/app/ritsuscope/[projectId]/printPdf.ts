@@ -83,6 +83,8 @@ export type PrintSheet = {
   subtitle: string
   /** Section heading in the tables ("Térreo · PRJ-01"). */
   heading: string
+  /** White wash over the source drawing before the takeoff is drawn (0…0.8). */
+  backgroundFade?: number
 }
 
 const svgPath = (pts: [number, number][], close: boolean) =>
@@ -145,6 +147,11 @@ export async function buildProjectPdf(opts: {
     if (!sources.has(sheet.url)) sources.set(sheet.url, await PDFDocument.load(bytes, { ignoreEncryption: true }))
     const [pg] = await out.copyPages(sources.get(sheet.url), [sheet.pageNumber - 1])
     out.addPage(pg)
+    // Faded background: a white wash over the drawing (it stays vector), so the takeoff colours read true.
+    if (sheet.backgroundFade && sheet.backgroundFade > 0) {
+      const mb = pg.getMediaBox()
+      pg.drawRectangle({ x: mb.x, y: mb.y, width: mb.width, height: mb.height, color: rgb(1, 1, 1), opacity: Math.min(0.8, sheet.backgroundFade) })
+    }
 
     for (const m of buildMarks(sheet.items, sheet.zones, toUser, sheet.ptPerM, fmt)) {
       if (m.type === 'polygon') {

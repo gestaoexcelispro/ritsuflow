@@ -60,6 +60,8 @@ type Props = {
   snap: boolean
   /** Show the tag of each wall stretch (DW01-03…) at its middle. */
   showTags?: boolean
+  /** White wash over the source drawing (0…0.8), so takeoff colours read true on coloured PDFs. */
+  backgroundFade?: number
   /** Select mode: shapes are clickable. */
   selectable: boolean
   selectedId: string | null
@@ -106,7 +108,7 @@ type PdfPageProxy = {
 
 /** One PDF page with the takeoff overlay. Coordinates are PDF points (viewport at scale 1). */
 export default function PdfSheet(props: Props) {
-  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, showTags = false, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
+  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, showTags = false, backgroundFade = 0, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLCanvasElement>(null)
@@ -413,6 +415,7 @@ export default function PdfSheet(props: Props) {
           }}
           onMouseLeave={() => { setHover(null); setSnapHit(null); onCursor?.(null) }}
         >
+          {backgroundFade > 0 && <rect x={0} y={0} width={W} height={H} fill="#fff" fillOpacity={backgroundFade} style={{ pointerEvents: 'none' }} />}
           {zones.map(z => {
             const zpts = drag && drag.id === `zone:${z.id}` ? drag.pts : z.pts
             const pts = zpts.map(p => `${p[0]},${p[1]}`).join(' ')
