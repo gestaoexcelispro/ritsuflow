@@ -25,13 +25,15 @@ function Field({ label, children }) {
   return <label className={ui.field}><span className={ui.fieldLabel}>{label}</span>{children}</label>
 }
 
-export default function StandaloneLocationWorkspace({ projectId, projectName, projectCode = '', userId, initialLocations = [], scopeItems = [], allocations = [], spatial = {}, loadError = '' }) {
+export default function StandaloneLocationWorkspace({ projectId, projectName, projectCode = '', userId, initialLocations = [], scopeItems: initialScopeItems = [], allocations = [], spatial = {}, loadError = '' }) {
   const t = useT('projects')
   const { language } = useLanguage()
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const [locations, setLocations] = useState(initialLocations)
   const [allocationRows, setAllocationRows] = useState(allocations)
+  const [scopeItems, setScopeItems] = useState(initialScopeItems)
+  useEffect(() => { setScopeItems(initialScopeItems) }, [initialScopeItems])
   const [activeTab, setActiveTab] = useState('locations')
   const [selectedId, setSelectedId] = useState('')
   const [selectedServiceId, setSelectedServiceId] = useState(scopeItems[0]?.id || '')
@@ -126,6 +128,26 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     setAllocationMessage(`${filledMessage(selectedService, r)} ${t('loc.ritsu.reviewThenSave')}`)
   }, [takeoff, selectedServiceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * A scope line without a FieldOp activity record gets one now, inactive: location quantities need it,
+   * and FieldOp only uses the item once it is activated in FieldOp's project setup.
+   */
+  async function ensureActivity(service) {
+    if (!service.pending) return service.id
+    const { data: found } = await supabase.from('fieldop_project_activities').select('id').eq('project_id', projectId).eq('source', 'scope').eq('scope_item_id', service.source_scope_item_id).limit(1)
+    let id = found?.[0]?.id
+    if (!id) {
+      const { data, error: e } = await supabase.from('fieldop_project_activities').insert({ project_id: projectId, source: 'scope', scope_item_id: service.source_scope_item_id, is_active: false }).select('id').single()
+      if (e) throw e
+      id = data.id
+    }
+    const oldId = service.id
+    setScopeItems((current) => current.map((s) => (s.id === oldId ? { ...s, id, pending: false } : s)))
+    setDraftAllocations((current) => { const next = {}; Object.entries(current).forEach(([k, v]) => { next[k.startsWith(`${oldId}:`) ? `${id}:${k.slice(oldId.length + 1)}` : k] = v }); return next })
+    setSelectedServiceId((current) => (current === oldId ? id : current))
+    return id
+  }
+
   /** Replaces one activity's quantities by location (updates, inserts, then removes locations no longer used). */
   async function writeAllocation(serviceId, desired) {
     const existing = allocationRows.filter((row) => row.service_id === serviceId)
@@ -163,11 +185,12 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     try {
       for (const x of todo) {
         const desired = [...x.r.byLocation].map(([locationId, v]) => ({ locationId, quantity: round2(v) })).filter((d) => d.quantity > 0)
-        await writeAllocation(x.service.id, desired)
-        fillDraft(x.service, x.r)
+        const id = await ensureActivity(x.service)
+        await writeAllocation(id, desired)
+        fillDraft({ ...x.service, id }, x.r)
       }
       await reloadAllocations()
-      await history('scope_location_allocation_bulk', 'Scope allocated from RitsuScope', `${todo.length} activities were allocated by production location from RitsuScope`, projectId, { activities: todo.map((x) => ({ service_id: x.service.id, service_name: x.service.service_name, allocated: x.allocated, total: x.r.total, outside: x.r.unallocated, unit: x.service.unit })) })
+      await history('scope_location_allocation_bulk', 'Scope allocated from RitsuScope', `${todo.length} activities were allocated by production location from RitsuScope`, projectId, { activities: todo.map((x) => ({ scope_item_id: x.service.source_scope_item_id, service_name: x.service.service_name, allocated: x.allocated, total: x.r.total, outside: x.r.unallocated, unit: x.service.unit })) })
       setBulk(null); setAllocationMessage(t('loc.bulk.done', { count: todo.length })); router.refresh()
     } catch (e) {
       try { await reloadAllocations() } catch { /* keep the first error */ }
@@ -267,8 +290,9 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     if (!selectedService) return; if (overAllocated) { setAllocationMessage(t('loc.alloc.errOver')); return }
     setAllocationSaving(true); setAllocationMessage('')
     const desired = locations.filter((location) => !nonProductionTypes.has(location.location_type)).map((location) => ({ location, quantity: number(draftAllocations[`${selectedService.id}:${location.id}`]) })).filter((item) => item.quantity > 0)
-    try { await writeAllocation(selectedService.id, desired.map((d) => ({ locationId: d.location.id, quantity: d.quantity }))); await reloadAllocations() } catch (e) { setAllocationMessage(e?.message || String(e)); setAllocationSaving(false); return }
-    try { await history('scope_location_allocation_updated', 'Scope allocation updated', `${selectedService.service_name} was allocated by production location`, selectedService.id, { service_id: selectedService.id, service_name: selectedService.service_name, scope_quantity: selectedServiceTotal, allocated_quantity: draftSelectedTotal, unit: selectedService.unit, locations: desired.map((item) => ({ location_id: item.location.id, location_name: item.location.name, quantity: item.quantity })) }) } catch (historyError) { setAllocationMessage(historyError.message); setAllocationSaving(false); return }
+    let serviceId = selectedService.id
+    try { serviceId = await ensureActivity(selectedService); await writeAllocation(serviceId, desired.map((d) => ({ locationId: d.location.id, quantity: d.quantity }))); await reloadAllocations() } catch (e) { setAllocationMessage(e?.message || String(e)); setAllocationSaving(false); return }
+    try { await history('scope_location_allocation_updated', 'Scope allocation updated', `${selectedService.service_name} was allocated by production location`, serviceId, { service_id: serviceId, service_name: selectedService.service_name, scope_quantity: selectedServiceTotal, allocated_quantity: draftSelectedTotal, unit: selectedService.unit, locations: desired.map((item) => ({ location_id: item.location.id, location_name: item.location.name, quantity: item.quantity })) }) } catch (historyError) { setAllocationMessage(historyError.message); setAllocationSaving(false); return }
     setAllocationMessage(t('loc.alloc.saved')); setAllocationSaving(false); router.refresh()
   }
 
@@ -288,7 +312,8 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
       try {
         const add = [...linkDraft].filter((id) => id !== auto?.id && !manual.some((l) => l.id === id))
         const remove = manual.filter((l) => !linkDraft.has(l.id)).map((l) => l.id)
-        if (add.length) { const { error: e1 } = await supabase.from('takeoff_layers').update({ scope_activity_id: selectedService.id }).in('id', add); if (e1) throw e1 }
+        const activityId = add.length ? await ensureActivity(selectedService) : selectedService.id
+        if (add.length) { const { error: e1 } = await supabase.from('takeoff_layers').update({ scope_activity_id: activityId }).in('id', add); if (e1) throw e1 }
         if (remove.length) { const { error: e2 } = await supabase.from('takeoff_layers').update({ scope_activity_id: null }).in('id', remove); if (e2) throw e2 }
         await refreshTakeoff(); setLinkOpen(false)
       } catch (e) { setAllocationMessage(e?.message || t('loc.ritsu.errLinks')) } finally { setLinkSaving(false) }
@@ -392,7 +417,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
             const total = number(item.scope_quantity); const allocated = serviceTotals.get(item.id) || 0; const percent = total > 0 ? Math.min(100, (allocated / total) * 100) : 0
             const status = allocated <= 0 ? 'none' : total > 0 && allocated >= total - 0.000001 ? 'full' : 'partial'
             return <button type="button" key={item.id} className={`${styles.serviceCard} ${selectedServiceId === item.id ? styles.serviceCardOn : ''}`} onClick={() => { setSelectedServiceId(item.id); setAllocationMessage(''); setLinkOpen(false) }}>
-              <span className={styles.serviceTop}><small>{item.service_code || t('loc.alloc.activity')}</small><em className={styles[`st_${status}`]}>{t(`loc.alloc.status.${status}`)}</em></span>
+              <span className={styles.serviceTop}><small>{item.service_code || t('loc.alloc.activity')}{item.source === 'scope' && !item.in_fieldop ? <i className={styles.notInFieldop} title={t('loc.alloc.notInFieldopHint')}>{t('loc.alloc.notInFieldop')}</i> : null}</small><em className={styles[`st_${status}`]}>{t(`loc.alloc.status.${status}`)}</em></span>
               <strong>{item.service_name}</strong>
               <span className={styles.serviceQty}>{qty(total)} {item.unit || ''}</span>
               <span className={styles.miniBar}><i style={{ width: `${percent}%` }} /></span>
