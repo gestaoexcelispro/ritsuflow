@@ -60,6 +60,13 @@ export type ElementRow = {
   layer_guids: string[]
   openings: ElementOpening[]
   faces: { faceA?: string; faceB?: string; flip?: boolean; exploded?: boolean }
+  /** Tags renamed by the user, one per segment (null/missing = automatic). Column added by migration 20261006_008. */
+  segment_tags?: (string | null)[] | null
+  created_at?: string
+  /** Final tag of each segment (computed, see segmentTags.ts); not a database column. */
+  tag_labels?: string[]
+  /** Automatic tag of each segment (shown as the placeholder when renaming). */
+  tag_auto?: string[]
 }
 
 export type IfcImportRows = {
@@ -158,6 +165,7 @@ export function rowsToItems(layers: LayerRow[], elements: ElementRow[], pageOfSo
         faceA: e.faces?.faceA,
         faceB: e.faces?.faceB,
         flipFaces: e.faces?.flip,
+    tags: e.tag_labels,
       }))
     return {
       key: l.id,

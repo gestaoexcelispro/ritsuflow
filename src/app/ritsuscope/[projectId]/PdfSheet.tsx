@@ -57,6 +57,8 @@ type Props = {
   fmt?: (v: number) => string
   /** Snap to PDF vector lines (endpoints, intersections, midpoints, nearest). */
   snap: boolean
+  /** Show the tag of each wall stretch (DW01-03…) at its middle. */
+  showTags?: boolean
   /** Select mode: shapes are clickable. */
   selectable: boolean
   selectedId: string | null
@@ -103,7 +105,7 @@ type PdfPageProxy = {
 
 /** One PDF page with the takeoff overlay. Coordinates are PDF points (viewport at scale 1). */
 export default function PdfSheet(props: Props) {
-  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
+  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, showTags = false, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLCanvasElement>(null)
@@ -565,6 +567,27 @@ export default function PdfSheet(props: Props) {
               onClick={event => { if (!onToggleSuggestion || crosshair) return; event.stopPropagation(); onToggleSuggestion(sg.id) }}
             />
           ))}
+
+          {/* Wall stretch tags: a small label at the middle of each straight stretch long enough on screen to fit it. */}
+          {showTags && !dimItems && items.filter(item => item.kind === 'linear').flatMap(item => item.shapes.flatMap((shape, index) => {
+            if (!shape.tags?.length) return []
+            const pts = drag && shape.id === drag.id ? drag.pts : shape.pts
+            return pts.slice(1).map((b, i) => {
+              const a = pts[i]
+              const tag = shape.tags![i]
+              if (!tag || dist(a, b) * zoom < tag.length * 6.4 + 24) return null
+              const w = stroke(tag.length * 6.2 + 10)
+              const h = stroke(15)
+              const cx = (a[0] + b[0]) / 2
+              const cy = (a[1] + b[1]) / 2
+              return (
+                <g key={`tag-${item.key}-${index}-${i}`} style={{ pointerEvents: 'none' }}>
+                  <rect x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={stroke(3)} fill="#fff" fillOpacity={0.92} stroke={item.color} strokeWidth={stroke(1.2)} />
+                  <text x={cx} y={cy + stroke(3.6)} textAnchor="middle" fontSize={stroke(10)} fontWeight={700} fill="#173441" fontFamily="system-ui, sans-serif">{tag}</text>
+                </g>
+              )
+            })
+          }))}
 
           {selectable && onMovePoints && selectedId && items.flatMap(item => item.shapes.filter(sh => sh.id === selectedId).map(sh => {
             const pts = drag && drag.id === sh.id ? drag.pts : sh.pts

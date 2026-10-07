@@ -35,6 +35,8 @@ export type Mark =
   | { type: 'label'; at: Vec2; lines: string[]; size: number }
   /** A door/window/opening: a band along the wall (a→b) and an icon badge at its centre. */
   | { type: 'opening'; kind: ElementOpening['kind']; a: Vec2; b: Vec2; at: Vec2; width: number; color: [number, number, number] }
+  /** Tag of a wall stretch (DW01-03), in a small box at the middle of the stretch. */
+  | { type: 'tag'; at: Vec2; text: string; color: [number, number, number] }
 
 export type LegendRow = { color: [number, number, number]; name: string; kind: TakeoffItem['kind']; main: string; sub: string }
 
@@ -75,6 +77,19 @@ export function buildMarks(items: TakeoffItem[], zones: ZoneLike[], toUser: Matr
         const c: Vec2 = [(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2]
         marks.push({ type: 'opening', kind: m.kind, a: apply(toUser, m.a), b: apply(toUser, m.b), at: apply(toUser, c), width: w, color: OPENING_COLORS[m.kind === 'door' || m.kind === 'window' ? m.kind : 'void'] })
       }
+    }
+  }
+  // Stretch tags on top, on stretches long enough on paper to hold their box.
+  for (const it of items) {
+    if (it.kind !== 'linear') continue
+    const color = hexToRgb(it.color)
+    for (const sh of it.shapes) {
+      sh.tags?.forEach((text, i) => {
+        const a = apply(toUser, sh.pts[i])
+        const b = apply(toUser, sh.pts[i + 1])
+        if (!text || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < text.length * 3 + 10) return
+        marks.push({ type: 'tag', at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], text, color })
+      })
     }
   }
   return marks

@@ -118,6 +118,8 @@ export default function PdfWorkspace(props: Props) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [snapOn, setSnapOn] = useState(true)
+  /** Tag of each wall stretch on the sheet (DW01-03…). */
+  const [tagsOn, setTagsOn] = useState(true)
   const [orthoOn, setOrthoOn] = useState(false)
   /** Line walls: draw the centreline, or a face and then click the side the wall goes. */
   const [placement, setPlacement] = useState<'face' | 'center'>('face')
@@ -1151,6 +1153,7 @@ export default function PdfWorkspace(props: Props) {
               multiSelected={boxSelSet}
               onMovePoints={(id, pts) => void movePoints(id, pts)}
               snap={snapOn}
+              showTags={tagsOn && !zoning}
               ortho={orthoOn}
               onSize={setPageSize}
               onPoint={p => void handlePoint(p)}
@@ -1561,6 +1564,7 @@ export default function PdfWorkspace(props: Props) {
             <>
               <label style={toggleLabel}>{t('tool.snap')}<Switch on={snapOn} onChange={setSnapOn} /></label>
               <label style={toggleLabel}>{t('tool.ortho')}<Switch on={orthoOn} onChange={setOrthoOn} /></label>
+              {!zoning && <label style={toggleLabel} title={t('tags.hint')}>{t('tags.toggle')}<Switch on={tagsOn} onChange={setTagsOn} /></label>}
               <span style={divider} />
             </>
           )}
@@ -1577,6 +1581,7 @@ export default function PdfWorkspace(props: Props) {
         <>
           <label style={{ ...toggleLabel, fontSize: 11, padding: 0 }}>{t('tool.snap')}<Switch on={snapOn} onChange={setSnapOn} /></label>
           <label style={{ ...toggleLabel, fontSize: 11, padding: 0 }}>{t('tool.ortho')}<Switch on={orthoOn} onChange={setOrthoOn} /></label>
+          {!zoning && <label style={{ ...toggleLabel, fontSize: 11, padding: 0 }} title={t('tags.hint')}>{t('tags.toggle')}<Switch on={tagsOn} onChange={setTagsOn} /></label>}
         </>,
         footerSlot,
       )}

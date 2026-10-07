@@ -31,6 +31,8 @@ export type TakeoffShape = {
   faceA?: string
   faceB?: string
   flipFaces?: boolean
+  /** Tag of each straight stretch (pts[i] → pts[i+1]), e.g. "DW01-03". */
+  tags?: string[]
 }
 
 export type LayerKind = 'linear' | 'area' | 'count'

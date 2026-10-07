@@ -2,7 +2,7 @@
 // pt-BR uses ";" as separator and "," as decimal mark (what Excel expects in Brazil);
 // en-US uses "," and ".".
 import { framingTotals, packBars, packSheets } from './framing/framing'
-import { layerQuantities, type TakeoffItem } from './geometry'
+import { dist, layerQuantities, shapeHeight, type TakeoffItem } from './geometry'
 import type { MaterialRequirement } from './recipes'
 
 export type CsvLabels = {
@@ -31,6 +31,9 @@ export type CsvLabels = {
   recipe?: string
   packages?: string
   screws?: string
+  /** Headers of the wall stretches section (one row per tagged stretch). */
+  tag?: string
+  height?: string
 }
 
 export function buildQuantitiesCsv(
@@ -68,6 +71,18 @@ export function buildQuantitiesCsv(
       area ? num(q.per) : '',
       it.kind === 'count' ? q.n : '',
     ]))
+  }
+
+  // Wall stretches: one row per straight stretch, with its tag (DW01-03…), length, height and gross area.
+  const stretches = items.filter(it => it.kind === 'linear').flatMap(it => it.shapes.flatMap(sh =>
+    (sh.tags || []).map((tag, i) => ({ tag, it, len: dist(sh.pts[i], sh.pts[i + 1]) / ptPerM, h: shapeHeight(it, sh) }))))
+  if (L.tag && stretches.length) {
+    lines.push('')
+    lines.push(row([L.tag, L.layer, `${L.length} (m)`, `${L.height || ''} (m)`, `${L.grossArea} (m²)`]))
+    const byTag = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
+    for (const s of stretches.sort((a, b) => byTag(a.tag, b.tag))) {
+      lines.push(row([s.tag, s.it.name, num(s.len), num(s.h), num(s.len * s.h)]))
+    }
   }
 
   const T = framingTotals(items, ptPerM)
