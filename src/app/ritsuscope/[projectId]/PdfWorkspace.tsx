@@ -122,6 +122,28 @@ export default function PdfWorkspace(props: Props) {
   const [snapOn, setSnapOn] = useState(true)
   /** Tag of each wall stretch on the sheet (DW01-03…). */
   const [tagsOn, setTagsOn] = useState(true)
+  /** Tool bar: icons only when the labelled bar doesn't fit the width (names stay in the tooltips). */
+  const barOuter = useRef<HTMLDivElement>(null)
+  const barInner = useRef<HTMLDivElement>(null)
+  const [barFullW, setBarFullW] = useState(0)
+  const [barAvail, setBarAvail] = useState(Infinity)
+  const compactBar = barFullW > barAvail
+  useLayoutEffect(() => {
+    // Measure the bar with labels (only while it shows them), and the room it has.
+    if (!compactBar && barInner.current) setBarFullW(barInner.current.getBoundingClientRect().width)
+  })
+  useEffect(() => {
+    const el = barOuter.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      const cs = getComputedStyle(el)
+      setBarAvail(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [toolbarSlot])
+  // Labels change with the language: measure the labelled bar again.
+  useEffect(() => { setBarFullW(0) }, [t])
   const [orthoOn, setOrthoOn] = useState(false)
   /** Line walls: draw the centreline, or a face and then click the side the wall goes. */
   const [placement, setPlacement] = useState<'face' | 'center'>('face')
@@ -985,7 +1007,8 @@ export default function PdfWorkspace(props: Props) {
     if (mode === 'origin') return originPts.length === 0 ? t('origin.hint.point') : originPts.length === 1 ? t('origin.hint.direction') : t('origin.hint.done')
     if (zoning) return sheetZones.length ? t('zone.hint.select') : t('zone.hint.empty')
     if (boxSel.length) return t('box.selectedHint')
-    return selectedId ? t('move.hint') : `${t('pan.hint')} ${t('box.hint')}`
+    // Nothing selected: no banner over the sheet (the help is in the Select button's tooltip).
+    return selectedId ? t('move.hint') : ''
   }, [boxSel.length, mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length])
 
   const zoneShapes = useMemo(() => [
@@ -998,8 +1021,8 @@ export default function PdfWorkspace(props: Props) {
   ], [sheetZones, scale, formatNumber, selectedZoneId, namedRoomSugs, roomPicked])
 
   const isTool = (m: Mode, s?: Shape) => mode === m && (!s || shape === s)
-  const tools: { key: string; icon: string; label: TakeoffMessageKey; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
-    { key: 'select', icon: 'select', label: 'tool.select', active: isTool('select'), onClick: () => chooseTool('select') },
+  const tools: { key: string; icon: string; label: TakeoffMessageKey; title?: string; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
+    { key: 'select', icon: 'select', label: 'tool.select', title: `${t('tool.select')}: ${t('pan.hint')} ${t('box.hint')}`, active: isTool('select'), onClick: () => chooseTool('select') },
     { key: 'scale', icon: 'scale', label: 'tool.scale', active: isTool('calibrate'), onClick: () => chooseTool('calibrate') },
     { key: 'line', icon: 'line', label: 'tool.line', active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
     { key: 'rect', icon: 'rect', label: 'tool.rect', active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },
@@ -1548,16 +1571,16 @@ export default function PdfWorkspace(props: Props) {
       {/* Tool bar: a 50 px strip at the top of the work area, right below the header. */}
       {(() => {
         const bar = (
-        <div style={toolbarSlot ? toolbarFull : toolbar}>
+        <div ref={barOuter} style={toolbarSlot ? toolbarFull : toolbar}>
           {/* Centred while it fits; when it doesn't, it scrolls from the first button (a centred flex row would cut it off). */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 'none', margin: toolbarSlot ? '0 auto' : 0 }}>
+          <div ref={barInner} style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 'none', margin: toolbarSlot ? '0 auto' : 0 }}>
           {quickActions.length > 0 && (
             <>
               {quickActions.map(q => (
-                <button key={q.key} type="button" onClick={q.onClick} title={q.title} style={quickBtn}>
-                  <Icon name="plus" size={12} />
+                <button key={q.key} type="button" onClick={q.onClick} title={compactBar ? `${q.label} · ${q.title}` : q.title} style={quickBtn}>
+                  {compactBar && <span style={{ fontSize: 13, fontWeight: 800, lineHeight: 1 }}>+</span>}
                   <Icon name={q.icon} size={16} />
-                  <span>{q.label}</span>
+                  {!compactBar && <span>{q.label}</span>}
                 </button>
               ))}
               <span style={divider} />
@@ -1569,11 +1592,11 @@ export default function PdfWorkspace(props: Props) {
               type="button"
               disabled={tool.disabled}
               onClick={event => tool.onClick(event)}
-              title={t(tool.label)}
+              title={tool.title || t(tool.label)}
               style={toolBtn(tool.active, tool.disabled)}
             >
               <Icon name={tool.icon} size={16} />
-              <span>{t(tool.label)}</span>
+              {!compactBar && <span>{t(tool.label)}</span>}
             </button>
           ))}
           <span style={divider} />
@@ -1587,7 +1610,7 @@ export default function PdfWorkspace(props: Props) {
           )}
           <button type="button" style={toolBtn(false, created.length === 0)} disabled={!created.length} title={t('undo.hint')} onClick={() => void undoLast()}>
             <Icon name="undo" size={16} />
-            <span>{t('undo.label')}</span>
+            {!compactBar && <span>{t('undo.label')}</span>}
           </button>
           </div>
         </div>
@@ -1642,8 +1665,8 @@ const toolBtn = (on: boolean, disabled?: boolean) => ({
   background: on ? '#109d91' : 'transparent', color: on ? '#fff' : '#294955', fontSize: 11, fontWeight: 650, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
 }) as const
 /** Quick add buttons: tinted so they read as "add an item", not as drawing tools. */
-const quickBtn = { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, flex: 'none', padding: '0 10px', margin: '0 2px', border: '1px solid #bfe6e1', borderRadius: 8, whiteSpace: 'nowrap', background: '#effaf8', color: '#0d7f77', fontSize: 11, fontWeight: 700, cursor: 'pointer' } as const
+const quickBtn = { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 5, height: 34, flex: 'none', padding: '0 8px', margin: '0 1px', border: '1px solid #bfe6e1', borderRadius: 8, whiteSpace: 'nowrap', background: '#effaf8', color: '#0d7f77', fontSize: 11, fontWeight: 700, cursor: 'pointer' } as const
 const divider = { width: 1, height: 26, flex: 'none', margin: '0 6px', background: '#e2eaed' } as const
 /** Same bar filling the full-width row under the header: everything visible, no scrolling. */
-const toolbarFull = { height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 12px', background: '#fff', overflowX: 'auto', overflowY: 'hidden' } as const
+const toolbarFull = { height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 12px', background: '#fff', overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'thin' } as const
 const toggleLabel = { display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px', flex: 'none', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#294955' } as const
