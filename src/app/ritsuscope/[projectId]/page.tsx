@@ -16,7 +16,7 @@ import { buildQuantitiesCsv } from '@/lib/takeoff/csv'
 import { sanitizeFramingDefaults, type FramingDefaults } from '@/lib/takeoff/framing/framing'
 import { recipeMaterials, rowToRecipe, type Recipe, type RecipeRow } from '@/lib/takeoff/recipes'
 import { projectItemsInMetres, rowsToItems, type ElementRow, type LayerRow, type SourceRow } from '@/lib/takeoff/rows'
-import { computeSegmentTags, withSegmentTags } from '@/lib/takeoff/segmentTags'
+import { computeOpeningTags, computeSegmentTags, withSegmentTags } from '@/lib/takeoff/segmentTags'
 import { ui } from '../ui'
 import FramingPanel from './FramingPanel'
 import ElevationView from './ElevationView'
@@ -146,11 +146,15 @@ export default function TakeoffWorkspacePage() {
   const [openingEditor, setOpeningEditor] = useState<'door' | 'window' | 'void' | null>(null)
   /** Elements as stored; `elements` (below) adds each stretch's tag. */
   const [rawElements, setElements] = useState<ElementRow[]>([])
-  /** Every element with the tag of each of its stretches ("DW01-03"), numbered across the whole project. */
-  const elements = useMemo(
-    () => withSegmentTags(rawElements, computeSegmentTags(rawElements, layers, wallTypes, sources.map(s => s.id))),
-    [rawElements, layers, wallTypes, sources],
-  )
+  /** Every element with the tag of each of its stretches ("DW01-03") and of its openings ("D-01"), numbered across the whole project. */
+  const elements = useMemo(() => {
+    const order = sources.map(s => s.id)
+    return withSegmentTags(
+      rawElements,
+      computeSegmentTags(rawElements, layers, wallTypes, order),
+      computeOpeningTags(rawElements, order, { door: t('openingTag.door'), window: t('openingTag.window'), void: t('openingTag.void') }),
+    )
+  }, [rawElements, layers, wallTypes, sources, t])
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [framingDefaults, setFramingDefaults] = useState<FramingDefaults>({})
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
@@ -1131,7 +1135,7 @@ export default function TakeoffWorkspacePage() {
           materialKind: { profile: pt('csv.profile'), board: pt('csv.board'), screws: pt('csv.screws'), recipe: pt('csv.recipe'), ceiling: pt('print.buildUp'), floor: pt('print.buildUp') },
           tags: pt('print.tags'),
           colTag: pt('csv.tag'),
-          detail: { length: pt('print.detailLength'), perimeter: pt('print.detailPerimeter'), height: pt('print.detailHeight') },
+          detail: { length: pt('print.detailLength'), perimeter: pt('print.detailPerimeter'), height: pt('print.detailHeight'), sill: pt('print.detailSill') },
         },
       })
       const href = URL.createObjectURL(blob)

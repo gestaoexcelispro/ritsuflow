@@ -3,7 +3,7 @@
 // distance (m) from the wall's first point plus a width, so this walks the polyline.
 import type { ElementOpening, Vec2 } from './geometry'
 
-export type OpeningMark = { kind: ElementOpening['kind']; a: Vec2; b: Vec2; u: Vec2; n: Vec2; widthPt: number }
+export type OpeningMark = { kind: ElementOpening['kind']; a: Vec2; b: Vec2; u: Vec2; n: Vec2; widthPt: number; /** Index in the wall's openings (for its tag). */ index: number }
 
 /** Point and direction at `d` sheet points along a polyline (clamped to its ends). */
 export function pointAlong(pts: Vec2[], d: number): { p: Vec2; u: Vec2 } | null {
@@ -24,7 +24,7 @@ export function pointAlong(pts: Vec2[], d: number): { p: Vec2; u: Vec2 } | null 
 export function openingMarks(pts: Vec2[], openings: ElementOpening[] | undefined, ptPerM: number): OpeningMark[] {
   if (!openings?.length || !(ptPerM > 0) || pts.length < 2) return []
   const out: OpeningMark[] = []
-  for (const o of openings) {
+  for (const [index, o] of openings.entries()) {
     const c = pointAlong(pts, o.off * ptPerM)
     if (!c) continue
     const half = (o.w * ptPerM) / 2
@@ -36,6 +36,7 @@ export function openingMarks(pts: Vec2[], openings: ElementOpening[] | undefined
       u,
       n: [-u[1], u[0]],
       widthPt: half * 2,
+      index,
     })
   }
   return out
