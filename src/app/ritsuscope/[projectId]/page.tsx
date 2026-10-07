@@ -7,7 +7,6 @@ import { AppBar } from '../../fieldop/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { takeoffTranslator, useTakeoffT } from '@/lib/i18n/useTakeoffT'
-import { formatNumber as formatNumberWith } from '@/lib/i18n/translate'
 import type { AppLanguage } from '@/lib/i18n/settings'
 import type { TakeoffMessageKey } from '@/lib/i18n/messages/takeoff.pt-BR'
 import { layerQuantities } from '@/lib/takeoff/geometry'
@@ -1040,12 +1039,10 @@ export default function TakeoffWorkspacePage() {
     setPrinting(true)
     setError('')
     try {
-      // The report follows the project's country (a Brazilian job prints in Portuguese, a US job in English),
-      // so the words and numbers match the library types' own names.
-      const pc = projectCountry(project)
-      const printLang: AppLanguage = pc === 'BR' ? 'pt-BR' : pc === 'US' ? 'en-US' : language
+      // The report is in the language (and number format) the user is working in.
+      const printLang: AppLanguage = language
       const pt = takeoffTranslator(printLang)
-      const pfmt = (v: number, d = 2) => formatNumberWith(v, printLang === 'pt-BR' ? 'pt-BR' : 'en-US', d)
+      const pfmt = (v: number, d = 2) => formatNumber(v, d)
       const pSurface = surfaceLabelsFrom(pt)
       const date = new Date().toLocaleString(printLang, { dateStyle: 'short', timeStyle: 'short' })
       const projectTitle = `${project!.name}${project!.project_code ? ` (${project!.project_code})` : ''}`
