@@ -6,7 +6,7 @@ import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import type { TakeoffMessageKey } from '@/lib/i18n/messages/takeoff.pt-BR'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
-import { polyLen, shapeHeight, type ElementOpening, type TakeoffItem, type TakeoffShape } from '@/lib/takeoff/geometry'
+import { dist, polyLen, shapeHeight, type ElementOpening, type TakeoffItem, type TakeoffShape } from '@/lib/takeoff/geometry'
 import { addOpening, OPENING_PRESETS, validateOpening, type OpeningError } from '@/lib/takeoff/openings'
 import type { ElementRow } from '@/lib/takeoff/rows'
 import { ui } from '../ui'
@@ -56,6 +56,10 @@ export default function ElementPanel({ element, item, shape, ptPerM, onSaved, on
   const [editIdx, setEditIdx] = useState<number | null>(null)
   const [ed, setEd] = useState({ kind: 'door' as 'door' | 'window' | 'void', off: '', w: '', h: '', sill: '', all: false })
   const [busy, setBusy] = useState(false)
+  /** Renamed tag of each stretch ('' = automatic). */
+  const [tagEdit, setTagEdit] = useState<string[]>([])
+  const segCount = Math.max(0, (element.points?.length || 0) - 1)
+  const tagged = item.kind === 'linear' && segCount > 0
 
   useEffect(() => {
     setHeight(element.height_override_m == null ? '' : n(Number(element.height_override_m)))
@@ -67,6 +71,10 @@ export default function ElementPanel({ element, item, shape, ptPerM, onSaved, on
     setOp({ off: '', w: n(p.w), h: n(p.h), sill: n(p.sill) })
     setEditIdx(null)
     setError('')
+    setTagEdit(Array.from({ length: Math.max(0, (element.points?.length || 0) - 1) }, (_, i) => {
+      const v = Array.isArray(element.segment_tags) ? element.segment_tags[i] : null
+      return typeof v === 'string' ? v : ''
+    }))
     // Reset only when another element is selected.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [element.id])
@@ -157,6 +165,18 @@ export default function ElementPanel({ element, item, shape, ptPerM, onSaved, on
 
   const openings: ElementOpening[] = element.openings || []
 
+  async function saveTags(event: FormEvent) {
+    event.preventDefault()
+    const list: (string | null)[] = Array.from({ length: segCount }, (_, i) => (tagEdit[i] || '').trim() || null)
+    while (list.length && list[list.length - 1] == null) list.pop()
+    setBusy(true)
+    setError('')
+    const { error: e } = await createClient().from('takeoff_elements').update({ segment_tags: list }).eq('id', element.id)
+    setBusy(false)
+    if (e) { setError(/segment_tags/.test(e.message) ? t('tags.needsMigration') : t('workspace.error', { message: e.message })); return }
+    await onSaved(t('tags.saved'))
+  }
+
   return (
     <div style={{ ...ui.panel, gap: 12 }}>
       <h2 style={ui.panelTitle}>{t('element.title')}</h2>
@@ -171,6 +191,30 @@ export default function ElementPanel({ element, item, shape, ptPerM, onSaved, on
         <button type="submit" style={smallBtn} disabled={busy}>{t('element.save')}</button>
         <span style={ui.small}>{t('element.heightHint')}</span>
       </form>
+
+      {tagged && (
+        <form onSubmit={saveTags} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <strong style={{ fontSize: 12, color: '#173441' }}>{t('tags.title')}</strong>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 230, overflow: 'auto' }}>
+            {Array.from({ length: segCount }, (_, i) => (
+              <label key={i} style={{ display: 'grid', gridTemplateColumns: '64px 1fr', alignItems: 'center', gap: 8, fontSize: 11, color: '#536d78' }}>
+                <span>{n(dist(element.points[i], element.points[i + 1]) / ptPerM)} m</span>
+                <input
+                  style={{ ...input, width: '100%' }}
+                  placeholder={element.tag_auto?.[i] || ''}
+                  value={tagEdit[i] || ''}
+                  maxLength={24}
+                  onChange={e => setTagEdit(prev => { const next = [...prev]; next[i] = e.target.value; return next })}
+                />
+              </label>
+            ))}
+          </div>
+          <div style={rowForm}>
+            <button type="submit" style={smallBtn} disabled={busy}>{t('element.save')}</button>
+            <span style={ui.small}>{t('tags.editHint')}</span>
+          </div>
+        </form>
+      )}
 
       {framed && (
         <form onSubmit={saveFaces} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

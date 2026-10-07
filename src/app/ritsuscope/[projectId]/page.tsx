@@ -15,6 +15,7 @@ import { buildQuantitiesCsv } from '@/lib/takeoff/csv'
 import { sanitizeFramingDefaults, type FramingDefaults } from '@/lib/takeoff/framing/framing'
 import { recipeMaterials, rowToRecipe, type Recipe, type RecipeRow } from '@/lib/takeoff/recipes'
 import { projectItemsInMetres, rowsToItems, type ElementRow, type LayerRow, type SourceRow } from '@/lib/takeoff/rows'
+import { computeSegmentTags, withSegmentTags } from '@/lib/takeoff/segmentTags'
 import { ui } from '../ui'
 import FramingPanel from './FramingPanel'
 import ElevationView from './ElevationView'
@@ -96,6 +97,8 @@ async function countPdfPages(file: File): Promise<number> {
   }
 }
 
+const ELEMENT_COLUMNS = 'id, project_id, layer_id, source_id, points, height_override_m, z_rel_m, ifc_guid, root_guid, layer_guids, openings, faces'
+
 export default function TakeoffWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>()
   const t = useTakeoffT()
@@ -126,7 +129,13 @@ export default function TakeoffWorkspacePage() {
   /** Footer spot (left of the zoom) for the Snap and Ortho switches. */
   const [footerSlot, setFooterSlot] = useState<HTMLSpanElement | null>(null)
   const [openingEditor, setOpeningEditor] = useState<'door' | 'window' | 'void' | null>(null)
-  const [elements, setElements] = useState<ElementRow[]>([])
+  /** Elements as stored; `elements` (below) adds each stretch's tag. */
+  const [rawElements, setElements] = useState<ElementRow[]>([])
+  /** Every element with the tag of each of its stretches ("DW01-03"), numbered across the whole project. */
+  const elements = useMemo(
+    () => withSegmentTags(rawElements, computeSegmentTags(rawElements, layers, wallTypes, sources.map(s => s.id))),
+    [rawElements, layers, wallTypes, sources],
+  )
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [framingDefaults, setFramingDefaults] = useState<FramingDefaults>({})
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
@@ -195,8 +204,12 @@ export default function TakeoffWorkspacePage() {
         .eq('project_id', projectId)
         .order('sort_order').order('created_at'),
       supabase.from('takeoff_elements')
-        .select('id, project_id, layer_id, source_id, points, height_override_m, z_rel_m, ifc_guid, root_guid, layer_guids, openings, faces')
-        .eq('project_id', projectId),
+        .select(`${ELEMENT_COLUMNS}, segment_tags, created_at`)
+        .eq('project_id', projectId)
+        // Before migration 20261006_008 (segment_tags) the column is missing: load without it.
+        .then(res => (res.error && /segment_tags/.test(res.error.message)
+          ? supabase.from('takeoff_elements').select(`${ELEMENT_COLUMNS}, created_at`).eq('project_id', projectId)
+          : res)),
       supabase.from('takeoff_recipes')
         .select('id, name, maker, system, kind, height_basis_m, waste_included_pct, status, lines, mode')
         .order('name'),
@@ -378,6 +391,8 @@ export default function TakeoffWorkspacePage() {
       recipe: t('csv.recipe'),
       packages: t('csv.packages'),
       screws: t('csv.screws'),
+      tag: t('csv.tag'),
+      height: t('csv.height'),
     }, recipeMaterials(sourceItems, ptPerM, recipeOfItem, recipeCtx))
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const link = document.createElement('a')

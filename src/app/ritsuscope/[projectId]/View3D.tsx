@@ -93,6 +93,8 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
   const [explode, setExplode] = useState(false)
   /** Construction layers: which board sides are drawn (none = framing only). */
   const [boards, setBoards] = useState<BoardSides>('both')
+  /** Tag of each wall stretch floating above it (off by default: busy on big models). */
+  const [tagsOn, setTagsOn] = useState(false)
   const [isolate, setIsolate] = useState(false)
   const [hiddenPages, setHiddenPages] = useState<Set<number>>(new Set())
   const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(new Set())
@@ -209,9 +211,9 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
   useEffect(() => {
     const s = sceneRef.current
     if (!s || status !== 'ready' || !ptPerM) return
-    build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards })
+    build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn })
     if (!fittedRef.current) { fit(s, items, ptPerM, elevationOf); fittedRef.current = true }
-  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards])
+  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards, tagsOn])
 
 
   const toggle = (active: boolean) => ({
@@ -242,6 +244,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
             </button>
           ))}
         </span>
+        <button type="button" style={toggle(tagsOn)} title={t('tags.hint')} onClick={() => setTagsOn(v => !v)}>{t('tags.toggle')}</button>
         <button type="button" style={toggle(isolate)} disabled={!selectedId && !isolate} onClick={() => setIsolate(v => !v)}>{t('view3d.isolate')}</button>
         <button type="button" style={toggle(false)} onClick={() => { const s = sceneRef.current; if (s) fit(s, items, ptPerM, elevationOf) }}>{t('tool.fit')}</button>
         <button type="button" style={toggle(showPanel || hiddenCount > 0)} onClick={() => setShowPanel(v => !v)}>
@@ -300,7 +303,7 @@ function clearGroup(g: any) {
     const c = g.children.pop()
     c.geometry?.dispose?.()
     const m = c.material
-    if (m) (Array.isArray(m) ? m : [m]).forEach((x: any) => x.dispose?.())
+    if (m) (Array.isArray(m) ? m : [m]).forEach((x: any) => { x.map?.dispose?.(); x.dispose?.() })
   }
 }
 
@@ -325,6 +328,8 @@ type BuildOptions = {
   selectedId: string | null
   /** Construction layers: board sides drawn (default both). */
   boards?: BoardSides
+  /** Draw the tag of each wall stretch above it. */
+  tags?: boolean
   layered: boolean
   explode: number
   isolate: boolean
@@ -447,6 +452,26 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
     }
   }
 
+  if (o.tags) {
+    for (const it of items) {
+      if (it.kind !== 'linear') continue
+      for (const sh of it.shapes) {
+        if (!show(sh) || !sh.tags?.length) continue
+        const top = (sh.zrel || 0) + o.elevationOf(sh.page) + (shapeHeight(it, sh) || 2.8) + 0.3
+        for (let i = 1; i < sh.pts.length; i++) {
+          const tag = sh.tags[i - 1]
+          if (!tag) continue
+          const a = M(sh.pts[i - 1])
+          const bb = M(sh.pts[i])
+          if (Math.hypot(bb[0] - a[0], bb[1] - a[1]) < 0.3) continue
+          const sprite = tagSprite(THREE, tag, it.color)
+          sprite.position.set((a[0] + bb[0]) / 2, top, (a[1] + bb[1]) / 2)
+          g.add(sprite)
+        }
+      }
+    }
+  }
+
   const span = Math.max((b.x1 - b.x0) / k, (b.y1 - b.y0) / k, 4)
   const grid = new THREE.GridHelper(Math.ceil(span * 1.4), Math.ceil(span * 1.4), 0x7a8590, 0x9aa4ae)
   grid.material.transparent = true
@@ -543,6 +568,40 @@ function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) =>
       rs.forEach((r, i) => put(r.x0 + 0.002, r.x1 - 0.002, r.y0 + 0.002, r.y1 - 0.002, sgn * (core / 2 + tb / 2 + ly * tb + ex), tb, m, i === 0 && rs.length === 1))
     }
   }
+}
+
+/** A tag label that always faces the camera and stays readable through walls; not clickable. */
+function tagSprite(THREE: Three, text: string, color: string) {
+  const px = 48
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')!
+  ctx.font = `700 ${px}px system-ui, sans-serif`
+  const w = Math.ceil(ctx.measureText(text).width) + px
+  canvas.width = w
+  canvas.height = px * 1.6
+  ctx.font = `700 ${px}px system-ui, sans-serif`
+  ctx.fillStyle = 'rgba(255,255,255,0.94)'
+  ctx.strokeStyle = color
+  ctx.lineWidth = 6
+  const r = px * 0.3
+  ctx.beginPath()
+  ctx.moveTo(r, 3); ctx.lineTo(w - r, 3); ctx.quadraticCurveTo(w - 3, 3, w - 3, r)
+  ctx.lineTo(w - 3, canvas.height - r); ctx.quadraticCurveTo(w - 3, canvas.height - 3, w - r, canvas.height - 3)
+  ctx.lineTo(r, canvas.height - 3); ctx.quadraticCurveTo(3, canvas.height - 3, 3, canvas.height - r)
+  ctx.lineTo(3, r); ctx.quadraticCurveTo(3, 3, r, 3)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#173441'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, w / 2, canvas.height / 2 + 2)
+  const tex = new THREE.CanvasTexture(canvas)
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }))
+  const hM = 0.32
+  sprite.scale.set((hM * w) / canvas.height, hM, 1)
+  sprite.renderOrder = 10
+  sprite.raycast = () => {}
+  return sprite
 }
 
 /** Board sides shown in Construction layers: both, one side, or none (framing only). */

@@ -158,6 +158,12 @@ export async function buildProjectPdf(opts: {
         const icon = ICON_PATHS[m.kind === 'door' ? 'door' : m.kind === 'window' ? 'window' : 'opening']
         const sc = 0.3
         pg.drawSvgPath(icon, { x: m.at[0] - 12 * sc, y: m.at[1] + 12 * sc, scale: sc, borderColor: color(m.color), borderWidth: 2.4, borderLineCap: LineCapStyle.Round })
+      } else if (m.type === 'tag') {
+        const text = winAnsi(m.text)
+        const size = 5
+        const w = bold.widthOfTextAtSize(text, size) + 4
+        pg.drawRectangle({ x: m.at[0] - w / 2, y: m.at[1] - 3.6, width: w, height: 7.2, color: rgb(1, 1, 1), opacity: 0.92, borderColor: color(m.color), borderWidth: 0.5 })
+        pg.drawText(text, { x: m.at[0] - w / 2 + 2, y: m.at[1] - 1.8, size, font: bold, color: ink })
       } else if (m.type === 'dot') {
         pg.drawCircle({ x: m.at[0], y: m.at[1], size: m.radius, color: color(m.color), borderColor: rgb(1, 1, 1), borderWidth: 0.8 })
       } else {
