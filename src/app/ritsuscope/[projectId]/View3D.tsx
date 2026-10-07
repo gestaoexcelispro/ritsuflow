@@ -5,6 +5,7 @@
    package install is needed. Coordinates: sheet x -> world x, sheet y -> world z, height -> y. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { layoutLabels, type LabelIn, type LabelOut } from '@/lib/takeoff/labelLayout'
 import { openingMarks } from '@/lib/takeoff/openingMarks'
 import { findJunctions, junctionStudsOnWall, layoutWall, type Junction } from '@/lib/takeoff/framing/framing'
 import { shapeHeight, type TakeoffItem, type TakeoffShape, type Vec2 } from '@/lib/takeoff/geometry'
@@ -96,6 +97,11 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
   const [boards, setBoards] = useState<BoardSides>('both')
   /** Tag of each wall stretch floating above it (off by default: busy on big models). */
   const [tagsOn, setTagsOn] = useState(false)
+  /** Doors and windows drawn as objects in their openings. */
+  const [openingsOn, setOpeningsOn] = useState(true)
+  /** Tag anchors of the current model, drawn as a 2D overlay every frame. */
+  const anchorsRef = useRef<TagAnchor[]>([])
+  const overlayRef = useRef<HTMLCanvasElement | null>(null)
   const [isolate, setIsolate] = useState(false)
   const [hiddenPages, setHiddenPages] = useState<Set<number>>(new Set())
   const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(new Set())
@@ -132,6 +138,12 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
         const renderer = new THREE.WebGLRenderer({ antialias: true })
         renderer.setPixelRatio(window.devicePixelRatio || 1)
         host.appendChild(renderer.domElement)
+        // Tag labels: a flat canvas over the 3D one, redrawn each frame so labels never collide.
+        const overlay = document.createElement('canvas')
+        overlay.style.cssText = 'position:absolute;inset:0;pointer-events:none'
+        if (getComputedStyle(host).position === 'static') host.style.position = 'relative'
+        host.appendChild(overlay)
+        overlayRef.current = overlay
         const scene = new THREE.Scene()
         scene.background = new THREE.Color('#eef2f3')
         const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 2000)
@@ -160,6 +172,11 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
           const w = Math.max(1, host.clientWidth)
           const h = Math.max(1, host.clientHeight)
           renderer.setSize(w, h)
+          const dpr = window.devicePixelRatio || 1
+          overlay.width = Math.round(w * dpr)
+          overlay.height = Math.round(h * dpr)
+          overlay.style.width = `${w}px`
+          overlay.style.height = `${h}px`
           cam.aspect = w / h
           cam.updateProjectionMatrix()
         }
@@ -184,6 +201,12 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
           state.raf = requestAnimationFrame(loop)
           ctl.update()
           renderer.render(scene, cam)
+          const octx = overlay.getContext('2d')
+          if (octx) {
+            const dpr = window.devicePixelRatio || 1
+            octx.setTransform(1, 0, 0, 1, 0, 0)
+            drawTagOverlay(octx, THREE, cam, anchorsRef.current, overlay.width, overlay.height, dpr)
+          }
         }
         loop()
         setStatus('ready')
@@ -200,6 +223,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
         s.ctl.dispose?.()
         s.renderer.dispose()
         s.renderer.domElement.remove()
+        overlayRef.current?.remove()
       }
       sceneRef.current = null
     }
@@ -212,9 +236,9 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
   useEffect(() => {
     const s = sceneRef.current
     if (!s || status !== 'ready' || !ptPerM) return
-    build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn })
+    anchorsRef.current = build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn, openings: openingsOn })
     if (!fittedRef.current) { fit(s, items, ptPerM, elevationOf); fittedRef.current = true }
-  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards, tagsOn])
+  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards, tagsOn, openingsOn])
 
 
   const toggle = (active: boolean) => ({
@@ -246,6 +270,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
           ))}
         </span>
         <button type="button" style={toggle(tagsOn)} title={t('tags.hint')} onClick={() => setTagsOn(v => !v)}>{t('tags.toggle')}</button>
+        <button type="button" style={toggle(openingsOn)} title={t('view3d.openingsHint')} onClick={() => setOpeningsOn(v => !v)}>{t('view3d.openings')}</button>
         <button type="button" style={toggle(isolate)} disabled={!selectedId && !isolate} onClick={() => setIsolate(v => !v)}>{t('view3d.isolate')}</button>
         <button type="button" style={toggle(false)} onClick={() => { const s = sceneRef.current; if (s) fit(s, items, ptPerM, elevationOf) }}>{t('tool.fit')}</button>
         <button type="button" style={toggle(showPanel || hiddenCount > 0)} onClick={() => setShowPanel(v => !v)}>
@@ -331,6 +356,8 @@ type BuildOptions = {
   boards?: BoardSides
   /** Draw the tag of each wall stretch above it. */
   tags?: boolean
+  /** Doors and windows as objects in their openings (default on); the holes stay either way. */
+  openings?: boolean
   layered: boolean
   explode: number
   isolate: boolean
@@ -340,7 +367,7 @@ type BuildOptions = {
   center: TakeoffItem[]
 }
 
-function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
+function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagAnchor[] {
   const { THREE, group: g } = s
   clearGroup(g)
   const b = bounds(o.center.length ? o.center : items)
@@ -454,7 +481,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
   }
 
   // Doors and windows as real objects in their openings (frame, leaf / glass), not only holes in the wall.
-  {
+  if (o.openings !== false) {
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.6 })
     const leafMat = new THREE.MeshStandardMaterial({ color: 0xb7793f, roughness: 0.7 })
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.45 })
@@ -496,54 +523,45 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
     }
   }
 
+  // Tags: only their anchor points here (the exact spot each one names); the labels and leader
+  // lines are drawn flat on top of the picture by drawTagOverlay, laid out so none collide.
+  const anchors: TagAnchor[] = []
   if (o.tags) {
     for (const it of items) {
-      // Areas: above their centre; counted points: above the item's box.
       if (it.kind !== 'linear') {
         for (const sh of it.shapes) {
           const tag = sh.tags?.[0]
           if (!show(sh) || !tag || !sh.pts.length || (it.kind === 'area' && sh.pts.length < 3)) continue
-          let at: Vec2
-          let y: number
           if (it.kind === 'area') {
             const ms = sh.pts.map(M)
-            at = [ms.reduce((t, q) => t + q[0], 0) / ms.length, ms.reduce((t, q) => t + q[1], 0) / ms.length]
-            y = (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02) + 0.3
+            const at: Vec2 = [ms.reduce((t, q) => t + q[0], 0) / ms.length, ms.reduce((t, q) => t + q[1], 0) / ms.length]
+            anchors.push({ id: `${sh.id || it.key}-a`, text: tag, color: it.color, p: [at[0], (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02), at[1]] })
           } else {
-            at = M(sh.pts[0])
-            y = (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1) + 0.3
+            const at = M(sh.pts[0])
+            anchors.push({ id: `${sh.id || it.key}-c`, text: tag, color: it.color, p: [at[0], (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1), at[1]] })
           }
-          const sprite = tagSprite(THREE, tag, it.color)
-          sprite.position.set(at[0], y, at[1])
-          g.add(sprite)
         }
         continue
       }
-      // Doors, windows and openings: their tag just above the opening's head.
-      for (const sh of it.shapes) {
-        if (!show(sh) || !sh.openingTags?.length) continue
-        for (const m of openingMarks(sh.pts, sh.openings, k)) {
-          const tag = sh.openingTags[m.index]
-          const op = sh.openings?.[m.index]
-          if (!tag || !op) continue
-          const at = M([(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2])
-          const sprite = tagSprite(THREE, tag, m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B')
-          sprite.position.set(at[0], (sh.zrel || 0) + o.elevationOf(sh.page) + (op.sill || 0) + (op.h || 2.1) + 0.25, at[1])
-          g.add(sprite)
-        }
-      }
-      for (const sh of it.shapes) {
-        if (!show(sh) || !sh.tags?.length) continue
-        const top = (sh.zrel || 0) + o.elevationOf(sh.page) + (shapeHeight(it, sh) || 2.8) + 0.3
-        for (let i = 1; i < sh.pts.length; i++) {
+      for (const [si, sh] of it.shapes.entries()) {
+        if (!show(sh)) continue
+        const base = (sh.zrel || 0) + o.elevationOf(sh.page)
+        const wallTop = base + (shapeHeight(it, sh) || 2.8)
+        for (let i = 1; i < sh.pts.length && sh.tags?.length; i++) {
           const tag = sh.tags[i - 1]
           if (!tag) continue
           const a = M(sh.pts[i - 1])
           const bb = M(sh.pts[i])
           if (Math.hypot(bb[0] - a[0], bb[1] - a[1]) < 0.3) continue
-          const sprite = tagSprite(THREE, tag, it.color)
-          sprite.position.set((a[0] + bb[0]) / 2, top, (a[1] + bb[1]) / 2)
-          g.add(sprite)
+          anchors.push({ id: `${sh.id || it.key + si}-s${i}`, text: tag, color: it.color, p: [(a[0] + bb[0]) / 2, wallTop, (a[1] + bb[1]) / 2] })
+        }
+        if (!sh.openingTags?.length) continue
+        for (const m of openingMarks(sh.pts, sh.openings, k)) {
+          const tag = sh.openingTags[m.index]
+          const op = sh.openings?.[m.index]
+          if (!tag || !op) continue
+          const at = M([(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2])
+          anchors.push({ id: `${sh.id || it.key + si}-o${m.index}`, text: tag, color: m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B', p: [at[0], base + (op.sill || 0) + (op.h || 2.1), at[1]] })
         }
       }
     }
@@ -554,6 +572,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
   grid.material.transparent = true
   grid.material.opacity = 0.35
   g.add(grid)
+  return anchors
 }
 
 /** Framing + Face A + Face B as separate solids, optionally pulled apart (exploded). */
@@ -647,40 +666,6 @@ function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) =>
   }
 }
 
-/** A tag label that always faces the camera and stays readable through walls; not clickable. */
-function tagSprite(THREE: Three, text: string, color: string) {
-  const px = 48
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')!
-  ctx.font = `700 ${px}px system-ui, sans-serif`
-  const w = Math.ceil(ctx.measureText(text).width) + px
-  canvas.width = w
-  canvas.height = px * 1.6
-  ctx.font = `700 ${px}px system-ui, sans-serif`
-  ctx.fillStyle = 'rgba(255,255,255,0.94)'
-  ctx.strokeStyle = color
-  ctx.lineWidth = 6
-  const r = px * 0.3
-  ctx.beginPath()
-  ctx.moveTo(r, 3); ctx.lineTo(w - r, 3); ctx.quadraticCurveTo(w - 3, 3, w - 3, r)
-  ctx.lineTo(w - 3, canvas.height - r); ctx.quadraticCurveTo(w - 3, canvas.height - 3, w - r, canvas.height - 3)
-  ctx.lineTo(r, canvas.height - 3); ctx.quadraticCurveTo(3, canvas.height - 3, 3, canvas.height - r)
-  ctx.lineTo(3, r); ctx.quadraticCurveTo(3, 3, r, 3)
-  ctx.fill()
-  ctx.stroke()
-  ctx.fillStyle = '#173441'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, w / 2, canvas.height / 2 + 2)
-  const tex = new THREE.CanvasTexture(canvas)
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }))
-  const hM = 0.32
-  sprite.scale.set((hM * w) / canvas.height, hM, 1)
-  sprite.renderOrder = 10
-  sprite.raycast = () => {}
-  return sprite
-}
-
 /** Board sides shown in Construction layers: both, one side, or none (framing only). */
 const BOARD_SIDES = ['both', 'A', 'B', 'none'] as const
 type BoardSides = (typeof BOARD_SIDES)[number]
@@ -691,6 +676,53 @@ const checkRow = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, 
  * Renders the model once, off screen, from the default 3D view angle, for printing.
  * Returns PNG bytes, or null when WebGL or three.js is not available.
  */
+/** A tag's exact spot in the model (world coordinates) with its text and colour. */
+export type TagAnchor = { id: string; text: string; color: string; p: [number, number, number] }
+
+/**
+ * Draws the tags on a 2D canvas over the 3D picture: each label placed so labels, anchors and
+ * leader lines never collide (layoutLabels), with a leader line down to a dot on its spot.
+ */
+function drawTagOverlay(ctx: CanvasRenderingContext2D, THREE: Three, cam: any, anchors: TagAnchor[], width: number, height: number, scale: number) {
+  ctx.clearRect(0, 0, width, height)
+  if (!anchors.length) return
+  const fontPx = 11 * scale
+  ctx.font = `700 ${fontPx}px system-ui, -apple-system, Segoe UI, sans-serif`
+  const v = new THREE.Vector3()
+  const ins: (LabelIn & { a: TagAnchor })[] = []
+  for (const a of anchors) {
+    v.set(a.p[0], a.p[1], a.p[2]).project(cam)
+    if (v.z > 1 || v.z < -1 || Math.abs(v.x) > 1.02 || Math.abs(v.y) > 1.02) continue
+    ins.push({ id: a.id, a, x: (v.x + 1) / 2 * width, y: (1 - v.y) / 2 * height, w: ctx.measureText(a.text).width + 12 * scale, h: 17 * scale })
+  }
+  const placed = layoutLabels(ins, width, height, scale)
+  // Leaders and dots first, labels on top.
+  for (const l of placed) {
+    const a = (l as LabelOut & { a: TagAnchor }).a
+    ctx.strokeStyle = a.color
+    ctx.lineWidth = 1.4 * scale
+    ctx.beginPath(); ctx.moveTo(l.x, l.y); ctx.lineTo(l.lx, l.ly); ctx.stroke()
+    ctx.fillStyle = a.color
+    ctx.beginPath(); ctx.arc(l.x, l.y, 3.2 * scale, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1 * scale; ctx.stroke()
+  }
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const l of placed) {
+    const a = (l as LabelOut & { a: TagAnchor }).a
+    const x0 = l.bx - l.w / 2, y0 = l.by - l.h / 2, r = 3 * scale
+    ctx.beginPath()
+    ctx.moveTo(x0 + r, y0); ctx.lineTo(x0 + l.w - r, y0); ctx.quadraticCurveTo(x0 + l.w, y0, x0 + l.w, y0 + r)
+    ctx.lineTo(x0 + l.w, y0 + l.h - r); ctx.quadraticCurveTo(x0 + l.w, y0 + l.h, x0 + l.w - r, y0 + l.h)
+    ctx.lineTo(x0 + r, y0 + l.h); ctx.quadraticCurveTo(x0, y0 + l.h, x0, y0 + l.h - r)
+    ctx.lineTo(x0, y0 + r); ctx.quadraticCurveTo(x0, y0, x0 + r, y0)
+    ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.fill()
+    ctx.strokeStyle = a.color; ctx.lineWidth = 1.6 * scale; ctx.stroke()
+    ctx.fillStyle = '#173441'
+    ctx.fillText(a.text, l.bx, l.by + 0.5 * scale)
+  }
+}
+
 export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean }): Promise<Uint8Array | null> {
   const { items, ptPerM, storeys, width, height, layered = true, tags = false } = opts
   if (!ptPerM || !items.some(it => it.shapes.length)) return null
@@ -715,20 +747,29 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
     const s: Scene = { THREE, renderer, scene, cam, ctl, group, raf: 0 }
     const elev = new Map((storeys || []).map(st => [st.page, st.elevation]))
     const elevationOf = (page: number) => elev.get(page) || 0
-    build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags })
-    if (tags) {
-      // On paper every tag is the same size wherever it sits (no shrinking with distance):
-      // about 2,2 % of the picture height. Non-attenuated sprites are sized at 1 unit from the camera.
-      const h = 2 * Math.tan((cam.fov * Math.PI) / 360) * 0.022
-      for (const c of group.children) if (c.type === 'Sprite') {
-        const aspect = c.scale.x / c.scale.y
-        c.material.sizeAttenuation = false
-        c.scale.set(h * aspect, h, 1)
-      }
+    const anchors = build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags })
+    const tgt = fitWhole(THREE, cam, group, width / height)
+    if (tags && anchors.length && tgt) {
+      // A little more room around the model for the labels above it.
+      cam.position.sub(tgt).multiplyScalar(1.15).add(tgt)
+      cam.updateMatrixWorld()
     }
-    fitWhole(THREE, cam, group, width / height)
     renderer.render(scene, cam)
-    const url: string = renderer.domElement.toDataURL('image/png')
+    let url: string
+    if (tags && anchors.length) {
+      // Labels drawn flat over the picture (same size everywhere, never colliding): ~9 pt on the A4 page.
+      const out = document.createElement('canvas')
+      out.width = width
+      out.height = height
+      const ctx = out.getContext('2d')!
+      const over = document.createElement('canvas')
+      over.width = width
+      over.height = height
+      drawTagOverlay(over.getContext('2d')!, THREE, cam, anchors, width, height, width / 900)
+      ctx.drawImage(renderer.domElement, 0, 0)
+      ctx.drawImage(over, 0, 0)
+      url = out.toDataURL('image/png')
+    } else url = renderer.domElement.toDataURL('image/png')
     clearGroup(group)
     const bin = atob(url.slice(url.indexOf(',') + 1))
     const bytes = new Uint8Array(bin.length)

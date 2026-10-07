@@ -433,6 +433,8 @@ const takeoffEnUS: TakeoffMessages = {
   'openingTag.window': 'W',
   'openingTag.void': 'O',
   'print.detailSill': 'Sill',
+  'view3d.openings': 'Doors & windows',
+  'view3d.openingsHint': 'Show or hide the doors and windows in their openings (the openings stay).',
   'quick.wall': '+ Wall',
   'quick.ceiling': '+ Ceiling',
   'quick.floor': '+ Floor',

@@ -111,6 +111,8 @@ export async function buildProjectPdf(opts: {
   sheets: PrintSheet[]
   /** PNG of the 3D view; the 3D page is skipped when null. */
   image3d: Uint8Array | null
+  /** Colour key of the 3D page (item name and colour). */
+  legend3d?: { name: string; color: [number, number, number] }[]
   title: string
   subtitle: string
   fmt: (v: number) => string
@@ -118,7 +120,7 @@ export async function buildProjectPdf(opts: {
   /** Company logo (PNG) placed on every page; skipped if it can't be loaded. */
   logoUrl?: string
 }): Promise<Blob> {
-  const { sheets, image3d, title, subtitle, fmt, labels, logoUrl } = opts
+  const { sheets, image3d, legend3d = [], title, subtitle, fmt, labels, logoUrl } = opts
   const urls = [...new Set(sheets.map(s => s.url))]
   const [PDFLib, logoBytes, ...files] = await Promise.all([
     loadPdfLib(),
@@ -227,11 +229,30 @@ export async function buildProjectPdf(opts: {
       header(p)
       p.drawText(winAnsi(title), { x: M, y: H - M, size: 14, font: bold, color: ink })
       p.drawText(winAnsi(labels.view3d).toUpperCase(), { x: M, y: H - M - 20, size: 9, font: bold, color: teal })
-      const boxW = W - 2 * M, boxH = H - 2 * M - 46
+      // Colour key under the picture: one swatch per item, wrapped in rows.
+      const keyRows: { x: number; row: number; name: string; color: [number, number, number] }[] = []
+      {
+        let x = M, row = 0
+        for (const l of legend3d) {
+          const name = winAnsi(l.name).slice(0, 60)
+          const wItem = 12 + font.widthOfTextAtSize(name, 7.5) + 16
+          if (x + wItem > W - M && x > M) { x = M; row++ }
+          keyRows.push({ x, row, name, color: l.color })
+          x += wItem
+        }
+      }
+      const keyH = keyRows.length ? (Math.max(...keyRows.map(r => r.row)) + 1) * 13 + 8 : 0
+      const boxW = W - 2 * M, boxH = H - 2 * M - 46 - keyH
+      const by = M + keyH
       const k = Math.min(boxW / img.width, boxH / img.height)
       const w = img.width * k, h = img.height * k
-      p.drawImage(img, { x: M + (boxW - w) / 2, y: M + (boxH - h) / 2, width: w, height: h })
-      p.drawRectangle({ x: M, y: M, width: boxW, height: boxH, borderColor: rgb(0.85, 0.89, 0.9), borderWidth: 0.6 })
+      p.drawImage(img, { x: M + (boxW - w) / 2, y: by + (boxH - h) / 2, width: w, height: h })
+      p.drawRectangle({ x: M, y: by, width: boxW, height: boxH, borderColor: rgb(0.85, 0.89, 0.9), borderWidth: 0.6 })
+      for (const r of keyRows) {
+        const yy = by - 14 - r.row * 13
+        p.drawRectangle({ x: r.x, y: yy - 1, width: 8, height: 8, color: color(r.color) })
+        p.drawText(r.name, { x: r.x + 12, y: yy, size: 7.5, font, color: ink })
+      }
     }
   }
 
