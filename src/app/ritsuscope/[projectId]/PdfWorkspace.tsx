@@ -225,7 +225,8 @@ export default function PdfWorkspace(props: Props) {
     setOpenSugs(null)
     // Reuse the item already tagged for this tool, else one named for it ("Laje" made with "New item").
     const ifcOf = (l: (typeof layers)[number]) => (l.framing as { meta?: { ifcType?: string } })?.meta?.ifcType ?? null
-    let layer = layers.find(l => l.kind === 'area' && ifcOf(l) === def.ifcType)
+    // Items made from a ceiling type (CL01…) keep their own build-up: the generic tool uses its own item.
+    let layer = layers.find(l => l.kind === 'area' && ifcOf(l) === def.ifcType && !l.wall_type_id)
       || layers.find(l => !ifcOf(l) && areaRole({ kind: l.kind, name: l.name }) === key)
     let id = layer?.id || null
     if (!id) {

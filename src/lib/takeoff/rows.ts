@@ -2,6 +2,8 @@
 // so the mapping is covered by tests.
 
 import { IFC_SHEET_PT_PER_M, type IfcImport } from './ifc/importIfcModel'
+import { ceilingSpecOf } from './ceilingTypes'
+import { floorSpecOf } from './floorTypes'
 import type { ElementOpening, FramingConfig, LayerKind, TakeoffItem, TakeoffShape, Vec2 } from './geometry'
 
 /** Placeholder GlobalId for elements the IFC has outside any storey. */
@@ -181,6 +183,8 @@ export function rowsToItems(layers: LayerRow[], elements: ElementRow[], pageOfSo
       width: typeof meta?.width === 'number' ? meta.width : undefined,
       deductOpenings: l.deduct_openings,
       ifcType: typeof meta?.ifcType === 'string' ? meta.ifcType : undefined,
+      ceiling: l.kind === 'area' ? ceilingSpecOf(meta) ?? undefined : undefined,
+      floor: l.kind === 'area' ? floorSpecOf(meta) ?? undefined : undefined,
       mep: typeof meta?.mep === 'string' ? meta.mep : undefined,
       struct: typeof meta?.struct === 'string' ? meta.struct : undefined,
       depth: typeof meta?.depth === 'number' ? meta.depth : undefined,
