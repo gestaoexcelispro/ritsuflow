@@ -52,7 +52,7 @@ export default function WallTypePicker({ projectId, projectCountry, layerCount, 
 
   useEffect(() => {
     let alive = true
-    createClient().from('takeoff_wall_types').select(WALL_TYPE_COLUMNS).neq('category', 'ceiling').order('name').then(({ data, error: e }) => {
+    createClient().from('takeoff_wall_types').select(WALL_TYPE_COLUMNS).not('category', 'in', '(ceiling,floor)').order('name').then(({ data, error: e }) => {
       if (!alive) return
       if (e) setError(t('workspace.error', { message: e.message }))
       setRows(((data || []) as WallTypeRow[]).map(x => ({ ...x, boards: Array.isArray(x.boards) ? x.boards : [], framing: x.framing || {} })))

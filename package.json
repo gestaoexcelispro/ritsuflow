@@ -10,7 +10,8 @@
     "test:platform-map": "node scripts/check-platform-map.mjs && node scripts/check-platform-map-layout.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:commercial": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/commercial-pricing.test.mjs",
-    "test:ceilings": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/ceiling-types.test.mjs"
+    "test:ceilings": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/ceiling-types.test.mjs",
+    "test:floors": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/floor-types.test.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.1",

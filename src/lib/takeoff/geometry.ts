@@ -87,6 +87,8 @@ export type TakeoffItem = {
   ifcType?: string
   /** Ceiling-type areas: the build-up (system, profiles, boards/tiles) used for material estimates. */
   ceiling?: import('./ceilingTypes').CeilingSpec
+  /** Floor-type areas: the finish build-up (tiles, vinyl, resin…) used for material estimates. */
+  floor?: import('./floorTypes').FloorSpec
   /** Building-services type (see mep.ts): reinforcement, outlet, plumbing point… */
   mep?: string
   /** Concrete structure / foundation type (see struct.ts). */

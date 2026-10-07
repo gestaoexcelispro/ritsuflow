@@ -1,6 +1,7 @@
--- RitsuScope: ceiling types (CL01, CL02…) live in the wall-type library with category 'ceiling'.
--- Their build-up is stored in framing.ceiling; layers drawn from them are areas (IfcCovering.CEILING)
--- linked by takeoff_layers.wall_type_id. Only the category check changes. Safe to run more than once.
+-- RitsuScope: ceiling types (CL01…) and floor types (FL01…) live in the wall-type library with
+-- categories 'ceiling' and 'floor'. Their build-up is stored in framing.ceiling / framing.floor; layers
+-- drawn from them are areas (IfcCovering.CEILING / IfcCovering.FLOORING) linked by takeoff_layers.wall_type_id.
+-- Only the category check changes. Safe to run more than once.
 do $$
 declare
   c record;
@@ -19,4 +20,4 @@ end $$;
 
 alter table public.takeoff_wall_types
   add constraint takeoff_wall_types_category_check
-  check (category in ('non_rated', 'rated', 'shaft', 'furring', 'chase', 'exterior', 'other', 'ceiling'));
+  check (category in ('non_rated', 'rated', 'shaft', 'furring', 'chase', 'exterior', 'other', 'ceiling', 'floor'));

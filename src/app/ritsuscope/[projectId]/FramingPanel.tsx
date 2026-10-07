@@ -5,8 +5,8 @@ import { framingTotals, packBars, packSheets } from '@/lib/takeoff/framing/frami
 import type { TakeoffItem } from '@/lib/takeoff/geometry'
 import { recipeMaterials, type Recipe } from '@/lib/takeoff/recipes'
 import { useRecipeContext } from './useRecipeContext'
-import { ceilingMaterials } from '@/lib/takeoff/ceilingTypes'
-import { useCeilingLabels } from './CeilingTypesLibrary'
+import { surfaceMaterials } from './surfaceFamilies'
+import { useSurfaceLabels } from './SurfaceTypesLibrary'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { ui } from '../ui'
@@ -40,9 +40,9 @@ export default function FramingPanel({ items, ptPerM, recipes }: Props) {
     for (const it of items) { const r = recipeOf(it); if (r && it.shapes.length) used.set(r.id, r) }
     return [...used.values()]
   }, [items, recipes]) // eslint-disable-line react-hooks/exhaustive-deps
-  const ceilingLabels = useCeilingLabels()
-  /** Ceilings drawn from a ceiling type: profiles, hangers, perimeter, boards or tiles (net estimates). */
-  const ceilings = useMemo(() => ceilingMaterials(items, ptPerM, ceilingLabels), [items, ptPerM, ceilingLabels])
+  const surfaceLabels = useSurfaceLabels()
+  /** Ceilings and floors drawn from a type: their build-up materials (estimates), one list per family. */
+  const surfaces = useMemo(() => surfaceMaterials(items, ptPerM, surfaceLabels), [items, ptPerM, surfaceLabels])
   const anyFramed = items.some(it => it.kind === 'linear' && it.framing?.on && it.recipeId)
 
   return (
@@ -109,18 +109,18 @@ export default function FramingPanel({ items, ptPerM, recipes }: Props) {
         </div>
       ))}
 
-      {ceilings.length > 0 && (
-        <>
-          <h3 style={{ ...ui.panelTitle, fontSize: 12, marginTop: 6 }}>{t('ceiling.materials')}</h3>
-          <div style={ui.small}>{t('ceiling.materialsNote')}</div>
-          {ceilings.map(m => (
-            <div key={`c|${m.mat}|${m.unit}`} style={{ ...ui.listItem, flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+      {surfaces.map(({ family, materials: list }) => (
+        <div key={family.id} style={{ display: 'contents' }}>
+          <h3 style={{ ...ui.panelTitle, fontSize: 12, marginTop: 6 }}>{t(family.msg.materials)}</h3>
+          <div style={ui.small}>{t(family.msg.materialsNote)}</div>
+          {list.map(m => (
+            <div key={`${family.id}|${m.mat}|${m.unit}`} style={{ ...ui.listItem, flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
               <span>{m.mat}</span>
-              <strong>{formatNumber(m.qty, m.unit === 'm' || m.unit === 'm²' ? 2 : 0)} {m.unit}</strong>
+              <strong>{formatNumber(m.qty, Number.isInteger(m.qty) ? 0 : 2)} {m.unit}</strong>
             </div>
           ))}
-        </>
-      )}
+        </div>
+      ))}
     </div>
   )
 }

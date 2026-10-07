@@ -100,8 +100,8 @@ export default function WallTypesLibrary({ projectId, projectCountry, onChanged 
   const load = useCallback(async () => {
     const supabase = createClient()
     const [w, s, r] = await Promise.all([
-      // Ceiling types share the table; they have their own library.
-      supabase.from('takeoff_wall_types').select(WALL_TYPE_COLUMNS).neq('category', 'ceiling').order('name'),
+      // Ceiling and floor types share the table; they have their own libraries.
+      supabase.from('takeoff_wall_types').select(WALL_TYPE_COLUMNS).not('category', 'in', '(ceiling,floor)').order('name'),
       supabase.from('takeoff_reference_sources').select('id, name, publisher, edition, country_code, url, license_note').order('name'),
       supabase.from('takeoff_recipes').select('id, name, maker, system, kind, height_basis_m, waste_included_pct, status, lines, mode').order('name'),
     ])

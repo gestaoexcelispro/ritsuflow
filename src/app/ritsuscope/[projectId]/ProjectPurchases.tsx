@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ceilingMaterials } from '@/lib/takeoff/ceilingTypes'
-import { useCeilingLabels } from './CeilingTypesLibrary'
+import { surfaceMaterials } from './surfaceFamilies'
+import { useSurfaceLabels } from './SurfaceTypesLibrary'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
@@ -90,7 +90,7 @@ export default function ProjectPurchases({ projectId }: { projectId: string }) {
     [sources, items, pageOfSource],
   )
 
-  const ceilingLabels = useCeilingLabels()
+  const surfaceLabels = useSurfaceLabels()
   function exportCsv() {
     const csv = buildQuantitiesCsv(withShapes, 1, numberFormat, {
       layer: t('csv.layer'),
@@ -117,7 +117,7 @@ export default function ProjectPurchases({ projectId }: { projectId: string }) {
       recipe: t('csv.recipe'),
       packages: t('csv.packages'),
       screws: t('csv.screws'),
-    }, [...recipeMaterials(withShapes, 1, recipeOfItem, recipeCtx), ...ceilingMaterials(withShapes, 1, ceilingLabels)])
+    }, [...recipeMaterials(withShapes, 1, recipeOfItem, recipeCtx), ...surfaceMaterials(withShapes, 1, surfaceLabels).flatMap(x => x.materials)])
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)

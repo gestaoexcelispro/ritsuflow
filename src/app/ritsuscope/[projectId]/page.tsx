@@ -55,9 +55,9 @@ import LevelsPanel from './LevelsPanel'
 import LevelProperties from './LevelProperties'
 import LevelsBulkEdit from './LevelsBulkEdit'
 import TagsEditor from './TagsEditor'
-import CeilingTypePicker from './CeilingTypePicker'
-import CeilingTypesLibrary, { useCeilingLabels } from './CeilingTypesLibrary'
-import { ceilingMaterials } from '@/lib/takeoff/ceilingTypes'
+import SurfaceTypePicker from './SurfaceTypePicker'
+import SurfaceTypesLibrary, { useSurfaceLabels } from './SurfaceTypesLibrary'
+import { CEILING_FAMILY, FAMILIES, FLOOR_FAMILY, surfaceMaterials, type FamilyId } from './surfaceFamilies'
 import GenerateLevelsDialog from './GenerateLevelsDialog'
 import CopyToLevelsDialog from './CopyToLevelsDialog'
 import DeleteFromLevelsDialog from './DeleteFromLevelsDialog'
@@ -164,10 +164,10 @@ export default function TakeoffWorkspacePage() {
     loadLegacyLocationMaps(createClient(), projectId).then(rows => { if (alive) setLegacyMaps(rows) }).catch(() => { if (alive) setLegacyMaps([]) })
     return () => { alive = false }
   }, [projectId])
-  const [settingsTab, setSettingsTab] = useState<'project' | 'walltypes' | 'ceilingtypes' | 'recipes' | 'materials'>('project')
+  const [settingsTab, setSettingsTab] = useState<'project' | 'walltypes' | 'ceilingtypes' | 'floortypes' | 'recipes' | 'materials'>('project')
   const [pickerOpen, setPickerOpen] = useState(false)
-  /** "+ Ceiling type": pick a ceiling build-up (CL01…) and draw it. */
-  const [ceilingPickerOpen, setCeilingPickerOpen] = useState(false)
+  /** "+ Ceiling type" / "+ Floor type": pick a build-up (CL01…, FL01…) and draw it. */
+  const [surfacePicker, setSurfacePicker] = useState<FamilyId | null>(null)
   const [zones, setZones] = useState<ZoneRow[]>([])
   const [zonesError, setZonesError] = useState<string | null>(null)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
@@ -370,7 +370,7 @@ export default function TakeoffWorkspacePage() {
     await load()
   }
 
-  const ceilingLabels = useCeilingLabels()
+  const surfaceLabels = useSurfaceLabels()
   function exportCsv() {
     if (!selectedSource || !ptPerM) return
     const csv = buildQuantitiesCsv(sourceItems, ptPerM, numberFormat, {
@@ -400,7 +400,7 @@ export default function TakeoffWorkspacePage() {
       screws: t('csv.screws'),
       tag: t('csv.tag'),
       height: t('csv.height'),
-    }, [...recipeMaterials(sourceItems, ptPerM, recipeOfItem, recipeCtx), ...ceilingMaterials(sourceItems, ptPerM, ceilingLabels)])
+    }, [...recipeMaterials(sourceItems, ptPerM, recipeOfItem, recipeCtx), ...surfaceMaterials(sourceItems, ptPerM, surfaceLabels).flatMap(x => x.materials)])
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
@@ -814,18 +814,21 @@ export default function TakeoffWorkspacePage() {
     <div style={{ ...ui.panel, gap: 12 }}>
       <h2 style={ui.panelTitle}>{selection.item.name}</h2>
       <TagsEditor key={`tag-${selectedElementRow.id}`} element={selectedElementRow} kind={selection.item.kind} ptPerM={ptPerM} onSaved={async message => { await load(); setStatus(message) }} />
-      {selection.item.ceiling && ptPerM > 0 && (
-        // This ceiling's own materials, from its ceiling type's build-up.
+      {(selection.item.ceiling || selection.item.floor) && ptPerM > 0 && (() => {
+        // This ceiling's or floor's own materials, from its type's build-up.
+        const fam = selection.item.ceiling ? CEILING_FAMILY : FLOOR_FAMILY
+        return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <strong style={{ fontSize: 12, color: '#173441' }}>{t('ceiling.thisMaterials')}</strong>
-          {ceilingMaterials([{ ...selection.item, shapes: [selection.shape] }], ptPerM, ceilingLabels).map(m => (
+          <strong style={{ fontSize: 12, color: '#173441' }}>{t(fam.msg.thisMaterials)}</strong>
+          {fam.materials([{ ...selection.item, shapes: [selection.shape] }], ptPerM, surfaceLabels).map(m => (
             <div key={`${m.mat}|${m.unit}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: '#294955', padding: '3px 0', borderBottom: '1px solid #f0f4f5' }}>
-              <span>{m.mat}</span><strong>{formatNumber(m.qty, m.unit === 'm' || m.unit === 'm²' ? 2 : 0)} {m.unit}</strong>
+              <span>{m.mat}</span><strong>{formatNumber(m.qty, Number.isInteger(m.qty) ? 0 : 2)} {m.unit}</strong>
             </div>
           ))}
-          <span style={ui.small}>{t('ceiling.materialsNote')}</span>
+          <span style={ui.small}>{t(fam.msg.materialsNote)}</span>
         </div>
-      )}
+        )
+      })()}
     </div>
   ) : (
     <div style={{ ...ui.small, padding: 8 }}>{t('layout.propsEmpty')}</div>
@@ -1329,7 +1332,8 @@ export default function TakeoffWorkspacePage() {
       {isPdf && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 14px' }}>
           <button type="button" style={chipBtn(true)} onClick={() => setPickerOpen(true)}><Icon name="plus" size={13} />{t('walltype.pickButton')}</button>
-          <button type="button" style={chipBtn(true)} onClick={() => setCeilingPickerOpen(true)}><Icon name="plus" size={13} />{t('ceiling.pickButton')}</button>
+          <button type="button" style={chipBtn(true)} onClick={() => setSurfacePicker('ceiling')}><Icon name="plus" size={13} />{t(CEILING_FAMILY.msg.pickButton)}</button>
+          <button type="button" style={chipBtn(true)} onClick={() => setSurfacePicker('floor')}><Icon name="plus" size={13} />{t(FLOOR_FAMILY.msg.pickButton)}</button>
           <button type="button" style={chipBtn(false)} onClick={() => setNewLayerRequest(n => n + 1)}><Icon name="plus" size={13} />{t('layout.newItem')}</button>
         </div>
       )}
@@ -1458,13 +1462,14 @@ export default function TakeoffWorkspacePage() {
   ) : section === 'settings' ? (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', gap: 6 }}>
-        {(licensed ? (['project', 'walltypes', 'ceilingtypes', 'recipes', 'materials'] as const) : (['project'] as const)).map(tab => (
+        {(licensed ? (['project', 'walltypes', 'ceilingtypes', 'floortypes', 'recipes', 'materials'] as const) : (['project'] as const)).map(tab => (
           <button key={tab} type="button" style={chipBtn(settingsTab === tab)} onClick={() => setSettingsTab(tab)}>{t(settingsKey[tab])}</button>
         ))}
       </div>
       {settingsTab === 'project' && <SettingsPanel projectId={projectId} onChanged={load} framingLocked={!licensed} />}
       {settingsTab === 'walltypes' && <WallTypesLibrary projectId={projectId} projectCountry={country} onChanged={load} />}
-        {settingsTab === 'ceilingtypes' && <CeilingTypesLibrary projectId={projectId} projectCountry={country} onChanged={load} />}
+        {settingsTab === 'ceilingtypes' && <SurfaceTypesLibrary key="ceiling" family={CEILING_FAMILY} projectId={projectId} projectCountry={country} onChanged={load} />}
+        {settingsTab === 'floortypes' && <SurfaceTypesLibrary key="floor" family={FLOOR_FAMILY} projectId={projectId} projectCountry={country} onChanged={load} />}
       {settingsTab === 'recipes' && <RecipesEditor onChanged={load} />}
       {settingsTab === 'materials' && <MaterialsCatalog projectCountry={country} onChanged={load} />}
     </div>
@@ -1707,24 +1712,24 @@ export default function TakeoffWorkspacePage() {
           }}
         />
       )}
-      {ceilingPickerOpen && (
-        <CeilingTypePicker
+      {surfacePicker && (
+        <SurfaceTypePicker
+          key={surfacePicker}
+          family={FAMILIES[surfacePicker]}
           projectId={projectId}
           projectCountry={country}
           layerCount={layers.length}
-          defaultHeight={(() => {
-            // Just below the walls drawn so far (2,60 m when there are none), like the Ceiling tool.
-            const wallTop = Math.max(0, ...sourceItems.filter(it => it.kind === 'linear').map(it => it.height || 0))
-            return Math.min(2.6, wallTop ? wallTop - 0.2 : 2.6)
-          })()}
-          onClose={() => setCeilingPickerOpen(false)}
-          onOpenLibrary={() => { setCeilingPickerOpen(false); setSection('settings'); setSettingsTab('ceilingtypes') }}
+          // Ceilings just below the walls drawn so far (2,60 m when there are none), like the Ceiling tool; floors at 0.
+          defaultHeight={FAMILIES[surfacePicker].defaultHeight(Math.max(0, ...sourceItems.filter(it => it.kind === 'linear').map(it => it.height || 0)))}
+          onClose={() => setSurfacePicker(null)}
+          onOpenLibrary={() => { setSettingsTab(surfacePicker === 'ceiling' ? 'ceilingtypes' : 'floortypes'); setSurfacePicker(null); setSection('settings') }}
           onCreated={async layerId => {
-            setCeilingPickerOpen(false)
+            const fam = FAMILIES[surfacePicker]
+            setSurfacePicker(null)
             await load()
             setActiveLayerId(layerId)
             setDrawRequest(n => n + 1)
-            setStatus(t('ceiling.itemCreated'))
+            setStatus(t(fam.msg.itemCreated))
           }}
         />
       )}
@@ -1767,6 +1772,7 @@ const settingsKey = {
   project: 'layout.section.settings',
   walltypes: 'layout.section.walltypes',
   ceilingtypes: 'layout.section.ceilingtypes',
+  floortypes: 'layout.section.floortypes',
   recipes: 'layout.section.recipes',
   materials: 'layout.section.materials',
 } as const satisfies Record<string, TakeoffMessageKey>

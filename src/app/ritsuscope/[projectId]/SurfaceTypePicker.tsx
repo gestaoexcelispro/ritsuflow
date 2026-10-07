@@ -6,17 +6,18 @@ import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { LAYER_PALETTE } from '@/lib/takeoff/ifc/importIfcModel'
-import { CEILING_CATEGORY, ceilingSpecOf, layerFromCeilingType } from '@/lib/takeoff/ceilingTypes'
 import { COUNTRIES, WALL_TYPE_COLUMNS } from '@/lib/takeoff/wallTypes'
 import { ui } from '../ui'
-import { ceilingDbError, systemKey, type CeilingTypeRow } from './CeilingTypesLibrary'
+import { familyDbError, type SurfaceFamily } from './surfaceFamilies'
+import type { SurfaceTypeRow } from './SurfaceTypesLibrary'
 import { statusColor, statusKey } from './WallTypesLibrary'
 
 type Props = {
+  family: SurfaceFamily
   projectId: string
   projectCountry: string | null
   layerCount: number
-  /** Default ceiling height (m): just below the walls drawn so far. */
+  /** Default level (m): ceilings just below the walls drawn so far, floors at 0. */
   defaultHeight: number
   onClose: () => void
   /** Called with the new takeoff item (layer) id. */
@@ -24,11 +25,11 @@ type Props = {
   onOpenLibrary: () => void
 }
 
-/** Pick a ceiling type from the library; creates a ceiling item from it, ready to draw. */
-export default function CeilingTypePicker({ projectId, projectCountry, layerCount, defaultHeight, onClose, onCreated, onOpenLibrary }: Props) {
+/** Pick a ceiling or floor type from the library; creates an area item from it, ready to draw. */
+export default function SurfaceTypePicker({ family, projectId, projectCountry, layerCount, defaultHeight, onClose, onCreated, onOpenLibrary }: Props) {
   const t = useTakeoffT()
   const { language, formatNumber } = useLanguage()
-  const [rows, setRows] = useState<CeilingTypeRow[]>([])
+  const [rows, setRows] = useState<SurfaceTypeRow[]>([])
   const [loading, setLoading] = useState(true)
   const [country, setCountry] = useState<string>(projectCountry || 'all')
   const [search, setSearch] = useState('')
@@ -39,14 +40,14 @@ export default function CeilingTypePicker({ projectId, projectCountry, layerCoun
 
   useEffect(() => {
     let alive = true
-    createClient().from('takeoff_wall_types').select(WALL_TYPE_COLUMNS).eq('category', CEILING_CATEGORY).order('code').then(({ data, error: e }) => {
+    createClient().from('takeoff_wall_types').select(WALL_TYPE_COLUMNS).eq('category', family.category).order('code').then(({ data, error: e }) => {
       if (!alive) return
-      if (e) setError(ceilingDbError(e.message) ? t('ceiling.needsMigration') : t('workspace.error', { message: e.message }))
-      setRows(((data || []) as CeilingTypeRow[]).map(x => ({ ...x, framing: x.framing || {} })))
+      if (e) setError(familyDbError(e.message) ? t(family.msg.needsMigration) : t('workspace.error', { message: e.message }))
+      setRows(((data || []) as SurfaceTypeRow[]).map(x => ({ ...x, framing: x.framing || {} })))
       setLoading(false)
     })
     return () => { alive = false }
-  }, [t])
+  }, [t, family])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -64,13 +65,13 @@ export default function CeilingTypePicker({ projectId, projectCountry, layerCoun
   }, [rows, search, country, projectId])
   const selected = visible.find(r => r.id === selectedId) || null
 
-  async function use(pick: CeilingTypeRow | null = selected) {
+  async function use(pick: SurfaceTypeRow | null = selected) {
     if (!pick) return
-    const h = parseLocaleNumber(height)
-    if (!(h > 0)) { setError(t('ceiling.heightInvalid')); return }
+    const h = family.asksHeight ? parseLocaleNumber(height) : defaultHeight
+    if (family.asksHeight && !(h > 0)) { setError(t(family.msg.heightInvalid)); return }
     setBusy(true)
     setError('')
-    const row = layerFromCeilingType(pick, { projectId, color: LAYER_PALETTE[layerCount % LAYER_PALETTE.length], sortOrder: (layerCount + 1) * 10, elevationM: h })
+    const row = family.layerFrom(pick, { projectId, color: LAYER_PALETTE[layerCount % LAYER_PALETTE.length], sortOrder: (layerCount + 1) * 10, elevationM: h })
     const { data, error: e } = await createClient().from('takeoff_layers').insert(row).select('id').single()
     setBusy(false)
     if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return }
@@ -79,10 +80,10 @@ export default function CeilingTypePicker({ projectId, projectCountry, layerCoun
 
   return (
     <div style={backdrop} onClick={onClose}>
-      <div style={dialog} onClick={e => e.stopPropagation()} role="dialog" aria-label={t('ceiling.pickTitle')}>
+      <div style={dialog} onClick={e => e.stopPropagation()} role="dialog" aria-label={t(family.msg.pickTitle)}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <strong style={{ fontSize: 14, color: '#173441', flex: 1 }}>{t('ceiling.pickTitle')}</strong>
-          <button type="button" style={ghostBtn} onClick={onOpenLibrary}>{t('ceiling.openLibrary')}</button>
+          <strong style={{ fontSize: 14, color: '#173441', flex: 1 }}>{t(family.msg.pickTitle)}</strong>
+          <button type="button" style={ghostBtn} onClick={onOpenLibrary}>{t(family.msg.openLibrary)}</button>
           <button type="button" style={ghostBtn} onClick={onClose}>×</button>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -97,10 +98,10 @@ export default function CeilingTypePicker({ projectId, projectCountry, layerCoun
           {loading ? (
             <div style={ui.small}>{t('workspace.loading')}</div>
           ) : visible.length === 0 ? (
-            <div style={{ ...ui.small, padding: 12 }}>{t('ceiling.pickEmpty')}</div>
+            <div style={{ ...ui.small, padding: 12 }}>{t(family.msg.pickEmpty)}</div>
           ) : visible.map(r => {
             const active = r.id === selectedId
-            const s = ceilingSpecOf(r.framing)
+            const s = family.specOf(r.framing)
             return (
               <button
                 key={r.id}
@@ -113,13 +114,13 @@ export default function CeilingTypePicker({ projectId, projectCountry, layerCoun
                   <strong style={{ flex: 1 }}>{r.code ? `${r.code} – ${r.name}` : r.name}</strong>
                   <span style={{ fontSize: 10, fontWeight: 800, color: statusColor[r.status] }}>{t(statusKey[r.status])}</span>
                 </span>
-                <span style={ui.small}>{s ? t(systemKey[s.system]) : '—'}{r.notes ? ` · ${r.notes}` : ''}</span>
+                <span style={ui.small}>{s && family.systemKey[s.system] ? t(family.systemKey[s.system]) : '—'}{r.notes ? ` · ${r.notes}` : ''}</span>
               </button>
             )
           })}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label style={field}>{t('ceiling.height')}<input style={{ ...input, width: 120 }} inputMode="decimal" value={height} onChange={e => setHeight(e.target.value)} /></label>
+          {family.asksHeight && <label style={field}>{t(family.msg.height)}<input style={{ ...input, width: 120 }} inputMode="decimal" value={height} onChange={e => setHeight(e.target.value)} /></label>}
           <span style={{ ...ui.small, flex: 1 }}>{selected && selected.status !== 'approved' ? t('walltype.notApproved') : ''}</span>
           <button type="button" style={{ ...ui.button, opacity: !selected || busy ? 0.5 : 1 }} disabled={!selected || busy} onClick={() => void use()}>{t('walltype.use')}</button>
         </div>
