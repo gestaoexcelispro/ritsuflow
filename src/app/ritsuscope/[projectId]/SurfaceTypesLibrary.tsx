@@ -7,7 +7,7 @@ import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { COUNTRIES, WALL_TYPE_COLUMNS, type WallTypeRow, type WallTypeStatus } from '@/lib/takeoff/wallTypes'
 import { ui } from '../ui'
-import { familyDbError, type SpecField, type SurfaceFamily, type SurfaceLabels } from './surfaceFamilies'
+import { addStandardTypes, familyDbError, type SpecField, type SurfaceFamily, type SurfaceLabels } from './surfaceFamilies'
 import { statusColor, statusKey } from './WallTypesLibrary'
 
 /** A ceiling or floor type is a wall-type row with its own category and the build-up in framing[specKey]. */
@@ -104,6 +104,13 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
     return spec
   }
 
+  /** Form build-up merged over the stored one, so settings the form doesn't show (imperial units, grid sizes…) are kept. */
+  function fullSpec(f: Form): Record<string, unknown> {
+    const prev = (selected && family.specOf(selected.framing)) || {}
+    const hidden = Object.fromEntries(Object.entries(prev).filter(([k]) => k !== 'system' && !family.fields.some(x => x.key === k)))
+    return { ...hidden, ...specOf(f) }
+  }
+
   async function create() {
     setBusy(true)
     setError('')
@@ -126,18 +133,13 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
   /** Adds the standard list for this country, skipping codes that already exist. */
   async function addStandard() {
     const cc = country === 'all' ? projectCountry || 'BR' : country
-    const have = new Set(rows.filter(r => r.country_code === cc && r.project_id == null).map(r => (r.code || '').toUpperCase()))
-    const missing = family.standard.filter(c => !have.has(c.code))
-    if (!missing.length) { setMessage(t(family.msg.standardAll)); return }
     setBusy(true)
     setError('')
-    const { error: e } = await createClient().from('takeoff_wall_types').insert(missing.map(c => ({
-      code: c.code, name: c.name, category: family.category, status: 'draft', country_code: cc, thickness_m: c.thickness_m,
-      framing: { [family.specKey]: c.spec, color: family.color }, notes: c.notes[language as 'pt-BR' | 'en-US'] || c.notes['pt-BR'],
-    })))
+    const res = await addStandardTypes(family, rows, cc, language)
     setBusy(false)
-    if (e) { fail(e.message); return }
-    setMessage(t(family.msg.standardAdded, { count: missing.length }))
+    if ('error' in res) { fail(res.error); return }
+    if (!res.added) { setMessage(t(family.msg.standardAll)); return }
+    setMessage(t(family.msg.standardAdded, { count: res.added }))
     await load()
     await onChanged?.()
   }
@@ -151,10 +153,10 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
     const { error: e } = await createClient().from('takeoff_wall_types').update({
       code: form.code.trim() || null, name: form.name.trim(), category: family.category, status: form.status, country_code: form.country,
       project_id: form.scope === 'project' ? projectId : null, thickness_m: num(form.thickness) ?? null,
-      framing: { ...(selected.framing || {}), [family.specKey]: specOf(form), color: form.color }, notes: form.notes.trim() || null,
+      framing: { ...(selected.framing || {}), [family.specKey]: fullSpec(form), color: form.color }, notes: form.notes.trim() || null,
     }).eq('id', selected.id)
     setBusy(false)
-    if (e) { setError(/duplicate|unique/i.test(e.message) ? t('walltype.duplicateExists') : t('workspace.error', { message: e.message })); return }
+    if (e) { setError(/duplicate|unique/i.test(e.message) ? t(family.msg.duplicateExists) : t('workspace.error', { message: e.message })); return }
     setMessage(t(family.msg.saved))
     await load()
     await onChanged?.()
@@ -180,7 +182,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
   }
 
   // Materials for 100 m² with 40 m of edges, so the build-up can be checked at a glance.
-  const preview = form ? family.lines(specOf(form) as { system: string }, 100, 40, labels) : []
+  const preview = form ? family.lines(fullSpec(form) as { system: string }, 100, 40, labels) : []
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -197,7 +199,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
             <option value="all">{t('walltype.allCountries')}</option>
             {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name[language]}</option>)}
           </select>
-          <input style={input} placeholder={t('walltype.search')} value={search} onChange={e => setSearch(e.target.value)} />
+          <input style={input} placeholder={t('surface.search')} value={search} onChange={e => setSearch(e.target.value)} />
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" style={{ ...ui.button, flex: 1 }} disabled={busy} onClick={() => void create()}>+ {t(family.msg.new)}</button>
             <button type="button" style={{ ...ghostBtn, flex: 1 }} disabled={busy} onClick={() => void addStandard()} title={t(family.msg.standardHint)}>{t(family.msg.addStandard)}</button>
@@ -231,7 +233,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
           ) : (
             <form onSubmit={save} style={{ ...ui.panel, gap: 12 }}>
               <div style={grid}>
-                <label style={field}>{t('walltype.code')}<input style={input} value={form.code} onChange={e => set('code', e.target.value)} placeholder={`${family.codePrefix}01`} /></label>
+                <label style={field}>{t(family.msg.code)}<input style={input} value={form.code} onChange={e => set('code', e.target.value)} placeholder={`${family.codePrefix}01`} /></label>
                 <label style={{ ...field, gridColumn: 'span 2' }}>{t('walltype.name')}<input style={input} value={form.name} onChange={e => set('name', e.target.value)} /></label>
                 <label style={field}>{t('ceiling.system')}
                   <select style={input} value={form.system} onChange={e => set('system', e.target.value)}>
@@ -280,7 +282,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
 
               <label style={field}>{t('recipes.notes')}<textarea style={{ ...input, height: 70, padding: 8 }} value={form.notes} onChange={e => set('notes', e.target.value)} /></label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="submit" style={ui.button} disabled={busy}>{t('walltype.save')}</button>
+                <button type="submit" style={ui.button} disabled={busy}>{t(family.msg.save)}</button>
                 <button type="button" style={ghostBtn} disabled={busy} onClick={() => void duplicate()}>{t('walltype.duplicate')}</button>
                 <button type="button" style={{ ...ghostBtn, color: '#c94a4a', borderColor: '#efcaca' }} disabled={busy} onClick={() => void remove()}>{t('walltype.delete')}</button>
               </div>

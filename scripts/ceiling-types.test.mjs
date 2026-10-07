@@ -94,3 +94,30 @@ test('tags: a ceiling area from CL02 is numbered CL02-01, CL02-02…', () => {
   assert.deepEqual([tags.get('e1').tags[0], tags.get('e2').tags[0]], ['CL02-01', 'CL02-02'])
   assert.equal(nameCode('Reforço para prateleira'), 'RPP')
 })
+
+test('US drywall ceiling: carrying channels at 48", hangers on them, sheets 4×12, imperial units', () => {
+  const s = { system: 'suspended', profile: '7/8" furring channel', spacing_m: 0.4064, hanger_m: 1.2192, carrier_m: 1.2192, carrier_name: '1-1/2" carrying channel',
+    board: '5/8" Type X gypsum board 4\'×12\'', layers: 1, sheet_w_m: 1.2192, sheet_l_m: 3.6576, imperial: true }
+  const A = 92.903 // 1000 sf
+  const lines = ceilingLines(s, A, 38.1, L)
+  const ft = lines.find(l => /furring/.test(l.mat))
+  assert.equal(ft.unit, 'ft')
+  assert.ok(Math.abs(ft.qty - 750) < 1) // 1000 sf / 16" = 750 lf
+  assert.ok(Math.abs(qty(lines, /carrying/) - 250) < 1) // 1000 sf / 48"
+  assert.equal(qty(lines, /Pendural/), Math.ceil(A / (1.2192 * 1.2192))) // 63 hangers, one per 16 sf
+  assert.equal(qty(lines, /4'×12'/), Math.ceil(A / (1.2192 * 3.6576))) // 21 sheets
+  assert.ok(Math.abs(qty(lines, /Cantoneira/) - 125) < 0.2) // 38,1 m → 125 ft
+})
+
+test('US 2×2 grid: 12\' mains at 4\', 4\' cross tees every 2\', 2\' cross tees between them', () => {
+  const s = { system: 'grid', tile: 'ACT 2×2', tile_w_m: 0.6096, tile_l_m: 0.6096, hanger_m: 1.2192, main_spacing_m: 1.2192, main_len_m: 3.6576,
+    cross_len_m: 1.2192, short_len_m: 0.6096, main_name: 'Main tee 12\'', cross_name: 'Cross tee 4\'', short_name: 'Cross tee 2\'', imperial: true }
+  const A = 92.903 // 1000 sf
+  const lines = ceilingLines(s, A, 38.1, L)
+  assert.equal(qty(lines, /ACT/), Math.ceil(1000 / 4)) // 250 tiles
+  assert.equal(qty(lines, /Main tee/), Math.ceil(250 / 12)) // 250 lf of mains / 12'
+  assert.equal(qty(lines, /Cross tee 4'/), Math.ceil(500 / 4)) // 500 lf / 4'
+  assert.equal(qty(lines, /Cross tee 2'/), Math.ceil(250 / 2)) // 250 lf / 2'
+  // 2×4 tiles: no 2' cross tees.
+  assert.equal(qty(ceilingLines({ ...s, tile_l_m: 1.2192 }, A, 38.1, L), /Cross tee 2'/), undefined)
+})

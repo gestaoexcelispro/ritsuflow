@@ -468,6 +468,8 @@ export function framingTotals(items: TakeoffItem[], ptPerM: number) {
       }
       addProfile(F.trackName, lay.trackLen)
       for (const f of ['A', 'B'] as const) {
+        // One-sided walls (furring, shaft): no boards on that face, so no empty "0 sheets" group either.
+        if (!lay.board[f].length) continue
         const name = lay.boardName[f]
         if (!boards.has(name)) boards.set(name, { name, pieces: [], from: new Set(), W: F.boardW, H: F.boardH })
         const e = boards.get(name)!

@@ -60,3 +60,20 @@ test('floorMaterials sums floor items only, layerFromFloorType makes a flooring 
   assert.equal(row.kind, 'area')
   assert.equal(row.wall_type_id, 'ft')
 })
+
+test('US floors: adhesive in gallons stays gal, covering in sf, thinset kg → lb, base in ft', () => {
+  const vct = floorLines({ system: 'vinyl_tile', product: 'VCT 12×12', tile_w_m: 0.3048, tile_l_m: 0.3048, adhesive: 'VCT adhesive', adhesive_kg_m2: 0.0331, adhesive_unit: 'gal', skirting: '4" cove base', waste_pct: 5, imperial: true }, 92.903, 38.1, L)
+  const cov = vct.find(l => l.mat === 'VCT 12×12')
+  assert.equal(cov.unit, 'sf')
+  near(cov.qty, 1050, 0.5) // 1000 sf × 1,05
+  assert.equal(qty(vct, /\(pç\)/), 1050) // 12×12 tiles
+  const adh = vct.find(l => l.mat === 'VCT adhesive')
+  assert.equal(adh.unit, 'gal')
+  near(adh.qty, 3.075, 0.01) // ≈ 1000 sf / 325 sf/gal
+  assert.equal(vct.find(l => /cove base/.test(l.mat)).unit, 'ft')
+  const tile = floorLines({ system: 'tile', product: 'Porcelain 24×24', tile_w_m: 0.6096, tile_l_m: 0.6096, joint_mm: 3, tile_mm: 9.5, adhesive: 'LHT mortar', adhesive_kg_m2: 6.1, waste_pct: 10, imperial: true }, 10, 12, L)
+  const mortar = tile.find(l => l.mat === 'LHT mortar')
+  assert.equal(mortar.unit, 'lb')
+  near(mortar.qty, 61 * 2.20462, 0.01)
+  assert.equal(tile.find(l => /Rejunte/.test(l.mat)).unit, 'lb')
+})
