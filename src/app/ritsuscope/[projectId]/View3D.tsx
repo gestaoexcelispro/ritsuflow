@@ -620,6 +620,8 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
     const plane = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.92, depthWrite: false }))
     plane.renderOrder = -2
     plane.raycast = () => {}
+    // The framed region can be much larger than what is drawn: framing the picture ignores it.
+    plane.userData = { noFit: true }
     g.add(plane)
     for (const z of o.zones || []) {
       if (z.pts.length < 3) continue
@@ -826,7 +828,7 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
     const tgt = fitWhole(THREE, cam, group, width / height)
     if (tags && anchors.length && tgt) {
       // A little more room around the model for the labels above it.
-      cam.position.sub(tgt).multiplyScalar(1.15).add(tgt)
+      cam.position.sub(tgt).multiplyScalar(1.06).add(tgt)
       cam.updateMatrixWorld()
     }
     renderer.render(scene, cam)
@@ -865,7 +867,7 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
  */
 function fitWhole(THREE: Three, cam: any, group: any, aspect: number) {
   const box = new THREE.Box3()
-  for (const c of group.children) if (c.type !== 'GridHelper') box.expandByObject(c)
+  for (const c of group.children) if (c.type !== 'GridHelper' && !c.userData?.noFit) box.expandByObject(c)
   if (box.isEmpty()) return null
   const center = box.getCenter(new THREE.Vector3())
   const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1)
@@ -897,7 +899,7 @@ function fitWhole(THREE: Three, cam: any, group: any, aspect: number) {
     const halfH = Math.tan((cam.fov * Math.PI) / 360) * dist
     target = target.clone().addScaledVector(right, ((x0 + x1) / 2) * halfH * aspect).addScaledVector(up, ((y0 + y1) / 2) * halfH)
     const extent = Math.max((x1 - x0) / 2, (y1 - y0) / 2)
-    if (extent > 0) dist *= extent / 0.9
+    if (extent > 0) dist *= extent / 0.94
   }
   place()
   return target
