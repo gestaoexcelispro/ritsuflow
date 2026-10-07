@@ -407,6 +407,7 @@ const takeoffPtBR = {
   'surface.assignElement': "Só esta área (novo item)",
   'surface.assignedItem': "Tipologia aplicada ao item.",
   'surface.assignedElement': "Área movida para um novo item com a tipologia escolhida.",
+  'element.itemsEmptied': "Item(ns) que ficarem sem desenho também sairão da lista: {names}.",
   'quick.wall': '+ Parede',
   'quick.ceiling': '+ Forro',
   'quick.floor': '+ Piso',

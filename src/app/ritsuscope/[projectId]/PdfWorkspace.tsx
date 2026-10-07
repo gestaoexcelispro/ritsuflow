@@ -743,10 +743,37 @@ export default function PdfWorkspace(props: Props) {
   }
 
   /** Deletes every element picked with the selection box (one confirmation for all). */
+  /** Items (across every sheet) that would have no drawing left once these elements are deleted. */
+  async function itemsEmptiedBy(ids: string[]): Promise<{ id: string; name: string }[]> {
+    const supabase = createClient()
+    const rows: { layer_id: string }[] = []
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data } = await supabase.from('takeoff_elements').select('layer_id').in('id', ids.slice(i, i + 200))
+      rows.push(...((data || []) as { layer_id: string }[]))
+    }
+    const deleting = new Map<string, number>()
+    for (const r of rows) deleting.set(r.layer_id, (deleting.get(r.layer_id) || 0) + 1)
+    const out: { id: string; name: string }[] = []
+    for (const [layerId, n] of deleting) {
+      const { count } = await supabase.from('takeoff_elements').select('id', { count: 'exact', head: true }).eq('layer_id', layerId)
+      if (count != null && count <= n) out.push({ id: layerId, name: layers.find(l => l.id === layerId)?.name || '' })
+    }
+    return out
+  }
+  /** Removes items left with no drawing (after their last element was deleted). */
+  async function removeEmptyItems(list: { id: string }[]) {
+    if (!list.length) return
+    const { error: e } = await createClient().from('takeoff_layers').delete().in('id', list.map(x => x.id))
+    if (e) setError(t('workspace.error', { message: e.message }))
+    if (activeLayerId && list.some(x => x.id === activeLayerId)) onActiveLayerChange(null)
+  }
+  const emptiedNote = (list: { name: string }[]) => (list.length ? `\n\n${t('element.itemsEmptied', { names: list.map(x => x.name).join(', ') })}` : '')
+
   async function deleteBoxSelection() {
     const ids = boxSel
     if (!ids.length) return
-    if (!window.confirm(t('element.confirmDeleteMany', { count: ids.length }))) return
+    const emptied = await itemsEmptiedBy(ids)
+    if (!window.confirm(t('element.confirmDeleteMany', { count: ids.length }) + emptiedNote(emptied))) return
     const supabase = createClient()
     const gone: string[] = []
     for (let i = 0; i < ids.length; i += 200) {
@@ -761,6 +788,7 @@ export default function PdfWorkspace(props: Props) {
     if (gone.length === 0) setError(t('element.deleteDenied'))
     else if (gone.length < ids.length) setError(t('element.deletedPartial', { done: gone.length, total: ids.length }))
     else setMessage(t('element.deletedMany', { count: gone.length }))
+    if (gone.length === ids.length) await removeEmptyItems(emptied)
     if (gone.length) await onChanged()
   }
 
@@ -769,11 +797,13 @@ export default function PdfWorkspace(props: Props) {
     const table = zoning ? 'takeoff_zones' : 'takeoff_elements'
     const id = zoning ? selectedZoneId : selectedId
     if (!id) return
-    if (!window.confirm(t(zoning ? 'zone.confirmDelete' : 'element.confirmDelete'))) return
+    const emptied = zoning ? [] : await itemsEmptiedBy([id])
+    if (!window.confirm(t(zoning ? 'zone.confirmDelete' : 'element.confirmDelete') + emptiedNote(emptied))) return
     const { data, error: e } = await createClient().from(table).delete().eq('id', id).select('id')
     if (e) { setError(t('workspace.error', { message: e.message })); return }
     // RLS hides the row from non-owners, so nothing is deleted and no error is returned.
     if (!data || data.length === 0) { setError(t('element.deleteDenied')); return }
+    await removeEmptyItems(emptied)
     if (zoning) onSelectZone(null)
     else onSelect(null)
     setMessage(t(zoning ? 'zone.deleted' : 'element.deleted'))

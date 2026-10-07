@@ -406,6 +406,7 @@ const takeoffEnUS: TakeoffMessages = {
   'surface.assignElement': "This area only (new item)",
   'surface.assignedItem': "Type applied to the item.",
   'surface.assignedElement': "Area moved to a new item with the chosen type.",
+  'element.itemsEmptied': "Item(s) left with no drawing will be removed from the list too: {names}.",
   'quick.wall': '+ Wall',
   'quick.ceiling': '+ Ceiling',
   'quick.floor': '+ Floor',

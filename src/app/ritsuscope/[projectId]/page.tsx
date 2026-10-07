@@ -717,10 +717,19 @@ export default function TakeoffWorkspacePage() {
       }).eq('id', layer.id)
       if (e) throw e
     } else {
-      const { data, error: e } = await supabase.from('takeoff_layers').insert(row).select('id').single()
-      if (e || !data) throw e || new Error('insert failed')
-      const { error: e2 } = await supabase.from('takeoff_elements').update({ layer_id: data.id }).eq('id', surfaceAssign.elementId)
+      // Join an item of the same type at the same level when there is one; otherwise a new item.
+      const same = layers.find(l => l.id !== layer.id && l.kind === 'area' && l.wall_type_id === pick.id && Math.abs((Number(l.elevation_m) || 0) - (Number(layer.elevation_m) || 0)) < 0.001)
+      let targetId = same?.id
+      if (!targetId) {
+        const { data, error: e } = await supabase.from('takeoff_layers').insert(row).select('id').single()
+        if (e || !data) throw e || new Error('insert failed')
+        targetId = data.id as string
+      }
+      const { error: e2 } = await supabase.from('takeoff_elements').update({ layer_id: targetId }).eq('id', surfaceAssign.elementId)
       if (e2) throw e2
+      // The old item had only this area: it's now empty, so it goes.
+      const { count } = await supabase.from('takeoff_elements').select('id', { count: 'exact', head: true }).eq('layer_id', layer.id)
+      if (count === 0) await supabase.from('takeoff_layers').delete().eq('id', layer.id)
     }
     setSurfaceAssign(null)
     await load()
