@@ -1495,7 +1495,7 @@ export default function TakeoffWorkspacePage() {
   )
 
   const workspace = (
-    <div style={{ position: 'fixed', inset: 0, background: '#f4f7f8', display: 'grid', gridTemplateRows: `56px 56px ${toolbarShown ? '50px ' : ''}minmax(0,1fr) 30px` }} onClick={() => setMenu(null)}>
+    <div style={{ position: 'fixed', inset: 0, background: '#f4f7f8', display: 'grid', gridTemplateRows: `56px 56px ${toolbarShown ? '58px ' : ''}minmax(0,1fr) 30px` }} onClick={() => setMenu(null)}>
       {/* RITSUFLOW HEADER (standard, compact) */}
       <AppBar module="ritsuscope" compact standalone title={project.name} />
       {/* EDITOR TOOLS */}
@@ -1605,7 +1605,7 @@ export default function TakeoffWorkspacePage() {
       </header>
 
       {toolbarShown && (
-        <div style={{ display: 'flex', alignItems: 'stretch', height: 50, minWidth: 0, background: '#fff', borderBottom: '1px solid #dfe7ea' }}>
+        <div style={{ display: 'flex', alignItems: 'stretch', height: 58, minWidth: 0, background: '#fff', borderBottom: '1px solid #dfe7ea' }}>
           <div ref={setToolbarSlot} style={{ flex: 1, minWidth: 0 }} />
           {levelSelector}
         </div>

@@ -122,7 +122,7 @@ export default function PdfWorkspace(props: Props) {
   const [snapOn, setSnapOn] = useState(true)
   /** Tag of each wall stretch on the sheet (DW01-03…). */
   const [tagsOn, setTagsOn] = useState(true)
-  /** Tool bar: icons only when the labelled bar doesn't fit the width (names stay in the tooltips). */
+  /** Tool bar: group captions always; button names hidden only when the labelled bar doesn't fit the width (they stay in the tooltips). */
   const barOuter = useRef<HTMLDivElement>(null)
   const barInner = useRef<HTMLDivElement>(null)
   const [barFullW, setBarFullW] = useState(0)
@@ -1021,18 +1021,19 @@ export default function PdfWorkspace(props: Props) {
   ], [sheetZones, scale, formatNumber, selectedZoneId, namedRoomSugs, roomPicked])
 
   const isTool = (m: Mode, s?: Shape) => mode === m && (!s || shape === s)
-  const tools: { key: string; icon: string; label: TakeoffMessageKey; title?: string; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
-    { key: 'select', icon: 'select', label: 'tool.select', title: `${t('tool.select')}: ${t('pan.hint')} ${t('box.hint')}`, active: isTool('select'), onClick: () => chooseTool('select') },
-    { key: 'scale', icon: 'scale', label: 'tool.scale', active: isTool('calibrate'), onClick: () => chooseTool('calibrate') },
-    { key: 'line', icon: 'line', label: 'tool.line', active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
-    { key: 'rect', icon: 'rect', label: 'tool.rect', active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },
-    { key: 'polygon', icon: 'polygon', label: 'tool.polygon', active: isTool('draw', 'polygon'), onClick: () => chooseTool('draw', 'polygon') },
-    { key: 'count', icon: 'count', label: 'tool.count', active: isTool('draw', 'count'), onClick: () => chooseTool('draw', 'count'), disabled: zoning },
-    { key: 'measure', icon: 'measure', label: 'tool.measure', active: isTool('measure'), onClick: () => chooseTool('measure') },
-    { key: 'origin', icon: 'origin', label: 'tool.origin', active: isTool('origin'), onClick: () => { chooseTool('origin'); openOriginForm() } },
+  type ToolGroup = 'edit' | 'ref' | 'draw' | 'model'
+  const tools: { key: string; group: ToolGroup; icon: string; label: TakeoffMessageKey; title?: string; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
+    { key: 'select', group: 'edit', icon: 'select', label: 'tool.select', title: `${t('tool.select')}: ${t('pan.hint')} ${t('box.hint')}`, active: isTool('select'), onClick: () => chooseTool('select') },
+    { key: 'scale', group: 'ref', icon: 'scale', label: 'tool.scale', active: isTool('calibrate'), onClick: () => chooseTool('calibrate') },
+    { key: 'line', group: 'draw', icon: 'line', label: 'tool.line', active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
+    { key: 'rect', group: 'draw', icon: 'rect', label: 'tool.rect', active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },
+    { key: 'polygon', group: 'draw', icon: 'polygon', label: 'tool.polygon', active: isTool('draw', 'polygon'), onClick: () => chooseTool('draw', 'polygon') },
+    { key: 'count', group: 'draw', icon: 'count', label: 'tool.count', active: isTool('draw', 'count'), onClick: () => chooseTool('draw', 'count'), disabled: zoning },
+    { key: 'measure', group: 'ref', icon: 'measure', label: 'tool.measure', active: isTool('measure'), onClick: () => chooseTool('measure') },
+    { key: 'origin', group: 'ref', icon: 'origin', label: 'tool.origin', active: isTool('origin'), onClick: () => { chooseTool('origin'); openOriginForm() } },
     ...(zoning ? [] : [
       {
-        key: 'arch', icon: 'building', label: 'tool.arch' as TakeoffMessageKey,
+        key: 'arch', group: 'model' as ToolGroup, icon: 'building', label: 'tool.arch' as TakeoffMessageKey,
         active: !!archMenu || isTool('detect') || !!openSugs || ((areaTool === 'floor' || areaTool === 'ceiling') && mode === 'draw'),
         onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => {
           if (archMenu) { setArchMenu(null); return }
@@ -1043,7 +1044,7 @@ export default function PdfWorkspace(props: Props) {
         },
       },
       {
-        key: 'struct', icon: 'column', label: 'tool.struct' as TakeoffMessageKey, active: !!structMenu || (!!structTool && mode === 'draw') || (areaTool === 'slab' && mode === 'draw'),
+        key: 'struct', group: 'model' as ToolGroup, icon: 'column', label: 'tool.struct' as TakeoffMessageKey, active: !!structMenu || (!!structTool && mode === 'draw') || (areaTool === 'slab' && mode === 'draw'),
         onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => {
           if (structMenu) { setStructMenu(null); return }
           setMepMenu(null)
@@ -1053,7 +1054,7 @@ export default function PdfWorkspace(props: Props) {
         },
       },
       {
-        key: 'mep', icon: 'mep', label: 'tool.mep' as TakeoffMessageKey, active: !!mepMenu || (!!mepTool && mode === 'draw'),
+        key: 'mep', group: 'model' as ToolGroup, icon: 'mep', label: 'tool.mep' as TakeoffMessageKey, active: !!mepMenu || (!!mepTool && mode === 'draw'),
         onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => {
           if (mepMenu) { setMepMenu(null); return }
           setStructMenu(null)
@@ -1063,6 +1064,17 @@ export default function PdfWorkspace(props: Props) {
         },
       },
     ]),
+  ]
+
+  tools.splice(1, 0, { key: 'undo', group: 'edit', icon: 'undo', label: 'undo.label', title: t('undo.hint'), active: false, onClick: () => void undoLast(), disabled: created.length === 0 })
+  /** Tool bar groups, each under its caption: Add · Edit · Reference · Draw · Disciplines · Drawing aids. */
+  const toolGroups: { key: string; caption: TakeoffMessageKey; tools: typeof tools }[] = [
+    ...(quickActions.length ? [{ key: 'add', caption: 'toolbar.group.add' as TakeoffMessageKey, tools: [] }] : []),
+    { key: 'edit', caption: 'toolbar.group.edit', tools: tools.filter(x => x.group === 'edit') },
+    { key: 'ref', caption: 'toolbar.group.ref', tools: tools.filter(x => x.group === 'ref') },
+    { key: 'draw', caption: 'toolbar.group.draw', tools: tools.filter(x => x.group === 'draw') },
+    ...(zoning ? [] : [{ key: 'model', caption: 'toolbar.group.model' as TakeoffMessageKey, tools: tools.filter(x => x.group === 'model') }]),
+    ...(footerSlot ? [] : [{ key: 'aids', caption: 'toolbar.group.aids' as TakeoffMessageKey, tools: [] }]),
   ]
 
   const selectionActive = zoning ? !!selectedZoneId : !!selectedId
@@ -1573,45 +1585,43 @@ export default function PdfWorkspace(props: Props) {
         const bar = (
         <div ref={barOuter} style={toolbarSlot ? toolbarFull : toolbar}>
           {/* Centred while it fits; when it doesn't, it scrolls from the first button (a centred flex row would cut it off). */}
-          <div ref={barInner} style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 'none', margin: toolbarSlot ? '0 auto' : 0 }}>
-          {quickActions.length > 0 && (
-            <>
-              {quickActions.map(q => (
-                <button key={q.key} type="button" onClick={q.onClick} title={compactBar ? `${q.label} · ${q.title}` : q.title} style={quickBtn}>
-                  {compactBar && <span style={{ fontSize: 13, fontWeight: 800, lineHeight: 1 }}>+</span>}
-                  <Icon name={q.icon} size={16} />
-                  {!compactBar && <span>{q.label}</span>}
-                </button>
-              ))}
-              <span style={divider} />
-            </>
-          )}
-          {tools.map(tool => (
-            <button
-              key={tool.key}
-              type="button"
-              disabled={tool.disabled}
-              onClick={event => tool.onClick(event)}
-              title={tool.title || t(tool.label)}
-              style={toolBtn(tool.active, tool.disabled)}
-            >
-              <Icon name={tool.icon} size={16} />
-              {!compactBar && <span>{t(tool.label)}</span>}
-            </button>
+          <div ref={barInner} style={{ display: 'flex', alignItems: 'stretch', flex: 'none', height: '100%', margin: toolbarSlot ? '0 auto' : 0 }}>
+          {toolGroups.map((g, gi) => (
+            <div key={g.key} style={{ display: 'flex', alignItems: 'stretch' }}>
+              {gi > 0 && <span style={divider} />}
+              <div style={groupBox}>
+                <div style={groupCaption}>{t(g.caption)}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
+                  {g.key === 'add' && quickActions.map(q => (
+                    <button key={q.key} type="button" onClick={q.onClick} title={compactBar ? `${q.label} · ${q.title}` : q.title} style={quickBtn}>
+                      <Icon name={q.icon} size={16} />
+                      {!compactBar && <span style={btnLabel}>{q.label}</span>}
+                    </button>
+                  ))}
+                  {g.tools.map(tool => (
+                    <button
+                      key={tool.key}
+                      type="button"
+                      disabled={tool.disabled}
+                      onClick={event => tool.onClick(event)}
+                      title={tool.title || t(tool.label)}
+                      style={toolBtn(tool.active, tool.disabled)}
+                    >
+                      <Icon name={tool.icon} size={16} />
+                      {!compactBar && <span style={btnLabel}>{t(tool.label)}</span>}
+                    </button>
+                  ))}
+                  {g.key === 'aids' && (
+                    <>
+                      <label style={toggleLabel}>{t('tool.snap')}<Switch on={snapOn} onChange={setSnapOn} /></label>
+                      <label style={toggleLabel}>{t('tool.ortho')}<Switch on={orthoOn} onChange={setOrthoOn} /></label>
+                      {!zoning && <label style={toggleLabel} title={t('tags.hint')}>{t('tags.toggle')}<Switch on={tagsOn} onChange={setTagsOn} /></label>}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           ))}
-          <span style={divider} />
-          {!footerSlot && (
-            <>
-              <label style={toggleLabel}>{t('tool.snap')}<Switch on={snapOn} onChange={setSnapOn} /></label>
-              <label style={toggleLabel}>{t('tool.ortho')}<Switch on={orthoOn} onChange={setOrthoOn} /></label>
-              {!zoning && <label style={toggleLabel} title={t('tags.hint')}>{t('tags.toggle')}<Switch on={tagsOn} onChange={setTagsOn} /></label>}
-              <span style={divider} />
-            </>
-          )}
-          <button type="button" style={toolBtn(false, created.length === 0)} disabled={!created.length} title={t('undo.hint')} onClick={() => void undoLast()}>
-            <Icon name="undo" size={16} />
-            {!compactBar && <span>{t('undo.label')}</span>}
-          </button>
           </div>
         </div>
         )
@@ -1650,7 +1660,7 @@ const pill = { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px
 const card = { display: 'flex', flexDirection: 'column', gap: 8, padding: 10, border: '1px solid #dfe7ea', borderRadius: 10, background: '#fff', boxShadow: '0 2px 10px rgba(15,35,45,.10)' } as const
 const xSmall = { border: 0, background: 'transparent', cursor: 'pointer', fontSize: 14, color: 'inherit', padding: 0 } as const
 const smallBtn = (on: boolean) => ({ height: 30, padding: '0 12px', border: '1px solid ' + (on ? '#109d91' : '#d3dfe2'), borderRadius: 7, background: on ? '#109d91' : '#fff', color: on ? '#fff' : '#294955', fontSize: 11, fontWeight: 700, cursor: 'pointer' }) as const
-const TOOLBAR_H = 50
+const TOOLBAR_H = 58
 
 /** Floor, ceiling and slab tools: the item category (IFC type), its look and starting thickness. */
 type AreaToolKey = 'floor' | 'ceiling' | 'slab'
@@ -1659,14 +1669,18 @@ const AREA_TOOLS: Record<AreaToolKey, { ifcType: string; icon: string; label: Ta
   ceiling: { ifcType: 'IfcCovering.CEILING', icon: 'ceiling', label: 'tool.ceiling', itemName: 'area.ceilingItem', color: '#7C3AED', thickness: 0.0125 },
   slab: { ifcType: 'IfcSlab', icon: 'slab', label: 'tool.slab', itemName: 'area.slabItem', color: '#64748B', thickness: 0.12 },
 }
-const toolbar = { position: 'absolute', top: 0, left: 0, right: 0, height: TOOLBAR_H, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 2, padding: '0 8px', background: '#fff', borderBottom: '1px solid #dfe7ea', overflowX: 'auto', overflowY: 'hidden', zIndex: 5 } as const
+const toolbar = { position: 'absolute', top: 0, left: 0, right: 0, height: TOOLBAR_H, boxSizing: 'border-box', display: 'flex', alignItems: 'stretch', gap: 2, padding: '0 8px', background: '#fff', borderBottom: '1px solid #dfe7ea', overflowX: 'auto', overflowY: 'hidden', zIndex: 5 } as const
+/** Ribbon buttons: icon over a short label, so every name fits in the width of a full-HD screen. */
 const toolBtn = (on: boolean, disabled?: boolean) => ({
-  display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, flex: 'none', padding: '0 10px', border: 0, borderRadius: 8, whiteSpace: 'nowrap',
-  background: on ? '#109d91' : 'transparent', color: on ? '#fff' : '#294955', fontSize: 11, fontWeight: 650, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
+  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, height: 38, minWidth: 40, flex: 'none', padding: '0 7px', border: 0, borderRadius: 7, whiteSpace: 'nowrap',
+  background: on ? '#109d91' : 'transparent', color: on ? '#fff' : '#294955', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
 }) as const
 /** Quick add buttons: tinted so they read as "add an item", not as drawing tools. */
-const quickBtn = { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 5, height: 34, flex: 'none', padding: '0 8px', margin: '0 1px', border: '1px solid #bfe6e1', borderRadius: 8, whiteSpace: 'nowrap', background: '#effaf8', color: '#0d7f77', fontSize: 11, fontWeight: 700, cursor: 'pointer' } as const
-const divider = { width: 1, height: 26, flex: 'none', margin: '0 6px', background: '#e2eaed' } as const
+const quickBtn = { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, height: 38, minWidth: 40, flex: 'none', padding: '0 6px', margin: '0 1px', border: '1px solid #bfe6e1', borderRadius: 7, boxSizing: 'border-box', whiteSpace: 'nowrap', background: '#effaf8', color: '#0d7f77', cursor: 'pointer' } as const
+const btnLabel = { fontSize: 11, fontWeight: 650, lineHeight: '13px' } as const
+const groupBox = { display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'center', padding: '3px 0 4px' } as const
+const groupCaption = { fontSize: 9, fontWeight: 800, lineHeight: '11px', letterSpacing: '.07em', textTransform: 'uppercase', color: '#8aa0a8', textAlign: 'center', whiteSpace: 'nowrap', padding: '0 4px' } as const
+const divider = { width: 1, alignSelf: 'center', height: 40, flex: 'none', margin: '0 6px', background: '#e2eaed' } as const
 /** Same bar filling the full-width row under the header: everything visible, no scrolling. */
-const toolbarFull = { height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 12px', background: '#fff', overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'thin' } as const
+const toolbarFull = { height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'stretch', padding: '0 12px', background: '#fff', overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'thin' } as const
 const toggleLabel = { display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px', flex: 'none', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#294955' } as const
