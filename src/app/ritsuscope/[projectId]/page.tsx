@@ -54,6 +54,7 @@ import Icon from './icons'
 import LevelsPanel from './LevelsPanel'
 import LevelProperties from './LevelProperties'
 import LevelsBulkEdit from './LevelsBulkEdit'
+import TagsEditor from './TagsEditor'
 import GenerateLevelsDialog from './GenerateLevelsDialog'
 import CopyToLevelsDialog from './CopyToLevelsDialog'
 import DeleteFromLevelsDialog from './DeleteFromLevelsDialog'
@@ -802,6 +803,12 @@ export default function TakeoffWorkspacePage() {
         <div style={ui.small}>{t('elevation.hint')}</div>
       )}
     </>
+  ) : selection && selectedElementRow ? (
+    // Areas and counted points: their tag.
+    <div style={{ ...ui.panel, gap: 12 }}>
+      <h2 style={ui.panelTitle}>{selection.item.name}</h2>
+      <TagsEditor key={`tag-${selectedElementRow.id}`} element={selectedElementRow} kind={selection.item.kind} ptPerM={ptPerM} onSaved={async message => { await load(); setStatus(message) }} />
+    </div>
   ) : (
     <div style={{ ...ui.small, padding: 8 }}>{t('layout.propsEmpty')}</div>
   )

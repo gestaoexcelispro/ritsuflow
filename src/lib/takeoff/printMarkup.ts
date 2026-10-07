@@ -7,6 +7,7 @@ import { layerQuantities, perimeter, polyArea, type ElementOpening, type Takeoff
 import { openingMarks } from './openingMarks'
 import { mepExtra } from './mep'
 import { structExtra } from './struct'
+import { centroid } from './zones'
 
 export type Matrix = [number, number, number, number, number, number]
 
@@ -79,17 +80,26 @@ export function buildMarks(items: TakeoffItem[], zones: ZoneLike[], toUser: Matr
       }
     }
   }
-  // Stretch tags on top, on stretches long enough on paper to hold their box.
+  // Tags on top: middle of each wall stretch long enough on paper to hold its box, centre of each area,
+  // beside each counted point.
   for (const it of items) {
-    if (it.kind !== 'linear') continue
     const color = hexToRgb(it.color)
     for (const sh of it.shapes) {
-      sh.tags?.forEach((text, i) => {
-        const a = apply(toUser, sh.pts[i])
-        const b = apply(toUser, sh.pts[i + 1])
-        if (!text || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < text.length * 3 + 10) return
-        marks.push({ type: 'tag', at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], text, color })
-      })
+      if (!sh.tags?.length || !sh.pts.length) continue
+      if (it.kind === 'linear') {
+        sh.tags.forEach((text, i) => {
+          if (!sh.pts[i + 1]) return
+          const a = apply(toUser, sh.pts[i])
+          const b = apply(toUser, sh.pts[i + 1])
+          if (!text || Math.hypot(b[0] - a[0], b[1] - a[1]) < text.length * 3 + 10) return
+          marks.push({ type: 'tag', at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], text, color })
+        })
+      } else if (it.kind === 'area' && sh.pts.length >= 3 && sh.tags[0]) {
+        marks.push({ type: 'tag', at: apply(toUser, centroid(sh.pts)), text: sh.tags[0], color })
+      } else if (it.kind === 'count' && sh.tags[0]) {
+        const p = apply(toUser, sh.pts[0])
+        marks.push({ type: 'tag', at: [p[0] + sh.tags[0].length * 1.5 + 6, p[1] + 6], text: sh.tags[0], color })
+      }
     }
   }
   return marks
