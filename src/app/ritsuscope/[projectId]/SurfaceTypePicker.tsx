@@ -23,10 +23,12 @@ type Props = {
   /** Called with the new takeoff item (layer) id. */
   onCreated: (layerId: string) => Promise<void> | void
   onOpenLibrary: () => void
+  /** Classify an existing item instead of creating one: the whole item, or just the selected area (into a new item). */
+  assign?: { itemName: string; count: number; onAssign: (pick: SurfaceTypeRow, scope: 'item' | 'element') => Promise<void> | void } | null
 }
 
 /** Pick a ceiling or floor type from the library; creates an area item from it, ready to draw. */
-export default function SurfaceTypePicker({ family, projectId, projectCountry, layerCount, defaultHeight, onClose, onCreated, onOpenLibrary }: Props) {
+export default function SurfaceTypePicker({ family, projectId, projectCountry, layerCount, defaultHeight, onClose, onCreated, onOpenLibrary, assign = null }: Props) {
   const t = useTakeoffT()
   const { language, formatNumber } = useLanguage()
   const [rows, setRows] = useState<SurfaceTypeRow[]>([])
@@ -74,13 +76,23 @@ export default function SurfaceTypePicker({ family, projectId, projectCountry, l
   }, [rows, search, country, projectId])
   const selected = visible.find(r => r.id === selectedId) || null
 
-  async function use(pick: SurfaceTypeRow | null = selected) {
+  async function use(pick: SurfaceTypeRow | null = selected, scope: 'item' | 'element' = 'item') {
     if (!pick) return
+    if (assign) {
+      setBusy(true)
+      setError('')
+      try { await assign.onAssign(pick, scope) } catch (err) { setError(t('workspace.error', { message: err instanceof Error ? err.message : String((err as { message?: string })?.message || err) })) }
+      setBusy(false)
+      return
+    }
     const h = family.asksHeight ? parseLocaleNumber(height) : defaultHeight
     if (family.asksHeight && !(h > 0)) { setError(t(family.msg.heightInvalid)); return }
     setBusy(true)
     setError('')
     const row = family.layerFrom(pick, { projectId, color: LAYER_PALETTE[layerCount % LAYER_PALETTE.length], sortOrder: (layerCount + 1) * 10, elevationM: h })
+    // Same type at the same level already in the project: draw into that item instead of a duplicate.
+    const { data: same } = await createClient().from('takeoff_layers').select('id').eq('project_id', projectId).eq('kind', 'area').eq('wall_type_id', pick.id).eq('elevation_m', row.elevation_m as number).limit(1)
+    if (same && same.length) { setBusy(false); await onCreated((same[0] as { id: string }).id); return }
     const { data, error: e } = await createClient().from('takeoff_layers').insert(row).select('id').single()
     setBusy(false)
     if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return }
@@ -134,9 +146,16 @@ export default function SurfaceTypePicker({ family, projectId, projectCountry, l
           })}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          {family.asksHeight && <label style={field}>{t(family.msg.height)}<input style={{ ...input, width: 120 }} inputMode="decimal" value={height} onChange={e => setHeight(e.target.value)} /></label>}
+          {family.asksHeight && !assign && <label style={field}>{t(family.msg.height)}<input style={{ ...input, width: 120 }} inputMode="decimal" value={height} onChange={e => setHeight(e.target.value)} /></label>}
           <span style={{ ...ui.small, flex: 1 }}>{selected && selected.status !== 'approved' ? t('walltype.notApproved') : ''}</span>
-          <button type="button" style={{ ...ui.button, opacity: !selected || busy ? 0.5 : 1 }} disabled={!selected || busy} onClick={() => void use()}>{t('walltype.use')}</button>
+          {assign ? (
+            <>
+              <button type="button" style={{ ...ghostBtn, height: 34, opacity: !selected || busy ? 0.5 : 1 }} disabled={!selected || busy} onClick={() => void use(selected, 'element')}>{t('surface.assignElement')}</button>
+              <button type="button" style={{ ...ui.button, opacity: !selected || busy ? 0.5 : 1 }} disabled={!selected || busy} onClick={() => void use(selected, 'item')}>{t('surface.assignItem', { name: assign.itemName, count: assign.count })}</button>
+            </>
+          ) : (
+            <button type="button" style={{ ...ui.button, opacity: !selected || busy ? 0.5 : 1 }} disabled={!selected || busy} onClick={() => void use()}>{t('walltype.use')}</button>
+          )}
         </div>
       </div>
     </div>

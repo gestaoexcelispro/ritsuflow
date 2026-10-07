@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
+import { defaultPlanTransparencyPct } from '@/lib/takeoff/planOpacity'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
@@ -25,6 +26,8 @@ type Form = {
   thickness: string
   elevation: string
   transparency: number
+  /** Sheet and PDF transparency, percent; null = the default for the kind (not stored). */
+  planTransparency: number | null
   deductOpenings: boolean
   recipeId: string
   framingOn: boolean
@@ -69,6 +72,7 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
       thickness: n(layer.thickness_m, 3),
       elevation: n(layer.elevation_m ?? 0),
       transparency: Math.round(100 * Number(((layer.framing || {}) as { meta?: { transparency?: number } }).meta?.transparency || 0)),
+      planTransparency: (() => { const v = ((layer.framing || {}) as { meta?: { planTransparency?: number } }).meta?.planTransparency; return typeof v === 'number' ? Math.round(v * 100) : null })(),
       deductOpenings: layer.deduct_openings,
       recipeId: layer.recipe_id || '',
       framingOn: !!base.on,
@@ -174,7 +178,7 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
     // Transparency (3D) lives with the other display settings in framing.meta.
     {
       const current = (update.framing || layer.framing || {}) as Record<string, unknown> & { meta?: Record<string, unknown> }
-      update.framing = { ...current, meta: { ...(current.meta || {}), transparency: Math.max(0, Math.min(90, form.transparency)) / 100 } }
+      update.framing = { ...current, meta: { ...(current.meta || {}), transparency: Math.max(0, Math.min(90, form.transparency)) / 100, ...(form.planTransparency != null ? { planTransparency: Math.max(0, Math.min(95, form.planTransparency)) / 100 } : {}) } }
     }
     const { error: e } = await createClient().from('takeoff_layers').update(update).eq('id', layer.id)
     setSaving(false)
@@ -206,6 +210,11 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
         </select>
       </label>
       <label style={fieldStyle}>{t('layer.color')}<input type="color" style={{ ...inputStyle, padding: 2, width: 60 }} value={form.color} onChange={e => set('color', e.target.value)} /></label>
+      <label style={fieldStyle}>
+        {t('layer.planTransparency', { pct: form.planTransparency ?? defaultPlanTransparencyPct(layer.kind) })}
+        <input type="range" min={0} max={95} step={5} value={form.planTransparency ?? defaultPlanTransparencyPct(layer.kind)} onChange={e => set('planTransparency', Number(e.target.value))} />
+        <span style={ui.small}>{t('layer.planTransparencyHint')}</span>
+      </label>
       <label style={fieldStyle}>
         {t('layer.transparency', { pct: form.transparency })}
         <input type="range" min={0} max={90} step={10} value={form.transparency} onChange={e => set('transparency', Number(e.target.value))} />

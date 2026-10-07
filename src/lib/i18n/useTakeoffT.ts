@@ -23,3 +23,8 @@ export function useTakeoffT() {
     [language],
   )
 }
+
+/** Translator for a fixed language (reports that follow the project's country, not the screen). */
+export function takeoffTranslator(language: AppLanguage) {
+  return (key: TakeoffMessageKey, vars?: Record<string, string | number>) => translate(takeoffMessages[language], takeoffPtBR, key, vars)
+}

@@ -1,7 +1,8 @@
 // Builds a printable PDF of the whole project: each original sheet (vector, untouched) with the
 // takeoff drawn on top and a title strip, a 3D page, and tables per level with project totals.
 // pdf-lib is loaded from a CDN at runtime (no package install needed), like three.js in View3D.
-import { buildMarks, invert, legendRows, openingRows, projectOpeningRows, projectTotals, winAnsi, zoneRows, type Matrix, type ZoneLike } from '@/lib/takeoff/printMarkup'
+import { buildMarks, invert, legendRows, openingRows, projectOpeningRows, projectTotals, tagTableRows, winAnsi, zoneRows, type Matrix, type ZoneLike } from '@/lib/takeoff/printMarkup'
+import { projectMaterialGroups, type MaterialGroup, type MaterialKind, type MaterialRow } from '@/lib/takeoff/materialList'
 import { ICON_PATHS } from './icons'
 import type { TakeoffItem } from '@/lib/takeoff/geometry'
 
@@ -67,6 +68,16 @@ export type PrintLabels = {
   totals: string
   /** Note under the totals (typical floors counted). */
   totalsNote: string
+  /** Materials table: heading, columns and the name of each kind of material. */
+  materials: string
+  colMaterial: string
+  colPacks: string
+  materialKind: Record<MaterialKind, string>
+  /** Tag table (one row per wall stretch, area or point). */
+  tags: string
+  colTag: string
+  /** Words in front of the second figure: "Length 23,72 m", "Perimeter 42,44 m". */
+  detail: Record<'length' | 'perimeter' | 'height', string>
 }
 
 /** One sheet of the project in the print, with what is drawn on it. */
@@ -83,6 +94,10 @@ export type PrintSheet = {
   subtitle: string
   /** Section heading in the tables ("Térreo · PRJ-01"). */
   heading: string
+  /** White wash over the source drawing before the takeoff is drawn (0…0.8). */
+  backgroundFade?: number
+  /** Materials of this sheet, one group per item / type (framing layout, recipes, ceiling / floor build-ups). */
+  materialGroups?: MaterialGroup[]
 }
 
 const svgPath = (pts: [number, number][], close: boolean) =>
@@ -145,7 +160,14 @@ export async function buildProjectPdf(opts: {
     if (!sources.has(sheet.url)) sources.set(sheet.url, await PDFDocument.load(bytes, { ignoreEncryption: true }))
     const [pg] = await out.copyPages(sources.get(sheet.url), [sheet.pageNumber - 1])
     out.addPage(pg)
+    // Faded background: a white wash over the drawing (it stays vector), so the takeoff colours read true.
+    if (sheet.backgroundFade && sheet.backgroundFade > 0) {
+      const mb = pg.getMediaBox()
+      pg.drawRectangle({ x: mb.x, y: mb.y, width: mb.width, height: mb.height, color: rgb(1, 1, 1), opacity: Math.min(0.8, sheet.backgroundFade) })
+    }
 
+    const mb0 = pg.getMediaBox()
+    const tagScale = Math.min(3, Math.max(1, Math.max(mb0.width, mb0.height) / 1190))
     for (const m of buildMarks(sheet.items, sheet.zones, toUser, sheet.ptPerM, fmt)) {
       if (m.type === 'polygon') {
         pg.drawSvgPath(svgPath(m.pts, true), { x: 0, y: 0, color: color(m.color), opacity: m.fillOpacity, borderColor: color(m.color), borderWidth: m.borderWidth, borderOpacity: 0.9 })
@@ -159,13 +181,14 @@ export async function buildProjectPdf(opts: {
         const sc = 0.3
         pg.drawSvgPath(icon, { x: m.at[0] - 12 * sc, y: m.at[1] + 12 * sc, scale: sc, borderColor: color(m.color), borderWidth: 2.4, borderLineCap: LineCapStyle.Round })
       } else if (m.type === 'tag') {
+        // Tags grow with the sheet (A4/A3 = 5 pt, A1 ≈ 10 pt) so they read like the drawing's own text.
         const text = winAnsi(m.text)
-        const size = 5
-        const w = bold.widthOfTextAtSize(text, size) + 4
-        pg.drawRectangle({ x: m.at[0] - w / 2, y: m.at[1] - 3.6, width: w, height: 7.2, color: rgb(1, 1, 1), opacity: 0.92, borderColor: color(m.color), borderWidth: 0.5 })
-        pg.drawText(text, { x: m.at[0] - w / 2 + 2, y: m.at[1] - 1.8, size, font: bold, color: ink })
+        const size = 5 * tagScale
+        const w = bold.widthOfTextAtSize(text, size) + 4 * tagScale
+        pg.drawRectangle({ x: m.at[0] - w / 2, y: m.at[1] - 3.6 * tagScale, width: w, height: 7.2 * tagScale, color: rgb(1, 1, 1), opacity: 0.92, borderColor: color(m.color), borderWidth: 0.5 * tagScale })
+        pg.drawText(text, { x: m.at[0] - w / 2 + 2 * tagScale, y: m.at[1] - 1.8 * tagScale, size, font: bold, color: ink })
       } else if (m.type === 'dot') {
-        pg.drawCircle({ x: m.at[0], y: m.at[1], size: m.radius, color: color(m.color), borderColor: rgb(1, 1, 1), borderWidth: 0.8 })
+        pg.drawCircle({ x: m.at[0], y: m.at[1], size: m.radius, color: color(m.color), opacity: m.opacity ?? 1, borderColor: rgb(1, 1, 1), borderWidth: 0.8, borderOpacity: m.opacity ?? 1 })
       } else {
         m.lines.forEach((line, i) => {
           const text = winAnsi(line)
@@ -220,8 +243,12 @@ export async function buildProjectPdf(opts: {
   page.drawText(winAnsi(title), { x: M, y, size: 14, font: bold, color: ink }); y -= 16
   page.drawText(winAnsi(subtitle), { x: M, y, size: 9, font, color: grey }); y -= 24
 
-  const table = (heading: string, cols: { label: string; x: number }[], rows: { swatch: [number, number, number]; cells: string[] }[]) => {
-    if (!rows.length) return
+  const table = (heading: string, allCols: { label: string; x: number }[], allRows: { swatch: [number, number, number]; cells: string[] }[]) => {
+    if (!allRows.length) return
+    // Columns with nothing in them are left out (e.g. Packages when nothing comes in packages).
+    const keep = allCols.map((_, i) => i === 0 || allRows.some(r => (r.cells[i] || '').trim() !== ''))
+    const cols = allCols.filter((_, i) => keep[i])
+    const rows = allRows.map(r => ({ ...r, cells: r.cells.filter((_, i) => keep[i]) }))
     need(40)
     page.drawText(winAnsi(heading).toUpperCase(), { x: M, y, size: 8.5, font: bold, color: ink }); y -= 14
     cols.forEach(c => page.drawText(winAnsi(c.label), { x: c.x, y, size: 8, font: bold, color: grey }))
@@ -249,10 +276,47 @@ export async function buildProjectPdf(opts: {
     cells: [`${labels.openingKind[r.kind]} ${fmt(r.w)} × ${fmt(r.h)} m${r.sill > 0 ? ` · ${fmt(r.sill)} m` : ''}`, r.wall, `${r.count} ${labels.unit}`, `${fmt(r.areaM2)} m²`],
   })
 
+  const matCols = [{ label: labels.colMaterial, x: M + 16 }, { label: labels.colKind, x: M + 420 }, { label: labels.colQty, x: M + 530 }, { label: labels.colPacks, x: M + 640 }]
+  const matCells = (r: MaterialRow) => ({
+    cells: [r.mat, labels.materialKind[r.kind], `${Number.isInteger(r.qty) ? String(r.qty) : fmt(r.qty)} ${r.unit}`, r.packs == null ? '' : `${r.packs}${r.packName ? ` ${r.packName}` : ''}`],
+  })
+
+  const withDetail = (r: { sub: string; detail?: 'length' | 'perimeter' | 'height' }) => (r.detail && r.sub ? `${labels.detail[r.detail]} ${r.sub}` : r.sub)
+  const tagCols = [{ label: labels.colTag, x: M + 16 }, { label: labels.colItem, x: M + 110 }, { label: labels.colQty, x: M + 530 }, { label: labels.colExtra, x: M + 640 }]
+  /** Materials under one heading per type (its colour and name), project or sheet. */
+  const materialsTable = (groups: MaterialGroup[]) => {
+    const list = groups.filter(g => g.rows.length)
+    if (!list.length) return
+    const anyPacks = list.some(g => g.rows.some(r => r.packs != null))
+    const cols = matCols.filter((_, i) => i < 3 || anyPacks)
+    need(56)
+    page.drawText(winAnsi(labels.materials).toUpperCase(), { x: M, y, size: 8.5, font: bold, color: ink }); y -= 14
+    cols.forEach(c => page.drawText(winAnsi(c.label), { x: c.x, y, size: 8, font: bold, color: grey }))
+    y -= 6
+    page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.5, color: rgb(0.85, 0.89, 0.9) })
+    y -= 14
+    for (const g of list) {
+      need(34)
+      page.drawRectangle({ x: M, y: y - 1, width: 9, height: 9, color: color(g.color) })
+      page.drawText(winAnsi(g.name).slice(0, 110), { x: M + 16, y, size: 8.5, font: bold, color: ink })
+      y -= 15
+      for (const r of g.rows) {
+        need(15)
+        const cells = matCells(r).cells
+        cells.forEach((cell, i) => { if (i < cols.length) page.drawText(winAnsi(cell).slice(0, i === 0 ? 75 : 40), { x: i === 0 ? cols[0].x + 12 : cols[i].x, y, size: 8, font, color: ink }) })
+        y -= 13
+      }
+      y -= 4
+    }
+    y -= 8
+  }
+
   for (const sheet of sheets) {
     section(sheet.heading)
-    table(labels.items, itemCols, legendRows(sheet.items, sheet.ptPerM, fmt, labels.unit, labels.formwork).map(r => ({ swatch: r.color, cells: [r.name, labels.kind[r.kind], r.main, r.sub] })))
+    table(labels.items, itemCols, legendRows(sheet.items, sheet.ptPerM, fmt, labels.unit, labels.formwork).map(r => ({ swatch: r.color, cells: [r.name, labels.kind[r.kind], r.main, withDetail(r)] })))
     table(labels.openings, openCols, openingRows(sheet.items).map(openCells))
+    materialsTable(sheet.materialGroups || [])
+    table(labels.tags, tagCols, tagTableRows(sheet.items, sheet.ptPerM, fmt, labels.unit).map(r => ({ swatch: r.color, cells: [r.tag, r.name, r.main, withDetail(r)] })))
     table(labels.locations,
       [{ label: labels.colItem, x: M + 16 }, { label: labels.colArea, x: M + 420 }, { label: labels.colPerimeter, x: M + 530 }],
       zoneRows(sheet.zones, sheet.ptPerM, fmt).map(z => ({ swatch: z.color, cells: [z.name, z.area, z.perimeter] })))
@@ -264,8 +328,9 @@ export async function buildProjectPdf(opts: {
   if (floors > 1 && totals.length) {
     section(labels.totals)
     page.drawText(winAnsi(labels.totalsNote), { x: M, y, size: 8, font, color: grey }); y -= 16
-    table(labels.items, itemCols, totals.map(r => ({ swatch: r.color, cells: [r.name, labels.kind[r.kind], r.main, r.sub] })))
+    table(labels.items, itemCols, totals.map(r => ({ swatch: r.color, cells: [r.name, labels.kind[r.kind], r.main, withDetail(r)] })))
     table(labels.openings, openCols, projectOpeningRows(sheets).map(openCells))
+    materialsTable(projectMaterialGroups(sheets.map(s => ({ groups: s.materialGroups || [], multiplier: s.multiplier }))))
   }
 
   for (let i = firstOwn; i < out.getPageCount(); i++) out.getPage(i).drawText(winAnsi(labels.footer), { x: M, y: M - 14, size: 7, font, color: grey })

@@ -15,7 +15,7 @@ import type { LayerRow, SourceRow } from '@/lib/takeoff/rows'
 import { angleFromPoints, originOf } from '@/lib/takeoff/origin'
 import { centrelineFromFace, joinToNeighbours, type NeighbourWall } from '@/lib/takeoff/faceWall'
 import { areaRole } from '@/lib/takeoff/areaRole'
-import { MEP_GROUPS, MEP_TYPES, mepType } from '@/lib/takeoff/mep'
+import { MEP_GROUPS, MEP_TYPES, mepType, type MepGroup } from '@/lib/takeoff/mep'
 import { STRUCT_GROUPS, STRUCT_TYPES, structType } from '@/lib/takeoff/struct'
 import { footprintFromWalls, roomsFromWalls } from '@/lib/takeoff/detect/roomsFromWalls'
 import { KIND_COLOR, centroid, isMacroKind, nameFromTexts, nextZoneName, pointInPolygon, type SheetText, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
@@ -77,8 +77,16 @@ type Props = {
   levelLabel?: string | null
   /** Element (a full-width row under the header) to render the tool bar into; inline strip when absent. */
   toolbarSlot?: HTMLElement | null
+  /** Quick buttons at the start of the tool bar (takeoff: add a wall, ceiling or floor type, or a new item). */
+  quickActions?: { key: string; icon: string; label: string; title: string; onClick: () => void }[]
+  /** Export buttons at the end of the tool bar (takeoff: CSV of the items). */
+  exportActions?: { key: string; icon: string; label: string; title: string; onClick: () => void; disabled?: boolean }[]
   /** Spot in the footer (left of the zoom) that hosts the Snap and Ortho switches. */
   footerSlot?: HTMLElement | null
+  /** Free stretch of the footer (between the cursor and the switches) for the tool hint and the active-item bar. */
+  statusSlot?: HTMLElement | null
+  /** Fade of the source drawing on this sheet (0…0.8). */
+  backgroundFade?: number
 }
 
 const kindKey: Record<LayerKind, TakeoffMessageKey> = {
@@ -94,7 +102,7 @@ function dedupe(points: Vec2[]): Vec2[] {
 }
 
 export default function PdfWorkspace(props: Props) {
-  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, levelLabel = null } = props
+  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, backgroundFade = 0, levelLabel = null, quickActions = [], exportActions = [] } = props
   const barH = toolbarSlot ? 0 : TOOLBAR_H
   const t = useTakeoffT()
   const { formatNumber, language } = useLanguage()
@@ -120,6 +128,28 @@ export default function PdfWorkspace(props: Props) {
   const [snapOn, setSnapOn] = useState(true)
   /** Tag of each wall stretch on the sheet (DW01-03…). */
   const [tagsOn, setTagsOn] = useState(true)
+  /** Tool bar: group captions always; button names hidden only when the labelled bar doesn't fit the width (they stay in the tooltips). */
+  const barOuter = useRef<HTMLDivElement>(null)
+  const barInner = useRef<HTMLDivElement>(null)
+  const [barFullW, setBarFullW] = useState(0)
+  const [barAvail, setBarAvail] = useState(Infinity)
+  const compactBar = barFullW > barAvail
+  useLayoutEffect(() => {
+    // Measure the bar with labels (only while it shows them), and the room it has.
+    if (!compactBar && barInner.current) setBarFullW(barInner.current.getBoundingClientRect().width)
+  })
+  useEffect(() => {
+    const el = barOuter.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      const cs = getComputedStyle(el)
+      setBarAvail(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [toolbarSlot])
+  // Labels change with the language: measure the labelled bar again.
+  useEffect(() => { setBarFullW(0) }, [t])
   const [orthoOn, setOrthoOn] = useState(false)
   /** Line walls: draw the centreline, or a face and then click the side the wall goes. */
   const [placement, setPlacement] = useState<'face' | 'center'>('face')
@@ -149,7 +179,7 @@ export default function PdfWorkspace(props: Props) {
   /** Floor / ceiling / slab tool in use (draws areas on that category's item). */
   const [areaTool, setAreaTool] = useState<AreaToolKey | null>(null)
   /** Building services: the open menu (anchored under its button) and the type being placed. */
-  const [mepMenu, setMepMenu] = useState<{ left: number; top: number } | null>(null)
+  const [mepMenu, setMepMenu] = useState<{ left: number; top: number; group: MepGroup } | null>(null)
   const [mepTool, setMepTool] = useState<string | null>(null)
   /** Concrete structure and foundations: the open menu and the type being drawn. */
   const [structMenu, setStructMenu] = useState<{ left: number; top: number } | null>(null)
@@ -713,10 +743,37 @@ export default function PdfWorkspace(props: Props) {
   }
 
   /** Deletes every element picked with the selection box (one confirmation for all). */
+  /** Items (across every sheet) that would have no drawing left once these elements are deleted. */
+  async function itemsEmptiedBy(ids: string[]): Promise<{ id: string; name: string }[]> {
+    const supabase = createClient()
+    const rows: { layer_id: string }[] = []
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data } = await supabase.from('takeoff_elements').select('layer_id').in('id', ids.slice(i, i + 200))
+      rows.push(...((data || []) as { layer_id: string }[]))
+    }
+    const deleting = new Map<string, number>()
+    for (const r of rows) deleting.set(r.layer_id, (deleting.get(r.layer_id) || 0) + 1)
+    const out: { id: string; name: string }[] = []
+    for (const [layerId, n] of deleting) {
+      const { count } = await supabase.from('takeoff_elements').select('id', { count: 'exact', head: true }).eq('layer_id', layerId)
+      if (count != null && count <= n) out.push({ id: layerId, name: layers.find(l => l.id === layerId)?.name || '' })
+    }
+    return out
+  }
+  /** Removes items left with no drawing (after their last element was deleted). */
+  async function removeEmptyItems(list: { id: string }[]) {
+    if (!list.length) return
+    const { error: e } = await createClient().from('takeoff_layers').delete().in('id', list.map(x => x.id))
+    if (e) setError(t('workspace.error', { message: e.message }))
+    if (activeLayerId && list.some(x => x.id === activeLayerId)) onActiveLayerChange(null)
+  }
+  const emptiedNote = (list: { name: string }[]) => (list.length ? `\n\n${t('element.itemsEmptied', { names: list.map(x => x.name).join(', ') })}` : '')
+
   async function deleteBoxSelection() {
     const ids = boxSel
     if (!ids.length) return
-    if (!window.confirm(t('element.confirmDeleteMany', { count: ids.length }))) return
+    const emptied = await itemsEmptiedBy(ids)
+    if (!window.confirm(t('element.confirmDeleteMany', { count: ids.length }) + emptiedNote(emptied))) return
     const supabase = createClient()
     const gone: string[] = []
     for (let i = 0; i < ids.length; i += 200) {
@@ -731,6 +788,7 @@ export default function PdfWorkspace(props: Props) {
     if (gone.length === 0) setError(t('element.deleteDenied'))
     else if (gone.length < ids.length) setError(t('element.deletedPartial', { done: gone.length, total: ids.length }))
     else setMessage(t('element.deletedMany', { count: gone.length }))
+    if (gone.length === ids.length) await removeEmptyItems(emptied)
     if (gone.length) await onChanged()
   }
 
@@ -739,24 +797,31 @@ export default function PdfWorkspace(props: Props) {
     const table = zoning ? 'takeoff_zones' : 'takeoff_elements'
     const id = zoning ? selectedZoneId : selectedId
     if (!id) return
-    if (!window.confirm(t(zoning ? 'zone.confirmDelete' : 'element.confirmDelete'))) return
+    const emptied = zoning ? [] : await itemsEmptiedBy([id])
+    if (!window.confirm(t(zoning ? 'zone.confirmDelete' : 'element.confirmDelete') + emptiedNote(emptied))) return
     const { data, error: e } = await createClient().from(table).delete().eq('id', id).select('id')
     if (e) { setError(t('workspace.error', { message: e.message })); return }
     // RLS hides the row from non-owners, so nothing is deleted and no error is returned.
     if (!data || data.length === 0) { setError(t('element.deleteDenied')); return }
+    await removeEmptyItems(emptied)
     if (zoning) onSelectZone(null)
     else onSelect(null)
     setMessage(t(zoning ? 'zone.deleted' : 'element.deleted'))
     await onChanged()
   }
 
-  // Keyboard: Enter finishes, Escape cancels, Backspace removes the last point, Delete removes the selection.
+  // Keyboard: Enter finishes, Escape ends the command and goes back to Select, Backspace removes the last point, Delete removes the selection.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null
       if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
       if (event.key === 'Escape' && openingPick) { setPickHover(null); onOpeningPickCancel?.(); return }
-      if (event.key === 'Escape') { clearTransient(); setBoxSel([]); onSelect(null); onSelectZone(null); setRoomPicking(false); setRoomPickPts([]) }
+      if (event.key === 'Escape') {
+        clearTransient(); setBoxSel([]); onSelect(null); onSelectZone(null); setRoomPicking(false); setRoomPickPts([])
+        // End the command: drop any drawing / measuring tool and its menus, back to Select.
+        if (mode !== 'select') chooseTool('select')
+        setArchMenu(null); setStructMenu(null); setMepMenu(null)
+      }
       if (event.key === 'Enter' && mode === 'draw' && !faceMode) void finishDraft()
       if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => prev.slice(0, -1)) }
       if (event.key === 'Backspace' && mode === 'measure') { event.preventDefault(); setMeasureDone(false); setMeasurePts(prev => prev.slice(0, -1)) }
@@ -983,7 +1048,8 @@ export default function PdfWorkspace(props: Props) {
     if (mode === 'origin') return originPts.length === 0 ? t('origin.hint.point') : originPts.length === 1 ? t('origin.hint.direction') : t('origin.hint.done')
     if (zoning) return sheetZones.length ? t('zone.hint.select') : t('zone.hint.empty')
     if (boxSel.length) return t('box.selectedHint')
-    return selectedId ? t('move.hint') : `${t('pan.hint')} ${t('box.hint')}`
+    // Nothing selected: no banner over the sheet (the help is in the Select button's tooltip).
+    return selectedId ? t('move.hint') : ''
   }, [boxSel.length, mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length])
 
   const zoneShapes = useMemo(() => [
@@ -996,18 +1062,19 @@ export default function PdfWorkspace(props: Props) {
   ], [sheetZones, scale, formatNumber, selectedZoneId, namedRoomSugs, roomPicked])
 
   const isTool = (m: Mode, s?: Shape) => mode === m && (!s || shape === s)
-  const tools: { key: string; icon: string; label: TakeoffMessageKey; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
-    { key: 'select', icon: 'select', label: 'tool.select', active: isTool('select'), onClick: () => chooseTool('select') },
-    { key: 'scale', icon: 'scale', label: 'tool.scale', active: isTool('calibrate'), onClick: () => chooseTool('calibrate') },
-    { key: 'line', icon: 'line', label: 'tool.line', active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
-    { key: 'rect', icon: 'rect', label: 'tool.rect', active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },
-    { key: 'polygon', icon: 'polygon', label: 'tool.polygon', active: isTool('draw', 'polygon'), onClick: () => chooseTool('draw', 'polygon') },
-    { key: 'count', icon: 'count', label: 'tool.count', active: isTool('draw', 'count'), onClick: () => chooseTool('draw', 'count'), disabled: zoning },
-    { key: 'measure', icon: 'measure', label: 'tool.measure', active: isTool('measure'), onClick: () => chooseTool('measure') },
-    { key: 'origin', icon: 'origin', label: 'tool.origin', active: isTool('origin'), onClick: () => { chooseTool('origin'); openOriginForm() } },
+  type ToolGroup = 'edit' | 'ref' | 'draw' | 'model' | 'services'
+  const tools: { key: string; group: ToolGroup; icon: string; label: TakeoffMessageKey; title?: string; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
+    { key: 'select', group: 'edit', icon: 'select', label: 'tool.select', title: `${t('tool.select')} (Esc): ${t('pan.hint')} ${t('box.hint')}`, active: isTool('select'), onClick: () => chooseTool('select') },
+    { key: 'scale', group: 'ref', icon: 'scale', label: 'tool.scale', active: isTool('calibrate'), onClick: () => chooseTool('calibrate') },
+    { key: 'line', group: 'draw', icon: 'line', label: 'tool.line', active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
+    { key: 'rect', group: 'draw', icon: 'rect', label: 'tool.rect', active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },
+    { key: 'polygon', group: 'draw', icon: 'polygon', label: 'tool.polygon', active: isTool('draw', 'polygon'), onClick: () => chooseTool('draw', 'polygon') },
+    { key: 'count', group: 'draw', icon: 'count', label: 'tool.count', active: isTool('draw', 'count'), onClick: () => chooseTool('draw', 'count'), disabled: zoning },
+    { key: 'measure', group: 'ref', icon: 'measure', label: 'tool.measure', active: isTool('measure'), onClick: () => chooseTool('measure') },
+    { key: 'origin', group: 'ref', icon: 'origin', label: 'tool.origin', active: isTool('origin'), onClick: () => { chooseTool('origin'); openOriginForm() } },
     ...(zoning ? [] : [
       {
-        key: 'arch', icon: 'building', label: 'tool.arch' as TakeoffMessageKey,
+        key: 'arch', group: 'model' as ToolGroup, icon: 'building', label: 'tool.arch' as TakeoffMessageKey,
         active: !!archMenu || isTool('detect') || !!openSugs || ((areaTool === 'floor' || areaTool === 'ceiling') && mode === 'draw'),
         onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => {
           if (archMenu) { setArchMenu(null); return }
@@ -1018,7 +1085,7 @@ export default function PdfWorkspace(props: Props) {
         },
       },
       {
-        key: 'struct', icon: 'column', label: 'tool.struct' as TakeoffMessageKey, active: !!structMenu || (!!structTool && mode === 'draw') || (areaTool === 'slab' && mode === 'draw'),
+        key: 'struct', group: 'model' as ToolGroup, icon: 'column', label: 'tool.struct' as TakeoffMessageKey, active: !!structMenu || (!!structTool && mode === 'draw') || (areaTool === 'slab' && mode === 'draw'),
         onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => {
           if (structMenu) { setStructMenu(null); return }
           setMepMenu(null)
@@ -1027,17 +1094,34 @@ export default function PdfWorkspace(props: Props) {
           setStructMenu({ left: Math.max(8, Math.min((r?.left ?? 200), window.innerWidth - 300)), top: (r?.bottom ?? 120) + 4 })
         },
       },
-      {
-        key: 'mep', icon: 'mep', label: 'tool.mep' as TakeoffMessageKey, active: !!mepMenu || (!!mepTool && mode === 'draw'),
+      // Services: one button per group (reinforcements, electrical, plumbing), each opening its own list.
+      ...([['blocking', 'blocking'], ['electrical', 'outlet'], ['plumbing', 'water']] as [MepGroup, string][]).map(([g, icon]) => ({
+        key: `mep-${g}`, group: 'services' as ToolGroup, icon, label: `mep.group.${g}` as TakeoffMessageKey,
+        active: mepMenu?.group === g || (!!mepTool && mode === 'draw' && mepType(mepTool)?.group === g),
         onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => {
-          if (mepMenu) { setMepMenu(null); return }
+          if (mepMenu?.group === g) { setMepMenu(null); return }
           setStructMenu(null)
           setArchMenu(null)
           const r = event?.currentTarget.getBoundingClientRect()
-          setMepMenu({ left: Math.max(8, Math.min((r?.left ?? 200), window.innerWidth - 300)), top: (r?.bottom ?? 120) + 4 })
+          setMepMenu({ group: g, left: Math.max(8, Math.min((r?.left ?? 200), window.innerWidth - 300)), top: (r?.bottom ?? 120) + 4 })
         },
-      },
+      })),
     ]),
+  ]
+
+  tools.splice(1, 0, { key: 'undo', group: 'edit', icon: 'undo', label: 'undo.label', title: t('undo.hint'), active: false, onClick: () => void undoLast(), disabled: created.length === 0 })
+  /** Tool bar groups, each under its caption: Add · Edit · Reference · Draw · Disciplines · Services · Drawing aids · Export. */
+  const toolGroups: { key: string; caption: TakeoffMessageKey; tools: typeof tools }[] = [
+    ...(quickActions.length ? [{ key: 'add', caption: 'toolbar.group.add' as TakeoffMessageKey, tools: [] }] : []),
+    { key: 'edit', caption: 'toolbar.group.edit', tools: tools.filter(x => x.group === 'edit') },
+    { key: 'ref', caption: 'toolbar.group.ref', tools: tools.filter(x => x.group === 'ref') },
+    { key: 'draw', caption: 'toolbar.group.draw', tools: tools.filter(x => x.group === 'draw') },
+    ...(zoning ? [] : [
+      { key: 'model', caption: 'toolbar.group.model' as TakeoffMessageKey, tools: tools.filter(x => x.group === 'model') },
+      { key: 'services', caption: 'tool.mep' as TakeoffMessageKey, tools: tools.filter(x => x.group === 'services') },
+    ]),
+    ...(footerSlot ? [] : [{ key: 'aids', caption: 'toolbar.group.aids' as TakeoffMessageKey, tools: [] }]),
+    ...(exportActions.length ? [{ key: 'export', caption: 'toolbar.group.export' as TakeoffMessageKey, tools: [] }] : []),
   ]
 
   const selectionActive = zoning ? !!selectedZoneId : !!selectedId
@@ -1060,6 +1144,56 @@ export default function PdfWorkspace(props: Props) {
   }
   const draftKind: LayerKind | null = zoning ? 'area' : activeLayer?.kind ?? null
   const zoneColor = isMacroKind(zoneKind) ? KIND_COLOR[zoneKind] : LAYER_PALETTE[zones.length % LAYER_PALETTE.length]
+
+  const newLayerForm = showNewLayer && !zoning ? (
+          <form onSubmit={createLayer} style={{ ...card, pointerEvents: 'auto', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label style={fieldStyle}>{t('layer.name')}<input autoFocus style={inputStyle} value={newLayer.name} onChange={e => setNewLayer(v => ({ ...v, name: e.target.value }))} /></label>
+            <label style={fieldStyle}>{t('layer.kind')}
+              <select style={inputStyle} value={newLayer.kind} onChange={e => setNewLayer(v => ({ ...v, kind: e.target.value as LayerKind }))}>
+                <option value="linear">{t('workspace.layer.linear')}</option>
+                <option value="area">{t('workspace.layer.area')}</option>
+                <option value="count">{t('workspace.layer.count')}</option>
+              </select>
+            </label>
+            <label style={fieldStyle}>{t('layer.color')}<input type="color" style={{ ...inputStyle, padding: 2, width: 52 }} value={newLayer.color} onChange={e => setNewLayer(v => ({ ...v, color: e.target.value }))} /></label>
+            {newLayer.kind === 'linear' && (
+              <>
+                <label style={fieldStyle}>{t('layer.height')}<input style={{ ...inputStyle, width: 80 }} inputMode="decimal" value={newLayer.height} onChange={e => setNewLayer(v => ({ ...v, height: e.target.value }))} /></label>
+                <label style={fieldStyle}>{t('layer.thickness')}<input style={{ ...inputStyle, width: 80 }} inputMode="decimal" value={newLayer.thickness} onChange={e => setNewLayer(v => ({ ...v, thickness: e.target.value }))} /></label>
+              </>
+            )}
+            <button type="submit" style={{ ...ui.button, height: 32 }}>{t('layer.create')}</button>
+            <button type="button" style={smallBtn(false)} onClick={() => setShowNewLayer(false)}>×</button>
+          </form>
+  ) : null
+
+  /** Draw tools: pick the item being drawn (or make a new one) and, for lines, how the wall is placed. In the footer when there's room for it. */
+  const inFooter = !!statusSlot
+  const fSel = inFooter ? { height: 22, maxWidth: 260, border: '1px solid #d6e0e3', borderRadius: 5, fontSize: 11, background: '#fff' } : { height: 28, border: '1px solid #d6e0e3', borderRadius: 6, fontSize: 11 }
+  const fBtn = (on: boolean) => inFooter ? { ...smallBtn(on), height: 22, padding: '0 8px', borderRadius: 5 } : smallBtn(on)
+  const layerBar = !zoning && mode === 'draw' ? (
+    <div style={inFooter ? { display: 'flex', alignItems: 'center', gap: 6, flex: 'none' } : { ...card, pointerEvents: 'auto', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <label style={{ ...ui.small, display: 'flex', alignItems: 'center', gap: 6, ...(inFooter ? { fontSize: 11, color: '#4b6570' } : {}) }}>
+        {t('layer.active')}
+        <select
+          value={activeLayerId || ''}
+          onChange={event => { onActiveLayerChange(event.target.value || null); setDraft([]) }}
+          style={fSel}
+        >
+          <option value="">—</option>
+          {layers.filter(l => l.kind === kindForShape[shape]).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </label>
+      <button type="button" style={fBtn(showNewLayer)} onClick={() => { setNewLayer(v => ({ ...v, kind: kindForShape[shape] })); setShowNewLayer(v => !v) }}>+ {t('layer.new')}</button>
+      {shape === 'line' && (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
+          <span style={{ ...ui.small, ...(inFooter ? { fontSize: 11, color: '#4b6570' } : {}) }}>{t('face.placement')}</span>
+          <button type="button" style={fBtn(placement === 'face')} onClick={() => { setPlacement('face'); setDraft([]) }} title={t('face.faceHelp')}>{t('face.face')}</button>
+          <button type="button" style={fBtn(placement === 'center')} onClick={() => { setPlacement('center'); setDraft([]) }} title={t('face.centerHelp')}>{t('face.center')}</button>
+        </span>
+      )}
+    </div>
+  ) : null
 
   return (
     <div style={{ position: 'relative', height: '100%', minHeight: 0 }}>
@@ -1155,6 +1289,7 @@ export default function PdfWorkspace(props: Props) {
               onMovePoints={(id, pts) => void movePoints(id, pts)}
               snap={snapOn}
               showTags={tagsOn && !zoning}
+              backgroundFade={backgroundFade}
               ortho={orthoOn}
               onSize={setPageSize}
               onPoint={p => void handlePoint(p)}
@@ -1201,7 +1336,7 @@ export default function PdfWorkspace(props: Props) {
 
       {/* Floating cards (top): hints, forms and results. */}
       <div style={{ position: 'absolute', top: barH + 10, left: 10, right: 10, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start', pointerEvents: 'none' }}>
-        {hint && <div style={{ ...pill, pointerEvents: 'auto' }}>{hint}</div>}
+        {hint && !statusSlot && <div style={{ ...pill, pointerEvents: 'auto' }}>{hint}</div>}
         {(message || error) && (
           <div style={{ ...pill, pointerEvents: 'auto', background: error ? '#fff5f5' : '#fff', color: error ? '#a44343' : '#294955', borderColor: error ? '#f1c7c7' : '#dfe7ea' }}>
             {error || message}
@@ -1216,51 +1351,9 @@ export default function PdfWorkspace(props: Props) {
           </div>
         )}
 
-        {!zoning && mode === 'draw' && (
-          <div style={{ ...card, pointerEvents: 'auto', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <label style={{ ...ui.small, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {t('layer.active')}
-              <select
-                value={activeLayerId || ''}
-                onChange={event => { onActiveLayerChange(event.target.value || null); setDraft([]) }}
-                style={{ height: 28, border: '1px solid #d6e0e3', borderRadius: 6, fontSize: 11 }}
-              >
-                <option value="">—</option>
-                {layers.filter(l => l.kind === kindForShape[shape]).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </label>
-            <button type="button" style={smallBtn(showNewLayer)} onClick={() => { setNewLayer(v => ({ ...v, kind: kindForShape[shape] })); setShowNewLayer(v => !v) }}>+ {t('layer.new')}</button>
-            {shape === 'line' && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
-                <span style={ui.small}>{t('face.placement')}</span>
-                <button type="button" style={smallBtn(placement === 'face')} onClick={() => { setPlacement('face'); setDraft([]) }} title={t('face.faceHelp')}>{t('face.face')}</button>
-                <button type="button" style={smallBtn(placement === 'center')} onClick={() => { setPlacement('center'); setDraft([]) }} title={t('face.centerHelp')}>{t('face.center')}</button>
-              </span>
-            )}
-          </div>
-        )}
+        {!statusSlot && layerBar}
 
-        {showNewLayer && !zoning && (
-          <form onSubmit={createLayer} style={{ ...card, pointerEvents: 'auto', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <label style={fieldStyle}>{t('layer.name')}<input autoFocus style={inputStyle} value={newLayer.name} onChange={e => setNewLayer(v => ({ ...v, name: e.target.value }))} /></label>
-            <label style={fieldStyle}>{t('layer.kind')}
-              <select style={inputStyle} value={newLayer.kind} onChange={e => setNewLayer(v => ({ ...v, kind: e.target.value as LayerKind }))}>
-                <option value="linear">{t('workspace.layer.linear')}</option>
-                <option value="area">{t('workspace.layer.area')}</option>
-                <option value="count">{t('workspace.layer.count')}</option>
-              </select>
-            </label>
-            <label style={fieldStyle}>{t('layer.color')}<input type="color" style={{ ...inputStyle, padding: 2, width: 52 }} value={newLayer.color} onChange={e => setNewLayer(v => ({ ...v, color: e.target.value }))} /></label>
-            {newLayer.kind === 'linear' && (
-              <>
-                <label style={fieldStyle}>{t('layer.height')}<input style={{ ...inputStyle, width: 80 }} inputMode="decimal" value={newLayer.height} onChange={e => setNewLayer(v => ({ ...v, height: e.target.value }))} /></label>
-                <label style={fieldStyle}>{t('layer.thickness')}<input style={{ ...inputStyle, width: 80 }} inputMode="decimal" value={newLayer.thickness} onChange={e => setNewLayer(v => ({ ...v, thickness: e.target.value }))} /></label>
-              </>
-            )}
-            <button type="submit" style={{ ...ui.button, height: 32 }}>{t('layer.create')}</button>
-            <button type="button" style={smallBtn(false)} onClick={() => setShowNewLayer(false)}>×</button>
-          </form>
-        )}
+        {!statusSlot && newLayerForm}
 
         {mode === 'origin' && originForm && (
           <form onSubmit={saveOrigin} style={{ ...card, pointerEvents: 'auto', gap: 10, maxWidth: 560 }}>
@@ -1524,7 +1617,7 @@ export default function PdfWorkspace(props: Props) {
       {mepMenu && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={() => setMepMenu(null)}>
           <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', left: mepMenu.left, top: mepMenu.top, width: 290, maxHeight: '70vh', overflow: 'auto', padding: 6, background: '#fff', border: '1px solid #dfe7ea', borderRadius: 10, boxShadow: '0 12px 30px rgba(15,35,45,.18)' }}>
-            {MEP_GROUPS.map(g => (
+            {MEP_GROUPS.filter(g => g === mepMenu.group).map(g => (
               <div key={g} style={{ paddingBottom: 4 }}>
                 <div style={{ padding: '8px 8px 4px', fontSize: 10, fontWeight: 800, color: '#536d78', letterSpacing: '.06em', textTransform: 'uppercase' }}>{t(`mep.group.${g}` as TakeoffMessageKey)}</div>
                 {MEP_TYPES.filter(m => m.group === g).map(m => (
@@ -1546,37 +1639,69 @@ export default function PdfWorkspace(props: Props) {
       {/* Tool bar: a 50 px strip at the top of the work area, right below the header. */}
       {(() => {
         const bar = (
-        <div style={toolbarSlot ? toolbarFull : toolbar}>
-          {tools.map(tool => (
-            <button
-              key={tool.key}
-              type="button"
-              disabled={tool.disabled}
-              onClick={event => tool.onClick(event)}
-              title={t(tool.label)}
-              style={toolBtn(tool.active, tool.disabled)}
-            >
-              <Icon name={tool.icon} size={16} />
-              <span>{t(tool.label)}</span>
-            </button>
+        <div ref={barOuter} style={toolbarSlot ? toolbarFull : toolbar}>
+          {/* Left-aligned; scrolls when the window is too narrow even for the icons. */}
+          <div ref={barInner} style={{ display: 'flex', alignItems: 'stretch', flex: 'none', height: '100%' }}>
+          {toolGroups.map((g, gi) => (
+            <div key={g.key} style={{ display: 'flex', alignItems: 'stretch' }}>
+              {gi > 0 && <span style={divider} />}
+              <div style={groupBox}>
+                <div style={groupCaption}>{t(g.caption)}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
+                  {g.key === 'add' && quickActions.map(q => (
+                    <button key={q.key} type="button" onClick={q.onClick} title={compactBar ? `${q.label} · ${q.title}` : q.title} style={quickBtn}>
+                      <Icon name={q.icon} size={16} />
+                      {!compactBar && <span style={btnLabel}>{q.label}</span>}
+                    </button>
+                  ))}
+                  {g.key === 'export' && exportActions.map(q => (
+                    <button key={q.key} type="button" onClick={q.onClick} disabled={q.disabled} title={q.title} style={toolBtn(false, q.disabled)}>
+                      <Icon name={q.icon} size={16} />
+                      {!compactBar && <span style={btnLabel}>{q.label}</span>}
+                    </button>
+                  ))}
+                  {g.tools.map(tool => (
+                    <button
+                      key={tool.key}
+                      type="button"
+                      disabled={tool.disabled}
+                      onClick={event => tool.onClick(event)}
+                      title={tool.title || t(tool.label)}
+                      style={toolBtn(tool.active, tool.disabled)}
+                    >
+                      <Icon name={tool.icon} size={16} />
+                      {!compactBar && <span style={btnLabel}>{t(tool.label)}</span>}
+                    </button>
+                  ))}
+                  {g.key === 'aids' && (
+                    <>
+                      <label style={toggleLabel}>{t('tool.snap')}<Switch on={snapOn} onChange={setSnapOn} /></label>
+                      <label style={toggleLabel}>{t('tool.ortho')}<Switch on={orthoOn} onChange={setOrthoOn} /></label>
+                      {!zoning && <label style={toggleLabel} title={t('tags.hint')}>{t('tags.toggle')}<Switch on={tagsOn} onChange={setTagsOn} /></label>}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           ))}
-          <span style={divider} />
-          {!footerSlot && (
-            <>
-              <label style={toggleLabel}>{t('tool.snap')}<Switch on={snapOn} onChange={setSnapOn} /></label>
-              <label style={toggleLabel}>{t('tool.ortho')}<Switch on={orthoOn} onChange={setOrthoOn} /></label>
-              {!zoning && <label style={toggleLabel} title={t('tags.hint')}>{t('tags.toggle')}<Switch on={tagsOn} onChange={setTagsOn} /></label>}
-              <span style={divider} />
-            </>
-          )}
-          <button type="button" style={toolBtn(false, created.length === 0)} disabled={!created.length} title={t('undo.hint')} onClick={() => void undoLast()}>
-            <Icon name="undo" size={16} />
-            <span>{t('undo.label')}</span>
-          </button>
+          </div>
         </div>
         )
         return toolbarSlot ? createPortal(bar, toolbarSlot) : bar
       })()}
+      {/* New item form: floats just above the footer, next to its button. */}
+      {statusSlot && newLayerForm && (
+        <div style={{ position: 'absolute', left: 10, bottom: 10, right: 10, display: 'flex', zIndex: 20 }}>{newLayerForm}</div>
+      )}
+      {/* Tool hint and active-item bar live in the footer, between the cursor and the switches. */}
+      {statusSlot && createPortal(
+        <>
+          {layerBar}
+          {layerBar && hint && <span style={{ color: '#c4d0d4', flex: 'none' }}>|</span>}
+          {hint && <span title={hint} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#294955' }}>{hint}</span>}
+        </>,
+        statusSlot,
+      )}
       {/* Snap and Ortho live in the footer, left of the zoom. */}
       {footerSlot && createPortal(
         <>
@@ -1610,7 +1735,7 @@ const pill = { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px
 const card = { display: 'flex', flexDirection: 'column', gap: 8, padding: 10, border: '1px solid #dfe7ea', borderRadius: 10, background: '#fff', boxShadow: '0 2px 10px rgba(15,35,45,.10)' } as const
 const xSmall = { border: 0, background: 'transparent', cursor: 'pointer', fontSize: 14, color: 'inherit', padding: 0 } as const
 const smallBtn = (on: boolean) => ({ height: 30, padding: '0 12px', border: '1px solid ' + (on ? '#109d91' : '#d3dfe2'), borderRadius: 7, background: on ? '#109d91' : '#fff', color: on ? '#fff' : '#294955', fontSize: 11, fontWeight: 700, cursor: 'pointer' }) as const
-const TOOLBAR_H = 50
+const TOOLBAR_H = 58
 
 /** Floor, ceiling and slab tools: the item category (IFC type), its look and starting thickness. */
 type AreaToolKey = 'floor' | 'ceiling' | 'slab'
@@ -1619,12 +1744,18 @@ const AREA_TOOLS: Record<AreaToolKey, { ifcType: string; icon: string; label: Ta
   ceiling: { ifcType: 'IfcCovering.CEILING', icon: 'ceiling', label: 'tool.ceiling', itemName: 'area.ceilingItem', color: '#7C3AED', thickness: 0.0125 },
   slab: { ifcType: 'IfcSlab', icon: 'slab', label: 'tool.slab', itemName: 'area.slabItem', color: '#64748B', thickness: 0.12 },
 }
-const toolbar = { position: 'absolute', top: 0, left: 0, right: 0, height: TOOLBAR_H, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 2, padding: '0 8px', background: '#fff', borderBottom: '1px solid #dfe7ea', overflowX: 'auto', overflowY: 'hidden', zIndex: 5 } as const
+const toolbar = { position: 'absolute', top: 0, left: 0, right: 0, height: TOOLBAR_H, boxSizing: 'border-box', display: 'flex', alignItems: 'stretch', gap: 2, padding: '0 8px', background: '#fff', borderBottom: '1px solid #dfe7ea', overflowX: 'auto', overflowY: 'hidden', zIndex: 5 } as const
+/** Ribbon buttons: icon over a short label, so every name fits in the width of a full-HD screen. */
 const toolBtn = (on: boolean, disabled?: boolean) => ({
-  display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, flex: 'none', padding: '0 10px', border: 0, borderRadius: 8, whiteSpace: 'nowrap',
-  background: on ? '#109d91' : 'transparent', color: on ? '#fff' : '#294955', fontSize: 11, fontWeight: 650, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
+  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, height: 38, minWidth: 40, flex: 'none', padding: '0 7px', border: 0, borderRadius: 7, whiteSpace: 'nowrap',
+  background: on ? '#109d91' : 'transparent', color: on ? '#fff' : '#294955', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
 }) as const
-const divider = { width: 1, height: 26, flex: 'none', margin: '0 6px', background: '#e2eaed' } as const
+/** Quick add buttons: tinted so they read as "add an item", not as drawing tools. */
+const quickBtn = { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, height: 38, minWidth: 40, flex: 'none', padding: '0 6px', margin: '0 1px', border: '1px solid #bfe6e1', borderRadius: 7, boxSizing: 'border-box', whiteSpace: 'nowrap', background: '#effaf8', color: '#0d7f77', cursor: 'pointer' } as const
+const btnLabel = { fontSize: 11, fontWeight: 650, lineHeight: '13px' } as const
+const groupBox = { display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'center', padding: '3px 0 4px' } as const
+const groupCaption = { fontSize: 9, fontWeight: 800, lineHeight: '11px', letterSpacing: '.07em', textTransform: 'uppercase', color: '#8aa0a8', textAlign: 'center', whiteSpace: 'nowrap', padding: '0 4px' } as const
+const divider = { width: 1, alignSelf: 'center', height: 40, flex: 'none', margin: '0 6px', background: '#e2eaed' } as const
 /** Same bar filling the full-width row under the header: everything visible, no scrolling. */
-const toolbarFull = { height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, padding: '0 12px', background: '#fff', overflowX: 'auto', overflowY: 'hidden' } as const
+const toolbarFull = { height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'stretch', padding: '0 12px', background: '#fff', overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'thin' } as const
 const toggleLabel = { display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px', flex: 'none', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#294955' } as const

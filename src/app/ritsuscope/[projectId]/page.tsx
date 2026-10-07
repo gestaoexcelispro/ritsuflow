@@ -1,12 +1,13 @@
 'use client'
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { AppBar } from '../../fieldop/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
-import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
+import { takeoffTranslator, useTakeoffT } from '@/lib/i18n/useTakeoffT'
+import type { AppLanguage } from '@/lib/i18n/settings'
 import type { TakeoffMessageKey } from '@/lib/i18n/messages/takeoff.pt-BR'
 import { layerQuantities } from '@/lib/takeoff/geometry'
 import { openingRows } from '@/lib/takeoff/printMarkup'
@@ -56,13 +57,17 @@ import LevelProperties from './LevelProperties'
 import LevelsBulkEdit from './LevelsBulkEdit'
 import TagsEditor from './TagsEditor'
 import SurfaceTypePicker from './SurfaceTypePicker'
-import SurfaceTypesLibrary, { useSurfaceLabels } from './SurfaceTypesLibrary'
+import type { SurfaceTypeRow } from './SurfaceTypesLibrary'
+import SurfaceTypesLibrary, { surfaceLabelsFrom, useSurfaceLabels } from './SurfaceTypesLibrary'
+import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { CEILING_FAMILY, FAMILIES, FLOOR_FAMILY, surfaceMaterials, type FamilyId } from './surfaceFamilies'
 import GenerateLevelsDialog from './GenerateLevelsDialog'
 import CopyToLevelsDialog from './CopyToLevelsDialog'
 import DeleteFromLevelsDialog from './DeleteFromLevelsDialog'
 import { NO_LEVEL, branchItems, branchOfLevel, levelBranches, withoutHiddenStoreys, type LevelBranch } from '@/lib/takeoff/levelTree'
 import type { Quantities } from '@/lib/takeoff/geometry'
+import { groupRows, type GroupKey, type SubKey } from '@/lib/takeoff/itemGroups'
+import { materialRows } from '@/lib/takeoff/materialList'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
 
@@ -121,17 +126,23 @@ export default function TakeoffWorkspacePage() {
   /** Level groups hidden with the level eye: this session only, not saved. */
   const [hiddenBranches, setHiddenBranches] = useState<Set<string>>(new Set())
   const [othersOpen, setOthersOpen] = useState(false)
+  /** Item list groups folded by the user (this session only): "<branch>:<group>" or "<branch>:<group>:<sub>". */
+  const [foldedGroups, setFoldedGroups] = useState<Set<string>>(new Set())
   const [layers, setLayers] = useState<LayerRow[]>([])
   /** Wall-type library (to show and assign the type of a selected wall's item). */
   const [wallTypes, setWallTypes] = useState<WallTypeRow[]>([])
   /** Choosing a library wall type for the selected wall (its item, or this wall only). */
   const [assignFor, setAssignFor] = useState<{ layerId: string; elementId: string } | null>(null)
+  /** Choosing a library ceiling / floor type for the selected area (its item, or this area only). */
+  const [surfaceAssign, setSurfaceAssign] = useState<{ family: FamilyId; layerId: string; elementId: string } | null>(null)
   const [assigning, setAssigning] = useState(false)
   /** Doors / Windows / Openings row being edited in the right sidebar. */
   /** Row under the header that hosts the drawing tool bar (filled by PdfWorkspace through a portal). */
   const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null)
   /** Footer spot (left of the zoom) for the Snap and Ortho switches. */
   const [footerSlot, setFooterSlot] = useState<HTMLSpanElement | null>(null)
+  /** Footer stretch between the cursor and the switches: tool hint and active-item bar. */
+  const [statusSlot, setStatusSlot] = useState<HTMLSpanElement | null>(null)
   const [openingEditor, setOpeningEditor] = useState<'door' | 'window' | 'void' | null>(null)
   /** Elements as stored; `elements` (below) adds each stretch's tag. */
   const [rawElements, setElements] = useState<ElementRow[]>([])
@@ -245,6 +256,20 @@ export default function TakeoffWorkspacePage() {
   useEffect(() => { load() }, [load])
 
   const selectedSource = sources.find(s => s.id === selectedSourceId) || null
+  /** Fade of a sheet's own drawing (white wash, 0…0.8), kept in the sheet's metadata. */
+  const fadeOf = (src: SourceRow | null | undefined) => Math.max(0, Math.min(0.8, Number((src?.metadata as { background_fade?: number } | undefined)?.background_fade) || 0))
+  const backgroundFade = fadeOf(selectedSource)
+  const fadeSave = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function setBackgroundFade(value: number) {
+    const src = selectedSource
+    if (!src) return
+    const metadata = { ...(src.metadata || {}), background_fade: value }
+    setSources(prev => prev.map(x => (x.id === src.id ? { ...x, metadata } : x)))
+    if (fadeSave.current) clearTimeout(fadeSave.current)
+    fadeSave.current = setTimeout(() => {
+      void createClient().from('takeoff_sources').update({ metadata }).eq('id', src.id).then(({ error: e }) => { if (e) setError(t('workspace.error', { message: e.message })) })
+    }, 400)
+  }
 
   // Engine items for the selected source only.
   // Every layer, with only this source's elements; layers without elements stay listed so they can be edited.
@@ -285,6 +310,9 @@ export default function TakeoffWorkspacePage() {
   const recipeById = useMemo(() => new Map(recipes.map(r => [r.id, r])), [recipes])
   const recipeOfItem = useCallback((it: { recipeId?: string | null }) => (it.recipeId ? recipeById.get(it.recipeId) : null), [recipeById])
   const recipeCtx = useRecipeContext(sourceItems, recipeOfItem)
+  /** Recipe context for every item of the project (the PDF report covers all sheets). */
+  const allLayerItems = useMemo(() => rowsToItems(layers, [], new Map()), [layers])
+  const projectRecipeCtx = useRecipeContext(allLayerItems, recipeOfItem)
 
   useEffect(() => {
     setSelectedElementId(pendingSelect.current)
@@ -560,6 +588,43 @@ export default function TakeoffWorkspacePage() {
   const shownItems = levelHidden ? [] : hiddenLayerIds.size ? sourceItems.filter(it => !hiddenLayerIds.has(it.key)) : sourceItems
   const levelShownModel = isIfcModel ? modelData.items : withoutHiddenStoreys(modelData.items, modelData.storeys, hiddenBranches, levels)
   const shownModelItems = hiddenLayerIds.size ? levelShownModel.filter(it => !hiddenLayerIds.has(it.key)) : levelShownModel
+  /** Items of the same library type at the same level/height (duplicates that should be one item), by key. */
+  const sameTypeKey = (l: LayerRow) => (l.wall_type_id ? `${l.wall_type_id}|${l.kind}|${l.kind === 'area' ? Number(l.elevation_m) || 0 : l.kind === 'linear' ? Number(l.height_m) || 0 : ''}` : null)
+  /** Merges duplicate items (same type, same level): their drawings move to the first one, the others are removed. */
+  async function mergeDuplicates(ids: string[]) {
+    const groups = new Map<string, LayerRow[]>()
+    for (const l of layers.filter(x => ids.includes(x.id))) {
+      const k = sameTypeKey(l)
+      if (k) groups.set(k, [...(groups.get(k) || []), l])
+    }
+    const dupes = [...groups.values()].filter(g => g.length > 1)
+    if (!dupes.length) return
+    if (!window.confirm(t('group.mergeConfirm', { names: dupes.map(g => `${g[0].name} ×${g.length}`).join(', ') }))) return
+    const supabase = createClient()
+    for (const g of dupes) {
+      const [keep, ...rest] = [...g].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      const restIds = rest.map(x => x.id)
+      const { error: e } = await supabase.from('takeoff_elements').update({ layer_id: keep.id }).in('layer_id', restIds)
+      if (e) { setError(t('workspace.error', { message: e.message })); return }
+      const { error: e2 } = await supabase.from('takeoff_layers').delete().in('id', restIds)
+      if (e2) { setError(t('workspace.error', { message: e2.message })); return }
+    }
+    await load()
+    setStatus(t('group.merged'))
+  }
+
+  /** Shows or hides several items at once (a whole list group). */
+  async function setLayersVisible(ids: string[], visible: boolean) {
+    if (!ids.length) return
+    const before = new Map(layers.filter(l => ids.includes(l.id)).map(l => [l.id, l.is_visible]))
+    setLayers(prev => prev.map(l => (ids.includes(l.id) ? { ...l, is_visible: visible } : l)))
+    const { error: e } = await createClient().from('takeoff_layers').update({ is_visible: visible }).in('id', ids)
+    if (e) {
+      setLayers(prev => prev.map(l => (before.has(l.id) ? { ...l, is_visible: before.get(l.id) ?? true } : l)))
+      setError(t('workspace.error', { message: e.message }))
+    }
+  }
+
   async function toggleLayerVisible(id: string) {
     const layer = layers.find(l => l.id === id)
     if (!layer) return
@@ -614,6 +679,17 @@ export default function TakeoffWorkspacePage() {
     <PdfWorkspace
       toolbarSlot={toolbarShown ? toolbarSlot : null}
       footerSlot={toolbarShown ? footerSlot : null}
+      statusSlot={toolbarShown ? statusSlot : null}
+      backgroundFade={backgroundFade}
+      quickActions={section === 'zoning' ? [] : [
+        { key: 'wall', icon: 'wall', label: t('quick.wall'), title: t('quick.wallHint'), onClick: () => setPickerOpen(true) },
+        { key: 'ceiling', icon: 'ceiling', label: t('quick.ceiling'), title: t('quick.ceilingHint'), onClick: () => setSurfacePicker('ceiling') },
+        { key: 'floor', icon: 'floor', label: t('quick.floor'), title: t('quick.floorHint'), onClick: () => setSurfacePicker('floor') },
+        { key: 'item', icon: 'edit', label: t('quick.item'), title: t('quick.itemHint'), onClick: () => setNewLayerRequest(n => n + 1) },
+      ]}
+      exportActions={section === 'zoning' ? [] : [
+        { key: 'csv', icon: 'download', label: 'CSV', title: t('csv.hint'), onClick: exportCsv, disabled: !(ptPerM > 0 && sourceItems.length > 0) },
+      ]}
       projectId={projectId}
       source={selectedSource}
       layers={layers}
@@ -665,6 +741,45 @@ export default function TakeoffWorkspacePage() {
     setAssignFor(null)
     await load()
     setStatus(t(scope === 'item' ? 'walltype.assignedItem' : 'walltype.assignedElement'))
+  }
+
+  /** Gives the selected area's item (all its areas) or just this area a library ceiling / floor type. */
+  async function assignSurfaceType(pick: SurfaceTypeRow, scope: 'item' | 'element') {
+    if (!surfaceAssign) return
+    const layer = layers.find(l => l.id === surfaceAssign.layerId)
+    if (!layer) return
+    const fam = FAMILIES[surfaceAssign.family]
+    const row = fam.layerFrom(pick, { projectId, color: layer.color, sortOrder: (layers.length + 1) * 10, elevationM: Number(layer.elevation_m) || 0 }) as Record<string, unknown> & { framing: { meta: Record<string, unknown> } }
+    const supabase = createClient()
+    if (scope === 'item') {
+      // The item becomes that type (name, colour, build-up, recipe); it keeps its level and display settings.
+      const current = (layer.framing || {}) as Record<string, unknown> & { meta?: Record<string, unknown> }
+      const meta = { ...(current.meta || {}) }
+      delete meta.ceiling
+      delete meta.floor
+      const { error: e } = await supabase.from('takeoff_layers').update({
+        name: row.name, color: row.color, thickness_m: row.thickness_m, recipe_id: row.recipe_id, wall_type_id: row.wall_type_id,
+        framing: { ...current, meta: { ...meta, ...row.framing.meta } },
+      }).eq('id', layer.id)
+      if (e) throw e
+    } else {
+      // Join an item of the same type at the same level when there is one; otherwise a new item.
+      const same = layers.find(l => l.id !== layer.id && l.kind === 'area' && l.wall_type_id === pick.id && Math.abs((Number(l.elevation_m) || 0) - (Number(layer.elevation_m) || 0)) < 0.001)
+      let targetId = same?.id
+      if (!targetId) {
+        const { data, error: e } = await supabase.from('takeoff_layers').insert(row).select('id').single()
+        if (e || !data) throw e || new Error('insert failed')
+        targetId = data.id as string
+      }
+      const { error: e2 } = await supabase.from('takeoff_elements').update({ layer_id: targetId }).eq('id', surfaceAssign.elementId)
+      if (e2) throw e2
+      // The old item had only this area: it's now empty, so it goes.
+      const { count } = await supabase.from('takeoff_elements').select('id', { count: 'exact', head: true }).eq('layer_id', layer.id)
+      if (count === 0) await supabase.from('takeoff_layers').delete().eq('id', layer.id)
+    }
+    setSurfaceAssign(null)
+    await load()
+    setStatus(t(scope === 'item' ? 'surface.assignedItem' : 'surface.assignedElement'))
   }
 
   /** Saves the selected wall's item as a new (draft) type in the library and links the item to it. */
@@ -813,6 +928,33 @@ export default function TakeoffWorkspacePage() {
     // Areas and counted points: their tag.
     <div style={{ ...ui.panel, gap: 12 }}>
       <h2 style={ui.panelTitle}>{selection.item.name}</h2>
+      {selection.item.kind === 'area' && selectedLayerRow && !selection.item.struct && selection.item.ifcType !== 'IfcSlab' && (() => {
+        // Library ceiling / floor type of this area's item: shown, or a nudge to pick one when it has none.
+        const typed = selectedLayerRow.wall_type_id ? wallTypes.find(w => w.id === selectedLayerRow.wall_type_id) || null : null
+        const fams: FamilyId[] = typed
+          ? [(typed.category as string) === 'floor' ? 'floor' : 'ceiling']
+          : selection.item.ifcType === 'IfcCovering.CEILING' ? ['ceiling'] : selection.item.ifcType === 'IfcCovering.FLOORING' ? ['floor'] : ['ceiling', 'floor']
+        const count = elements.filter(el => el.layer_id === selectedLayerRow.id).length
+        const open = (family: FamilyId) => setSurfaceAssign({ family, layerId: selectedLayerRow.id, elementId: selectedElementRow.id })
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 8, border: `1px solid ${typed ? '#dfe7ea' : '#f3d19c'}`, background: typed ? '#fff' : '#fffaf0' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <strong style={{ fontSize: 12, color: '#173441', flex: 1 }}>{t('surface.cardTitle')}</strong>
+              <span style={ui.small}>{t('surface.cardItem', { name: selection.item.name, count })}</span>
+            </div>
+            {typed
+              ? <strong style={{ fontSize: 12, color: '#294955' }}>{typed.code ? `${typed.code} – ${typed.name}` : typed.name}</strong>
+              : <span style={{ fontSize: 11, color: '#8a5a12' }}>{t(selectedLayerRow.wall_type_id ? 'surface.cardMissing' : 'surface.cardNone')}</span>}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {fams.map(f => (
+                <button key={f} type="button" style={{ ...ui.button, height: 30, fontSize: 11 }} onClick={() => open(f)}>
+                  {typed ? t('surface.cardChange') : t(FAMILIES[f].msg.pickTitle)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
       <TagsEditor key={`tag-${selectedElementRow.id}`} element={selectedElementRow} kind={selection.item.kind} ptPerM={ptPerM} onSaved={async message => { await load(); setStatus(message) }} />
       {(selection.item.ceiling || selection.item.floor) && ptPerM > 0 && (() => {
         // This ceiling's or floor's own materials, from its type's build-up.
@@ -897,9 +1039,14 @@ export default function TakeoffWorkspacePage() {
     setPrinting(true)
     setError('')
     try {
-      const date = new Date().toLocaleString(language, { dateStyle: 'short', timeStyle: 'short' })
+      // The report is in the language (and number format) the user is working in.
+      const printLang: AppLanguage = language
+      const pt = takeoffTranslator(printLang)
+      const pfmt = (v: number, d = 2) => formatNumber(v, d)
+      const pSurface = surfaceLabelsFrom(pt)
+      const date = new Date().toLocaleString(printLang, { dateStyle: 'short', timeStyle: 'short' })
       const projectTitle = `${project!.name}${project!.project_code ? ` (${project!.project_code})` : ''}`
-      const kind = t(printKindKey[what])
+      const kind = pt(printKindKey[what])
       const chosen = printSheets
         .map(ps => ({ ...ps, items: what === 'locations' ? [] : ps.items.filter(printFilter[what]), zones: what === 'locations' ? ps.zones : [] }))
         .filter(ps => ps.items.length > 0 || ps.zones.length > 0)
@@ -912,7 +1059,7 @@ export default function TakeoffWorkspacePage() {
       const sheetsOut: PrintSheet[] = chosen.map(ps => {
         const k = Number(ps.source.scale_pt_per_m) || 0
         const r = scaleRatio(k)
-        const scale = r ? `1:${formatNumber(Math.round(r), 0)}` : t('workspace.source.notCalibrated')
+        const scale = r ? `1:${pfmt(Math.round(r), 0)}` : pt('workspace.source.notCalibrated')
         const mult = ps.branch.count
         return {
           url: urlOf.get(ps.source.file_path)!,
@@ -922,8 +1069,22 @@ export default function TakeoffWorkspacePage() {
           ptPerM: k,
           multiplier: mult,
           title: `${projectTitle} · ${ps.levelName} · ${ps.source.name} · ${kind}`,
-          subtitle: t('print.subtitle', { scale, date }),
-          heading: `${ps.levelName} · ${ps.source.name}${mult > 1 ? ` · ${t('print.perFloor')}` : ''}`,
+          subtitle: pt('print.subtitle', { scale, date }),
+          heading: `${ps.levelName} · ${ps.source.name}${mult > 1 ? ` · ${pt('print.perFloor')}` : ''}`,
+          backgroundFade: fadeOf(ps.source),
+          materialGroups: k > 0 ? ps.items.map(it => {
+            // One group per item (its type): framing layout, recipe and ceiling / floor build-up.
+            const surf = surfaceMaterials([it], k, pSurface)
+            return {
+              name: it.name,
+              color: hexToRgb(it.color),
+              rows: materialRows([it], k, {
+                recipe: recipeMaterials([it], k, recipeOfItem, projectRecipeCtx),
+                ceiling: surf.find(x => x.family.id === 'ceiling')?.materials || [],
+                floor: surf.find(x => x.family.id === 'floor')?.materials || [],
+              }, { bars: pt('csv.bars'), sheets: pt('csv.sheets'), un: pt('unit.un') }, v => pfmt(v, 2), (len, unit) => pt('print.stockBars', { len: pfmt(len, 2), unit })),
+            }
+          }).filter(g => g.rows.length) : [],
         }
       })
       // 3D page: the building with this PDF's items (everything for locations and the full takeoff).
@@ -934,36 +1095,43 @@ export default function TakeoffWorkspacePage() {
       const all3d = fillLevelHeights(building.items, page => hOfPage.get(page) ?? null).filter(it => it.shapes.length > 0)
       // Services are shown inside their walls, so the walls come along on that 3D page.
       const items3d = what === 'locations' || what === 'takeoff' ? all3d : all3d.filter(it => printFilter[what](it) || (what === 'mep' && it.kind === 'linear' && !it.struct))
-      if (items3d.length) image3d = await render3DImage({ items: items3d, ptPerM: 1, storeys: building.storeys, width: 2000, height: 1250 })
+      if (items3d.length) image3d = await render3DImage({ items: items3d, ptPerM: 1, storeys: building.storeys, width: 2000, height: 1250, tags: true })
       const blob = await buildProjectPdf({
         sheets: sheetsOut,
         image3d,
         title: `${projectTitle} · ${kind}`,
-        subtitle: t('print.projectSubtitle', { sheets: sheetsOut.length, date }),
-        fmt: v => formatNumber(v, 2),
+        subtitle: pt(sheetsOut.length === 1 ? 'print.projectSubtitleOne' : 'print.projectSubtitle', { sheets: sheetsOut.length, date }),
+        fmt: v => pfmt(v, 2),
         logoUrl: '/ritsu-logo.png',
         labels: {
           title: `${projectTitle} · ${kind}`,
           subtitle: '',
-          items: t('print.items'),
-          locations: t('print.locations'),
-          colItem: t('print.colItem'),
-          colKind: t('print.colKind'),
-          colQty: t('print.colQty'),
-          colExtra: t('print.colExtra'),
-          colArea: t('zone.area'),
-          colPerimeter: t('zone.perimeter'),
-          kind: { linear: t('workspace.layer.linear'), area: t('workspace.layer.area'), count: t('workspace.layer.count') },
-          unit: t('unit.un'),
-          footer: t('print.footer'),
-          openings: t('print.openings'),
-          colWall: t('print.colWall'),
-          colOpenArea: t('print.colOpenArea'),
-          openingKind: { door: t('opening.kind.door'), window: t('opening.kind.window'), void: t('opening.kind.void'), other: t('opening.kind.void') },
-          formwork: t('struct.formwork'),
-          view3d: t('print.view3d'),
-          totals: t('print.totals'),
-          totalsNote: t('print.totalsNote'),
+          items: pt('print.items'),
+          locations: pt('print.locations'),
+          colItem: pt('print.colItem'),
+          colKind: pt('print.colKind'),
+          colQty: pt('print.colQty'),
+          colExtra: pt('print.colExtra'),
+          colArea: pt('zone.area'),
+          colPerimeter: pt('zone.perimeter'),
+          kind: { linear: pt('workspace.layer.linear'), area: pt('workspace.layer.area'), count: pt('workspace.layer.count') },
+          unit: pt('unit.un'),
+          footer: pt('print.footer'),
+          openings: pt('print.openings'),
+          colWall: pt('print.colWall'),
+          colOpenArea: pt('print.colOpenArea'),
+          openingKind: { door: pt('opening.kind.door'), window: pt('opening.kind.window'), void: pt('opening.kind.void'), other: pt('opening.kind.void') },
+          formwork: pt('struct.formwork'),
+          view3d: pt('print.view3d'),
+          totals: pt('print.totals'),
+          totalsNote: pt('print.totalsNote'),
+          materials: pt('print.materials'),
+          colMaterial: pt('csv.material'),
+          colPacks: pt('csv.packages'),
+          materialKind: { profile: pt('csv.profile'), board: pt('csv.board'), screws: pt('csv.screws'), recipe: pt('csv.recipe'), ceiling: pt('print.buildUp'), floor: pt('print.buildUp') },
+          tags: pt('print.tags'),
+          colTag: pt('csv.tag'),
+          detail: { length: pt('print.detailLength'), perimeter: pt('print.detailPerimeter'), height: pt('print.detailHeight') },
         },
       })
       const href = URL.createObjectURL(blob)
@@ -1180,7 +1348,7 @@ export default function TakeoffWorkspacePage() {
     </label>
   )
   /** One row of the item list (flat list or under a level). `sheetId`: sheet to switch to before drawing. */
-  const renderItemRow = (item: (typeof layerItems)[number], q: { main: string; sub: string }, sheetId?: string, rowKey?: string) => {
+  const renderItemRow = (item: (typeof layerItems)[number], q: { main: string; sub: string }, sheetId?: string, rowKey?: string, indent = 14) => {
           const activeDraw = isPdf && item.key === activeLayerId
           const editing = item.key === editingLayerId
           return (
@@ -1189,11 +1357,13 @@ export default function TakeoffWorkspacePage() {
               onClick={() => {
                 if (sheetId && sheetId !== selectedSourceId) { setSelectedSourceId(sheetId); setActiveLayerId(item.key); setDrawRequest(n => n + 1) }
                 else if (isPdf) { setActiveLayerId(item.key); setDrawRequest(n => n + 1) }
-                else { setEditingLayerId(item.key); setRightOpen(true); setRightTab('props') }
+                // The item's properties open in the right panel too.
+                setOpeningEditor(null); setEditingLevelId(null); setCheckedLevelIds(new Set()); setSelectedElementId(null)
+                setEditingLayerId(item.key); setRightOpen(true); setRightTab('props')
               }}
               title={isPdf ? t('layout.itemClickPdf') : t('layer.edit')}
               style={{
-                display: 'grid', gridTemplateColumns: '16px 14px minmax(0,1fr) auto 22px 22px', gap: 6, alignItems: 'center', padding: '8px 14px', cursor: 'pointer', opacity: hiddenLayerIds.has(item.key) ? 0.5 : 1,
+                display: 'grid', gridTemplateColumns: '16px 14px minmax(0,1fr) auto 22px 22px', gap: 6, alignItems: 'center', padding: `8px 14px 8px ${indent}px`, cursor: 'pointer', opacity: hiddenLayerIds.has(item.key) ? 0.5 : 1,
                 borderBottom: '1px solid #f0f4f5', background: checked.has(item.key) ? '#fff4ec' : activeDraw ? '#e6f6f4' : editing ? '#f4f7ff' : 'transparent', boxShadow: activeDraw ? 'inset 3px 0 0 #109d91' : 'none',
               }}
             >
@@ -1207,7 +1377,7 @@ export default function TakeoffWorkspacePage() {
               <span style={{ width: 12, height: 12, borderRadius: 3, background: item.color }} />
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 12, fontWeight: 650, color: '#173441', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                <span style={{ fontSize: 10, color: '#6b8089' }}>{t(layerKindKey[item.kind])}</span>
+                <span style={{ fontSize: 10, color: '#6b8089' }}>{t(layerKindKey[item.kind])}{item.kind === 'area' && (item.elevation ?? 0) > 0 ? ` · h ${formatNumber(item.elevation ?? 0, 2)} m` : ''}</span>
               </span>
               <span style={{ textAlign: 'right' }}>
                 <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#0d7f77' }}>{q.main}</span>
@@ -1237,14 +1407,14 @@ export default function TakeoffWorkspacePage() {
     if (sheetId && sheetId !== selectedSourceId) setSelectedSourceId(sheetId)
     setEditingLayerId(null); setSelectedElementId(null); setOpeningEditor(kind); setRightOpen(true); setRightTab('props')
   }
-  const renderOpeningRow = (o: ReturnType<typeof summarizeOpenings>[number], keyPrefix: string, sheetId?: string) => {
+  const renderOpeningRow = (o: ReturnType<typeof summarizeOpenings>[number], keyPrefix: string, sheetId?: string, indent = 14) => {
     const active = !sheetId || sheetId === selectedSourceId
     return (
             <div
               key={`${keyPrefix}${o.kind}`}
               title={o.sizes.map(([size, n]) => `${n} × ${size} m`).join('\n')}
               onClick={() => openOpenings(o.kind, sheetId)}
-              style={{ cursor: 'pointer', background: (active && openingEditor === o.kind) ? '#e6f6f4' : 'transparent', display: 'grid', gridTemplateColumns: '16px 14px minmax(0,1fr) auto 22px', gap: 6, alignItems: 'center', padding: '8px 14px', borderBottom: '1px solid #f0f4f5' }}
+              style={{ cursor: 'pointer', background: (active && openingEditor === o.kind) ? '#e6f6f4' : 'transparent', display: 'grid', gridTemplateColumns: '16px 14px minmax(0,1fr) auto 22px', gap: 6, alignItems: 'center', padding: `8px 14px 8px ${indent}px`, borderBottom: '1px solid #f0f4f5' }}
             >
               <span />
               <Icon name={o.icon} size={14} style={{ color: o.color }} />
@@ -1267,6 +1437,106 @@ export default function TakeoffWorkspacePage() {
             </div>
     )
   }
+  /** Main figure of an item as a number and unit, for group subtotals (walls in m² when they have a height). */
+  const qtyValue = (item: (typeof layerItems)[number], q: Quantities | null): { v: number; u: string } | null => {
+    if (!q) return null
+    if (item.kind === 'linear') return !item.struct && (q.net ?? 0) > 0 ? { v: q.net ?? 0, u: 'm²' } : { v: q.len, u: 'm' }
+    if (item.kind === 'area') return { v: q.area, u: 'm²' }
+    return { v: q.n, u: t('unit.un') }
+  }
+  const GROUP_LABEL: Record<GroupKey, TakeoffMessageKey> = {
+    arch: 'tool.arch', struct: 'tool.struct', blocking: 'mep.group.blocking', electrical: 'mep.group.electrical', plumbing: 'mep.group.plumbing', other: 'group.other',
+  }
+  const SUB_LABEL: Record<SubKey, TakeoffMessageKey> = { walls: 'group.walls', ceilings: 'group.ceilings', floors: 'group.floors' }
+  /** The item rows under discipline headers (Architecture → Walls / Ceilings / Floors, Structure, …), each foldable, with a subtotal, an eye and a select-all box. */
+  const renderGrouped = (rows: { item: (typeof layerItems)[number]; q: Quantities | null; node: (indent: number) => ReactNode }[], prefix: string, indent: number, openings: ReturnType<typeof summarizeOpenings> = [], sheetId?: string) => {
+    const STEP = 12
+    const header = (key: string, label: string, list: typeof rows, level: 0 | 1, extra?: { total: string; count: number }) => {
+      const ids = list.map(r => r.item.key)
+      const folded = foldedGroups.has(key)
+      const allChecked = ids.every(id => checked.has(id))
+      const someChecked = !allChecked && ids.some(id => checked.has(id))
+      const anyHidden = ids.some(id => hiddenLayerIds.has(id))
+      const allHidden = ids.length > 0 && ids.every(id => hiddenLayerIds.has(id))
+      const sums = new Map<string, number>()
+      for (const r of list) { const v = qtyValue(r.item, r.q); if (v) sums.set(v.u, (sums.get(v.u) || 0) + v.v) }
+      const total = extra ? extra.total : [...sums.entries()].map(([u, v]) => `${formatNumber(v, u === t('unit.un') ? 0 : 2)} ${u}`).join(' · ')
+      // Same library type at the same level split over several items: offer to merge them into one.
+      const seen = new Map<string, number>()
+      for (const id of ids) { const l = layers.find(x => x.id === id); const k = l && sameTypeKey(l); if (k) seen.set(k, (seen.get(k) || 0) + 1) }
+      const dupCount = [...seen.values()].filter(n => n > 1).length
+      return (
+        <div
+          key={`h:${key}`}
+          onClick={() => setFoldedGroups(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n })}
+          style={{ display: 'grid', gridTemplateColumns: '16px 14px minmax(0,1fr) auto 22px', gap: 6, alignItems: 'center', padding: `${level === 0 ? 7 : 5}px 14px ${level === 0 ? 7 : 5}px ${indent + level * STEP}px`, cursor: 'pointer', background: level === 0 ? '#f2f7f8' : '#f8fbfb', borderBottom: '1px solid #e8eff1', opacity: allHidden ? 0.55 : 1 }}
+        >
+          {extra ? <span /> : <input
+            type="checkbox"
+            checked={allChecked}
+            ref={el => { if (el) el.indeterminate = someChecked }}
+            onClick={event => event.stopPropagation()}
+            onChange={() => setChecked(prev => { const n = new Set(prev); for (const id of ids) { if (allChecked) n.delete(id); else n.add(id) } return n })}
+            title={t('group.selectAll')}
+            style={{ margin: 0 }}
+          />}
+          <Icon name="chevron" size={12} style={{ color: '#536d78', transform: folded ? 'rotate(-90deg)' : 'none', transition: 'transform .12s' }} />
+          {/* One text style for every group (any discipline added later looks the same): name never cut, count shrinks first. */}
+          <span style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            <span style={groupName(level)}>{label}</span>
+            <span style={groupCount}>{t((extra ? extra.count : list.length) === 1 ? 'group.typesOne' : 'group.types', { count: extra ? extra.count : list.length })}</span>
+            {dupCount > 0 && (
+              <button type="button" title={t('group.mergeHint')} onClick={event => { event.stopPropagation(); void mergeDuplicates(ids) }}
+                style={{ marginLeft: 6, height: 18, padding: '0 6px', border: '1px solid #f3d19c', borderRadius: 9, background: '#fffaf0', color: '#8a5a12', fontSize: 9, fontWeight: 800, cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
+                {t('group.merge')}
+              </button>
+            )}
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#0d7f77', whiteSpace: 'nowrap' }}>{total}</span>
+          {extra ? <span /> : <button
+            type="button"
+            title={t(anyHidden ? 'group.show' : 'group.hide')}
+            onClick={event => { event.stopPropagation(); void setLayersVisible(ids, anyHidden) }}
+            style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: '1px solid #d3dfe2', borderRadius: 5, background: '#fff', cursor: 'pointer', color: anyHidden ? '#a0b0b6' : '#294955' }}
+          >
+            <Icon name={anyHidden ? 'eyeOff' : 'eye'} size={13} />
+          </button>}
+        </div>
+      )
+    }
+    const groups = groupRows(rows, r => r.item).map(g => {
+      const gKey = `${prefix}${g.group}`
+      const all = g.subs.flatMap(s => s.rows)
+      return (
+        <div key={gKey}>
+          {header(gKey, t(GROUP_LABEL[g.group]), all, 0)}
+          {!foldedGroups.has(gKey) && g.subs.map(s => {
+            if (!s.sub) return <div key={`${gKey}:rows`}>{s.rows.map(r => r.node(indent + STEP))}</div>
+            const sKey = `${gKey}:${s.sub}`
+            return (
+              <div key={sKey}>
+                {header(sKey, t(SUB_LABEL[s.sub]), s.rows, 1)}
+                {!foldedGroups.has(sKey) && s.rows.map(r => r.node(indent + 2 * STEP))}
+              </div>
+            )
+          })}
+        </div>
+      )
+    })
+    // Doors, windows and openings: their own group, last, like the disciplines.
+    if (openings.length) {
+      const oKey = `${prefix}openings`
+      const n = openings.reduce((a, o) => a + o.count, 0)
+      const area = openings.reduce((a, o) => a + o.area, 0)
+      groups.push(
+        <div key={oKey}>
+          {header(oKey, t('group.openings'), [], 0, { total: `${n} ${t('unit.un')} · ${formatNumber(area, 2)} m²`, count: openings.length })}
+          {!foldedGroups.has(oKey) && openings.map(o => renderOpeningRow(o, `${oKey}:`, sheetId, indent + STEP))}
+        </div>,
+      )
+    }
+    return groups
+  }
   const treeMode = levels.length > 0 && isPdf
   const usedLayerIds = new Set(elements.map(e => e.layer_id))
   /** Under a level: items drawn on its sheets; on the current level also new (never drawn) items, and the others on demand. */
@@ -1281,20 +1551,16 @@ export default function TakeoffWorkspacePage() {
     if (!drawn.length && !fresh.length && !others.length) return <div style={{ ...ui.small, padding: '2px 14px 4px 50px', color: '#a0b0b6' }}>{t('level.noItems')}</div>
     return (
       <>
-        {drawn.map(d => renderItemRow(d.item, quantityText(d.item, d.q), sheetId, `${b.id}:${d.key}`))}
-        {fresh.map(it => renderItemRow(it, quantityText(it, null), undefined, `${b.id}:${it.key}`))}
+        {renderGrouped([
+          ...drawn.map(d => ({ item: d.item, q: d.q, node: (ind: number) => renderItemRow(d.item, quantityText(d.item, d.q), sheetId, `${b.id}:${d.key}`, ind) })),
+          ...fresh.map(it => ({ item: it, q: null, node: (ind: number) => renderItemRow(it, quantityText(it, null), undefined, `${b.id}:${it.key}`, ind) })),
+        ], `${b.id}:`, 28, openings, sheetId)}
         {others.length > 0 && (
           <button type="button" onClick={() => setOthersOpen(o => !o)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, background: 'transparent', padding: '6px 14px 6px 50px', color: '#0d7f77', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>
             {othersOpen ? t('level.hideOtherItems') : t('level.otherItems', { count: others.length })}
           </button>
         )}
         {othersOpen && others.map(it => <div key={`${b.id}:o:${it.key}`} style={{ background: '#fafcfc' }}>{renderItemRow(it, quantityText(it, null), undefined, `${b.id}:o:${it.key}`)}</div>)}
-        {openings.length > 0 && (
-          <>
-            <div style={{ padding: '6px 14px 3px 50px', fontSize: 9, fontWeight: 800, color: '#536d78', letterSpacing: '.06em', textTransform: 'uppercase' }}>{t('openings.listTitle')}</div>
-            {openings.map(o => renderOpeningRow(o, `${b.id}:op:`, sheetId))}
-          </>
-        )}
       </>
     )
   }
@@ -1327,16 +1593,7 @@ export default function TakeoffWorkspacePage() {
       <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid #e5ecee', display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ ...paneTitle, flex: 1 }}>{t('layout.items')}</span>
         {sheetMult > 1 && <span title={t('level.sheetMultiplier', { count: sheetMult })} style={{ padding: '2px 7px', borderRadius: 10, background: '#e6f6f4', color: '#0d7f77', fontSize: 10, fontWeight: 800 }}>×{sheetMult}</span>}
-        {ptPerM > 0 && sourceItems.length > 0 && <button type="button" style={chipBtn(false)} onClick={exportCsv}>CSV</button>}
       </div>
-      {isPdf && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 14px' }}>
-          <button type="button" style={chipBtn(true)} onClick={() => setPickerOpen(true)}><Icon name="plus" size={13} />{t('walltype.pickButton')}</button>
-          <button type="button" style={chipBtn(true)} onClick={() => setSurfacePicker('ceiling')}><Icon name="plus" size={13} />{t(CEILING_FAMILY.msg.pickButton)}</button>
-          <button type="button" style={chipBtn(true)} onClick={() => setSurfacePicker('floor')}><Icon name="plus" size={13} />{t(FLOOR_FAMILY.msg.pickButton)}</button>
-          <button type="button" style={chipBtn(false)} onClick={() => setNewLayerRequest(n => n + 1)}><Icon name="plus" size={13} />{t('layout.newItem')}</button>
-        </div>
-      )}
       {checkedIds.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff8f2', borderTop: '1px solid #f3dcc8' }}>
           <strong style={{ fontSize: 11, color: '#7c2d12', flex: '1 0 100%' }}>{t('bulk.selected', { count: checkedIds.length })}</strong>
@@ -1373,13 +1630,7 @@ export default function TakeoffWorkspacePage() {
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {treeMode ? levelsPanel : layerItems.length === 0 ? (
           <div style={{ ...ui.small, padding: 14 }}>{t('workspace.layers.empty')}</div>
-        ) : layerItems.map(item => renderItemRow(item, itemQuantity(item)))}
-        {!treeMode && openingSummary.length > 0 && (
-          <>
-            <div style={{ padding: '10px 14px 4px', fontSize: 10, fontWeight: 800, color: '#536d78', letterSpacing: '.06em', textTransform: 'uppercase', borderTop: '1px solid #e5ecee', background: '#f2f7f8' }}>{t('openings.listTitle')}</div>
-            {openingSummary.map(o => renderOpeningRow(o, ''))}
-          </>
-        )}
+        ) : renderGrouped(layerItems.map(item => ({ item, q: ptPerM > 0 && item.shapes.length ? layerQuantities(item, ptPerM) : null, node: (ind: number) => renderItemRow(item, itemQuantity(item), undefined, undefined, ind) })), 'flat:', 14, openingSummary)}
       </div>
     </div>
   )
@@ -1497,7 +1748,7 @@ export default function TakeoffWorkspacePage() {
   )
 
   const workspace = (
-    <div style={{ position: 'fixed', inset: 0, background: '#f4f7f8', display: 'grid', gridTemplateRows: `56px 56px ${toolbarShown ? '50px ' : ''}minmax(0,1fr) 30px` }} onClick={() => setMenu(null)}>
+    <div style={{ position: 'fixed', inset: 0, background: '#f4f7f8', display: 'grid', gridTemplateRows: `56px 56px ${toolbarShown ? '58px ' : ''}minmax(0,1fr) 30px` }} onClick={() => setMenu(null)}>
       {/* RITSUFLOW HEADER (standard, compact) */}
       <AppBar module="ritsuscope" compact standalone title={project.name} />
       {/* EDITOR TOOLS */}
@@ -1607,7 +1858,7 @@ export default function TakeoffWorkspacePage() {
       </header>
 
       {toolbarShown && (
-        <div style={{ display: 'flex', alignItems: 'stretch', height: 50, minWidth: 0, background: '#fff', borderBottom: '1px solid #dfe7ea' }}>
+        <div style={{ display: 'flex', alignItems: 'stretch', height: 58, minWidth: 0, background: '#fff', borderBottom: '1px solid #dfe7ea' }}>
           <div ref={setToolbarSlot} style={{ flex: 1, minWidth: 0 }} />
           {levelSelector}
         </div>
@@ -1615,7 +1866,17 @@ export default function TakeoffWorkspacePage() {
 
       {/* MAIN */}
       {lockedSection ? lockedPanel : canvasMode ? (
-        <div style={{ display: 'grid', gridTemplateColumns: `${leftOpen ? '290px ' : ''}minmax(0,1fr)${rightOpen ? ' 340px' : ''}`, minHeight: 0 }}>
+        <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `${leftOpen ? '290px ' : ''}minmax(0,1fr)${rightOpen ? ' 340px' : ''}`, minHeight: 0 }}>
+          {/* Quick tab on the right panel's edge: hide / show it. */}
+          <button
+            type="button"
+            onClick={() => setRightOpen(v => !v)}
+            title={t(rightOpen ? 'layout.hideRight' : 'layout.showRight')}
+            aria-label={t(rightOpen ? 'layout.hideRight' : 'layout.showRight')}
+            style={{ position: 'absolute', zIndex: 30, top: '50%', right: rightOpen ? 340 : 0, transform: 'translateY(-50%)', width: 16, height: 56, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #cfdcdf', borderRight: 0, borderRadius: '8px 0 0 8px', background: '#fff', color: '#0d7f77', cursor: 'pointer', boxShadow: '-2px 0 6px rgba(15,35,45,.08)' }}
+          >
+            <Icon name="chevron" size={14} style={{ transform: `rotate(${rightOpen ? -90 : 90}deg)` }} />
+          </button>
           {leftOpen && <aside style={sidePane}>{section === 'zoning' ? zoningLeft : takeoffLeft}</aside>}
           <main style={{ position: 'relative', minWidth: 0, minHeight: 0, padding: (isPdf && viewMode === 'plan') ? 0 : 10 }}>
             {(error || status) && (
@@ -1644,9 +1905,18 @@ export default function TakeoffWorkspacePage() {
             : ''}
         </span>
         {isPdf && canvasMode && <><span style={{ color: '#c4d0d4' }}>|</span><CursorReadout sink={cursorSink} ptPerM={ptPerM} origin={sheetOrigin} fmt={v => formatNumber(v, 2)} label={t(sheetOrigin ? 'footer.cursorOrigin' : 'footer.cursor')} /></>}
-        <span style={{ flex: 1 }} />
+        {toolbarShown && canvasMode
+          ? <span ref={setStatusSlot} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, marginLeft: 8, overflow: 'hidden' }} />
+          : <span style={{ flex: 1 }} />}
         {isPdf && canvasMode && viewMode === 'plan' && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {selectedSource && (
+              <label title={t('fade.hint')} style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 10, fontWeight: 700, color: '#294955' }}>
+                {t('fade.label')}
+                <input type="range" min={0} max={80} step={10} value={Math.round(backgroundFade * 100)} onChange={e => setBackgroundFade(Number(e.target.value) / 100)} style={{ width: 80, accentColor: '#109d91' }} />
+                <span style={{ minWidth: 28, textAlign: 'right', fontWeight: 600 }}>{Math.round(backgroundFade * 100)}%</span>
+              </label>
+            )}
             <span ref={setFooterSlot} style={{ display: 'flex', alignItems: 'center', gap: 14, marginRight: 8 }} />
             <span style={{ minWidth: 40, textAlign: 'right' }}>{Math.round(zoom * 100)}%</span>
             <button type="button" style={footBtn} onClick={() => run('zoomOut')}>–</button>
@@ -1709,6 +1979,24 @@ export default function TakeoffWorkspacePage() {
             itemName: layers.find(l => l.id === assignFor.layerId)?.name || '',
             wallCount: elements.filter(el => el.layer_id === assignFor.layerId).length,
             onAssign: assignWallType,
+          }}
+        />
+      )}
+      {surfaceAssign && (
+        <SurfaceTypePicker
+          key={`assign-${surfaceAssign.family}`}
+          family={FAMILIES[surfaceAssign.family]}
+          projectId={projectId}
+          projectCountry={country}
+          layerCount={layers.length}
+          defaultHeight={Number(layers.find(l => l.id === surfaceAssign.layerId)?.elevation_m) || 0}
+          onClose={() => setSurfaceAssign(null)}
+          onOpenLibrary={() => { setSettingsTab(surfaceAssign.family === 'ceiling' ? 'ceilingtypes' : 'floortypes'); setSurfaceAssign(null); setSection('settings') }}
+          onCreated={() => setSurfaceAssign(null)}
+          assign={{
+            itemName: layers.find(l => l.id === surfaceAssign.layerId)?.name || '',
+            count: elements.filter(el => el.layer_id === surfaceAssign.layerId).length,
+            onAssign: assignSurfaceType,
           }}
         />
       )}
@@ -1792,3 +2080,6 @@ const sidePane = { minHeight: 0, minWidth: 0, overflow: 'hidden', background: '#
 const footerBar = { display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: '#eef3f4', borderTop: '1px solid #dfe7ea', fontSize: 11, color: '#4b6570', whiteSpace: 'nowrap', overflow: 'hidden' } as const
 const footBtn = { width: 24, height: 22, border: '1px solid #d3dfe2', borderRadius: 5, background: '#fff', cursor: 'pointer', fontSize: 12, color: '#294955' } as const
 const chipBtn = (on: boolean) => ({ display: 'flex', alignItems: 'center', gap: 4, height: 28, padding: '0 10px', border: '1px solid ' + (on ? '#109d91' : '#d3dfe2'), borderRadius: 7, background: on ? '#109d91' : '#fff', color: on ? '#fff' : '#294955', fontSize: 11, fontWeight: 700, cursor: 'pointer' }) as const
+/** Item list group headers: the same type for every discipline and feature. */
+const groupName = (level: 0 | 1) => ({ flex: 'none', fontSize: 10, fontWeight: 800, letterSpacing: level === 0 ? '.06em' : '.02em', textTransform: level === 0 ? 'uppercase' : 'none', color: level === 0 ? '#294955' : '#536d78' }) as const
+const groupCount = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 10, fontWeight: 600, letterSpacing: 0, textTransform: 'none', color: '#8aa0a8' } as const

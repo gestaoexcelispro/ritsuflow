@@ -634,8 +634,8 @@ const checkRow = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, 
  * Renders the model once, off screen, from the default 3D view angle, for printing.
  * Returns PNG bytes, or null when WebGL or three.js is not available.
  */
-export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean }): Promise<Uint8Array | null> {
-  const { items, ptPerM, storeys, width, height, layered = true } = opts
+export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean }): Promise<Uint8Array | null> {
+  const { items, ptPerM, storeys, width, height, layered = true, tags = false } = opts
   if (!ptPerM || !items.some(it => it.shapes.length)) return null
   let THREE: Three
   try { THREE = await loadThree() } catch { return null }
@@ -658,7 +658,17 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
     const s: Scene = { THREE, renderer, scene, cam, ctl, group, raf: 0 }
     const elev = new Map((storeys || []).map(st => [st.page, st.elevation]))
     const elevationOf = (page: number) => elev.get(page) || 0
-    build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items })
+    build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags })
+    if (tags) {
+      // On paper every tag is the same size wherever it sits (no shrinking with distance):
+      // about 2,2 % of the picture height. Non-attenuated sprites are sized at 1 unit from the camera.
+      const h = 2 * Math.tan((cam.fov * Math.PI) / 360) * 0.022
+      for (const c of group.children) if (c.type === 'Sprite') {
+        const aspect = c.scale.x / c.scale.y
+        c.material.sizeAttenuation = false
+        c.scale.set(h * aspect, h, 1)
+      }
+    }
     fitWhole(THREE, cam, group, width / height)
     renderer.render(scene, cam)
     const url: string = renderer.domElement.toDataURL('image/png')

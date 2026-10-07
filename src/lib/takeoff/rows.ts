@@ -189,6 +189,7 @@ export function rowsToItems(layers: LayerRow[], elements: ElementRow[], pageOfSo
       struct: typeof meta?.struct === 'string' ? meta.struct : undefined,
       depth: typeof meta?.depth === 'number' ? meta.depth : undefined,
       transparency: typeof meta?.transparency === 'number' ? Math.max(0, Math.min(0.9, meta.transparency)) : undefined,
+      planTransparency: typeof meta?.planTransparency === 'number' ? Math.max(0, Math.min(0.95, meta.planTransparency)) : undefined,
       framing: hasFraming ? (framing as unknown as FramingConfig) : undefined,
       recipeId: l.recipe_id ?? null,
       wallTypeId: l.wall_type_id ?? null,

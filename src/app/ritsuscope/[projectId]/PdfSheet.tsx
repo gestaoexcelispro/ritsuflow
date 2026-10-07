@@ -2,6 +2,7 @@
 
 import { MouseEvent, useEffect, useRef, useState } from 'react'
 import { dist, polyLen, type LayerKind, type TakeoffItem, type Vec2 } from '@/lib/takeoff/geometry'
+import { planOpacity } from '@/lib/takeoff/planOpacity'
 import { extractPdfSegments, findSnap, type SnapPoint, type VectorSegment } from '@/lib/takeoff/pdfSnapEngine'
 import { extractPdfVectors } from '@/lib/takeoff/detect/pdfVectors'
 import type { VSeg } from '@/lib/takeoff/detect/walls'
@@ -59,6 +60,8 @@ type Props = {
   snap: boolean
   /** Show the tag of each wall stretch (DW01-03…) at its middle. */
   showTags?: boolean
+  /** White wash over the source drawing (0…0.8), so takeoff colours read true on coloured PDFs. */
+  backgroundFade?: number
   /** Select mode: shapes are clickable. */
   selectable: boolean
   selectedId: string | null
@@ -105,7 +108,7 @@ type PdfPageProxy = {
 
 /** One PDF page with the takeoff overlay. Coordinates are PDF points (viewport at scale 1). */
 export default function PdfSheet(props: Props) {
-  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, showTags = false, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
+  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, showTags = false, backgroundFade = 0, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLCanvasElement>(null)
@@ -412,6 +415,7 @@ export default function PdfSheet(props: Props) {
           }}
           onMouseLeave={() => { setHover(null); setSnapHit(null); onCursor?.(null) }}
         >
+          {backgroundFade > 0 && <rect x={0} y={0} width={W} height={H} fill="#fff" fillOpacity={backgroundFade} style={{ pointerEvents: 'none' }} />}
           {zones.map(z => {
             const zpts = drag && drag.id === `zone:${z.id}` ? drag.pts : z.pts
             const pts = zpts.map(p => `${p[0]},${p[1]}`).join(' ')
@@ -494,7 +498,7 @@ export default function PdfSheet(props: Props) {
                       style: { cursor: 'pointer' },
                     }
                   : pick
-                return <polygon key={key} points={points} fill={item.color} fillOpacity={selected ? 0.35 : 0.18} stroke={color} strokeWidth={stroke(selected ? 3 : 2)} {...areaPick} />
+                return <polygon key={key} points={points} fill={item.color} fillOpacity={selected ? Math.min(1, planOpacity(item, 'screen') + 0.17) : planOpacity(item, 'screen')} stroke={color} strokeWidth={stroke(selected ? 3 : 2)} {...areaPick} />
               }
               if (item.kind === 'linear') {
                 // Real wall thickness once the sheet has a scale (stays the same on paper at any zoom);
@@ -503,14 +507,14 @@ export default function PdfSheet(props: Props) {
                 const width = real > 0 ? Math.max(real, stroke(selected ? 3 : 1.5)) : stroke(selected ? 7 : 5)
                 return (
                   <g key={key}>
-                    <polyline points={points} fill="none" stroke={color} strokeOpacity={0.85} strokeWidth={width} strokeLinejoin="miter" strokeLinecap={real > 0 ? 'square' : 'round'} {...pick} />
+                    <polyline points={points} fill="none" stroke={color} strokeOpacity={selected ? Math.max(0.85, planOpacity(item, 'screen')) : planOpacity(item, 'screen')} strokeWidth={width} strokeLinejoin="miter" strokeLinecap={real > 0 ? 'square' : 'round'} {...pick} />
                     {selectable && shape.id && <polyline points={points} fill="none" stroke="transparent" strokeWidth={Math.max(width, stroke(10))} strokeLinejoin="round" strokeLinecap="round" style={{ cursor: 'pointer', pointerEvents: 'stroke' }} onClick={event => { event.stopPropagation(); onSelect(shape.id!) }} />}
                     {selected && real > 0 && <polyline points={points} fill="none" stroke="#fff" strokeOpacity={0.9} strokeWidth={stroke(1.2)} strokeDasharray={`${stroke(6)} ${stroke(4)}`} style={{ pointerEvents: 'none' }} />}
                   </g>
                 )
               }
               const [x, y] = pts[0]
-              return <circle key={key} cx={x} cy={y} r={stroke(selected ? 9 : 7)} fill="#fff" stroke={color} strokeWidth={stroke(3)} {...pick} />
+              return <circle key={key} cx={x} cy={y} r={stroke(selected ? 9 : 7)} fill="#fff" stroke={color} strokeWidth={stroke(3)} opacity={selected ? 1 : planOpacity(item, 'screen')} {...pick} />
             }),
           )}
 
