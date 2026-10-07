@@ -59,6 +59,8 @@ import TagsEditor from './TagsEditor'
 import SurfaceTypePicker from './SurfaceTypePicker'
 import type { SurfaceTypeRow } from './SurfaceTypesLibrary'
 import SurfaceTypesLibrary, { surfaceLabelsFrom, useSurfaceLabels } from './SurfaceTypesLibrary'
+import { loadUnderlay, underlayRegionOf, type UnderlaySpec, type UnderlayZone } from './planUnderlay'
+import { sheetToModelOf } from '@/lib/takeoff/origin'
 import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { CEILING_FAMILY, FAMILIES, FLOOR_FAMILY, surfaceMaterials, type FamilyId } from './surfaceFamilies'
 import GenerateLevelsDialog from './GenerateLevelsDialog'
@@ -196,6 +198,8 @@ export default function TakeoffWorkspacePage() {
   const [menu, setMenu] = useState<'edit' | 'view' | 'sheet' | 'print' | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
+  /** Report: PDF region with the locations in colour under the 3D page. */
+  const [printUnderlay, setPrintUnderlay] = useState(true)
   /** Takeoff items ticked in the left list (for bulk delete), and the last one clicked (Shift-click ranges). */
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const lastChecked = useRef<string | null>(null)
@@ -348,6 +352,35 @@ export default function TakeoffWorkspacePage() {
     const hOfPage = new Map(b.storeys.map(st => [st.page, wallHeightOf(st.levelId ? byId.get(st.levelId) : null)]))
     return { ...b, items: fillLevelHeights(b.items, page => hOfPage.get(page) ?? null) }
   }, [selectedSource, layers, elements, sources, levels])
+  /** Plan underlays for the 3D: each sheet's framed region (never the whole sheet) and its locations, per 3D scope. */
+  const underlay3d = useMemo(() => {
+    const toModelOf = sheetToModelOf(sources)
+    // Locations: the most detailed kind drawn on the sheet (rooms over areas over zones over blocks), so colours don't stack.
+    const zonesOf = (sourceId: string) => {
+      const vis = zones.filter(z => z.source_id === sourceId && z.is_visible && z.points.length >= 3)
+      const rank = ['room', 'area', 'zone', 'block']
+      const kind = rank.find(k => vis.some(z => (z.zone_kind || 'room') === k))
+      return vis.filter(z => (z.zone_kind || 'room') === kind)
+    }
+    const sheet: { underlays: UnderlaySpec[]; zones: UnderlayZone[] } = { underlays: [], zones: [] }
+    if (selectedSource?.kind === 'pdf_page') {
+      const region = underlayRegionOf(selectedSource)
+      if (region) {
+        sheet.underlays.push({ page: 1, filePath: selectedSource.file_path, pageNumber: selectedSource.page_number || 1, region, toModel: p => p })
+        sheet.zones = zonesOf(selectedSource.id).map(z => ({ page: 1, pts: z.points, color: z.color, name: z.name }))
+      }
+    }
+    const model: { underlays: UnderlaySpec[]; zones: UnderlayZone[] } = { underlays: [], zones: [] }
+    for (const st of pdfBuilding?.storeys || []) {
+      const src = sources.find(x => x.id === st.sourceId)
+      const region = underlayRegionOf(src)
+      const toModel = src ? toModelOf(src) : null
+      if (!src || !region || !toModel) continue
+      model.underlays.push({ page: st.page, filePath: src.file_path, pageNumber: src.page_number || 1, region, toModel })
+      model.zones.push(...zonesOf(src.id).map(z => ({ page: st.page, pts: z.points.map(toModel), color: z.color, name: z.name })))
+    }
+    return { sheet, model }
+  }, [sources, zones, selectedSource, pdfBuilding])
   const isIfcModel = selectedSource?.kind === 'ifc_storey'
   const modelData = isIfcModel ? model3d : pdfBuilding ? { items: pdfBuilding.items.filter(it => it.shapes.length > 0), storeys: pdfBuilding.storeys } : model3d
   const canShowModel = isIfcModel
@@ -661,9 +694,12 @@ export default function TakeoffWorkspacePage() {
       )}
       <div style={{ flex: 1, minHeight: 0 }}>
         {canShowModel && scope3d === 'model' ? (
-          <View3D key={isIfcModel ? 'model' : 'building'} items={shownModelItems} ptPerM={1} storeys={modelData.storeys} selectedId={selectedElementId} onSelect={selectFromModel} />
+          <View3D key={isIfcModel ? 'model' : 'building'} items={shownModelItems} ptPerM={1} storeys={modelData.storeys} selectedId={selectedElementId} onSelect={selectFromModel}
+            underlays={isIfcModel ? undefined : underlay3d.model.underlays} underlayZones={isIfcModel ? undefined : underlay3d.model.zones}
+            preferPage={modelData.storeys.find(st => st.sourceId === selectedSourceId)?.page} />
         ) : (
-          <View3D key={selectedSource.id} items={shownItems} ptPerM={ptPerM} selectedId={selectedElementId} onSelect={setSelectedElementId} />
+          <View3D key={selectedSource.id} items={shownItems} ptPerM={ptPerM} selectedId={selectedElementId} onSelect={setSelectedElementId}
+            underlays={underlay3d.sheet.underlays} underlayZones={underlay3d.sheet.zones} />
         )}
       </div>
     </div>
@@ -1100,7 +1136,30 @@ export default function TakeoffWorkspacePage() {
       // Services are shown inside their walls, so the walls come along on that 3D page.
       const items3d = what === 'locations' || what === 'takeoff' ? all3d : all3d.filter(it => printFilter[what](it) || (what === 'mep' && it.kind === 'linear' && !it.struct))
       // Colour-coded (each item in its type colour, not the construction layers): the report is for aligning scope.
-      if (items3d.length) image3d = await render3DImage({ items: items3d, ptPerM: 1, storeys: building.storeys, width: 2000, height: 1250, tags: true, layered: false })
+      // Plan underlay with the locations, under the lowest level that has a framed region (when chosen in the menu).
+      let underlay: Awaited<ReturnType<typeof loadUnderlay>> = null
+      let underlayZones: UnderlayZone[] = []
+      if (printUnderlay && items3d.length) {
+        const toModelOf = sheetToModelOf(sources)
+        const elev = new Map(building.storeys.map(st => [st.page, st.elevation]))
+        const specs = building.storeys.flatMap(st => {
+          const src = sources.find(x => x.id === st.sourceId)
+          const region = underlayRegionOf(src)
+          const toModel = src ? toModelOf(src) : null
+          return src && region && toModel ? [{ spec: { page: st.page, filePath: src.file_path, pageNumber: src.page_number || 1, region, toModel }, src }] : []
+        })
+          // Only a sheet whose drawings are on this 3D page (its own scale, so they sit on their drawing); lowest first.
+          .filter(x => items3d.some(it => it.shapes.some(sh => sh.page === x.spec.page)))
+          .sort((a, b) => (elev.get(a.spec.page) ?? 0) - (elev.get(b.spec.page) ?? 0))
+        const first = specs[0]
+        if (first) {
+          underlay = await loadUnderlay(first.spec, 2600)
+          const shown = zones.filter(z => z.source_id === first.src.id && z.is_visible && z.points.length >= 3)
+          const kind = ['room', 'area', 'zone', 'block'].find(k => shown.some(z => (z.zone_kind || 'room') === k))
+          underlayZones = shown.filter(z => (z.zone_kind || 'room') === kind).map(z => ({ page: first.spec.page, pts: z.points.map(first.spec.toModel), color: z.color, name: z.name }))
+        }
+      }
+      if (items3d.length) image3d = await render3DImage({ items: items3d, ptPerM: 1, storeys: building.storeys, width: 2000, height: 1250, tags: true, layered: false, underlay, zones: underlayZones })
       // Legend of the 3D page: one swatch per item, in the list order.
       const legend3d = [...new Map(items3d.map(it => [it.name, { name: it.name, color: hexToRgb(it.color) }])).values()]
       const blob = await buildProjectPdf({
@@ -1844,6 +1903,12 @@ export default function TakeoffWorkspacePage() {
           </button>
           {menu === 'print' && (
             <div style={{ ...dropdown, right: 0, left: 'auto', width: 280 }} onClick={e => e.stopPropagation()}>
+              {underlay3d.model.underlays.length + underlay3d.sheet.underlays.length > 0 && (
+                <label title={t('print.underlayHint')} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', margin: '0 0 4px', borderBottom: '1px solid #e5ecee', fontSize: 11, fontWeight: 700, color: '#173441', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={printUnderlay} onChange={e => setPrintUnderlay(e.target.checked)} style={{ margin: 0 }} />
+                  {t('print.underlay')}
+                </label>
+              )}
               {(['locations', 'walls', 'floor', 'ceiling', 'slab', 'mep', 'struct', 'takeoff'] as PrintWhat[]).map(what => ({ what, locked: !licensed && what !== 'locations', empty: printEmpty(what) || (!licensed && what !== 'locations') })).map(o => (
                 <button
                   key={o.what}

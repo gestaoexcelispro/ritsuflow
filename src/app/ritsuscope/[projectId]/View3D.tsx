@@ -5,6 +5,7 @@
    package install is needed. Coordinates: sheet x -> world x, sheet y -> world z, height -> y. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { loadUnderlay, type LoadedUnderlay, type UnderlaySpec, type UnderlayZone } from './planUnderlay'
 import { layoutLabels, type LabelIn, type LabelOut } from '@/lib/takeoff/labelLayout'
 import { openingMarks } from '@/lib/takeoff/openingMarks'
 import { findJunctions, junctionStudsOnWall, layoutWall, type Junction } from '@/lib/takeoff/framing/framing'
@@ -79,11 +80,19 @@ type Props = {
   onSelect: (elementId: string | null) => void
   /** When given, shapes are stacked by storey elevation and each storey can be shown or hidden. */
   storeys?: View3DStorey[]
+  /** Plan underlays per storey (sheet region framed for room detection) and the locations on them. */
+  underlays?: UnderlaySpec[]
+  underlayZones?: UnderlayZone[]
+  /** Storey (page) of the sheet open in the editor: its underlay is preferred. */
+  preferPage?: number
 }
 
 type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; group: any; raf: number }
 
-export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }: Props) {
+const NO_UNDERLAYS: UnderlaySpec[] = []
+const NO_ZONES: UnderlayZone[] = []
+
+export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage }: Props) {
   const t = useTakeoffT()
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<Scene | null>(null)
@@ -99,6 +108,9 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
   const [tagsOn, setTagsOn] = useState(false)
   /** Doors and windows drawn as objects in their openings. */
   const [openingsOn, setOpeningsOn] = useState(true)
+  /** The PDF region under the model (half tone) with the locations in colour. */
+  const [underlayOn, setUnderlayOn] = useState(true)
+  const [underlay, setUnderlay] = useState<LoadedUnderlay | null>(null)
   /** Tag anchors of the current model, drawn as a 2D overlay every frame. */
   const anchorsRef = useRef<TagAnchor[]>([])
   const overlayRef = useRef<HTMLCanvasElement | null>(null)
@@ -205,7 +217,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
           if (octx) {
             const dpr = window.devicePixelRatio || 1
             octx.setTransform(1, 0, 0, 1, 0, 0)
-            drawTagOverlay(octx, THREE, cam, anchorsRef.current, overlay.width, overlay.height, dpr)
+            drawTagOverlay(octx, THREE, cam, anchorsRef.current, overlay.width, overlay.height, dpr, group)
           }
         }
         loop()
@@ -232,13 +244,36 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
   // Re-frame the camera when the sheet changes (declared first so it runs before the rebuild).
   useEffect(() => { fittedRef.current = false }, [ptPerM, items.length])
 
+  // Plan underlay: one storey only — the sheet the drawn model comes from (its own region and scale, so the
+  // walls sit exactly on their drawing), the selected sheet first, then the lowest visible one.
+  const underlaySpec = useMemo(() => {
+    if (!underlayOn || !underlays.length) return null
+    const elev = (page: number) => (storeys || []).find(st => st.page === page)?.elevation ?? 0
+    const drawn = new Set(visibleItems.flatMap(it => it.shapes.map(sh => sh.page)))
+    const score = (u: UnderlaySpec) => (drawn.has(u.page) ? 0 : 2) + (u.page === preferPage ? 0 : 1)
+    return [...underlays]
+      .filter(u => !hiddenPages.has(u.page) && drawn.has(u.page))
+      .sort((a, b) => score(a) - score(b) || elev(a.page) - elev(b.page))[0] || null
+  }, [underlayOn, underlays, storeys, hiddenPages, visibleItems, preferPage])
+  // Reload only when the region really changes (the parent rebuilds the spec objects on every change).
+  const specRef = useRef(underlaySpec)
+  specRef.current = underlaySpec
+  const specKey = underlaySpec ? `${underlaySpec.page}|${underlaySpec.filePath}|${underlaySpec.pageNumber}|${underlaySpec.region.flat().join(',')}|${underlaySpec.toModel([0, 0]).join(',')}|${underlaySpec.toModel([1000, 1000]).join(',')}` : ''
+  useEffect(() => {
+    let alive = true
+    const spec = specRef.current
+    if (!spec) { setUnderlay(null); return }
+    void loadUnderlay(spec).then(u => { if (alive) setUnderlay(u) })
+    return () => { alive = false }
+  }, [specKey])
+
   // Rebuild the model when the data or options change.
   useEffect(() => {
     const s = sceneRef.current
     if (!s || status !== 'ready' || !ptPerM) return
-    anchorsRef.current = build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn, openings: openingsOn })
+    anchorsRef.current = build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn, openings: openingsOn, underlay, zones: underlay ? underlayZones.filter(z => z.page === underlay.page) : [] })
     if (!fittedRef.current) { fit(s, items, ptPerM, elevationOf); fittedRef.current = true }
-  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards, tagsOn, openingsOn])
+  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards, tagsOn, openingsOn, underlay, underlayZones])
 
 
   const toggle = (active: boolean) => ({
@@ -271,6 +306,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys }:
         </span>
         <button type="button" style={toggle(tagsOn)} title={t('tags.hint')} onClick={() => setTagsOn(v => !v)}>{t('tags.toggle')}</button>
         <button type="button" style={toggle(openingsOn)} title={t('view3d.openingsHint')} onClick={() => setOpeningsOn(v => !v)}>{t('view3d.openings')}</button>
+        {underlays.length > 0 && <button type="button" style={toggle(underlayOn)} title={t('view3d.underlayHint')} onClick={() => setUnderlayOn(v => !v)}>{t('view3d.underlay')}</button>}
         <button type="button" style={toggle(isolate)} disabled={!selectedId && !isolate} onClick={() => setIsolate(v => !v)}>{t('view3d.isolate')}</button>
         <button type="button" style={toggle(false)} onClick={() => { const s = sceneRef.current; if (s) fit(s, items, ptPerM, elevationOf) }}>{t('tool.fit')}</button>
         <button type="button" style={toggle(showPanel || hiddenCount > 0)} onClick={() => setShowPanel(v => !v)}>
@@ -358,6 +394,9 @@ type BuildOptions = {
   tags?: boolean
   /** Doors and windows as objects in their openings (default on); the holes stay either way. */
   openings?: boolean
+  /** PDF region in half tone under its storey, with the locations in colour on it. */
+  underlay?: LoadedUnderlay | null
+  zones?: UnderlayZone[]
   layered: boolean
   explode: number
   isolate: boolean
@@ -485,8 +524,10 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.6 })
     const leafMat = new THREE.MeshStandardMaterial({ color: 0xb7793f, roughness: 0.7 })
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.45 })
+    let owner: string | undefined
     const put = (geo: unknown, mat: unknown, at: Vec2, ang: number, along: number, y: number, across = 0) => {
       const mesh = new THREE.Mesh(geo, mat)
+      mesh.userData = { owner }
       const c = Math.cos(ang), sn = Math.sin(ang)
       mesh.position.set(at[0] + c * along - sn * across, y, at[1] + sn * along + c * across)
       mesh.rotation.y = -ang
@@ -498,6 +539,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
       for (const sh of it.shapes) {
         if (!show(sh) || !sh.openings?.length) continue
         const base = (sh.zrel || 0) + o.elevationOf(sh.page)
+        owner = sh.id
         for (const m of openingMarks(sh.pts, sh.openings, k)) {
           const op = sh.openings[m.index]
           if (!op || (op.kind !== 'door' && op.kind !== 'window')) continue
@@ -535,10 +577,10 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
           if (it.kind === 'area') {
             const ms = sh.pts.map(M)
             const at: Vec2 = [ms.reduce((t, q) => t + q[0], 0) / ms.length, ms.reduce((t, q) => t + q[1], 0) / ms.length]
-            anchors.push({ id: `${sh.id || it.key}-a`, text: tag, color: it.color, p: [at[0], (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02), at[1]] })
+            anchors.push({ id: `${sh.id || it.key}-a`, owner: sh.id, text: tag, color: it.color, p: [at[0], (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02), at[1]] })
           } else {
             const at = M(sh.pts[0])
-            anchors.push({ id: `${sh.id || it.key}-c`, text: tag, color: it.color, p: [at[0], (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1), at[1]] })
+            anchors.push({ id: `${sh.id || it.key}-c`, owner: sh.id, text: tag, color: it.color, p: [at[0], (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1), at[1]] })
           }
         }
         continue
@@ -553,7 +595,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
           const a = M(sh.pts[i - 1])
           const bb = M(sh.pts[i])
           if (Math.hypot(bb[0] - a[0], bb[1] - a[1]) < 0.3) continue
-          anchors.push({ id: `${sh.id || it.key + si}-s${i}`, text: tag, color: it.color, p: [(a[0] + bb[0]) / 2, wallTop, (a[1] + bb[1]) / 2] })
+          anchors.push({ id: `${sh.id || it.key + si}-s${i}`, owner: sh.id, text: tag, color: it.color, p: [(a[0] + bb[0]) / 2, wallTop, (a[1] + bb[1]) / 2] })
         }
         if (!sh.openingTags?.length) continue
         for (const m of openingMarks(sh.pts, sh.openings, k)) {
@@ -561,8 +603,46 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
           const op = sh.openings?.[m.index]
           if (!tag || !op) continue
           const at = M([(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2])
-          anchors.push({ id: `${sh.id || it.key + si}-o${m.index}`, text: tag, color: m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B', p: [at[0], base + (op.sill || 0) + (op.h || 2.1), at[1]] })
+          anchors.push({ id: `${sh.id || it.key + si}-o${m.index}`, owner: sh.id, text: tag, color: m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B', p: [at[0], base + (op.sill || 0) + (op.h || 2.1), at[1]] })
         }
+      }
+    }
+  }
+
+  // Plan underlay (half-tone PDF region) flat under its storey, the locations in colour on top.
+  if (o.underlay) {
+    const u = o.underlay
+    const y0 = o.elevationOf(u.page) - 0.012
+    const c = u.corners.map(M)
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([c[0][0], y0, c[0][1], c[1][0], y0, c[1][1], c[2][0], y0, c[2][1], c[3][0], y0, c[3][1]], 3))
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2))
+    geo.setIndex([0, 2, 1, 0, 3, 2])
+    const tex = new THREE.CanvasTexture(u.image)
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace
+    const plane = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.92, depthWrite: false }))
+    plane.renderOrder = -2
+    plane.raycast = () => {}
+    // The framed region can be much larger than what is drawn: framing the picture ignores it.
+    plane.userData = { noFit: true }
+    g.add(plane)
+    for (const z of o.zones || []) {
+      if (z.pts.length < 3) continue
+      const shape = new THREE.Shape(z.pts.map(p => { const q = M(p); return new THREE.Vector2(q[0], -q[1]) }))
+      const zg = new THREE.ShapeGeometry(shape)
+      zg.rotateX(-Math.PI / 2)
+      const zm = new THREE.Mesh(zg, new THREE.MeshBasicMaterial({ color: z.color, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }))
+      zm.position.y = o.elevationOf(z.page) - 0.006
+      zm.renderOrder = -1
+      zm.raycast = () => {}
+      g.add(zm)
+      const ring = z.pts.map(p => { const q = M(p); return new THREE.Vector3(q[0], o.elevationOf(z.page) - 0.004, q[1]) })
+      const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ring), new THREE.LineBasicMaterial({ color: z.color }))
+      line.raycast = () => {}
+      g.add(line)
+      if (o.tags && z.name) {
+        const ms = z.pts.map(M)
+        anchors.push({ id: `zone-${z.page}-${z.name}-${ms.length}-${Math.round(ms[0][0] * 100)}`, text: z.name, color: z.color, p: [ms.reduce((t, q) => t + q[0], 0) / ms.length, o.elevationOf(z.page) + 0.06, ms.reduce((t, q) => t + q[1], 0) / ms.length] })
       }
     }
   }
@@ -677,20 +757,41 @@ const checkRow = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, 
  * Returns PNG bytes, or null when WebGL or three.js is not available.
  */
 /** A tag's exact spot in the model (world coordinates) with its text and colour. */
-export type TagAnchor = { id: string; text: string; color: string; p: [number, number, number] }
+export type TagAnchor = { id: string; text: string; color: string; p: [number, number, number]; /** Element the anchor sits on (its own surfaces don't hide it). */ owner?: string }
 
 /**
  * Draws the tags on a 2D canvas over the 3D picture: each label placed so labels, anchors and
  * leader lines never collide (layoutLabels), with a leader line down to a dot on its spot.
  */
-function drawTagOverlay(ctx: CanvasRenderingContext2D, THREE: Three, cam: any, anchors: TagAnchor[], width: number, height: number, scale: number) {
+function drawTagOverlay(ctx: CanvasRenderingContext2D, THREE: Three, cam: any, anchors: TagAnchor[], width: number, height: number, scale: number, group?: any) {
   ctx.clearRect(0, 0, width, height)
   if (!anchors.length) return
   const fontPx = 11 * scale
   ctx.font = `700 ${fontPx}px system-ui, -apple-system, Segoe UI, sans-serif`
   const v = new THREE.Vector3()
   const ins: (LabelIn & { a: TagAnchor })[] = []
+  // Tags whose spot is hidden behind something (a wall in front of a room…) are left out:
+  // a ray from the camera to the spot must not hit another element first.
+  const solids: any[] = []
+  group?.traverse((c: any) => { if (c.isMesh && !c.userData?.noFit && c.material && !c.material.transparent) solids.push(c) })
+  const ray = new THREE.Raycaster()
+  const camPos = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld)
+  const hidden = (a: TagAnchor) => {
+    if (!solids.length) return false
+    const target = new THREE.Vector3(a.p[0], a.p[1], a.p[2])
+    const dir = target.clone().sub(camPos)
+    const dist = dir.length()
+    ray.set(camPos, dir.normalize())
+    ray.far = dist - 0.03
+    for (const h of ray.intersectObjects(solids, false)) {
+      const ud = h.object.userData || {}
+      if (a.owner && (ud.id === a.owner || ud.owner === a.owner)) continue
+      return true
+    }
+    return false
+  }
   for (const a of anchors) {
+    if (hidden(a)) continue
     v.set(a.p[0], a.p[1], a.p[2]).project(cam)
     if (v.z > 1 || v.z < -1 || Math.abs(v.x) > 1.02 || Math.abs(v.y) > 1.02) continue
     ins.push({ id: a.id, a, x: (v.x + 1) / 2 * width, y: (1 - v.y) / 2 * height, w: ctx.measureText(a.text).width + 12 * scale, h: 17 * scale })
@@ -723,8 +824,8 @@ function drawTagOverlay(ctx: CanvasRenderingContext2D, THREE: Three, cam: any, a
   }
 }
 
-export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean }): Promise<Uint8Array | null> {
-  const { items, ptPerM, storeys, width, height, layered = true, tags = false } = opts
+export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean; underlay?: LoadedUnderlay | null; zones?: UnderlayZone[] }): Promise<Uint8Array | null> {
+  const { items, ptPerM, storeys, width, height, layered = true, tags = false, underlay = null, zones = [] } = opts
   if (!ptPerM || !items.some(it => it.shapes.length)) return null
   let THREE: Three
   try { THREE = await loadThree() } catch { return null }
@@ -747,11 +848,11 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
     const s: Scene = { THREE, renderer, scene, cam, ctl, group, raf: 0 }
     const elev = new Map((storeys || []).map(st => [st.page, st.elevation]))
     const elevationOf = (page: number) => elev.get(page) || 0
-    const anchors = build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags })
+    const anchors = build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags, underlay, zones: underlay ? zones.filter(z => z.page === underlay.page) : [] })
     const tgt = fitWhole(THREE, cam, group, width / height)
     if (tags && anchors.length && tgt) {
       // A little more room around the model for the labels above it.
-      cam.position.sub(tgt).multiplyScalar(1.15).add(tgt)
+      cam.position.sub(tgt).multiplyScalar(1.06).add(tgt)
       cam.updateMatrixWorld()
     }
     renderer.render(scene, cam)
@@ -765,7 +866,7 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
       const over = document.createElement('canvas')
       over.width = width
       over.height = height
-      drawTagOverlay(over.getContext('2d')!, THREE, cam, anchors, width, height, width / 900)
+      drawTagOverlay(over.getContext('2d')!, THREE, cam, anchors, width, height, width / 900, group)
       ctx.drawImage(renderer.domElement, 0, 0)
       ctx.drawImage(over, 0, 0)
       url = out.toDataURL('image/png')
@@ -790,7 +891,7 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
  */
 function fitWhole(THREE: Three, cam: any, group: any, aspect: number) {
   const box = new THREE.Box3()
-  for (const c of group.children) if (c.type !== 'GridHelper') box.expandByObject(c)
+  for (const c of group.children) if (c.type !== 'GridHelper' && !c.userData?.noFit) box.expandByObject(c)
   if (box.isEmpty()) return null
   const center = box.getCenter(new THREE.Vector3())
   const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1)
@@ -822,7 +923,7 @@ function fitWhole(THREE: Three, cam: any, group: any, aspect: number) {
     const halfH = Math.tan((cam.fov * Math.PI) / 360) * dist
     target = target.clone().addScaledVector(right, ((x0 + x1) / 2) * halfH * aspect).addScaledVector(up, ((y0 + y1) / 2) * halfH)
     const extent = Math.max((x1 - x0) / 2, (y1 - y0) / 2)
-    if (extent > 0) dist *= extent / 0.9
+    if (extent > 0) dist *= extent / 0.94
   }
   place()
   return target

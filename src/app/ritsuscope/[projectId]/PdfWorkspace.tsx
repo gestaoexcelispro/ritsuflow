@@ -894,6 +894,9 @@ export default function PdfWorkspace(props: Props) {
       setRoomPicking(false)
       setRoomRegion(region)
       runRoomDetection(region)
+      // The framed region is also the sheet's plan underlay in the 3D view and report (never the whole sheet).
+      const box = [[Math.min(region[0][0], region[1][0]), Math.min(region[0][1], region[1][1])], [Math.max(region[0][0], region[1][0]), Math.max(region[0][1], region[1][1])]]
+      void createClient().from('takeoff_sources').update({ metadata: { ...(source.metadata || {}), underlay_region: box } }).eq('id', source.id).then(() => onChanged())
       return
     }
     if (mode === 'detect') {
