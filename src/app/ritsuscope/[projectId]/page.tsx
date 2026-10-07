@@ -56,6 +56,7 @@ import LevelProperties from './LevelProperties'
 import LevelsBulkEdit from './LevelsBulkEdit'
 import TagsEditor from './TagsEditor'
 import SurfaceTypePicker from './SurfaceTypePicker'
+import type { SurfaceTypeRow } from './SurfaceTypesLibrary'
 import SurfaceTypesLibrary, { useSurfaceLabels } from './SurfaceTypesLibrary'
 import { CEILING_FAMILY, FAMILIES, FLOOR_FAMILY, surfaceMaterials, type FamilyId } from './surfaceFamilies'
 import GenerateLevelsDialog from './GenerateLevelsDialog'
@@ -126,6 +127,8 @@ export default function TakeoffWorkspacePage() {
   const [wallTypes, setWallTypes] = useState<WallTypeRow[]>([])
   /** Choosing a library wall type for the selected wall (its item, or this wall only). */
   const [assignFor, setAssignFor] = useState<{ layerId: string; elementId: string } | null>(null)
+  /** Choosing a library ceiling / floor type for the selected area (its item, or this area only). */
+  const [surfaceAssign, setSurfaceAssign] = useState<{ family: FamilyId; layerId: string; elementId: string } | null>(null)
   const [assigning, setAssigning] = useState(false)
   /** Doors / Windows / Openings row being edited in the right sidebar. */
   /** Row under the header that hosts the drawing tool bar (filled by PdfWorkspace through a portal). */
@@ -694,6 +697,36 @@ export default function TakeoffWorkspacePage() {
     setStatus(t(scope === 'item' ? 'walltype.assignedItem' : 'walltype.assignedElement'))
   }
 
+  /** Gives the selected area's item (all its areas) or just this area a library ceiling / floor type. */
+  async function assignSurfaceType(pick: SurfaceTypeRow, scope: 'item' | 'element') {
+    if (!surfaceAssign) return
+    const layer = layers.find(l => l.id === surfaceAssign.layerId)
+    if (!layer) return
+    const fam = FAMILIES[surfaceAssign.family]
+    const row = fam.layerFrom(pick, { projectId, color: layer.color, sortOrder: (layers.length + 1) * 10, elevationM: Number(layer.elevation_m) || 0 }) as Record<string, unknown> & { framing: { meta: Record<string, unknown> } }
+    const supabase = createClient()
+    if (scope === 'item') {
+      // The item becomes that type (name, colour, build-up, recipe); it keeps its level and display settings.
+      const current = (layer.framing || {}) as Record<string, unknown> & { meta?: Record<string, unknown> }
+      const meta = { ...(current.meta || {}) }
+      delete meta.ceiling
+      delete meta.floor
+      const { error: e } = await supabase.from('takeoff_layers').update({
+        name: row.name, color: row.color, thickness_m: row.thickness_m, recipe_id: row.recipe_id, wall_type_id: row.wall_type_id,
+        framing: { ...current, meta: { ...meta, ...row.framing.meta } },
+      }).eq('id', layer.id)
+      if (e) throw e
+    } else {
+      const { data, error: e } = await supabase.from('takeoff_layers').insert(row).select('id').single()
+      if (e || !data) throw e || new Error('insert failed')
+      const { error: e2 } = await supabase.from('takeoff_elements').update({ layer_id: data.id }).eq('id', surfaceAssign.elementId)
+      if (e2) throw e2
+    }
+    setSurfaceAssign(null)
+    await load()
+    setStatus(t(scope === 'item' ? 'surface.assignedItem' : 'surface.assignedElement'))
+  }
+
   /** Saves the selected wall's item as a new (draft) type in the library and links the item to it. */
   async function saveItemToLibrary(layer: LayerRow) {
     setAssigning(true)
@@ -840,6 +873,33 @@ export default function TakeoffWorkspacePage() {
     // Areas and counted points: their tag.
     <div style={{ ...ui.panel, gap: 12 }}>
       <h2 style={ui.panelTitle}>{selection.item.name}</h2>
+      {selection.item.kind === 'area' && selectedLayerRow && !selection.item.struct && selection.item.ifcType !== 'IfcSlab' && (() => {
+        // Library ceiling / floor type of this area's item: shown, or a nudge to pick one when it has none.
+        const typed = selectedLayerRow.wall_type_id ? wallTypes.find(w => w.id === selectedLayerRow.wall_type_id) || null : null
+        const fams: FamilyId[] = typed
+          ? [(typed.category as string) === 'floor' ? 'floor' : 'ceiling']
+          : selection.item.ifcType === 'IfcCovering.CEILING' ? ['ceiling'] : selection.item.ifcType === 'IfcCovering.FLOORING' ? ['floor'] : ['ceiling', 'floor']
+        const count = elements.filter(el => el.layer_id === selectedLayerRow.id).length
+        const open = (family: FamilyId) => setSurfaceAssign({ family, layerId: selectedLayerRow.id, elementId: selectedElementRow.id })
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 8, border: `1px solid ${typed ? '#dfe7ea' : '#f3d19c'}`, background: typed ? '#fff' : '#fffaf0' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <strong style={{ fontSize: 12, color: '#173441', flex: 1 }}>{t('surface.cardTitle')}</strong>
+              <span style={ui.small}>{t('surface.cardItem', { name: selection.item.name, count })}</span>
+            </div>
+            {typed
+              ? <strong style={{ fontSize: 12, color: '#294955' }}>{typed.code ? `${typed.code} – ${typed.name}` : typed.name}</strong>
+              : <span style={{ fontSize: 11, color: '#8a5a12' }}>{t(selectedLayerRow.wall_type_id ? 'surface.cardMissing' : 'surface.cardNone')}</span>}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {fams.map(f => (
+                <button key={f} type="button" style={{ ...ui.button, height: 30, fontSize: 11 }} onClick={() => open(f)}>
+                  {typed ? t('surface.cardChange') : t(FAMILIES[f].msg.pickTitle)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
       <TagsEditor key={`tag-${selectedElementRow.id}`} element={selectedElementRow} kind={selection.item.kind} ptPerM={ptPerM} onSaved={async message => { await load(); setStatus(message) }} />
       {(selection.item.ceiling || selection.item.floor) && ptPerM > 0 && (() => {
         // This ceiling's or floor's own materials, from its type's build-up.
@@ -1749,6 +1809,24 @@ export default function TakeoffWorkspacePage() {
             itemName: layers.find(l => l.id === assignFor.layerId)?.name || '',
             wallCount: elements.filter(el => el.layer_id === assignFor.layerId).length,
             onAssign: assignWallType,
+          }}
+        />
+      )}
+      {surfaceAssign && (
+        <SurfaceTypePicker
+          key={`assign-${surfaceAssign.family}`}
+          family={FAMILIES[surfaceAssign.family]}
+          projectId={projectId}
+          projectCountry={country}
+          layerCount={layers.length}
+          defaultHeight={Number(layers.find(l => l.id === surfaceAssign.layerId)?.elevation_m) || 0}
+          onClose={() => setSurfaceAssign(null)}
+          onOpenLibrary={() => { setSettingsTab(surfaceAssign.family === 'ceiling' ? 'ceilingtypes' : 'floortypes'); setSurfaceAssign(null); setSection('settings') }}
+          onCreated={() => setSurfaceAssign(null)}
+          assign={{
+            itemName: layers.find(l => l.id === surfaceAssign.layerId)?.name || '',
+            count: elements.filter(el => el.layer_id === surfaceAssign.layerId).length,
+            onAssign: assignSurfaceType,
           }}
         />
       )}
