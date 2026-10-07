@@ -25,6 +25,23 @@ export function sheetToModel(p: Vec2, o: SheetOrigin, ptPerM: number): Vec2 {
   return [(dx * Math.cos(a) - dy * Math.sin(a)) / ptPerM, (dx * Math.sin(a) + dy * Math.cos(a)) / ptPerM]
 }
 
+/**
+ * Sheet points → building metres for each calibrated sheet (same origin rules as pdfBuildingItems:
+ * its own origin, else another sheet's on the same PDF page, else the page corner).
+ */
+export function sheetToModelOf(sources: SourceRow[]): (src: SourceRow) => ((p: Vec2) => Vec2) | null {
+  const ok = sources.filter(s => s.kind === 'pdf_page' && Number(s.scale_pt_per_m) > 0)
+  const pageKey = (s: SourceRow) => `${s.file_path}#${s.page_number ?? 1}`
+  const originOfPage = new Map<string, SheetOrigin>()
+  for (const s of ok) { const o = originOf(s); if (o && !originOfPage.has(pageKey(s))) originOfPage.set(pageKey(s), o) }
+  return src => {
+    const k = Number(src.scale_pt_per_m)
+    if (!(k > 0)) return null
+    const o = originOf(src) || originOfPage.get(pageKey(src)) || { x: 0, y: 0, angleDeg: 0 }
+    return p => sheetToModel(p, o, k)
+  }
+}
+
 export type BuildingStorey = { page: number; name: string; elevation: number; sourceId: string; levelId?: string | null }
 
 /**
