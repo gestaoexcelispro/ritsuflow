@@ -453,6 +453,49 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
     }
   }
 
+  // Doors and windows as real objects in their openings (frame, leaf / glass), not only holes in the wall.
+  {
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.6 })
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0xb7793f, roughness: 0.7 })
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.45 })
+    const put = (geo: unknown, mat: unknown, at: Vec2, ang: number, along: number, y: number, across = 0) => {
+      const mesh = new THREE.Mesh(geo, mat)
+      const c = Math.cos(ang), sn = Math.sin(ang)
+      mesh.position.set(at[0] + c * along - sn * across, y, at[1] + sn * along + c * across)
+      mesh.rotation.y = -ang
+      g.add(mesh)
+    }
+    for (const it of items) {
+      if (it.kind !== 'linear' || it.struct) continue
+      const wallT = Math.max(it.thickness || 0.1, 0.06)
+      for (const sh of it.shapes) {
+        if (!show(sh) || !sh.openings?.length) continue
+        const base = (sh.zrel || 0) + o.elevationOf(sh.page)
+        for (const m of openingMarks(sh.pts, sh.openings, k)) {
+          const op = sh.openings[m.index]
+          if (!op || (op.kind !== 'door' && op.kind !== 'window')) continue
+          const at = M([(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2])
+          const ang = Math.atan2(m.u[1], m.u[0])
+          const w = op.w, h = op.h, y0 = base + (op.sill || 0)
+          const f = 0.05 // frame profile
+          const depth = wallT + 0.02
+          // Frame: two jambs and a head across the whole wall thickness (+ a sill for windows).
+          put(new THREE.BoxGeometry(f, h, depth), frameMat, at, ang, -w / 2 + f / 2, y0 + h / 2)
+          put(new THREE.BoxGeometry(f, h, depth), frameMat, at, ang, w / 2 - f / 2, y0 + h / 2)
+          put(new THREE.BoxGeometry(w, f, depth), frameMat, at, ang, 0, y0 + h - f / 2)
+          if (op.kind === 'door') {
+            // Leaf, slightly open is hard to read in a takeoff: closed, flush with the frame.
+            put(new THREE.BoxGeometry(Math.max(0.1, w - 2 * f), Math.max(0.1, h - f - 0.01), 0.04), leafMat, at, ang, 0, y0 + (h - f) / 2)
+          } else {
+            put(new THREE.BoxGeometry(w, f, depth + 0.04), frameMat, at, ang, 0, y0 + f / 2)
+            put(new THREE.BoxGeometry(Math.max(0.1, w - 2 * f), Math.max(0.1, h - 2 * f), 0.012), glassMat, at, ang, 0, y0 + h / 2)
+            put(new THREE.BoxGeometry(f * 0.6, Math.max(0.1, h - 2 * f), 0.03), frameMat, at, ang, 0, y0 + h / 2)
+          }
+        }
+      }
+    }
+  }
+
   if (o.tags) {
     for (const it of items) {
       // Areas: above their centre; counted points: above the item's box.
