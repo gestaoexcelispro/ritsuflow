@@ -614,6 +614,12 @@ export default function TakeoffWorkspacePage() {
     <PdfWorkspace
       toolbarSlot={toolbarShown ? toolbarSlot : null}
       footerSlot={toolbarShown ? footerSlot : null}
+      quickActions={section === 'zoning' ? [] : [
+        { key: 'wall', icon: 'wall', label: t('quick.wall'), title: t('quick.wallHint'), onClick: () => setPickerOpen(true) },
+        { key: 'ceiling', icon: 'ceiling', label: t('quick.ceiling'), title: t('quick.ceilingHint'), onClick: () => setSurfacePicker('ceiling') },
+        { key: 'floor', icon: 'floor', label: t('quick.floor'), title: t('quick.floorHint'), onClick: () => setSurfacePicker('floor') },
+        { key: 'item', icon: 'edit', label: t('quick.item'), title: t('quick.itemHint'), onClick: () => setNewLayerRequest(n => n + 1) },
+      ]}
       projectId={projectId}
       source={selectedSource}
       layers={layers}
@@ -1329,14 +1335,6 @@ export default function TakeoffWorkspacePage() {
         {sheetMult > 1 && <span title={t('level.sheetMultiplier', { count: sheetMult })} style={{ padding: '2px 7px', borderRadius: 10, background: '#e6f6f4', color: '#0d7f77', fontSize: 10, fontWeight: 800 }}>×{sheetMult}</span>}
         {ptPerM > 0 && sourceItems.length > 0 && <button type="button" style={chipBtn(false)} onClick={exportCsv}>CSV</button>}
       </div>
-      {isPdf && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 14px' }}>
-          <button type="button" style={chipBtn(true)} onClick={() => setPickerOpen(true)}><Icon name="plus" size={13} />{t('walltype.pickButton')}</button>
-          <button type="button" style={chipBtn(true)} onClick={() => setSurfacePicker('ceiling')}><Icon name="plus" size={13} />{t(CEILING_FAMILY.msg.pickButton)}</button>
-          <button type="button" style={chipBtn(true)} onClick={() => setSurfacePicker('floor')}><Icon name="plus" size={13} />{t(FLOOR_FAMILY.msg.pickButton)}</button>
-          <button type="button" style={chipBtn(false)} onClick={() => setNewLayerRequest(n => n + 1)}><Icon name="plus" size={13} />{t('layout.newItem')}</button>
-        </div>
-      )}
       {checkedIds.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff8f2', borderTop: '1px solid #f3dcc8' }}>
           <strong style={{ fontSize: 11, color: '#7c2d12', flex: '1 0 100%' }}>{t('bulk.selected', { count: checkedIds.length })}</strong>

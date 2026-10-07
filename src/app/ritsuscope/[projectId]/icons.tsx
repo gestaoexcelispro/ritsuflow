@@ -32,6 +32,7 @@ export const ICON_PATHS: Record<string, string> = {
   window: 'M4 4h16v16H4zM12 4v16M4 12h16',
   opening: 'M5 20V5h14v15M2 20h6M16 20h6',
   floor: 'M2 14l10-5 10 5-10 5zM7 11.5l10 5M12 9l5 2.5M7 16.5l10-5',
+  wall: 'M3 5h18v14H3zM3 9.7h18M3 14.3h18M9 5v4.7M15 5v4.7M6 9.7v4.6M12 9.7v4.6M18 9.7v4.6M9 14.3V19M15 14.3V19',
   ceiling: 'M3 5h18M3 9h18M6 5v4M12 5v4M18 5v4M9 14l3 3 3-3M12 17v-6',
   slab: 'M2 9h20v5H2zM5 14v5M19 14v5M2 9l3-3h14l3 3',
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',

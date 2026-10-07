@@ -77,6 +77,8 @@ type Props = {
   levelLabel?: string | null
   /** Element (a full-width row under the header) to render the tool bar into; inline strip when absent. */
   toolbarSlot?: HTMLElement | null
+  /** Quick buttons at the start of the tool bar (takeoff: add a wall, ceiling or floor type, or a new item). */
+  quickActions?: { key: string; icon: string; label: string; title: string; onClick: () => void }[]
   /** Spot in the footer (left of the zoom) that hosts the Snap and Ortho switches. */
   footerSlot?: HTMLElement | null
 }
@@ -94,7 +96,7 @@ function dedupe(points: Vec2[]): Vec2[] {
 }
 
 export default function PdfWorkspace(props: Props) {
-  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, levelLabel = null } = props
+  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, levelLabel = null, quickActions = [] } = props
   const barH = toolbarSlot ? 0 : TOOLBAR_H
   const t = useTakeoffT()
   const { formatNumber, language } = useLanguage()
@@ -1547,6 +1549,20 @@ export default function PdfWorkspace(props: Props) {
       {(() => {
         const bar = (
         <div style={toolbarSlot ? toolbarFull : toolbar}>
+          {/* Centred while it fits; when it doesn't, it scrolls from the first button (a centred flex row would cut it off). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 'none', margin: toolbarSlot ? '0 auto' : 0 }}>
+          {quickActions.length > 0 && (
+            <>
+              {quickActions.map(q => (
+                <button key={q.key} type="button" onClick={q.onClick} title={q.title} style={quickBtn}>
+                  <Icon name="plus" size={12} />
+                  <Icon name={q.icon} size={16} />
+                  <span>{q.label}</span>
+                </button>
+              ))}
+              <span style={divider} />
+            </>
+          )}
           {tools.map(tool => (
             <button
               key={tool.key}
@@ -1573,6 +1589,7 @@ export default function PdfWorkspace(props: Props) {
             <Icon name="undo" size={16} />
             <span>{t('undo.label')}</span>
           </button>
+          </div>
         </div>
         )
         return toolbarSlot ? createPortal(bar, toolbarSlot) : bar
@@ -1624,7 +1641,9 @@ const toolBtn = (on: boolean, disabled?: boolean) => ({
   display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, flex: 'none', padding: '0 10px', border: 0, borderRadius: 8, whiteSpace: 'nowrap',
   background: on ? '#109d91' : 'transparent', color: on ? '#fff' : '#294955', fontSize: 11, fontWeight: 650, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
 }) as const
+/** Quick add buttons: tinted so they read as "add an item", not as drawing tools. */
+const quickBtn = { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, flex: 'none', padding: '0 10px', margin: '0 2px', border: '1px solid #bfe6e1', borderRadius: 8, whiteSpace: 'nowrap', background: '#effaf8', color: '#0d7f77', fontSize: 11, fontWeight: 700, cursor: 'pointer' } as const
 const divider = { width: 1, height: 26, flex: 'none', margin: '0 6px', background: '#e2eaed' } as const
 /** Same bar filling the full-width row under the header: everything visible, no scrolling. */
-const toolbarFull = { height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, padding: '0 12px', background: '#fff', overflowX: 'auto', overflowY: 'hidden' } as const
+const toolbarFull = { height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 12px', background: '#fff', overflowX: 'auto', overflowY: 'hidden' } as const
 const toggleLabel = { display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px', flex: 'none', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#294955' } as const
