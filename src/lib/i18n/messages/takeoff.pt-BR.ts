@@ -434,6 +434,8 @@ const takeoffPtBR = {
   'openingTag.window': 'J',
   'openingTag.void': 'V',
   'print.detailSill': 'Peitoril',
+  'view3d.openings': 'Portas e janelas',
+  'view3d.openingsHint': 'Mostrar ou ocultar as portas e janelas nos vãos (os vãos continuam).',
   'quick.wall': '+ Parede',
   'quick.ceiling': '+ Forro',
   'quick.floor': '+ Piso',
