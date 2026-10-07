@@ -5,6 +5,8 @@ import { framingTotals, packBars, packSheets } from '@/lib/takeoff/framing/frami
 import type { TakeoffItem } from '@/lib/takeoff/geometry'
 import { recipeMaterials, type Recipe } from '@/lib/takeoff/recipes'
 import { useRecipeContext } from './useRecipeContext'
+import { ceilingMaterials } from '@/lib/takeoff/ceilingTypes'
+import { useCeilingLabels } from './CeilingTypesLibrary'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { ui } from '../ui'
@@ -38,6 +40,9 @@ export default function FramingPanel({ items, ptPerM, recipes }: Props) {
     for (const it of items) { const r = recipeOf(it); if (r && it.shapes.length) used.set(r.id, r) }
     return [...used.values()]
   }, [items, recipes]) // eslint-disable-line react-hooks/exhaustive-deps
+  const ceilingLabels = useCeilingLabels()
+  /** Ceilings drawn from a ceiling type: profiles, hangers, perimeter, boards or tiles (net estimates). */
+  const ceilings = useMemo(() => ceilingMaterials(items, ptPerM, ceilingLabels), [items, ptPerM, ceilingLabels])
   const anyFramed = items.some(it => it.kind === 'linear' && it.framing?.on && it.recipeId)
 
   return (
@@ -103,6 +108,19 @@ export default function FramingPanel({ items, ptPerM, recipes }: Props) {
           <strong>{formatNumber(m.qty, m.unit === 'un' ? 0 : 2)} {m.unit}{m.packs != null ? ` · ${m.packs} ${m.packName || ''}` : ''}</strong>
         </div>
       ))}
+
+      {ceilings.length > 0 && (
+        <>
+          <h3 style={{ ...ui.panelTitle, fontSize: 12, marginTop: 6 }}>{t('ceiling.materials')}</h3>
+          <div style={ui.small}>{t('ceiling.materialsNote')}</div>
+          {ceilings.map(m => (
+            <div key={`c|${m.mat}|${m.unit}`} style={{ ...ui.listItem, flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+              <span>{m.mat}</span>
+              <strong>{formatNumber(m.qty, m.unit === 'm' || m.unit === 'm²' ? 2 : 0)} {m.unit}</strong>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   )
 }
