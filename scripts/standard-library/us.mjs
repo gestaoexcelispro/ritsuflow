@@ -5,6 +5,10 @@
 // fire ratings, UL designs, STC and stud limiting heights must be checked against the current listings.
 // Run: node scripts/standard-library/generate.mjs  (writes the SQL in supabase/migrations).
 
+import { readFileSync } from 'node:fs'
+
+/** One colour per type, picked so no two in a country are easy to confuse (see colors.json). */
+const COLORS = JSON.parse(readFileSync(new URL('./colors.json', import.meta.url), 'utf8')).US
 export const IN = 0.0254
 export const FT = 0.3048
 const SF = 10.7639 // sf per m²
@@ -124,7 +128,7 @@ export function usWalls() {
         taName: `Drywall screw ${w.longScrews ? '1-5/8"' : '1-1/4"'} Type S`, laName: 'Framing screw #8 × 1/2" pan head',
         // One-sided walls (furring, shaft): no side B, or the layout would add the default board there.
         ...(w.b ? {} : { layersB: 0 }),
-        ...(w.double ? { doubleStuds: true } : {}), color: w.category === 'rated' || w.category === 'shaft' ? '#DC2626' : w.category === 'exterior' ? '#0369A1' : '#64748B',
+        ...(w.double ? { doubleStuds: true } : {}), color: COLORS[w.code],
       },
       recipe: wallRecipe(w),
     }
@@ -207,5 +211,5 @@ const floors = [
 ]
 
 const recipeOf = (t, kind, system) => (t.extras && t.extras.length ? { name: `${t.code} – material list (US)`, kind, system, lines: t.extras } : null)
-export const usCeilings = () => ceilings.map(c => ({ ...c, framing: { ceiling: c.spec, color: '#7C3AED' }, recipe: recipeOf(c, 'area', 'Ceiling') }))
-export const usFloors = () => floors.map(f => ({ ...f, framing: { floor: f.spec, color: '#B7791F' }, recipe: recipeOf(f, 'area', 'Floor') }))
+export const usCeilings = () => ceilings.map(c => ({ ...c, framing: { ceiling: c.spec, color: COLORS[c.code] }, recipe: recipeOf(c, 'area', 'Ceiling') }))
+export const usFloors = () => floors.map(f => ({ ...f, framing: { floor: f.spec, color: COLORS[f.code] }, recipe: recipeOf(f, 'area', 'Floor') }))

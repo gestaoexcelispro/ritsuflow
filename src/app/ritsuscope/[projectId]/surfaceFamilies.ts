@@ -30,7 +30,7 @@ export type SpecField = {
 type Msg =
   | 'title' | 'subtitle' | 'new' | 'newName' | 'addStandard' | 'standardHint' | 'standardAdded' | 'standardAll' | 'empty' | 'select' | 'saved'
   | 'confirmDelete' | 'needsMigration' | 'pickButton' | 'pickTitle' | 'openLibrary' | 'pickEmpty' | 'height' | 'heightInvalid' | 'itemCreated'
-  | 'preview' | 'previewHint' | 'materials' | 'materialsNote' | 'thisMaterials'
+  | 'preview' | 'previewHint' | 'materials' | 'materialsNote' | 'thisMaterials' | 'save' | 'duplicateExists' | 'code'
 
 export type SurfaceFamily = {
   id: FamilyId
@@ -42,7 +42,7 @@ export type SurfaceFamily = {
   systems: string[]
   systemKey: Record<string, TakeoffMessageKey>
   fields: SpecField[]
-  standard: { code: string; name: string; thickness_m: number; spec: Spec; notes: { 'pt-BR': string; 'en-US': string } }[]
+  standard: { code: string; color?: string; name: string; thickness_m: number; spec: Spec; notes: { 'pt-BR': string; 'en-US': string } }[]
   msg: Record<Msg, TakeoffMessageKey>
   /** Key of the build-up in takeoff_wall_types.framing and in the layer's framing.meta. */
   specKey: 'ceiling' | 'floor'
@@ -88,6 +88,7 @@ export const CEILING_FAMILY: SurfaceFamily = {
     pickButton: 'ceiling.pickButton', pickTitle: 'ceiling.pickTitle', openLibrary: 'ceiling.openLibrary', pickEmpty: 'ceiling.pickEmpty',
     height: 'ceiling.height', heightInvalid: 'ceiling.heightInvalid', itemCreated: 'ceiling.itemCreated', preview: 'ceiling.preview',
     previewHint: 'ceiling.previewHint', materials: 'ceiling.materials', materialsNote: 'ceiling.materialsNote', thisMaterials: 'ceiling.thisMaterials',
+    save: 'ceiling.save', duplicateExists: 'ceiling.duplicateExists', code: 'ceiling.code',
   },
   specKey: 'ceiling',
   specOf: f => ceilingSpecOf(f) as Spec | null,
@@ -132,6 +133,7 @@ export const FLOOR_FAMILY: SurfaceFamily = {
     pickButton: 'floortype.pickButton', pickTitle: 'floortype.pickTitle', openLibrary: 'floortype.openLibrary', pickEmpty: 'floortype.pickEmpty',
     height: 'floortype.height', heightInvalid: 'floortype.heightInvalid', itemCreated: 'floortype.itemCreated', preview: 'floortype.preview',
     previewHint: 'floortype.previewHint', materials: 'floortype.materials', materialsNote: 'floortype.materialsNote', thisMaterials: 'floortype.thisMaterials',
+    save: 'floortype.save', duplicateExists: 'floortype.duplicateExists', code: 'floortype.code',
   },
   specKey: 'floor',
   specOf: f => floorSpecOf(f) as Spec | null,
@@ -162,7 +164,7 @@ export async function addStandardTypes(family: SurfaceFamily, existing: { code: 
   if (!missing.length) return { added: 0 }
   const { error } = await createClient().from('takeoff_wall_types').insert(missing.map(c => ({
     code: c.code, name: c.name, category: family.category, status: 'draft', country_code: country, thickness_m: c.thickness_m,
-    framing: { [family.specKey]: c.spec, color: family.color }, notes: c.notes[language as 'pt-BR' | 'en-US'] || c.notes['pt-BR'],
+    framing: { [family.specKey]: c.spec, color: c.color || family.color }, notes: c.notes[language as 'pt-BR' | 'en-US'] || c.notes['pt-BR'],
   })))
   return error ? { error: error.message } : { added: missing.length }
 }

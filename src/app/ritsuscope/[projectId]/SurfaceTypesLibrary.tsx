@@ -156,7 +156,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
       framing: { ...(selected.framing || {}), [family.specKey]: fullSpec(form), color: form.color }, notes: form.notes.trim() || null,
     }).eq('id', selected.id)
     setBusy(false)
-    if (e) { setError(/duplicate|unique/i.test(e.message) ? t('walltype.duplicateExists') : t('workspace.error', { message: e.message })); return }
+    if (e) { setError(/duplicate|unique/i.test(e.message) ? t(family.msg.duplicateExists) : t('workspace.error', { message: e.message })); return }
     setMessage(t(family.msg.saved))
     await load()
     await onChanged?.()
@@ -233,7 +233,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
           ) : (
             <form onSubmit={save} style={{ ...ui.panel, gap: 12 }}>
               <div style={grid}>
-                <label style={field}>{t('walltype.code')}<input style={input} value={form.code} onChange={e => set('code', e.target.value)} placeholder={`${family.codePrefix}01`} /></label>
+                <label style={field}>{t(family.msg.code)}<input style={input} value={form.code} onChange={e => set('code', e.target.value)} placeholder={`${family.codePrefix}01`} /></label>
                 <label style={{ ...field, gridColumn: 'span 2' }}>{t('walltype.name')}<input style={input} value={form.name} onChange={e => set('name', e.target.value)} /></label>
                 <label style={field}>{t('ceiling.system')}
                   <select style={input} value={form.system} onChange={e => set('system', e.target.value)}>
@@ -282,7 +282,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
 
               <label style={field}>{t('recipes.notes')}<textarea style={{ ...input, height: 70, padding: 8 }} value={form.notes} onChange={e => set('notes', e.target.value)} /></label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="submit" style={ui.button} disabled={busy}>{t('walltype.save')}</button>
+                <button type="submit" style={ui.button} disabled={busy}>{t(family.msg.save)}</button>
                 <button type="button" style={ghostBtn} disabled={busy} onClick={() => void duplicate()}>{t('walltype.duplicate')}</button>
                 <button type="button" style={{ ...ghostBtn, color: '#c94a4a', borderColor: '#efcaca' }} disabled={busy} onClick={() => void remove()}>{t('walltype.delete')}</button>
               </div>
