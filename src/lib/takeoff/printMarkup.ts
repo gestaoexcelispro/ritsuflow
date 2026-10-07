@@ -129,7 +129,10 @@ export function legendRows(items: TakeoffItem[], ptPerM: number, fmt: (v: number
     const q = ptPerM > 0 ? layerQuantities(it, ptPerM) : null
     let main = '—'
     let sub = ''
-    if (q && it.kind === 'linear') { main = `${fmt(q.len)} m`; sub = q.net != null ? `${fmt(q.net)} m²` : '' }
+    // Walls lead with their area (net of openings), length below; lines without a height keep metres.
+    if (q && it.kind === 'linear') {
+      if (!it.struct && q.net != null && q.net > 0) { main = `${fmt(q.net)} m²`; sub = `${fmt(q.len)} m` } else { main = `${fmt(q.len)} m`; sub = '' }
+    }
     else if (q && it.kind === 'area') { main = `${fmt(q.area)} m²`; sub = `${fmt(q.per)} m` }
     else if (q) { main = `${q.n} ${unitLabel}`; sub = blockingText(it, q.n, fmt) }
     if (q && it.struct) sub = structText(it, q, fmt, formworkLabel) || sub
@@ -186,7 +189,9 @@ export function projectTotals(sheets: PrintSheetQty[], fmt: (v: number) => strin
   return [...acc.values()].map(r => {
     let main = '—'
     let sub = ''
-    if (r.measured && r.it.kind === 'linear') { main = `${fmt(r.len)} m`; sub = r.hasNet ? `${fmt(r.net)} m²` : '' }
+    if (r.measured && r.it.kind === 'linear') {
+      if (!r.it.struct && r.hasNet && r.net > 0) { main = `${fmt(r.net)} m²`; sub = `${fmt(r.len)} m` } else { main = `${fmt(r.len)} m`; sub = '' }
+    }
     else if (r.measured && r.it.kind === 'area') { main = `${fmt(r.area)} m²`; sub = `${fmt(r.per)} m` }
     else if (r.measured) { main = `${r.n} ${unitLabel}`; sub = blockingText(r.it, r.n, fmt) }
     if (r.measured && r.it.struct) sub = structText(r.it, r, fmt, formworkLabel) || sub
