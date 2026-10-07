@@ -99,10 +99,47 @@ export function computeSegmentTags(elements: ElementRow[], layers: LayerLike[], 
   return out
 }
 
-/** Elements with their final tags attached (`tag_labels`, `tag_auto`), for rowsToItems. */
-export function withSegmentTags(elements: ElementRow[], tags: Map<string, ElementTags>): ElementRow[] {
+/** Tag letter of each kind of opening (D / W / O in English, P / J / V in Portuguese). */
+export type OpeningTagPrefixes = { door: string; window: string; void: string }
+
+/**
+ * Doors, windows and plain openings numbered across the project, per kind (D-01, D-02… W-01…):
+ * sheet order, then drawing order, then along each wall. Returns each wall's tags, aligned with its openings.
+ */
+export function computeOpeningTags(elements: ElementRow[], sourceOrder: string[], prefixes: OpeningTagPrefixes): Map<string, string[]> {
+  const sheetRank = new Map(sourceOrder.map((id, i) => [id, i]))
+  const kindKey = (k: string) => (k === 'door' || k === 'window' ? k : 'void') as keyof OpeningTagPrefixes
+  const ordered = elements
+    .map((e, i) => ({ e, i }))
+    .filter(x => Array.isArray(x.e.openings) && x.e.openings.length > 0)
+    .sort((a, b) =>
+      (sheetRank.get(a.e.source_id) ?? 1e9) - (sheetRank.get(b.e.source_id) ?? 1e9)
+      || String(a.e.created_at || '').localeCompare(String(b.e.created_at || ''))
+      || a.i - b.i)
+  const total = { door: 0, window: 0, void: 0 }
+  for (const { e } of ordered) for (const o of e.openings) total[kindKey(o.kind)]++
+  const next = { door: 0, window: 0, void: 0 }
+  const out = new Map<string, string[]>()
+  for (const { e } of ordered) {
+    const tags: string[] = new Array(e.openings.length).fill('')
+    // Along the wall from its first point.
+    const byOffset = e.openings.map((o, idx) => ({ o, idx })).sort((a, b) => a.o.off - b.o.off)
+    for (const { o, idx } of byOffset) {
+      const k = kindKey(o.kind)
+      next[k]++
+      tags[idx] = `${prefixes[k]}-${String(next[k]).padStart(Math.max(2, String(total[k]).length), '0')}`
+    }
+    out.set(e.id, tags)
+  }
+  return out
+}
+
+/** Elements with their final tags attached (`tag_labels`, `tag_auto`, `opening_tags`), for rowsToItems. */
+export function withSegmentTags(elements: ElementRow[], tags: Map<string, ElementTags>, openingTags?: Map<string, string[]>): ElementRow[] {
   return elements.map(e => {
     const t = tags.get(e.id)
-    return t ? { ...e, tag_labels: t.tags, tag_auto: t.auto } : e
+    const o = openingTags?.get(e.id)
+    if (!t && !o) return e
+    return { ...e, ...(t ? { tag_labels: t.tags, tag_auto: t.auto } : {}), ...(o ? { opening_tags: o } : {}) }
   })
 }

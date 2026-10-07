@@ -77,7 +77,7 @@ export type PrintLabels = {
   tags: string
   colTag: string
   /** Words in front of the second figure: "Length 23,72 m", "Perimeter 42,44 m". */
-  detail: Record<'length' | 'perimeter' | 'height', string>
+  detail: Record<'length' | 'perimeter' | 'height' | 'sill', string>
 }
 
 /** One sheet of the project in the print, with what is drawn on it. */
@@ -281,7 +281,7 @@ export async function buildProjectPdf(opts: {
     cells: [r.mat, labels.materialKind[r.kind], `${Number.isInteger(r.qty) ? String(r.qty) : fmt(r.qty)} ${r.unit}`, r.packs == null ? '' : `${r.packs}${r.packName ? ` ${r.packName}` : ''}`],
   })
 
-  const withDetail = (r: { sub: string; detail?: 'length' | 'perimeter' | 'height' }) => (r.detail && r.sub ? `${labels.detail[r.detail]} ${r.sub}` : r.sub)
+  const withDetail = (r: { sub: string; detail?: 'length' | 'perimeter' | 'height' | 'sill' }) => (r.detail && r.sub ? `${labels.detail[r.detail]} ${r.sub}` : r.sub)
   const tagCols = [{ label: labels.colTag, x: M + 16 }, { label: labels.colItem, x: M + 110 }, { label: labels.colQty, x: M + 530 }, { label: labels.colExtra, x: M + 640 }]
   /** Materials under one heading per type (its colour and name), project or sheet. */
   const materialsTable = (groups: MaterialGroup[]) => {

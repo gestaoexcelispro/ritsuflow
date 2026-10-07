@@ -81,6 +81,19 @@ export function buildMarks(items: TakeoffItem[], zones: ZoneLike[], toUser: Matr
       }
     }
   }
+  // Door, window and opening tags, beside each opening's badge.
+  for (const it of items) {
+    if (it.kind !== 'linear') continue
+    for (const sh of it.shapes) {
+      if (!sh.openingTags?.length) continue
+      for (const m of openingMarks(sh.pts, sh.openings, ptPerM)) {
+        const tag = sh.openingTags[m.index]
+        if (!tag) continue
+        const c: Vec2 = [(m.a[0] + m.b[0]) / 2 + m.n[0] * 13, (m.a[1] + m.b[1]) / 2 + m.n[1] * 13]
+        marks.push({ type: 'tag', at: apply(toUser, c), text: tag, color: OPENING_COLORS[m.kind === 'door' || m.kind === 'window' ? m.kind : 'void'] })
+      }
+    }
+  }
   // Tags on top: middle of each wall stretch long enough on paper to hold its box, centre of each area,
   // beside each counted point.
   for (const it of items) {
@@ -242,7 +255,7 @@ export function structText(it: TakeoffItem, q: { n: number; len: number; area: n
 }
 
 /** One row per tag (wall stretch, area, counted point), sorted by tag, for the report's tag table. */
-export function tagTableRows(items: TakeoffItem[], ptPerM: number, fmt: (v: number) => string, unitLabel: string): { color: [number, number, number]; tag: string; name: string; main: string; sub: string; detail?: 'length' | 'perimeter' | 'height' }[] {
+export function tagTableRows(items: TakeoffItem[], ptPerM: number, fmt: (v: number) => string, unitLabel: string): { color: [number, number, number]; tag: string; name: string; main: string; sub: string; detail?: 'length' | 'perimeter' | 'height' | 'sill' }[] {
   const rows: ReturnType<typeof tagTableRows> = []
   const k2 = ptPerM * ptPerM
   for (const it of items) for (const sh of it.shapes) (sh.tags || []).forEach((tag, i) => {
@@ -259,6 +272,13 @@ export function tagTableRows(items: TakeoffItem[], ptPerM: number, fmt: (v: numb
         ? { color, tag, name: it.name, main: `${fmt(polyArea(sh.pts) / k2)} m²`, sub: `${fmt(perimeter(sh.pts) / ptPerM)} m`, detail: 'perimeter' }
         : { color, tag, name: it.name, main: '—', sub: '' })
     } else rows.push({ color, tag, name: it.name, main: `1 ${unitLabel}`, sub: '' })
+  })
+  // Doors, windows and openings: size and sill, on the wall they sit in.
+  for (const it of items) if (it.kind === 'linear') for (const sh of it.shapes) (sh.openingTags || []).forEach((tag, i) => {
+    const o = sh.openings?.[i]
+    if (!tag || !o) return
+    const kind = o.kind === 'door' || o.kind === 'window' ? o.kind : 'void'
+    rows.push({ color: OPENING_COLORS[kind], tag, name: it.name, main: `${fmt(o.w)} × ${fmt(o.h)} m`, sub: o.sill > 0 ? `${fmt(o.sill)} m` : '', detail: o.sill > 0 ? 'sill' : undefined })
   })
   return rows.sort((a, b) => a.tag.localeCompare(b.tag, undefined, { numeric: true }))
 }
