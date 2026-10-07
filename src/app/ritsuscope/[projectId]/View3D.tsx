@@ -83,6 +83,8 @@ type Props = {
   /** Plan underlays per storey (sheet region framed for room detection) and the locations on them. */
   underlays?: UnderlaySpec[]
   underlayZones?: UnderlayZone[]
+  /** Storey (page) of the sheet open in the editor: its underlay is preferred. */
+  preferPage?: number
 }
 
 type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; group: any; raf: number }
@@ -90,7 +92,7 @@ type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; grou
 const NO_UNDERLAYS: UnderlaySpec[] = []
 const NO_ZONES: UnderlayZone[] = []
 
-export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES }: Props) {
+export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage }: Props) {
   const t = useTakeoffT()
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<Scene | null>(null)
@@ -242,12 +244,17 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
   // Re-frame the camera when the sheet changes (declared first so it runs before the rebuild).
   useEffect(() => { fittedRef.current = false }, [ptPerM, items.length])
 
-  // Plan underlay: only under the lowest visible storey that has a framed region.
+  // Plan underlay: one storey only — the sheet the drawn model comes from (its own region and scale, so the
+  // walls sit exactly on their drawing), the selected sheet first, then the lowest visible one.
   const underlaySpec = useMemo(() => {
     if (!underlayOn || !underlays.length) return null
     const elev = (page: number) => (storeys || []).find(st => st.page === page)?.elevation ?? 0
-    return [...underlays].filter(u => !hiddenPages.has(u.page)).sort((a, b) => elev(a.page) - elev(b.page))[0] || null
-  }, [underlayOn, underlays, storeys, hiddenPages])
+    const drawn = new Set(visibleItems.flatMap(it => it.shapes.map(sh => sh.page)))
+    const score = (u: UnderlaySpec) => (drawn.has(u.page) ? 0 : 2) + (u.page === preferPage ? 0 : 1)
+    return [...underlays]
+      .filter(u => !hiddenPages.has(u.page) && drawn.has(u.page))
+      .sort((a, b) => score(a) - score(b) || elev(a.page) - elev(b.page))[0] || null
+  }, [underlayOn, underlays, storeys, hiddenPages, visibleItems, preferPage])
   // Reload only when the region really changes (the parent rebuilds the spec objects on every change).
   const specRef = useRef(underlaySpec)
   specRef.current = underlaySpec

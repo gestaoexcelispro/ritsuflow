@@ -695,7 +695,8 @@ export default function TakeoffWorkspacePage() {
       <div style={{ flex: 1, minHeight: 0 }}>
         {canShowModel && scope3d === 'model' ? (
           <View3D key={isIfcModel ? 'model' : 'building'} items={shownModelItems} ptPerM={1} storeys={modelData.storeys} selectedId={selectedElementId} onSelect={selectFromModel}
-            underlays={isIfcModel ? undefined : underlay3d.model.underlays} underlayZones={isIfcModel ? undefined : underlay3d.model.zones} />
+            underlays={isIfcModel ? undefined : underlay3d.model.underlays} underlayZones={isIfcModel ? undefined : underlay3d.model.zones}
+            preferPage={modelData.storeys.find(st => st.sourceId === selectedSourceId)?.page} />
         ) : (
           <View3D key={selectedSource.id} items={shownItems} ptPerM={ptPerM} selectedId={selectedElementId} onSelect={setSelectedElementId}
             underlays={underlay3d.sheet.underlays} underlayZones={underlay3d.sheet.zones} />
@@ -1146,7 +1147,10 @@ export default function TakeoffWorkspacePage() {
           const region = underlayRegionOf(src)
           const toModel = src ? toModelOf(src) : null
           return src && region && toModel ? [{ spec: { page: st.page, filePath: src.file_path, pageNumber: src.page_number || 1, region, toModel }, src }] : []
-        }).sort((a, b) => (elev.get(a.spec.page) ?? 0) - (elev.get(b.spec.page) ?? 0))
+        })
+          // Only a sheet whose drawings are on this 3D page (its own scale, so they sit on their drawing); lowest first.
+          .filter(x => items3d.some(it => it.shapes.some(sh => sh.page === x.spec.page)))
+          .sort((a, b) => (elev.get(a.spec.page) ?? 0) - (elev.get(b.spec.page) ?? 0))
         const first = specs[0]
         if (first) {
           underlay = await loadUnderlay(first.spec, 2600)
