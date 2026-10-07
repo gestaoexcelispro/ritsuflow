@@ -419,6 +419,7 @@ const takeoffEnUS: TakeoffMessages = {
   'group.mergeHint': "Some items here use the same library type at the same level: merge them into one item.",
   'group.mergeConfirm': "Merge items of the same type into one? {names}. Their drawings move to one item and the extra items are removed.",
   'group.merged': "Items of the same type merged.",
+  'group.openings': 'Openings',
   'quick.wall': '+ Wall',
   'quick.ceiling': '+ Ceiling',
   'quick.floor': '+ Floor',

@@ -420,6 +420,7 @@ const takeoffPtBR = {
   'group.mergeHint': "Alguns itens aqui usam a mesma tipologia da biblioteca no mesmo nível: una-os em um só item.",
   'group.mergeConfirm': "Unir itens da mesma tipologia em um só? {names}. Os desenhos passam para um item e os itens extras são removidos.",
   'group.merged': "Itens da mesma tipologia unidos.",
+  'group.openings': 'Aberturas',
   'quick.wall': '+ Parede',
   'quick.ceiling': '+ Forro',
   'quick.floor': '+ Piso',
