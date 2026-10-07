@@ -78,3 +78,18 @@ export function projectMaterialGroups(sheets: { groups: MaterialGroup[]; multipl
   }
   return order.map(name => ({ name, color: by.get(name)!.color, rows: projectMaterials(by.get(name)!.parts) }))
 }
+
+/**
+ * A type's materials scaled to the part of it in one location. Whole units (bars, sheets, pieces…)
+ * are rounded up per location, so the locations can add up to a little more than the project total.
+ */
+export function scaleGroup(g: MaterialGroup, fraction: number): MaterialGroup {
+  return {
+    ...g,
+    rows: g.rows.map(r => {
+      const whole = Number.isInteger(r.qty)
+      const qty = whole ? Math.ceil(r.qty * fraction - 1e-9) : r.qty * fraction
+      return { ...r, qty, packs: r.packs == null ? null : Math.ceil(r.packs * fraction - 1e-9) }
+    }).filter(r => r.qty > 0),
+  }
+}
