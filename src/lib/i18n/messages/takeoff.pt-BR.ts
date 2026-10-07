@@ -914,6 +914,8 @@ const takeoffPtBR = {
   'area.filled': '{count} áreas criadas a partir dos locais.',
   'area.fillNone': 'Todos os locais desta folha já têm área neste item.',
   'layer.elevation': 'Cota (m)',
+  'layer.planTransparency': 'Transparência na planta e no PDF: {pct}%',
+  'layer.planTransparencyHint': 'Vale para a planta na tela e para o PDF impresso. 0% = cor sólida.',
   'layer.transparency': 'Transparência no 3D: {pct}%',
   'layer.transparencyHint': '0% = volume sólido (padrão). Aumente para enxergar através deste item.',
   'print.kindWalls': 'Paredes',

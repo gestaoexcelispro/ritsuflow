@@ -1201,7 +1201,9 @@ export default function TakeoffWorkspacePage() {
               onClick={() => {
                 if (sheetId && sheetId !== selectedSourceId) { setSelectedSourceId(sheetId); setActiveLayerId(item.key); setDrawRequest(n => n + 1) }
                 else if (isPdf) { setActiveLayerId(item.key); setDrawRequest(n => n + 1) }
-                else { setEditingLayerId(item.key); setRightOpen(true); setRightTab('props') }
+                // The item's properties open in the right panel too.
+                setOpeningEditor(null); setEditingLevelId(null); setCheckedLevelIds(new Set()); setSelectedElementId(null)
+                setEditingLayerId(item.key); setRightOpen(true); setRightTab('props')
               }}
               title={isPdf ? t('layout.itemClickPdf') : t('layer.edit')}
               style={{

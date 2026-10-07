@@ -778,13 +778,18 @@ export default function PdfWorkspace(props: Props) {
     await onChanged()
   }
 
-  // Keyboard: Enter finishes, Escape cancels, Backspace removes the last point, Delete removes the selection.
+  // Keyboard: Enter finishes, Escape ends the command and goes back to Select, Backspace removes the last point, Delete removes the selection.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null
       if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
       if (event.key === 'Escape' && openingPick) { setPickHover(null); onOpeningPickCancel?.(); return }
-      if (event.key === 'Escape') { clearTransient(); setBoxSel([]); onSelect(null); onSelectZone(null); setRoomPicking(false); setRoomPickPts([]) }
+      if (event.key === 'Escape') {
+        clearTransient(); setBoxSel([]); onSelect(null); onSelectZone(null); setRoomPicking(false); setRoomPickPts([])
+        // End the command: drop any drawing / measuring tool and its menus, back to Select.
+        if (mode !== 'select') chooseTool('select')
+        setArchMenu(null); setStructMenu(null); setMepMenu(null)
+      }
       if (event.key === 'Enter' && mode === 'draw' && !faceMode) void finishDraft()
       if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => prev.slice(0, -1)) }
       if (event.key === 'Backspace' && mode === 'measure') { event.preventDefault(); setMeasureDone(false); setMeasurePts(prev => prev.slice(0, -1)) }
@@ -1027,7 +1032,7 @@ export default function PdfWorkspace(props: Props) {
   const isTool = (m: Mode, s?: Shape) => mode === m && (!s || shape === s)
   type ToolGroup = 'edit' | 'ref' | 'draw' | 'model' | 'services'
   const tools: { key: string; group: ToolGroup; icon: string; label: TakeoffMessageKey; title?: string; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
-    { key: 'select', group: 'edit', icon: 'select', label: 'tool.select', title: `${t('tool.select')}: ${t('pan.hint')} ${t('box.hint')}`, active: isTool('select'), onClick: () => chooseTool('select') },
+    { key: 'select', group: 'edit', icon: 'select', label: 'tool.select', title: `${t('tool.select')} (Esc): ${t('pan.hint')} ${t('box.hint')}`, active: isTool('select'), onClick: () => chooseTool('select') },
     { key: 'scale', group: 'ref', icon: 'scale', label: 'tool.scale', active: isTool('calibrate'), onClick: () => chooseTool('calibrate') },
     { key: 'line', group: 'draw', icon: 'line', label: 'tool.line', active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
     { key: 'rect', group: 'draw', icon: 'rect', label: 'tool.rect', active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },

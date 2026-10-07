@@ -913,6 +913,8 @@ const takeoffEnUS: TakeoffMessages = {
   'area.filled': '{count} areas created from the locations.',
   'area.fillNone': 'Every location on this sheet already has an area in this item.',
   'layer.elevation': 'Elevation (m)',
+  'layer.planTransparency': 'Transparency on the sheet and PDF: {pct}%',
+  'layer.planTransparencyHint': 'Applies to the plan on screen and to the printed PDF. 0% = solid colour.',
   'layer.transparency': '3D transparency: {pct}%',
   'layer.transparencyHint': '0% = solid volume (default). Raise it to see through this item.',
   'print.kindWalls': 'Walls',

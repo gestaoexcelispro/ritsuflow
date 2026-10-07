@@ -165,7 +165,7 @@ export async function buildProjectPdf(opts: {
         pg.drawRectangle({ x: m.at[0] - w / 2, y: m.at[1] - 3.6, width: w, height: 7.2, color: rgb(1, 1, 1), opacity: 0.92, borderColor: color(m.color), borderWidth: 0.5 })
         pg.drawText(text, { x: m.at[0] - w / 2 + 2, y: m.at[1] - 1.8, size, font: bold, color: ink })
       } else if (m.type === 'dot') {
-        pg.drawCircle({ x: m.at[0], y: m.at[1], size: m.radius, color: color(m.color), borderColor: rgb(1, 1, 1), borderWidth: 0.8 })
+        pg.drawCircle({ x: m.at[0], y: m.at[1], size: m.radius, color: color(m.color), opacity: m.opacity ?? 1, borderColor: rgb(1, 1, 1), borderWidth: 0.8, borderOpacity: m.opacity ?? 1 })
       } else {
         m.lines.forEach((line, i) => {
           const text = winAnsi(line)

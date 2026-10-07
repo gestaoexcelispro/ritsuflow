@@ -8,6 +8,7 @@ import { openingMarks } from './openingMarks'
 import { mepExtra } from './mep'
 import { structExtra } from './struct'
 import { centroid } from './zones'
+import { planOpacity } from './planOpacity'
 
 export type Matrix = [number, number, number, number, number, number]
 
@@ -32,7 +33,7 @@ export function hexToRgb(hex: string): [number, number, number] {
 export type Mark =
   | { type: 'polyline'; pts: Vec2[]; color: [number, number, number]; width: number; opacity: number }
   | { type: 'polygon'; pts: Vec2[]; color: [number, number, number]; fillOpacity: number; borderWidth: number }
-  | { type: 'dot'; at: Vec2; color: [number, number, number]; radius: number }
+  | { type: 'dot'; at: Vec2; color: [number, number, number]; radius: number; opacity?: number }
   | { type: 'label'; at: Vec2; lines: string[]; size: number }
   /** A door/window/opening: a band along the wall (a→b) and an icon badge at its centre. */
   | { type: 'opening'; kind: ElementOpening['kind']; a: Vec2; b: Vec2; at: Vec2; width: number; color: [number, number, number] }
@@ -61,12 +62,12 @@ export function buildMarks(items: TakeoffItem[], zones: ZoneLike[], toUser: Matr
   for (const it of items) {
     const color = hexToRgb(it.color)
     for (const sh of it.shapes) {
-      if (it.kind === 'area' && sh.pts.length >= 3) marks.push({ type: 'polygon', pts: u(sh.pts), color, fillOpacity: 0.2, borderWidth: 1 })
+      if (it.kind === 'area' && sh.pts.length >= 3) marks.push({ type: 'polygon', pts: u(sh.pts), color, fillOpacity: planOpacity(it, 'print'), borderWidth: 1 })
       else if (it.kind === 'linear' && sh.pts.length >= 2) {
         // Real wall thickness when known (at least 1.5 pt so thin walls stay visible).
         const w = it.thickness && it.thickness > 0 && ptPerM > 0 ? Math.max(1.5, it.thickness * ptPerM) : 3
-        marks.push({ type: 'polyline', pts: u(sh.pts), color, width: w, opacity: 0.6 })
-      } else if (it.kind === 'count' && sh.pts[0]) marks.push({ type: 'dot', at: apply(toUser, sh.pts[0]), color, radius: 3.5 })
+        marks.push({ type: 'polyline', pts: u(sh.pts), color, width: w, opacity: planOpacity(it, 'print') })
+      } else if (it.kind === 'count' && sh.pts[0]) marks.push({ type: 'dot', at: apply(toUser, sh.pts[0]), color, radius: 3.5, opacity: planOpacity(it, 'print') })
     }
   }
   // Openings last, so their badges sit on top of everything.

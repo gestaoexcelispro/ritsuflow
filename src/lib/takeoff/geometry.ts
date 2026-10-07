@@ -84,6 +84,8 @@ export type TakeoffItem = {
   deductOpenings?: boolean
   /** 3D view: 0 = solid (default) … 0.9 = almost see-through. */
   transparency?: number
+  /** Sheet and printed PDF: 0 = opaque … 0.95 = almost invisible; unset = default per kind (see planOpacity.ts). */
+  planTransparency?: number
   ifcType?: string
   /** Ceiling-type areas: the build-up (system, profiles, boards/tiles) used for material estimates. */
   ceiling?: import('./ceilingTypes').CeilingSpec

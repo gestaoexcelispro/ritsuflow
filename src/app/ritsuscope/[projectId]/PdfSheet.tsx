@@ -2,6 +2,7 @@
 
 import { MouseEvent, useEffect, useRef, useState } from 'react'
 import { dist, polyLen, type LayerKind, type TakeoffItem, type Vec2 } from '@/lib/takeoff/geometry'
+import { planOpacity } from '@/lib/takeoff/planOpacity'
 import { extractPdfSegments, findSnap, type SnapPoint, type VectorSegment } from '@/lib/takeoff/pdfSnapEngine'
 import { extractPdfVectors } from '@/lib/takeoff/detect/pdfVectors'
 import type { VSeg } from '@/lib/takeoff/detect/walls'
@@ -494,7 +495,7 @@ export default function PdfSheet(props: Props) {
                       style: { cursor: 'pointer' },
                     }
                   : pick
-                return <polygon key={key} points={points} fill={item.color} fillOpacity={selected ? 0.35 : 0.18} stroke={color} strokeWidth={stroke(selected ? 3 : 2)} {...areaPick} />
+                return <polygon key={key} points={points} fill={item.color} fillOpacity={selected ? Math.min(1, planOpacity(item, 'screen') + 0.17) : planOpacity(item, 'screen')} stroke={color} strokeWidth={stroke(selected ? 3 : 2)} {...areaPick} />
               }
               if (item.kind === 'linear') {
                 // Real wall thickness once the sheet has a scale (stays the same on paper at any zoom);
@@ -503,14 +504,14 @@ export default function PdfSheet(props: Props) {
                 const width = real > 0 ? Math.max(real, stroke(selected ? 3 : 1.5)) : stroke(selected ? 7 : 5)
                 return (
                   <g key={key}>
-                    <polyline points={points} fill="none" stroke={color} strokeOpacity={0.85} strokeWidth={width} strokeLinejoin="miter" strokeLinecap={real > 0 ? 'square' : 'round'} {...pick} />
+                    <polyline points={points} fill="none" stroke={color} strokeOpacity={selected ? Math.max(0.85, planOpacity(item, 'screen')) : planOpacity(item, 'screen')} strokeWidth={width} strokeLinejoin="miter" strokeLinecap={real > 0 ? 'square' : 'round'} {...pick} />
                     {selectable && shape.id && <polyline points={points} fill="none" stroke="transparent" strokeWidth={Math.max(width, stroke(10))} strokeLinejoin="round" strokeLinecap="round" style={{ cursor: 'pointer', pointerEvents: 'stroke' }} onClick={event => { event.stopPropagation(); onSelect(shape.id!) }} />}
                     {selected && real > 0 && <polyline points={points} fill="none" stroke="#fff" strokeOpacity={0.9} strokeWidth={stroke(1.2)} strokeDasharray={`${stroke(6)} ${stroke(4)}`} style={{ pointerEvents: 'none' }} />}
                   </g>
                 )
               }
               const [x, y] = pts[0]
-              return <circle key={key} cx={x} cy={y} r={stroke(selected ? 9 : 7)} fill="#fff" stroke={color} strokeWidth={stroke(3)} {...pick} />
+              return <circle key={key} cx={x} cy={y} r={stroke(selected ? 9 : 7)} fill="#fff" stroke={color} strokeWidth={stroke(3)} opacity={selected ? 1 : planOpacity(item, 'screen')} {...pick} />
             }),
           )}
 
