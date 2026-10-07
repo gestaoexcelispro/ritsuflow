@@ -634,8 +634,8 @@ const checkRow = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, 
  * Renders the model once, off screen, from the default 3D view angle, for printing.
  * Returns PNG bytes, or null when WebGL or three.js is not available.
  */
-export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean }): Promise<Uint8Array | null> {
-  const { items, ptPerM, storeys, width, height, layered = true } = opts
+export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean }): Promise<Uint8Array | null> {
+  const { items, ptPerM, storeys, width, height, layered = true, tags = false } = opts
   if (!ptPerM || !items.some(it => it.shapes.length)) return null
   let THREE: Three
   try { THREE = await loadThree() } catch { return null }
@@ -658,7 +658,15 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
     const s: Scene = { THREE, renderer, scene, cam, ctl, group, raf: 0 }
     const elev = new Map((storeys || []).map(st => [st.page, st.elevation]))
     const elevationOf = (page: number) => elev.get(page) || 0
-    build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items })
+    build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags })
+    if (tags) {
+      // Tags stay readable on paper: on big models they grow with the model (they are 0,32 m tall by default).
+      const box = new THREE.Box3()
+      for (const c of group.children) if (c.type !== 'GridHelper' && c.type !== 'Sprite') box.expandByObject(c)
+      const span = box.isEmpty() ? 0 : Math.max(box.max.x - box.min.x, box.max.z - box.min.z)
+      const k = Math.max(1, span / 20)
+      if (k > 1) for (const c of group.children) if (c.type === 'Sprite') c.scale.multiplyScalar(k)
+    }
     fitWhole(THREE, cam, group, width / height)
     renderer.render(scene, cam)
     const url: string = renderer.domElement.toDataURL('image/png')

@@ -420,6 +420,8 @@ const takeoffEnUS: TakeoffMessages = {
   'group.mergeConfirm': "Merge items of the same type into one? {names}. Their drawings move to one item and the extra items are removed.",
   'group.merged': "Items of the same type merged.",
   'group.openings': 'Openings',
+  'group.typesOne': '1 item',
+  'print.materials': 'Materials',
   'quick.wall': '+ Wall',
   'quick.ceiling': '+ Ceiling',
   'quick.floor': '+ Floor',

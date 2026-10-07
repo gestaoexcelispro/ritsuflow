@@ -2,6 +2,7 @@
 // takeoff drawn on top and a title strip, a 3D page, and tables per level with project totals.
 // pdf-lib is loaded from a CDN at runtime (no package install needed), like three.js in View3D.
 import { buildMarks, invert, legendRows, openingRows, projectOpeningRows, projectTotals, winAnsi, zoneRows, type Matrix, type ZoneLike } from '@/lib/takeoff/printMarkup'
+import { projectMaterials, type MaterialKind, type MaterialRow } from '@/lib/takeoff/materialList'
 import { ICON_PATHS } from './icons'
 import type { TakeoffItem } from '@/lib/takeoff/geometry'
 
@@ -67,6 +68,11 @@ export type PrintLabels = {
   totals: string
   /** Note under the totals (typical floors counted). */
   totalsNote: string
+  /** Materials table: heading, columns and the name of each kind of material. */
+  materials: string
+  colMaterial: string
+  colPacks: string
+  materialKind: Record<MaterialKind, string>
 }
 
 /** One sheet of the project in the print, with what is drawn on it. */
@@ -85,6 +91,8 @@ export type PrintSheet = {
   heading: string
   /** White wash over the source drawing before the takeoff is drawn (0…0.8). */
   backgroundFade?: number
+  /** Materials of this sheet's items (framing layout, recipes, ceiling / floor build-ups). */
+  materials?: MaterialRow[]
 }
 
 const svgPath = (pts: [number, number][], close: boolean) =>
@@ -256,10 +264,18 @@ export async function buildProjectPdf(opts: {
     cells: [`${labels.openingKind[r.kind]} ${fmt(r.w)} × ${fmt(r.h)} m${r.sill > 0 ? ` · ${fmt(r.sill)} m` : ''}`, r.wall, `${r.count} ${labels.unit}`, `${fmt(r.areaM2)} m²`],
   })
 
+  const matCols = [{ label: labels.colMaterial, x: M + 16 }, { label: labels.colKind, x: M + 420 }, { label: labels.colQty, x: M + 530 }, { label: labels.colPacks, x: M + 640 }]
+  const ink3: [number, number, number] = [0.42, 0.5, 0.54]
+  const matCells = (r: MaterialRow) => ({
+    swatch: ink3,
+    cells: [r.mat, labels.materialKind[r.kind], `${Number.isInteger(r.qty) ? String(r.qty) : fmt(r.qty)} ${r.unit}`, r.packs == null ? '' : `${r.packs}${r.packName ? ` ${r.packName}` : ''}`],
+  })
+
   for (const sheet of sheets) {
     section(sheet.heading)
     table(labels.items, itemCols, legendRows(sheet.items, sheet.ptPerM, fmt, labels.unit, labels.formwork).map(r => ({ swatch: r.color, cells: [r.name, labels.kind[r.kind], r.main, r.sub] })))
     table(labels.openings, openCols, openingRows(sheet.items).map(openCells))
+    table(labels.materials, matCols, (sheet.materials || []).map(matCells))
     table(labels.locations,
       [{ label: labels.colItem, x: M + 16 }, { label: labels.colArea, x: M + 420 }, { label: labels.colPerimeter, x: M + 530 }],
       zoneRows(sheet.zones, sheet.ptPerM, fmt).map(z => ({ swatch: z.color, cells: [z.name, z.area, z.perimeter] })))
@@ -273,6 +289,7 @@ export async function buildProjectPdf(opts: {
     page.drawText(winAnsi(labels.totalsNote), { x: M, y, size: 8, font, color: grey }); y -= 16
     table(labels.items, itemCols, totals.map(r => ({ swatch: r.color, cells: [r.name, labels.kind[r.kind], r.main, r.sub] })))
     table(labels.openings, openCols, projectOpeningRows(sheets).map(openCells))
+    table(labels.materials, matCols, projectMaterials(sheets.map(s => ({ rows: s.materials || [], multiplier: s.multiplier }))).map(matCells))
   }
 
   for (let i = firstOwn; i < out.getPageCount(); i++) out.getPage(i).drawText(winAnsi(labels.footer), { x: M, y: M - 14, size: 7, font, color: grey })

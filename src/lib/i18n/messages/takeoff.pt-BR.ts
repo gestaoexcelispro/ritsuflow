@@ -421,6 +421,8 @@ const takeoffPtBR = {
   'group.mergeConfirm': "Unir itens da mesma tipologia em um só? {names}. Os desenhos passam para um item e os itens extras são removidos.",
   'group.merged': "Itens da mesma tipologia unidos.",
   'group.openings': 'Aberturas',
+  'group.typesOne': '1 item',
+  'print.materials': 'Materiais',
   'quick.wall': '+ Parede',
   'quick.ceiling': '+ Forro',
   'quick.floor': '+ Piso',

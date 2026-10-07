@@ -65,6 +65,7 @@ import DeleteFromLevelsDialog from './DeleteFromLevelsDialog'
 import { NO_LEVEL, branchItems, branchOfLevel, levelBranches, withoutHiddenStoreys, type LevelBranch } from '@/lib/takeoff/levelTree'
 import type { Quantities } from '@/lib/takeoff/geometry'
 import { groupRows, type GroupKey, type SubKey } from '@/lib/takeoff/itemGroups'
+import { materialRows } from '@/lib/takeoff/materialList'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
 
@@ -307,6 +308,9 @@ export default function TakeoffWorkspacePage() {
   const recipeById = useMemo(() => new Map(recipes.map(r => [r.id, r])), [recipes])
   const recipeOfItem = useCallback((it: { recipeId?: string | null }) => (it.recipeId ? recipeById.get(it.recipeId) : null), [recipeById])
   const recipeCtx = useRecipeContext(sourceItems, recipeOfItem)
+  /** Recipe context for every item of the project (the PDF report covers all sheets). */
+  const allLayerItems = useMemo(() => rowsToItems(layers, [], new Map()), [layers])
+  const projectRecipeCtx = useRecipeContext(allLayerItems, recipeOfItem)
 
   useEffect(() => {
     setSelectedElementId(pendingSelect.current)
@@ -1061,6 +1065,14 @@ export default function TakeoffWorkspacePage() {
           subtitle: t('print.subtitle', { scale, date }),
           heading: `${ps.levelName} · ${ps.source.name}${mult > 1 ? ` · ${t('print.perFloor')}` : ''}`,
           backgroundFade: fadeOf(ps.source),
+          materials: k > 0 ? (() => {
+            const surf = surfaceMaterials(ps.items, k, surfaceLabels)
+            return materialRows(ps.items, k, {
+              recipe: recipeMaterials(ps.items, k, recipeOfItem, projectRecipeCtx),
+              ceiling: surf.find(x => x.family.id === 'ceiling')?.materials || [],
+              floor: surf.find(x => x.family.id === 'floor')?.materials || [],
+            }, { bars: t('csv.bars'), sheets: t('csv.sheets'), un: t('unit.un') }, v => formatNumber(v, 2))
+          })() : [],
         }
       })
       // 3D page: the building with this PDF's items (everything for locations and the full takeoff).
@@ -1071,7 +1083,7 @@ export default function TakeoffWorkspacePage() {
       const all3d = fillLevelHeights(building.items, page => hOfPage.get(page) ?? null).filter(it => it.shapes.length > 0)
       // Services are shown inside their walls, so the walls come along on that 3D page.
       const items3d = what === 'locations' || what === 'takeoff' ? all3d : all3d.filter(it => printFilter[what](it) || (what === 'mep' && it.kind === 'linear' && !it.struct))
-      if (items3d.length) image3d = await render3DImage({ items: items3d, ptPerM: 1, storeys: building.storeys, width: 2000, height: 1250 })
+      if (items3d.length) image3d = await render3DImage({ items: items3d, ptPerM: 1, storeys: building.storeys, width: 2000, height: 1250, tags: true })
       const blob = await buildProjectPdf({
         sheets: sheetsOut,
         image3d,
@@ -1101,6 +1113,10 @@ export default function TakeoffWorkspacePage() {
           view3d: t('print.view3d'),
           totals: t('print.totals'),
           totalsNote: t('print.totalsNote'),
+          materials: t('print.materials'),
+          colMaterial: t('csv.material'),
+          colPacks: t('csv.packages'),
+          materialKind: { profile: t('csv.profile'), board: t('csv.board'), screws: t('csv.screws'), recipe: t('csv.recipe'), ceiling: t('group.ceilings'), floor: t('group.floors') },
         },
       })
       const href = URL.createObjectURL(blob)
@@ -1426,7 +1442,7 @@ export default function TakeoffWorkspacePage() {
       const allChecked = ids.every(id => checked.has(id))
       const someChecked = !allChecked && ids.some(id => checked.has(id))
       const anyHidden = ids.some(id => hiddenLayerIds.has(id))
-      const allHidden = ids.every(id => hiddenLayerIds.has(id))
+      const allHidden = ids.length > 0 && ids.every(id => hiddenLayerIds.has(id))
       const sums = new Map<string, number>()
       for (const r of list) { const v = qtyValue(r.item, r.q); if (v) sums.set(v.u, (sums.get(v.u) || 0) + v.v) }
       const total = extra ? extra.total : [...sums.entries()].map(([u, v]) => `${formatNumber(v, u === t('unit.un') ? 0 : 2)} ${u}`).join(' · ')
@@ -1450,8 +1466,10 @@ export default function TakeoffWorkspacePage() {
             style={{ margin: 0 }}
           />}
           <Icon name="chevron" size={12} style={{ color: '#536d78', transform: folded ? 'rotate(-90deg)' : 'none', transition: 'transform .12s' }} />
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: level === 0 ? 10 : 10, fontWeight: 800, letterSpacing: level === 0 ? '.06em' : '.02em', textTransform: level === 0 ? 'uppercase' : 'none', color: level === 0 ? '#294955' : '#536d78' }}>
-            {label} <span style={{ fontWeight: 650, color: '#8aa0a8' }}>· {t('group.types', { count: extra ? extra.count : list.length })}</span>
+          {/* One text style for every group (any discipline added later looks the same): name never cut, count shrinks first. */}
+          <span style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            <span style={groupName(level)}>{label}</span>
+            <span style={groupCount}>{t((extra ? extra.count : list.length) === 1 ? 'group.typesOne' : 'group.types', { count: extra ? extra.count : list.length })}</span>
             {dupCount > 0 && (
               <button type="button" title={t('group.mergeHint')} onClick={event => { event.stopPropagation(); void mergeDuplicates(ids) }}
                 style={{ marginLeft: 6, height: 18, padding: '0 6px', border: '1px solid #f3d19c', borderRadius: 9, background: '#fffaf0', color: '#8a5a12', fontSize: 9, fontWeight: 800, cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
@@ -2047,3 +2065,6 @@ const sidePane = { minHeight: 0, minWidth: 0, overflow: 'hidden', background: '#
 const footerBar = { display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: '#eef3f4', borderTop: '1px solid #dfe7ea', fontSize: 11, color: '#4b6570', whiteSpace: 'nowrap', overflow: 'hidden' } as const
 const footBtn = { width: 24, height: 22, border: '1px solid #d3dfe2', borderRadius: 5, background: '#fff', cursor: 'pointer', fontSize: 12, color: '#294955' } as const
 const chipBtn = (on: boolean) => ({ display: 'flex', alignItems: 'center', gap: 4, height: 28, padding: '0 10px', border: '1px solid ' + (on ? '#109d91' : '#d3dfe2'), borderRadius: 7, background: on ? '#109d91' : '#fff', color: on ? '#fff' : '#294955', fontSize: 11, fontWeight: 700, cursor: 'pointer' }) as const
+/** Item list group headers: the same type for every discipline and feature. */
+const groupName = (level: 0 | 1) => ({ flex: 'none', fontSize: 10, fontWeight: 800, letterSpacing: level === 0 ? '.06em' : '.02em', textTransform: level === 0 ? 'uppercase' : 'none', color: level === 0 ? '#294955' : '#536d78' }) as const
+const groupCount = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 10, fontWeight: 600, letterSpacing: 0, textTransform: 'none', color: '#8aa0a8' } as const
