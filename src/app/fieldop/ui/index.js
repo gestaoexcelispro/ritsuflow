@@ -49,6 +49,7 @@ const MODULES = {
       return [
         { key: 'overview', icon: 'grid', href: '/dashboard', labelKey: 'nav.preconOverview' },
         { key: 'masterPlan', icon: 'masterPlan', href: withProject('/dashboard/planning/master-plan'), labelKey: 'nav.preconMasterPlan' },
+        { key: 'pull', icon: 'pull', href: withProject('/dashboard/planning/pull-planning'), labelKey: 'nav.preconPull' },
         { key: 'lookahead', icon: 'lookahead', href: withProject('/dashboard/planning/lookahead'), labelKey: 'nav.preconLookahead' },
         { key: 'constraints', icon: 'constraint', href: withProject('/dashboard/planning/constraints'), labelKey: 'nav.preconConstraints' },
         { key: 'weekly', icon: 'weekly', href: withProject('/dashboard/planning/weekly-planning'), labelKey: 'nav.preconWeekly' },

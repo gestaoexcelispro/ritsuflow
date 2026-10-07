@@ -7,6 +7,7 @@ import { usePreconProjectId } from './preconProject'
 // PreCon pages and the tab that marks each one as active.
 const TABS = [
   ['/dashboard/planning/master-plan', 'masterPlan'],
+  ['/dashboard/planning/pull-planning', 'pull'],
   ['/dashboard/planning/lookahead', 'lookahead'],
   ['/dashboard/planning/constraints', 'constraints'],
   ['/dashboard/planning/weekly-planning', 'weekly'],
