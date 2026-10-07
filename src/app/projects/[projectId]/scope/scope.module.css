@@ -90,3 +90,17 @@
   .grid, .activityForm { grid-template-columns: 1fr; }
   .drawer { width: 100vw; }
 }
+
+/* Import from RitsuScope */
+.emptyActions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.fromTakeoff { display: inline-block; margin-right: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .02em; vertical-align: 1px; background: var(--fo-info-wash); color: var(--fo-info); }
+.importDialog { width: min(820px, 100%); }
+.importList { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
+.importScope { border: 1px solid var(--fo-line-soft); border-radius: 10px; overflow: hidden; }
+.importScopeHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; background: var(--fo-sunken); font-size: 14px; }
+.importTable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.importTable td { padding: 7px 12px; border-top: 1px solid var(--fo-line-soft); }
+.importTable .num { text-align: right; white-space: nowrap; }
+.importTable s { color: var(--fo-faint); margin-right: 4px; }
+.importAction { width: 1%; white-space: nowrap; color: var(--fo-muted); font-size: 13px; }
+.importSame td { color: var(--fo-faint); }
