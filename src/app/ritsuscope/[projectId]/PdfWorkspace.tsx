@@ -81,6 +81,8 @@ type Props = {
   quickActions?: { key: string; icon: string; label: string; title: string; onClick: () => void }[]
   /** Spot in the footer (left of the zoom) that hosts the Snap and Ortho switches. */
   footerSlot?: HTMLElement | null
+  /** Free stretch of the footer (between the cursor and the switches) for the tool hint and the active-item bar. */
+  statusSlot?: HTMLElement | null
 }
 
 const kindKey: Record<LayerKind, TakeoffMessageKey> = {
@@ -96,7 +98,7 @@ function dedupe(points: Vec2[]): Vec2[] {
 }
 
 export default function PdfWorkspace(props: Props) {
-  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, levelLabel = null, quickActions = [] } = props
+  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, levelLabel = null, quickActions = [] } = props
   const barH = toolbarSlot ? 0 : TOOLBAR_H
   const t = useTakeoffT()
   const { formatNumber, language } = useLanguage()
@@ -1098,6 +1100,56 @@ export default function PdfWorkspace(props: Props) {
   const draftKind: LayerKind | null = zoning ? 'area' : activeLayer?.kind ?? null
   const zoneColor = isMacroKind(zoneKind) ? KIND_COLOR[zoneKind] : LAYER_PALETTE[zones.length % LAYER_PALETTE.length]
 
+  const newLayerForm = showNewLayer && !zoning ? (
+          <form onSubmit={createLayer} style={{ ...card, pointerEvents: 'auto', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label style={fieldStyle}>{t('layer.name')}<input autoFocus style={inputStyle} value={newLayer.name} onChange={e => setNewLayer(v => ({ ...v, name: e.target.value }))} /></label>
+            <label style={fieldStyle}>{t('layer.kind')}
+              <select style={inputStyle} value={newLayer.kind} onChange={e => setNewLayer(v => ({ ...v, kind: e.target.value as LayerKind }))}>
+                <option value="linear">{t('workspace.layer.linear')}</option>
+                <option value="area">{t('workspace.layer.area')}</option>
+                <option value="count">{t('workspace.layer.count')}</option>
+              </select>
+            </label>
+            <label style={fieldStyle}>{t('layer.color')}<input type="color" style={{ ...inputStyle, padding: 2, width: 52 }} value={newLayer.color} onChange={e => setNewLayer(v => ({ ...v, color: e.target.value }))} /></label>
+            {newLayer.kind === 'linear' && (
+              <>
+                <label style={fieldStyle}>{t('layer.height')}<input style={{ ...inputStyle, width: 80 }} inputMode="decimal" value={newLayer.height} onChange={e => setNewLayer(v => ({ ...v, height: e.target.value }))} /></label>
+                <label style={fieldStyle}>{t('layer.thickness')}<input style={{ ...inputStyle, width: 80 }} inputMode="decimal" value={newLayer.thickness} onChange={e => setNewLayer(v => ({ ...v, thickness: e.target.value }))} /></label>
+              </>
+            )}
+            <button type="submit" style={{ ...ui.button, height: 32 }}>{t('layer.create')}</button>
+            <button type="button" style={smallBtn(false)} onClick={() => setShowNewLayer(false)}>×</button>
+          </form>
+  ) : null
+
+  /** Draw tools: pick the item being drawn (or make a new one) and, for lines, how the wall is placed. In the footer when there's room for it. */
+  const inFooter = !!statusSlot
+  const fSel = inFooter ? { height: 22, maxWidth: 260, border: '1px solid #d6e0e3', borderRadius: 5, fontSize: 11, background: '#fff' } : { height: 28, border: '1px solid #d6e0e3', borderRadius: 6, fontSize: 11 }
+  const fBtn = (on: boolean) => inFooter ? { ...smallBtn(on), height: 22, padding: '0 8px', borderRadius: 5 } : smallBtn(on)
+  const layerBar = !zoning && mode === 'draw' ? (
+    <div style={inFooter ? { display: 'flex', alignItems: 'center', gap: 6, flex: 'none' } : { ...card, pointerEvents: 'auto', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <label style={{ ...ui.small, display: 'flex', alignItems: 'center', gap: 6, ...(inFooter ? { fontSize: 11, color: '#4b6570' } : {}) }}>
+        {t('layer.active')}
+        <select
+          value={activeLayerId || ''}
+          onChange={event => { onActiveLayerChange(event.target.value || null); setDraft([]) }}
+          style={fSel}
+        >
+          <option value="">—</option>
+          {layers.filter(l => l.kind === kindForShape[shape]).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </label>
+      <button type="button" style={fBtn(showNewLayer)} onClick={() => { setNewLayer(v => ({ ...v, kind: kindForShape[shape] })); setShowNewLayer(v => !v) }}>+ {t('layer.new')}</button>
+      {shape === 'line' && (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
+          <span style={{ ...ui.small, ...(inFooter ? { fontSize: 11, color: '#4b6570' } : {}) }}>{t('face.placement')}</span>
+          <button type="button" style={fBtn(placement === 'face')} onClick={() => { setPlacement('face'); setDraft([]) }} title={t('face.faceHelp')}>{t('face.face')}</button>
+          <button type="button" style={fBtn(placement === 'center')} onClick={() => { setPlacement('center'); setDraft([]) }} title={t('face.centerHelp')}>{t('face.center')}</button>
+        </span>
+      )}
+    </div>
+  ) : null
+
   return (
     <div style={{ position: 'relative', height: '100%', minHeight: 0 }}>
       <div
@@ -1238,7 +1290,7 @@ export default function PdfWorkspace(props: Props) {
 
       {/* Floating cards (top): hints, forms and results. */}
       <div style={{ position: 'absolute', top: barH + 10, left: 10, right: 10, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start', pointerEvents: 'none' }}>
-        {hint && <div style={{ ...pill, pointerEvents: 'auto' }}>{hint}</div>}
+        {hint && !statusSlot && <div style={{ ...pill, pointerEvents: 'auto' }}>{hint}</div>}
         {(message || error) && (
           <div style={{ ...pill, pointerEvents: 'auto', background: error ? '#fff5f5' : '#fff', color: error ? '#a44343' : '#294955', borderColor: error ? '#f1c7c7' : '#dfe7ea' }}>
             {error || message}
@@ -1253,51 +1305,9 @@ export default function PdfWorkspace(props: Props) {
           </div>
         )}
 
-        {!zoning && mode === 'draw' && (
-          <div style={{ ...card, pointerEvents: 'auto', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <label style={{ ...ui.small, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {t('layer.active')}
-              <select
-                value={activeLayerId || ''}
-                onChange={event => { onActiveLayerChange(event.target.value || null); setDraft([]) }}
-                style={{ height: 28, border: '1px solid #d6e0e3', borderRadius: 6, fontSize: 11 }}
-              >
-                <option value="">—</option>
-                {layers.filter(l => l.kind === kindForShape[shape]).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </label>
-            <button type="button" style={smallBtn(showNewLayer)} onClick={() => { setNewLayer(v => ({ ...v, kind: kindForShape[shape] })); setShowNewLayer(v => !v) }}>+ {t('layer.new')}</button>
-            {shape === 'line' && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
-                <span style={ui.small}>{t('face.placement')}</span>
-                <button type="button" style={smallBtn(placement === 'face')} onClick={() => { setPlacement('face'); setDraft([]) }} title={t('face.faceHelp')}>{t('face.face')}</button>
-                <button type="button" style={smallBtn(placement === 'center')} onClick={() => { setPlacement('center'); setDraft([]) }} title={t('face.centerHelp')}>{t('face.center')}</button>
-              </span>
-            )}
-          </div>
-        )}
+        {!statusSlot && layerBar}
 
-        {showNewLayer && !zoning && (
-          <form onSubmit={createLayer} style={{ ...card, pointerEvents: 'auto', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <label style={fieldStyle}>{t('layer.name')}<input autoFocus style={inputStyle} value={newLayer.name} onChange={e => setNewLayer(v => ({ ...v, name: e.target.value }))} /></label>
-            <label style={fieldStyle}>{t('layer.kind')}
-              <select style={inputStyle} value={newLayer.kind} onChange={e => setNewLayer(v => ({ ...v, kind: e.target.value as LayerKind }))}>
-                <option value="linear">{t('workspace.layer.linear')}</option>
-                <option value="area">{t('workspace.layer.area')}</option>
-                <option value="count">{t('workspace.layer.count')}</option>
-              </select>
-            </label>
-            <label style={fieldStyle}>{t('layer.color')}<input type="color" style={{ ...inputStyle, padding: 2, width: 52 }} value={newLayer.color} onChange={e => setNewLayer(v => ({ ...v, color: e.target.value }))} /></label>
-            {newLayer.kind === 'linear' && (
-              <>
-                <label style={fieldStyle}>{t('layer.height')}<input style={{ ...inputStyle, width: 80 }} inputMode="decimal" value={newLayer.height} onChange={e => setNewLayer(v => ({ ...v, height: e.target.value }))} /></label>
-                <label style={fieldStyle}>{t('layer.thickness')}<input style={{ ...inputStyle, width: 80 }} inputMode="decimal" value={newLayer.thickness} onChange={e => setNewLayer(v => ({ ...v, thickness: e.target.value }))} /></label>
-              </>
-            )}
-            <button type="submit" style={{ ...ui.button, height: 32 }}>{t('layer.create')}</button>
-            <button type="button" style={smallBtn(false)} onClick={() => setShowNewLayer(false)}>×</button>
-          </form>
-        )}
+        {!statusSlot && newLayerForm}
 
         {mode === 'origin' && originForm && (
           <form onSubmit={saveOrigin} style={{ ...card, pointerEvents: 'auto', gap: 10, maxWidth: 560 }}>
@@ -1627,6 +1637,19 @@ export default function PdfWorkspace(props: Props) {
         )
         return toolbarSlot ? createPortal(bar, toolbarSlot) : bar
       })()}
+      {/* New item form: floats just above the footer, next to its button. */}
+      {statusSlot && newLayerForm && (
+        <div style={{ position: 'absolute', left: 10, bottom: 10, right: 10, display: 'flex', zIndex: 20 }}>{newLayerForm}</div>
+      )}
+      {/* Tool hint and active-item bar live in the footer, between the cursor and the switches. */}
+      {statusSlot && createPortal(
+        <>
+          {layerBar}
+          {layerBar && hint && <span style={{ color: '#c4d0d4', flex: 'none' }}>|</span>}
+          {hint && <span title={hint} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#294955' }}>{hint}</span>}
+        </>,
+        statusSlot,
+      )}
       {/* Snap and Ortho live in the footer, left of the zoom. */}
       {footerSlot && createPortal(
         <>

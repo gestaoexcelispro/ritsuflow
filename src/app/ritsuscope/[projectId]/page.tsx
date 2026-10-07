@@ -132,6 +132,8 @@ export default function TakeoffWorkspacePage() {
   const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null)
   /** Footer spot (left of the zoom) for the Snap and Ortho switches. */
   const [footerSlot, setFooterSlot] = useState<HTMLSpanElement | null>(null)
+  /** Footer stretch between the cursor and the switches: tool hint and active-item bar. */
+  const [statusSlot, setStatusSlot] = useState<HTMLSpanElement | null>(null)
   const [openingEditor, setOpeningEditor] = useState<'door' | 'window' | 'void' | null>(null)
   /** Elements as stored; `elements` (below) adds each stretch's tag. */
   const [rawElements, setElements] = useState<ElementRow[]>([])
@@ -614,6 +616,7 @@ export default function TakeoffWorkspacePage() {
     <PdfWorkspace
       toolbarSlot={toolbarShown ? toolbarSlot : null}
       footerSlot={toolbarShown ? footerSlot : null}
+      statusSlot={toolbarShown ? statusSlot : null}
       quickActions={section === 'zoning' ? [] : [
         { key: 'wall', icon: 'wall', label: t('quick.wall'), title: t('quick.wallHint'), onClick: () => setPickerOpen(true) },
         { key: 'ceiling', icon: 'ceiling', label: t('quick.ceiling'), title: t('quick.ceilingHint'), onClick: () => setSurfacePicker('ceiling') },
@@ -1642,7 +1645,9 @@ export default function TakeoffWorkspacePage() {
             : ''}
         </span>
         {isPdf && canvasMode && <><span style={{ color: '#c4d0d4' }}>|</span><CursorReadout sink={cursorSink} ptPerM={ptPerM} origin={sheetOrigin} fmt={v => formatNumber(v, 2)} label={t(sheetOrigin ? 'footer.cursorOrigin' : 'footer.cursor')} /></>}
-        <span style={{ flex: 1 }} />
+        {toolbarShown && canvasMode
+          ? <span ref={setStatusSlot} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, marginLeft: 8, overflow: 'hidden' }} />
+          : <span style={{ flex: 1 }} />}
         {isPdf && canvasMode && viewMode === 'plan' && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span ref={setFooterSlot} style={{ display: 'flex', alignItems: 'center', gap: 14, marginRight: 8 }} />
