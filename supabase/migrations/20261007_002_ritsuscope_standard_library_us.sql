@@ -3,8 +3,28 @@
 -- complete material list, in the shared RitsuFlow library (no organization, no project): every company reads
 -- them, only the platform owner edits them. Status 'review': consumption rates are common estimating values;
 -- fire ratings, UL designs, STC and stud limiting heights must be checked against the current listings.
--- Requires migration 20261006_009 (categories 'ceiling' and 'floor'). Safe to run more than once: rows that
+-- Includes the 'ceiling'/'floor' category update, so it runs on its own. Safe to run more than once: rows that
 -- already exist (same name / code) are skipped, nothing is overwritten.
+
+-- 0. Allow the 'ceiling' and 'floor' categories (same as migration 20261006_009; safe to run again).
+do $$
+declare
+  c record;
+begin
+  for c in
+    select con.conname
+      from pg_constraint con
+     where con.conrelid = 'public.takeoff_wall_types'::regclass
+       and con.contype = 'c'
+       and pg_get_constraintdef(con.oid) ilike '%category%'
+  loop
+    execute format('alter table public.takeoff_wall_types drop constraint %I', c.conname);
+  end loop;
+end $$;
+
+alter table public.takeoff_wall_types
+  add constraint takeoff_wall_types_category_check
+  check (category in ('non_rated', 'rated', 'shaft', 'furring', 'chase', 'exterior', 'other', 'ceiling', 'floor'));
 
 -- 1. Recipes (material lists)
 insert into public.takeoff_recipes (organization_id, country_code, name, maker, system, kind, status, mode, waste_included_pct, lines, source, notes)

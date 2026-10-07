@@ -13,7 +13,7 @@
     "test:ceilings": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/ceiling-types.test.mjs",
     "test:floors": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/floor-types.test.mjs",
     "test:library": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/standard-library.test.mjs",
-    "library:sql": "node --experimental-strip-types --no-warnings scripts/standard-library/generate.mjs"
+    "library:sql": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/standard-library/generate.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.1",
