@@ -41,7 +41,7 @@ import MaterialsCatalog from './MaterialsCatalog'
 import { ZONE_COLUMNS, scaleRatio, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
 import { createFloorsForLevels, createLocationsForZones, loadLocations, placeRootLocations } from '@/lib/takeoff/locationSync'
 import { importLegacyLocationMap, importableOutline, loadLegacyLocationMaps, type LegacyMap } from '@/lib/takeoff/importLocationMap'
-import type { ElementOpening, Vec2 } from '@/lib/takeoff/geometry'
+import type { ElementOpening, TakeoffItem, Vec2 } from '@/lib/takeoff/geometry'
 import ZoningSidebar from './ZoningSidebar'
 import ZoneProperties from './ZoneProperties'
 import { useRitsuScopeLicensed } from '../license'
@@ -73,6 +73,7 @@ import { materialRows, scaleGroup } from '@/lib/takeoff/materialList'
 import { itemShareByZone, NONE } from '@/lib/takeoff/locationShare'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
+import { frameOf, measureTaskLines, takeWallAt, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
 
 type Project = { id: string; project_code: string | null; name: string; country: string | null; country_code: string | null; stage?: string | null }
 
@@ -110,6 +111,13 @@ async function countPdfPages(file: File): Promise<number> {
 }
 
 const ELEMENT_COLUMNS = 'id, project_id, layer_id, source_id, points, height_override_m, z_rel_m, ifc_guid, root_guid, layer_guids, openings, faces'
+
+/** Tarefas: lines of the activity being drawn. */
+const TASK_COLOR = '#E11D48'
+/** Location kinds that group others (not where work is built). */
+const TASK_GROUP_KINDS = new Set(['building', 'floor', 'zone'])
+type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null }
+type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null }
 
 export default function TakeoffWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -171,7 +179,19 @@ export default function TakeoffWorkspacePage() {
   /** Header mode: what the sidebars (or the whole page) show. */
   /** Takeoff, estimating, 3D, reports, share links and IFC need the RitsuScope license; zoning is for everyone. */
   const licensed = useRitsuScopeLicensed()
-  const [section, setSection] = useState<'zoning' | 'takeoff' | 'estimating' | 'settings'>(licensed ? 'takeoff' : 'zoning')
+  const [section, setSection] = useState<'zoning' | 'takeoff' | 'tasks' | 'estimating' | 'settings'>(licensed ? 'takeoff' : 'zoning')
+  // Tarefas: where each scope item is built, per location (location_task_drawings). Opened from
+  // Projects › Locations › Scope allocation with ?task=<scope item>&location=<location>&from=allocation.
+  const [taskScopes, setTaskScopes] = useState<TaskScopeRow[]>([])
+  const [taskLocations, setTaskLocations] = useState<TaskLocationRow[]>([])
+  const [taskRows, setTaskRows] = useState<TaskDrawingRow[]>([])
+  const [taskScopeId, setTaskScopeId] = useState<string | null>(null)
+  const [taskLocationId, setTaskLocationId] = useState<string | null>(null)
+  const [taskHeight, setTaskHeight] = useState('')
+  const [taskWalls, setTaskWalls] = useState(true)
+  const [taskFrameTick, setTaskFrameTick] = useState(0)
+  const [taskFrom, setTaskFrom] = useState(false)
+  const [tasksLoaded, setTasksLoaded] = useState(false)
   /** Kind given to the next zone drawn in Zoning. */
   const [drawKind, setDrawKind] = useState<ZoneKind>('room')
   /** Old Location Map pages not moved into RitsuScope yet. */
@@ -263,6 +283,32 @@ export default function TakeoffWorkspacePage() {
   }, [projectId, t])
 
   useEffect(() => { load() }, [load])
+
+  const loadTasks = useCallback(async () => {
+    const supabase = createClient()
+    const [sc, lc, td] = await Promise.all([
+      supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code'),
+      supabase.from('locations').select('id, name, location_type, parent_id, sequence_number').eq('project_id', projectId).order('sequence_number'),
+      supabase.from('location_task_drawings').select('*').eq('project_id', projectId),
+    ])
+    const failure = sc.error || lc.error || td.error
+    if (failure) setError(t('workspace.error', { message: failure.message }))
+    setTaskScopes((sc.data || []) as TaskScopeRow[])
+    setTaskLocations((lc.data || []) as TaskLocationRow[])
+    setTaskRows((td.data || []) as TaskDrawingRow[])
+    setTasksLoaded(true)
+  }, [projectId, t])
+  useEffect(() => { if (section === 'tasks' && !tasksLoaded) void loadTasks() }, [section, tasksLoaded, loadTasks])
+  // Deep link from Scope allocation: open Tarefas on that activity and location.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const scope = q.get('task')
+    if (!scope) return
+    setSection('tasks')
+    setTaskScopeId(scope)
+    setTaskLocationId(q.get('location'))
+    setTaskFrom(q.get('from') === 'allocation')
+  }, [])
 
   const selectedSource = sources.find(s => s.id === selectedSourceId) || null
   /** Fade of a sheet's own drawing (white wash, 0…0.8), kept in the sheet's metadata. */
@@ -601,8 +647,36 @@ export default function TakeoffWorkspacePage() {
   })
   const isPdf = selectedSource?.kind === 'pdf_page'
   /** The drawing tool bar gets its own full-width row under the header on PDF sheets. */
-  const lockedSection = !licensed && (section === 'takeoff' || section === 'estimating')
-  const toolbarShown = !lockedSection && (section === 'zoning' || section === 'takeoff') && isPdf && viewMode === 'plan'
+  // ---------- Tarefas ----------
+  const taskScope = taskScopes.find(x => x.id === taskScopeId) || null
+  const taskLocation = taskLocations.find(x => x.id === taskLocationId) || null
+  const taskZone = taskLocationId ? zones.find(z => z.location_id === taskLocationId && Array.isArray(z.points) && z.points.length >= 3) || null : null
+  const taskZoneSheet = taskZone ? sources.find(x => x.id === taskZone.source_id) || null : null
+  // Choosing a location shows its zone's sheet and frames it (room + 1 m).
+  useEffect(() => {
+    if (section !== 'tasks' || !taskZone) return
+    if (taskZone.source_id !== selectedSourceId) setSelectedSourceId(taskZone.source_id)
+    setTaskFrameTick(n => n + 1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, taskZone?.id])
+  /** Walls (and their openings) on this sheet: "take a wall" and the openings deducted from task lines. */
+  const taskWallRefs: WallRef[] = useMemo(() => sourceItems.filter(it => it.kind === 'linear').flatMap(it => it.shapes.map(sh => ({ pts: sh.pts, openings: sh.openings, kind: it.kind }))), [sourceItems])
+  const taskHeightM = (() => { const v = Number(String(taskHeight).replace(',', '.')); return v > 0 ? v : null })()
+  // Default wall height: the one already used for these lines, else the item's own takeoff item, else the sheet's level.
+  useEffect(() => {
+    if (!taskScopeId || !taskLocationId) return
+    const used = taskRows.find(r => r.scope_item_id === taskScopeId && r.location_id === taskLocationId && r.height_m)?.height_m
+    const own = taskScope?.takeoff_layer_id ? layers.find(l => l.id === taskScope.takeoff_layer_id)?.height_m : null
+    const lv = taskZoneSheet?.level_id ? levels.find(l => l.id === taskZoneSheet.level_id) : null
+    const h = used || (own && Number(own) > 0 ? Number(own) : null) || wallHeightOf(lv ?? null)
+    setTaskHeight(h ? String(h) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskScopeId, taskLocationId, tasksLoaded, taskScope?.takeoff_layer_id])
+  const taskHere = taskRows.filter(r => r.scope_item_id === taskScopeId && r.location_id === taskLocationId)
+  const taskMeasured = measureTaskLines(taskHere.filter(r => r.source_id === selectedSource?.id).map(r => r.points), { ptPerM: Number(selectedSource?.scale_pt_per_m) || 0, heightM: taskHeightM, unit: taskScope?.unit, walls: taskWallRefs })
+
+  const lockedSection = !licensed && (section === 'takeoff' || section === 'tasks' || section === 'estimating')
+  const toolbarShown = !lockedSection && (section === 'zoning' || section === 'takeoff' || section === 'tasks') && isPdf && viewMode === 'plan'
 
   if (loading || !project) {
     return (
@@ -624,6 +698,61 @@ export default function TakeoffWorkspacePage() {
   const currentBranch = selectedSource ? branchOfLevel(selectedSource.level_id, levels) : null
   const levelHidden = currentBranch != null && hiddenBranches.has(currentBranch)
   const shownItems = levelHidden ? [] : hiddenLayerIds.size ? sourceItems.filter(it => !hiddenLayerIds.has(it.key)) : sourceItems
+
+  const taskShownItems: TakeoffItem[] = (() => {
+    if (section !== 'tasks' || !selectedSource) return shownItems
+    const out: TakeoffItem[] = taskWalls ? shownItems.map(it => ({ ...it, planTransparency: 0.8 })) : []
+    const rows = taskRows.filter(r => r.scope_item_id === taskScopeId && r.source_id === selectedSource.id)
+    const others = rows.filter(r => r.location_id !== taskLocationId)
+    if (others.length) out.push({ key: '__task_others', kind: 'linear', name: '', system: '', color: '#64748B', thickness: 0.06, planTransparency: 0.45, shapes: others.map(r => ({ id: `other:${r.id}`, page: 1, pts: r.points })) })
+    out.push({ key: '__task', kind: 'linear', name: taskScope?.scope_name || '', system: '', color: TASK_COLOR, thickness: 0.1, planTransparency: 0, shapes: rows.filter(r => r.location_id === taskLocationId).map(r => ({ id: `task:${r.id}`, page: 1, pts: r.points })) })
+    return out
+  })()
+
+  /** Saves one task line for the chosen activity and location, measured now. */
+  async function saveTaskLine(pts: Vec2[]): Promise<string | null> {
+    if (!taskScope || !taskLocationId || !selectedSource) return null
+    const k = Number(selectedSource.scale_pt_per_m) || 0
+    const m = measureTaskLines([pts], { ptPerM: k, heightM: taskHeightM, unit: taskScope.unit, walls: taskWallRefs })
+    if (m.measure === 'wallArea' && !taskHeightM) { setError(t('task.needsHeight')); return null }
+    const { data, error: e } = await createClient().from('location_task_drawings').insert({
+      project_id: projectId, scope_item_id: taskScope.id, location_id: taskLocationId, source_id: selectedSource.id,
+      points: pts, height_m: m.measure === 'wallArea' ? taskHeightM : null, quantity: Math.round(m.quantity * 10000) / 10000, unit: taskScope.unit,
+    }).select('id').single()
+    if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return null }
+    await loadTasks()
+    return data.id as string
+  }
+  async function takeTaskWall(p: Vec2): Promise<string | null> {
+    if (!taskZone || !selectedSource || taskZone.source_id !== selectedSource.id) return null
+    const k = Number(selectedSource.scale_pt_per_m) || 0
+    const room = frameOf(taskZone.points as Vec2[], k, 0)
+    const seg = room ? takeWallAt(p, taskWallRefs, room, k) : null
+    return seg ? saveTaskLine([seg[0], seg[1]]) : null
+  }
+  /** A new wall height re-measures this location's lines. */
+  async function applyTaskHeight() {
+    if (!taskScope || !selectedSource) return
+    const k = Number(selectedSource.scale_pt_per_m) || 0
+    const rows = taskHere.filter(r => r.source_id === selectedSource.id)
+    if (!rows.length || !taskHeightM) return
+    if (rows.every(r => Number(r.height_m) === taskHeightM)) return
+    const supabase = createClient()
+    for (const r of rows) {
+      const m = measureTaskLines([r.points], { ptPerM: k, heightM: taskHeightM, unit: taskScope.unit, walls: taskWallRefs })
+      const { error: e } = await supabase.from('location_task_drawings').update({ height_m: m.measure === 'wallArea' ? taskHeightM : null, quantity: Math.round(m.quantity * 10000) / 10000 }).eq('id', r.id)
+      if (e) { setError(t('workspace.error', { message: e.message })); return }
+    }
+    await loadTasks()
+    setStatus(t('task.panel.heightApplied'))
+  }
+  async function deleteTaskLine(id: string) {
+    if (!window.confirm(t('task.confirmDelete'))) return
+    const { error: e } = await createClient().from('location_task_drawings').delete().eq('id', id)
+    if (e) { setError(t('workspace.error', { message: e.message })); return }
+    await loadTasks()
+    setStatus(t('task.deleted'))
+  }
   const levelShownModel = isIfcModel ? modelData.items : withoutHiddenStoreys(modelData.items, modelData.storeys, hiddenBranches, levels)
   const shownModelItems = hiddenLayerIds.size ? levelShownModel.filter(it => !hiddenLayerIds.has(it.key)) : levelShownModel
   /** Items of the same library type at the same level/height (duplicates that should be one item), by key. */
@@ -722,20 +851,20 @@ export default function TakeoffWorkspacePage() {
       footerSlot={toolbarShown ? footerSlot : null}
       statusSlot={toolbarShown ? statusSlot : null}
       backgroundFade={backgroundFade}
-      quickActions={section === 'zoning' ? [] : [
+      quickActions={section === 'zoning' || section === 'tasks' ? [] : [
         { key: 'wall', icon: 'wall', label: t('quick.wall'), title: t('quick.wallHint'), onClick: () => setPickerOpen(true) },
         { key: 'ceiling', icon: 'ceiling', label: t('quick.ceiling'), title: t('quick.ceilingHint'), onClick: () => setSurfacePicker('ceiling') },
         { key: 'floor', icon: 'floor', label: t('quick.floor'), title: t('quick.floorHint'), onClick: () => setSurfacePicker('floor') },
         { key: 'item', icon: 'edit', label: t('quick.item'), title: t('quick.itemHint'), onClick: () => setNewLayerRequest(n => n + 1) },
       ]}
-      exportActions={section === 'zoning' ? [] : [
+      exportActions={section === 'zoning' || section === 'tasks' ? [] : [
         { key: 'csv', icon: 'download', label: 'CSV', title: t('csv.hint'), onClick: exportCsv, disabled: !(ptPerM > 0 && sourceItems.length > 0) },
       ]}
       projectId={projectId}
       source={selectedSource}
       layers={layers}
-      items={shownItems}
-      onChanged={load}
+      items={section === 'tasks' ? taskShownItems : shownItems}
+      onChanged={section === 'tasks' ? loadTasks : load}
       selectedId={selectedElementId}
       onSelect={setSelectedElementId}
       framingDefaults={framingDefaults}
@@ -743,7 +872,15 @@ export default function TakeoffWorkspacePage() {
       onActiveLayerChange={setActiveLayerId}
       drawRequest={drawRequest}
       newLayerRequest={newLayerRequest}
-      workMode={section === 'zoning' ? 'zoning' : 'takeoff'}
+      workMode={section === 'zoning' ? 'zoning' : section === 'tasks' ? 'tasks' : 'takeoff'}
+      task={section === 'tasks' ? {
+        color: TASK_COLOR,
+        zone: taskZone && taskZone.source_id === selectedSource.id ? { id: taskZone.id, name: taskLocation?.name || taskZone.name, pts: taskZone.points as Vec2[] } : null,
+        frame: taskZone && taskZone.source_id === selectedSource.id ? frameOf(taskZone.points as Vec2[], Number(selectedSource.scale_pt_per_m) || 0, 1) : null,
+        frameTick: taskFrameTick,
+      } : null}
+      onTaskLine={saveTaskLine}
+      onTaskTake={takeTaskWall}
       zones={zones}
       zoneKind={drawKind}
       selectedZoneId={selectedZoneId}
@@ -1020,7 +1157,7 @@ export default function TakeoffWorkspacePage() {
   const country = projectCountry(project)
   const sheetZones = selectedSource ? zones.filter(z => z.source_id === selectedSource.id) : []
   const selectedZone = zones.find(z => z.id === selectedZoneId && z.source_id === selectedSource?.id) || null
-  const canvasMode = section === 'zoning' || section === 'takeoff'
+  const canvasMode = section === 'zoning' || section === 'takeoff' || section === 'tasks'
   const ratio = scaleRatio(ptPerM)
   const sheetOrigin: SheetOrigin | null = selectedSource ? originOf(selectedSource) : null
 
@@ -1355,6 +1492,7 @@ export default function TakeoffWorkspacePage() {
     { key: 'settings', icon: 'settings', label: 'header.settings' },
     { key: 'zoning', icon: 'zoning', label: 'header.zoning' },
     { key: 'takeoff', icon: 'takeoff', label: 'header.takeoff' },
+    { key: 'tasks', icon: 'measure', label: 'header.tasks' },
     { key: 'estimating', icon: 'estimating', label: 'header.estimating' },
   ]
 
@@ -1778,6 +1916,90 @@ export default function TakeoffWorkspacePage() {
     </div>
   )
 
+  // ---------- Tarefas sidebars ----------
+  const fmtQty = (v: number) => formatNumber(v, 2)
+  const taskProduction = taskLocations.filter(l => !TASK_GROUP_KINDS.has(l.location_type)).slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  const drawnOf = (scopeId: string, locationId: string) => taskRows.filter(r => r.scope_item_id === scopeId && r.location_id === locationId).reduce((a, r) => a + Number(r.quantity || 0), 0)
+  const hasZone = (locationId: string) => zones.some(z => z.location_id === locationId && Array.isArray(z.points) && z.points.length >= 3)
+  const tasksLeft = (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid #e5edef' }}>
+        <div style={paneTitle}>{t('task.sidebar.title')}</div>
+        <div style={{ ...ui.small, marginTop: 6, lineHeight: 1.45 }}>{t('task.sidebar.help')}</div>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '6px 8px 14px' }}>
+        {!tasksLoaded ? <div style={ui.muted}>{t('workspace.loading')}</div>
+          : !taskScopes.length ? <div style={{ ...ui.small, padding: 10, lineHeight: 1.5 }}>{t('task.sidebar.noScope')}</div>
+          : taskScopes.map(sc => {
+            const open = sc.id === taskScopeId
+            const total = taskRows.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0)
+            return <div key={sc.id} style={{ marginTop: 4, border: '1px solid ' + (open ? '#9fd6cf' : '#e5edef'), borderRadius: 8, background: open ? '#f2fbfa' : '#fff', overflow: 'hidden' }}>
+              <button type="button" onClick={() => { setTaskScopeId(open ? null : sc.id) }} style={{ display: 'grid', gap: 2, width: '100%', padding: '8px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#173441' }}>
+                <span style={{ fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}>{sc.scope_code}{sc.unit ? ` · ${sc.unit}` : ''}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>{sc.scope_name}</span>
+                <span style={{ fontSize: 10.5, color: total > 0 ? '#be123c' : '#8aa0a8' }}>{t('task.sidebar.drawnTotal', { value: `${fmtQty(total)} / ${fmtQty(Number(sc.quantity || 0))} ${sc.unit || ''}` })}</span>
+              </button>
+              {open && <div style={{ borderTop: '1px solid #dcefeb', padding: '4px 6px 6px' }}>
+                {!taskProduction.length ? <div style={{ ...ui.small, padding: 6 }}>{t('task.sidebar.noLocations')}</div> : taskProduction.map(loc => {
+                  const on = loc.id === taskLocationId
+                  const zoned = hasZone(loc.id)
+                  const q = drawnOf(sc.id, loc.id)
+                  return <button key={loc.id} type="button" disabled={!zoned} title={zoned ? undefined : t('task.sidebar.noZoneHint')} onClick={() => { setTaskLocationId(loc.id); setTaskFrameTick(n => n + 1) }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', marginTop: 3, padding: '6px 8px', border: '1px solid ' + (on ? '#e11d48' : 'transparent'), borderRadius: 6, background: on ? '#fff1f3' : 'transparent', cursor: zoned ? 'pointer' : 'default', color: zoned ? '#294955' : '#9aaeb5', fontSize: 12, textAlign: 'left' }}>
+                    <span>{loc.name}</span>
+                    <span style={{ fontWeight: 700, color: q > 0 ? '#be123c' : '#9aaeb5', whiteSpace: 'nowrap' }}>{!zoned ? t('task.sidebar.noZone') : q > 0 ? `${fmtQty(q)} ${sc.unit || ''}` : '—'}</span>
+                  </button>
+                })}
+              </div>}
+            </div>
+          })}
+      </div>
+    </div>
+  )
+
+  const backToAllocation = taskFrom && taskScopeId ? `/projects/${projectId}/locations?tab=allocation&scope=${taskScopeId}${taskLocationId ? `&drawn=${taskLocationId}` : ''}` : null
+  const taskOthers = taskScopeId ? taskProduction.filter(l => l.id !== taskLocationId).map(l => ({ l, q: drawnOf(taskScopeId, l.id) })).filter(x => x.q > 0) : []
+  const tasksRight = (
+    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
+      {backToAllocation && <a href={backToAllocation} style={{ ...ui.backLink, fontSize: 12 }}>← {t('task.panel.back')}</a>}
+      {!taskScope || !taskLocation ? <div style={{ ...ui.small, lineHeight: 1.5 }}>{t('task.panel.pick')}</div> : <>
+        <div>
+          <div style={{ fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}>{taskScope.scope_code} · {t('task.panel.in', { location: taskLocation.name })}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#173441', lineHeight: 1.3, marginTop: 2 }}>{taskScope.scope_name}</div>
+        </div>
+        {!taskZone ? <div style={ui.error}>{t('task.panel.noZone', { location: taskLocation.name })}</div> : <>
+          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#fff1f3', display: 'grid', gap: 2 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9f1239' }}>{t('task.panel.drawn')}</span>
+            <b style={{ fontSize: 20, color: '#be123c' }}>{fmtQty(taskHere.reduce((a, r) => a + Number(r.quantity || 0), 0))} {taskScope.unit || ''}</b>
+            {taskMeasured.measure === 'wallArea' && taskHere.length > 0 && <span style={{ fontSize: 11, color: '#6b8089' }}>{t('task.panel.breakdown', { length: fmtQty(taskMeasured.length), height: taskHeightM ? fmtQty(taskHeightM) : '—', openings: fmtQty(taskMeasured.openings) })}</span>}
+          </div>
+          {taskMeasured.measure === 'wallArea' && <label style={{ display: 'grid', gap: 4, fontSize: 11, fontWeight: 700, color: '#42636f' }}>{t('task.panel.height')}
+            <input type="number" min="0" step="0.01" value={taskHeight} onChange={e => setTaskHeight(e.target.value)} onBlur={() => void applyTaskHeight()} style={{ height: 32, padding: '0 8px', border: '1px solid ' + (taskHeightM ? '#cddcdf' : '#e5a3a3'), borderRadius: 6, fontSize: 13 }} />
+          </label>}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#42636f', cursor: 'pointer' }}><input type="checkbox" checked={taskWalls} onChange={e => setTaskWalls(e.target.checked)} />{t('task.panel.walls')}</label>
+          <button type="button" onClick={() => { if (taskZone.source_id !== selectedSourceId) setSelectedSourceId(taskZone.source_id); setTaskFrameTick(n => n + 1) }} style={{ alignSelf: 'flex-start', height: 30, padding: '0 12px', border: '1px solid #cddcdf', borderRadius: 7, background: '#fff', color: '#173441', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('task.panel.frame')}</button>
+          <div>
+            <div style={paneTitle}>{t('task.panel.lines', { count: taskHere.length })}</div>
+            {!taskHere.length ? <div style={{ ...ui.small, marginTop: 6, lineHeight: 1.5 }}>{t('task.panel.noLines')}</div> : <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {taskHere.map((r, i) => <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', border: '1px solid #f3d0d7', borderRadius: 6, fontSize: 12 }}>
+                <span style={{ width: 10, height: 3, background: TASK_COLOR, borderRadius: 2 }} />
+                <span style={{ flex: 1, color: '#294955' }}>#{i + 1}</span>
+                <b style={{ color: '#be123c' }}>{fmtQty(Number(r.quantity || 0))} {taskScope.unit || ''}</b>
+                <button type="button" onClick={() => void deleteTaskLine(r.id)} title={t('task.delete')} aria-label={t('task.delete')} style={{ border: 0, background: 'transparent', color: '#a44343', cursor: 'pointer', fontSize: 14 }}>×</button>
+              </div>)}
+            </div>}
+          </div>
+          {taskOthers.length > 0 && <div>
+            <div style={paneTitle}>{t('task.panel.others')}</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 3 }}>
+              {taskOthers.map(({ l, q }) => <button key={l.id} type="button" onClick={() => { setTaskLocationId(l.id); setTaskFrameTick(n => n + 1) }} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', border: 0, borderRadius: 6, background: '#f4f7f8', fontSize: 12, color: '#42636f', cursor: 'pointer' }}><span>{l.name}</span><b>{fmtQty(q)} {taskScope.unit || ''}</b></button>)}
+            </div>
+          </div>}
+        </>}
+      </>}
+    </div>
+  )
+
   const zoningRight = selectedZone ? (
     <ZoneProperties
       key={selectedZone.id}
@@ -1860,7 +2082,7 @@ export default function TakeoffWorkspacePage() {
             <Link key={m.key} href="/ritsuscope" style={modeBtn(false)}><Icon name={m.icon} size={17} />{t(m.label)}</Link>
           ) : (
             <button key={m.key} type="button" style={modeBtn(section === m.key)} onClick={() => setSection(m.key as typeof section)}>
-              <Icon name={m.icon} size={17} />{t(m.label)}{!licensed && (m.key === 'takeoff' || m.key === 'estimating') ? <span title={t('license.locked')} style={{ fontSize: 11 }}>🔒</span> : null}
+              <Icon name={m.icon} size={17} />{t(m.label)}{!licensed && (m.key === 'takeoff' || m.key === 'tasks' || m.key === 'estimating') ? <span title={t('license.locked')} style={{ fontSize: 11 }}>🔒</span> : null}
             </button>
           ))}
           <span style={vRule} />
@@ -1973,7 +2195,7 @@ export default function TakeoffWorkspacePage() {
           >
             <Icon name="chevron" size={14} style={{ transform: `rotate(${rightOpen ? -90 : 90}deg)` }} />
           </button>
-          {leftOpen && <aside style={sidePane}>{section === 'zoning' ? zoningLeft : takeoffLeft}</aside>}
+          {leftOpen && <aside style={sidePane}>{section === 'zoning' ? zoningLeft : section === 'tasks' ? tasksLeft : takeoffLeft}</aside>}
           <main style={{ position: 'relative', minWidth: 0, minHeight: 0, padding: (isPdf && viewMode === 'plan') ? 0 : 10 }}>
             {(error || status) && (
               <div style={{ position: 'absolute', zIndex: 5, right: 12, top: 12, maxWidth: 420, ...(error ? ui.error : { padding: 8, borderRadius: 6, background: '#fff', border: '1px solid #dfe7ea', fontSize: 11, color: '#294955' }) }}>
@@ -1981,9 +2203,9 @@ export default function TakeoffWorkspacePage() {
                 <button type="button" style={{ marginLeft: 8, border: 0, background: 'transparent', cursor: 'pointer' }} onClick={() => { setError(''); setStatus('') }}>×</button>
               </div>
             )}
-            {section === 'zoning' && !isPdf ? <div style={{ ...ui.viewer, height: '100%' }}>{t('zone.pdfOnly')}</div> : viewer}
+            {(section === 'zoning' || section === 'tasks') && !isPdf ? <div style={{ ...ui.viewer, height: '100%' }}>{t('zone.pdfOnly')}</div> : viewer}
           </main>
-          {rightOpen && <aside style={{ ...sidePane, borderRight: 0, borderLeft: '1px solid #dfe7ea' }}>{section === 'zoning' ? zoningRight : takeoffRight}</aside>}
+          {rightOpen && <aside style={{ ...sidePane, borderRight: 0, borderLeft: '1px solid #dfe7ea' }}>{section === 'zoning' ? zoningRight : section === 'tasks' ? tasksRight : takeoffRight}</aside>}
         </div>
       ) : (
         <div style={{ minHeight: 0, overflow: 'auto', padding: 20 }}>
