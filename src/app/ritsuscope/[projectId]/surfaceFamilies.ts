@@ -1,6 +1,7 @@
 // Ceiling types and floor types share one library screen and one picker; a "family" says what
 // differs: table category, code prefix, systems, build-up fields, standard list, materials and texts.
 import type { TakeoffMessageKey } from '@/lib/i18n/messages/takeoff.pt-BR'
+import { createClient } from '@/lib/supabase/client'
 import type { TakeoffItem } from '@/lib/takeoff/geometry'
 import type { MaterialRequirement } from '@/lib/takeoff/recipes'
 import {
@@ -150,3 +151,18 @@ export function surfaceMaterials(items: TakeoffItem[], ptPerM: number, labels: S
 
 /** Missing-migration errors (category check) read as a hint instead of a raw constraint message. */
 export const familyDbError = (message: string) => /category/i.test(message) && /check|constraint/i.test(message)
+
+/**
+ * Adds the family's standard list (CL01…, FL01…) to the company library for a country, skipping codes
+ * it already has. Returns how many were added (0 = all were there), or the database error message.
+ */
+export async function addStandardTypes(family: SurfaceFamily, existing: { code: string | null; country_code: string; project_id: string | null }[], country: string, language: string): Promise<{ added: number } | { error: string }> {
+  const have = new Set(existing.filter(r => r.country_code === country && r.project_id == null).map(r => (r.code || '').toUpperCase()))
+  const missing = family.standard.filter(c => !have.has(c.code))
+  if (!missing.length) return { added: 0 }
+  const { error } = await createClient().from('takeoff_wall_types').insert(missing.map(c => ({
+    code: c.code, name: c.name, category: family.category, status: 'draft', country_code: country, thickness_m: c.thickness_m,
+    framing: { [family.specKey]: c.spec, color: family.color }, notes: c.notes[language as 'pt-BR' | 'en-US'] || c.notes['pt-BR'],
+  })))
+  return error ? { error: error.message } : { added: missing.length }
+}

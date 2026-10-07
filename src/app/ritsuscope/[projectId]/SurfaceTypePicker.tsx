@@ -8,7 +8,7 @@ import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { LAYER_PALETTE } from '@/lib/takeoff/ifc/importIfcModel'
 import { COUNTRIES, WALL_TYPE_COLUMNS } from '@/lib/takeoff/wallTypes'
 import { ui } from '../ui'
-import { familyDbError, type SurfaceFamily } from './surfaceFamilies'
+import { addStandardTypes, familyDbError, type SurfaceFamily } from './surfaceFamilies'
 import type { SurfaceTypeRow } from './SurfaceTypesLibrary'
 import { statusColor, statusKey } from './WallTypesLibrary'
 
@@ -38,16 +38,25 @@ export default function SurfaceTypePicker({ family, projectId, projectCountry, l
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let alive = true
-    createClient().from('takeoff_wall_types').select(WALL_TYPE_COLUMNS).eq('category', family.category).order('code').then(({ data, error: e }) => {
-      if (!alive) return
-      if (e) setError(familyDbError(e.message) ? t(family.msg.needsMigration) : t('workspace.error', { message: e.message }))
-      setRows(((data || []) as SurfaceTypeRow[]).map(x => ({ ...x, framing: x.framing || {} })))
-      setLoading(false)
-    })
-    return () => { alive = false }
-  }, [t, family])
+  const fail = (m: string) => setError(familyDbError(m) ? t(family.msg.needsMigration) : t('workspace.error', { message: m }))
+  async function load() {
+    const { data, error: e } = await createClient().from('takeoff_wall_types').select(WALL_TYPE_COLUMNS).eq('category', family.category).order('code')
+    if (e) fail(e.message)
+    setRows(((data || []) as SurfaceTypeRow[]).map(x => ({ ...x, framing: x.framing || {} })))
+    setLoading(false)
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [family])
+
+  /** Empty library: add the standard list (CL01…, FL01…) right here, then pick from it. */
+  async function addStandard() {
+    setBusy(true)
+    setError('')
+    const res = await addStandardTypes(family, rows, country === 'all' ? projectCountry || 'BR' : country, language)
+    if ('error' in res) { setBusy(false); fail(res.error); return }
+    await load()
+    setBusy(false)
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -91,14 +100,19 @@ export default function SurfaceTypePicker({ family, projectId, projectCountry, l
             <option value="all">{t('walltype.allCountries')}</option>
             {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name[language]}</option>)}
           </select>
-          <input style={{ ...input, flex: 1, minWidth: 180 }} placeholder={t('walltype.search')} value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+          <input style={{ ...input, flex: 1, minWidth: 180 }} placeholder={t('surface.search')} value={search} onChange={e => setSearch(e.target.value)} autoFocus />
         </div>
         {error && <div style={ui.error}>{error}</div>}
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {loading ? (
             <div style={ui.small}>{t('workspace.loading')}</div>
           ) : visible.length === 0 ? (
-            <div style={{ ...ui.small, padding: 12 }}>{t(family.msg.pickEmpty)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: 12 }}>
+              <span style={ui.small}>{t(family.msg.pickEmpty)}</span>
+              {!search.trim() && (
+                <button type="button" style={{ ...ui.button, opacity: busy ? 0.5 : 1 }} disabled={busy} onClick={() => void addStandard()}>{t(family.msg.addStandard)}</button>
+              )}
+            </div>
           ) : visible.map(r => {
             const active = r.id === selectedId
             const s = family.specOf(r.framing)
