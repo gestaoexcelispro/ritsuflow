@@ -454,7 +454,27 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
 
   if (o.tags) {
     for (const it of items) {
-      if (it.kind !== 'linear') continue
+      // Areas: above their centre; counted points: above the item's box.
+      if (it.kind !== 'linear') {
+        for (const sh of it.shapes) {
+          const tag = sh.tags?.[0]
+          if (!show(sh) || !tag || !sh.pts.length || (it.kind === 'area' && sh.pts.length < 3)) continue
+          let at: Vec2
+          let y: number
+          if (it.kind === 'area') {
+            const ms = sh.pts.map(M)
+            at = [ms.reduce((t, q) => t + q[0], 0) / ms.length, ms.reduce((t, q) => t + q[1], 0) / ms.length]
+            y = (it.elevation || 0) + o.elevationOf(sh.page) + Math.max(it.thickness || 0.02, 0.02) + 0.3
+          } else {
+            at = M(sh.pts[0])
+            y = (sh.sill != null ? sh.sill : it.sill || 0) + o.elevationOf(sh.page) + (it.height || 2.1) + 0.3
+          }
+          const sprite = tagSprite(THREE, tag, it.color)
+          sprite.position.set(at[0], y, at[1])
+          g.add(sprite)
+        }
+        continue
+      }
       for (const sh of it.shapes) {
         if (!show(sh) || !sh.tags?.length) continue
         const top = (sh.zrel || 0) + o.elevationOf(sh.page) + (shapeHeight(it, sh) || 2.8) + 0.3

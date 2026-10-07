@@ -5,7 +5,7 @@ import { dist, polyLen, type LayerKind, type TakeoffItem, type Vec2 } from '@/li
 import { extractPdfSegments, findSnap, type SnapPoint, type VectorSegment } from '@/lib/takeoff/pdfSnapEngine'
 import { extractPdfVectors } from '@/lib/takeoff/detect/pdfVectors'
 import type { VSeg } from '@/lib/takeoff/detect/walls'
-import type { SheetText } from '@/lib/takeoff/zones'
+import { centroid, type SheetText } from '@/lib/takeoff/zones'
 import { wallBand } from '@/lib/takeoff/faceWall'
 import { openingMarks } from '@/lib/takeoff/openingMarks'
 import { areaAt, paintOrder } from '@/lib/takeoff/pick'
@@ -568,25 +568,38 @@ export default function PdfSheet(props: Props) {
             />
           ))}
 
-          {/* Wall stretch tags: a small label at the middle of each straight stretch long enough on screen to fit it. */}
-          {showTags && !dimItems && items.filter(item => item.kind === 'linear').flatMap(item => item.shapes.flatMap((shape, index) => {
+          {/* Tags of everything drawn: middle of each wall stretch, centre of each area, beside each counted point. */}
+          {showTags && !dimItems && items.flatMap(item => item.shapes.flatMap((shape, index) => {
             if (!shape.tags?.length) return []
             const pts = drag && shape.id === drag.id ? drag.pts : shape.pts
-            return pts.slice(1).map((b, i) => {
-              const a = pts[i]
-              const tag = shape.tags![i]
-              if (!tag || dist(a, b) * zoom < tag.length * 6.4 + 24) return null
+            const pill = (key: string, cx: number, cy: number, tag: string) => {
               const w = stroke(tag.length * 6.2 + 10)
               const h = stroke(15)
-              const cx = (a[0] + b[0]) / 2
-              const cy = (a[1] + b[1]) / 2
               return (
-                <g key={`tag-${item.key}-${index}-${i}`} style={{ pointerEvents: 'none' }}>
+                <g key={key} style={{ pointerEvents: 'none' }}>
                   <rect x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={stroke(3)} fill="#fff" fillOpacity={0.92} stroke={item.color} strokeWidth={stroke(1.2)} />
                   <text x={cx} y={cy + stroke(3.6)} textAnchor="middle" fontSize={stroke(10)} fontWeight={700} fill="#173441" fontFamily="system-ui, sans-serif">{tag}</text>
                 </g>
               )
-            })
+            }
+            if (item.kind === 'linear') {
+              return pts.slice(1).map((b, i) => {
+                const a = pts[i]
+                const tag = shape.tags![i]
+                // Only on stretches long enough on screen to hold the label.
+                if (!tag || dist(a, b) * zoom < tag.length * 6.4 + 24) return null
+                return pill(`tag-${item.key}-${index}-${i}`, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, tag)
+              })
+            }
+            const tag = shape.tags[0]
+            if (!tag || !pts.length) return []
+            if (item.kind === 'area') {
+              if (pts.length < 3) return []
+              const [cx, cy] = centroid(pts)
+              return [pill(`tag-${item.key}-${index}`, cx, cy, tag)]
+            }
+            const w = tag.length * 6.2 + 10
+            return [pill(`tag-${item.key}-${index}`, pts[0][0] + stroke(w / 2 + 8), pts[0][1] - stroke(14), tag)]
           }))}
 
           {selectable && onMovePoints && selectedId && items.flatMap(item => item.shapes.filter(sh => sh.id === selectedId).map(sh => {

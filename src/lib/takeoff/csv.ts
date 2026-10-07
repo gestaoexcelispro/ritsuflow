@@ -2,7 +2,7 @@
 // pt-BR uses ";" as separator and "," as decimal mark (what Excel expects in Brazil);
 // en-US uses "," and ".".
 import { framingTotals, packBars, packSheets } from './framing/framing'
-import { dist, layerQuantities, shapeHeight, type TakeoffItem } from './geometry'
+import { dist, layerQuantities, perimeter, polyArea, shapeHeight, type TakeoffItem } from './geometry'
 import type { MaterialRequirement } from './recipes'
 
 export type CsvLabels = {
@@ -73,16 +73,23 @@ export function buildQuantitiesCsv(
     ]))
   }
 
-  // Wall stretches: one row per straight stretch, with its tag (DW01-03…), length, height and gross area.
-  const stretches = items.filter(it => it.kind === 'linear').flatMap(it => it.shapes.flatMap(sh =>
-    (sh.tags || []).map((tag, i) => ({ tag, it, len: dist(sh.pts[i], sh.pts[i + 1]) / ptPerM, h: shapeHeight(it, sh) }))))
-  if (L.tag && stretches.length) {
-    lines.push('')
-    lines.push(row([L.tag, L.layer, `${L.length} (m)`, `${L.height || ''} (m)`, `${L.grossArea} (m²)`]))
-    const byTag = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
-    for (const s of stretches.sort((a, b) => byTag(a.tag, b.tag))) {
-      lines.push(row([s.tag, s.it.name, num(s.len), num(s.h), num(s.len * s.h)]))
+  // Everything tagged, one row per tag: wall stretches (length, height, gross area), areas (perimeter, area)
+  // and counted points (tag and item only).
+  const k2 = ptPerM * ptPerM
+  const tagged = items.flatMap(it => it.shapes.flatMap(sh => (sh.tags || []).map((tag, i) => {
+    if (it.kind === 'linear') {
+      const len = sh.pts[i + 1] ? dist(sh.pts[i], sh.pts[i + 1]) / ptPerM : 0
+      const h = shapeHeight(it, sh)
+      return { tag, it, cells: [num(len), h ? num(h) : '', h ? num(len * h) : ''] }
     }
+    if (it.kind === 'area') return { tag, it, cells: [num(perimeter(sh.pts) / ptPerM), '', num(polyArea(sh.pts) / k2)] }
+    return { tag, it, cells: ['', '', ''] }
+  })))
+  if (L.tag && tagged.length) {
+    lines.push('')
+    lines.push(row([L.tag, L.layer, L.type, `${L.length} (m)`, `${L.height || ''} (m)`, `${L.area} (m²)`]))
+    const byTag = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
+    for (const r of tagged.sort((a, b) => byTag(a.tag, b.tag))) lines.push(row([r.tag, r.it.name, L.kind[r.it.kind], ...r.cells]))
   }
 
   const T = framingTotals(items, ptPerM)
