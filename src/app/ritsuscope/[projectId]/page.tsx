@@ -623,6 +623,9 @@ export default function TakeoffWorkspacePage() {
         { key: 'floor', icon: 'floor', label: t('quick.floor'), title: t('quick.floorHint'), onClick: () => setSurfacePicker('floor') },
         { key: 'item', icon: 'edit', label: t('quick.item'), title: t('quick.itemHint'), onClick: () => setNewLayerRequest(n => n + 1) },
       ]}
+      exportActions={section === 'zoning' ? [] : [
+        { key: 'csv', icon: 'download', label: 'CSV', title: t('csv.hint'), onClick: exportCsv, disabled: !(ptPerM > 0 && sourceItems.length > 0) },
+      ]}
       projectId={projectId}
       source={selectedSource}
       layers={layers}
@@ -1336,7 +1339,6 @@ export default function TakeoffWorkspacePage() {
       <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid #e5ecee', display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ ...paneTitle, flex: 1 }}>{t('layout.items')}</span>
         {sheetMult > 1 && <span title={t('level.sheetMultiplier', { count: sheetMult })} style={{ padding: '2px 7px', borderRadius: 10, background: '#e6f6f4', color: '#0d7f77', fontSize: 10, fontWeight: 800 }}>×{sheetMult}</span>}
-        {ptPerM > 0 && sourceItems.length > 0 && <button type="button" style={chipBtn(false)} onClick={exportCsv}>CSV</button>}
       </div>
       {checkedIds.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff8f2', borderTop: '1px solid #f3dcc8' }}>
@@ -1616,7 +1618,17 @@ export default function TakeoffWorkspacePage() {
 
       {/* MAIN */}
       {lockedSection ? lockedPanel : canvasMode ? (
-        <div style={{ display: 'grid', gridTemplateColumns: `${leftOpen ? '290px ' : ''}minmax(0,1fr)${rightOpen ? ' 340px' : ''}`, minHeight: 0 }}>
+        <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `${leftOpen ? '290px ' : ''}minmax(0,1fr)${rightOpen ? ' 340px' : ''}`, minHeight: 0 }}>
+          {/* Quick tab on the right panel's edge: hide / show it. */}
+          <button
+            type="button"
+            onClick={() => setRightOpen(v => !v)}
+            title={t(rightOpen ? 'layout.hideRight' : 'layout.showRight')}
+            aria-label={t(rightOpen ? 'layout.hideRight' : 'layout.showRight')}
+            style={{ position: 'absolute', zIndex: 30, top: '50%', right: rightOpen ? 340 : 0, transform: 'translateY(-50%)', width: 16, height: 56, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #cfdcdf', borderRight: 0, borderRadius: '8px 0 0 8px', background: '#fff', color: '#0d7f77', cursor: 'pointer', boxShadow: '-2px 0 6px rgba(15,35,45,.08)' }}
+          >
+            <Icon name="chevron" size={14} style={{ transform: `rotate(${rightOpen ? -90 : 90}deg)` }} />
+          </button>
           {leftOpen && <aside style={sidePane}>{section === 'zoning' ? zoningLeft : takeoffLeft}</aside>}
           <main style={{ position: 'relative', minWidth: 0, minHeight: 0, padding: (isPdf && viewMode === 'plan') ? 0 : 10 }}>
             {(error || status) && (

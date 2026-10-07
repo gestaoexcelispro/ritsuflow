@@ -15,7 +15,7 @@ import type { LayerRow, SourceRow } from '@/lib/takeoff/rows'
 import { angleFromPoints, originOf } from '@/lib/takeoff/origin'
 import { centrelineFromFace, joinToNeighbours, type NeighbourWall } from '@/lib/takeoff/faceWall'
 import { areaRole } from '@/lib/takeoff/areaRole'
-import { MEP_GROUPS, MEP_TYPES, mepType } from '@/lib/takeoff/mep'
+import { MEP_GROUPS, MEP_TYPES, mepType, type MepGroup } from '@/lib/takeoff/mep'
 import { STRUCT_GROUPS, STRUCT_TYPES, structType } from '@/lib/takeoff/struct'
 import { footprintFromWalls, roomsFromWalls } from '@/lib/takeoff/detect/roomsFromWalls'
 import { KIND_COLOR, centroid, isMacroKind, nameFromTexts, nextZoneName, pointInPolygon, type SheetText, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
@@ -79,6 +79,8 @@ type Props = {
   toolbarSlot?: HTMLElement | null
   /** Quick buttons at the start of the tool bar (takeoff: add a wall, ceiling or floor type, or a new item). */
   quickActions?: { key: string; icon: string; label: string; title: string; onClick: () => void }[]
+  /** Export buttons at the end of the tool bar (takeoff: CSV of the items). */
+  exportActions?: { key: string; icon: string; label: string; title: string; onClick: () => void; disabled?: boolean }[]
   /** Spot in the footer (left of the zoom) that hosts the Snap and Ortho switches. */
   footerSlot?: HTMLElement | null
   /** Free stretch of the footer (between the cursor and the switches) for the tool hint and the active-item bar. */
@@ -98,7 +100,7 @@ function dedupe(points: Vec2[]): Vec2[] {
 }
 
 export default function PdfWorkspace(props: Props) {
-  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, levelLabel = null, quickActions = [] } = props
+  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, levelLabel = null, quickActions = [], exportActions = [] } = props
   const barH = toolbarSlot ? 0 : TOOLBAR_H
   const t = useTakeoffT()
   const { formatNumber, language } = useLanguage()
@@ -175,7 +177,7 @@ export default function PdfWorkspace(props: Props) {
   /** Floor / ceiling / slab tool in use (draws areas on that category's item). */
   const [areaTool, setAreaTool] = useState<AreaToolKey | null>(null)
   /** Building services: the open menu (anchored under its button) and the type being placed. */
-  const [mepMenu, setMepMenu] = useState<{ left: number; top: number } | null>(null)
+  const [mepMenu, setMepMenu] = useState<{ left: number; top: number; group: MepGroup } | null>(null)
   const [mepTool, setMepTool] = useState<string | null>(null)
   /** Concrete structure and foundations: the open menu and the type being drawn. */
   const [structMenu, setStructMenu] = useState<{ left: number; top: number } | null>(null)
@@ -1023,7 +1025,7 @@ export default function PdfWorkspace(props: Props) {
   ], [sheetZones, scale, formatNumber, selectedZoneId, namedRoomSugs, roomPicked])
 
   const isTool = (m: Mode, s?: Shape) => mode === m && (!s || shape === s)
-  type ToolGroup = 'edit' | 'ref' | 'draw' | 'model'
+  type ToolGroup = 'edit' | 'ref' | 'draw' | 'model' | 'services'
   const tools: { key: string; group: ToolGroup; icon: string; label: TakeoffMessageKey; title?: string; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
     { key: 'select', group: 'edit', icon: 'select', label: 'tool.select', title: `${t('tool.select')}: ${t('pan.hint')} ${t('box.hint')}`, active: isTool('select'), onClick: () => chooseTool('select') },
     { key: 'scale', group: 'ref', icon: 'scale', label: 'tool.scale', active: isTool('calibrate'), onClick: () => chooseTool('calibrate') },
@@ -1055,28 +1057,34 @@ export default function PdfWorkspace(props: Props) {
           setStructMenu({ left: Math.max(8, Math.min((r?.left ?? 200), window.innerWidth - 300)), top: (r?.bottom ?? 120) + 4 })
         },
       },
-      {
-        key: 'mep', group: 'model' as ToolGroup, icon: 'mep', label: 'tool.mep' as TakeoffMessageKey, active: !!mepMenu || (!!mepTool && mode === 'draw'),
+      // Services: one button per group (reinforcements, electrical, plumbing), each opening its own list.
+      ...([['blocking', 'blocking'], ['electrical', 'outlet'], ['plumbing', 'water']] as [MepGroup, string][]).map(([g, icon]) => ({
+        key: `mep-${g}`, group: 'services' as ToolGroup, icon, label: `mep.group.${g}` as TakeoffMessageKey,
+        active: mepMenu?.group === g || (!!mepTool && mode === 'draw' && mepType(mepTool)?.group === g),
         onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => {
-          if (mepMenu) { setMepMenu(null); return }
+          if (mepMenu?.group === g) { setMepMenu(null); return }
           setStructMenu(null)
           setArchMenu(null)
           const r = event?.currentTarget.getBoundingClientRect()
-          setMepMenu({ left: Math.max(8, Math.min((r?.left ?? 200), window.innerWidth - 300)), top: (r?.bottom ?? 120) + 4 })
+          setMepMenu({ group: g, left: Math.max(8, Math.min((r?.left ?? 200), window.innerWidth - 300)), top: (r?.bottom ?? 120) + 4 })
         },
-      },
+      })),
     ]),
   ]
 
   tools.splice(1, 0, { key: 'undo', group: 'edit', icon: 'undo', label: 'undo.label', title: t('undo.hint'), active: false, onClick: () => void undoLast(), disabled: created.length === 0 })
-  /** Tool bar groups, each under its caption: Add · Edit · Reference · Draw · Disciplines · Drawing aids. */
+  /** Tool bar groups, each under its caption: Add · Edit · Reference · Draw · Disciplines · Services · Drawing aids · Export. */
   const toolGroups: { key: string; caption: TakeoffMessageKey; tools: typeof tools }[] = [
     ...(quickActions.length ? [{ key: 'add', caption: 'toolbar.group.add' as TakeoffMessageKey, tools: [] }] : []),
     { key: 'edit', caption: 'toolbar.group.edit', tools: tools.filter(x => x.group === 'edit') },
     { key: 'ref', caption: 'toolbar.group.ref', tools: tools.filter(x => x.group === 'ref') },
     { key: 'draw', caption: 'toolbar.group.draw', tools: tools.filter(x => x.group === 'draw') },
-    ...(zoning ? [] : [{ key: 'model', caption: 'toolbar.group.model' as TakeoffMessageKey, tools: tools.filter(x => x.group === 'model') }]),
+    ...(zoning ? [] : [
+      { key: 'model', caption: 'toolbar.group.model' as TakeoffMessageKey, tools: tools.filter(x => x.group === 'model') },
+      { key: 'services', caption: 'tool.mep' as TakeoffMessageKey, tools: tools.filter(x => x.group === 'services') },
+    ]),
     ...(footerSlot ? [] : [{ key: 'aids', caption: 'toolbar.group.aids' as TakeoffMessageKey, tools: [] }]),
+    ...(exportActions.length ? [{ key: 'export', caption: 'toolbar.group.export' as TakeoffMessageKey, tools: [] }] : []),
   ]
 
   const selectionActive = zoning ? !!selectedZoneId : !!selectedId
@@ -1571,7 +1579,7 @@ export default function PdfWorkspace(props: Props) {
       {mepMenu && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={() => setMepMenu(null)}>
           <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', left: mepMenu.left, top: mepMenu.top, width: 290, maxHeight: '70vh', overflow: 'auto', padding: 6, background: '#fff', border: '1px solid #dfe7ea', borderRadius: 10, boxShadow: '0 12px 30px rgba(15,35,45,.18)' }}>
-            {MEP_GROUPS.map(g => (
+            {MEP_GROUPS.filter(g => g === mepMenu.group).map(g => (
               <div key={g} style={{ paddingBottom: 4 }}>
                 <div style={{ padding: '8px 8px 4px', fontSize: 10, fontWeight: 800, color: '#536d78', letterSpacing: '.06em', textTransform: 'uppercase' }}>{t(`mep.group.${g}` as TakeoffMessageKey)}</div>
                 {MEP_TYPES.filter(m => m.group === g).map(m => (
@@ -1594,8 +1602,8 @@ export default function PdfWorkspace(props: Props) {
       {(() => {
         const bar = (
         <div ref={barOuter} style={toolbarSlot ? toolbarFull : toolbar}>
-          {/* Centred while it fits; when it doesn't, it scrolls from the first button (a centred flex row would cut it off). */}
-          <div ref={barInner} style={{ display: 'flex', alignItems: 'stretch', flex: 'none', height: '100%', margin: toolbarSlot ? '0 auto' : 0 }}>
+          {/* Left-aligned; scrolls when the window is too narrow even for the icons. */}
+          <div ref={barInner} style={{ display: 'flex', alignItems: 'stretch', flex: 'none', height: '100%' }}>
           {toolGroups.map((g, gi) => (
             <div key={g.key} style={{ display: 'flex', alignItems: 'stretch' }}>
               {gi > 0 && <span style={divider} />}
@@ -1604,6 +1612,12 @@ export default function PdfWorkspace(props: Props) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
                   {g.key === 'add' && quickActions.map(q => (
                     <button key={q.key} type="button" onClick={q.onClick} title={compactBar ? `${q.label} · ${q.title}` : q.title} style={quickBtn}>
+                      <Icon name={q.icon} size={16} />
+                      {!compactBar && <span style={btnLabel}>{q.label}</span>}
+                    </button>
+                  ))}
+                  {g.key === 'export' && exportActions.map(q => (
+                    <button key={q.key} type="button" onClick={q.onClick} disabled={q.disabled} title={q.title} style={toolBtn(false, q.disabled)}>
                       <Icon name={q.icon} size={16} />
                       {!compactBar && <span style={btnLabel}>{q.label}</span>}
                     </button>

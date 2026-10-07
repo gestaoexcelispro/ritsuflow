@@ -56,6 +56,8 @@ export const ICON_PATHS: Record<string, string> = {
   shower: 'M4 21V7a4 4 0 018 0v1M8 8h8M10 12v1M14 12v1M12 15v1M10 18v1M14 18v1',
   edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
   building: 'M4 21V4h10v17M14 9h6v12M2 21h20M7 8h4M7 12h4M7 16h4M17 13h1M17 17h1',
+  download: 'M12 4v11M7 10l5 5 5-5M4 19h16',
+  panelRight: 'M3 4h18v16H3zM15 4v16',
   link: 'M10 14a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1M14 10a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1',
 }
 
