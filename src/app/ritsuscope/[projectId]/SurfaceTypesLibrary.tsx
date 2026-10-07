@@ -7,7 +7,7 @@ import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import { COUNTRIES, WALL_TYPE_COLUMNS, type WallTypeRow, type WallTypeStatus } from '@/lib/takeoff/wallTypes'
 import { ui } from '../ui'
-import { familyDbError, type SpecField, type SurfaceFamily, type SurfaceLabels } from './surfaceFamilies'
+import { addStandardTypes, familyDbError, type SpecField, type SurfaceFamily, type SurfaceLabels } from './surfaceFamilies'
 import { statusColor, statusKey } from './WallTypesLibrary'
 
 /** A ceiling or floor type is a wall-type row with its own category and the build-up in framing[specKey]. */
@@ -133,18 +133,13 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
   /** Adds the standard list for this country, skipping codes that already exist. */
   async function addStandard() {
     const cc = country === 'all' ? projectCountry || 'BR' : country
-    const have = new Set(rows.filter(r => r.country_code === cc && r.project_id == null).map(r => (r.code || '').toUpperCase()))
-    const missing = family.standard.filter(c => !have.has(c.code))
-    if (!missing.length) { setMessage(t(family.msg.standardAll)); return }
     setBusy(true)
     setError('')
-    const { error: e } = await createClient().from('takeoff_wall_types').insert(missing.map(c => ({
-      code: c.code, name: c.name, category: family.category, status: 'draft', country_code: cc, thickness_m: c.thickness_m,
-      framing: { [family.specKey]: c.spec, color: family.color }, notes: c.notes[language as 'pt-BR' | 'en-US'] || c.notes['pt-BR'],
-    })))
+    const res = await addStandardTypes(family, rows, cc, language)
     setBusy(false)
-    if (e) { fail(e.message); return }
-    setMessage(t(family.msg.standardAdded, { count: missing.length }))
+    if ('error' in res) { fail(res.error); return }
+    if (!res.added) { setMessage(t(family.msg.standardAll)); return }
+    setMessage(t(family.msg.standardAdded, { count: res.added }))
     await load()
     await onChanged?.()
   }
@@ -204,7 +199,7 @@ export default function SurfaceTypesLibrary({ family, projectId, projectCountry,
             <option value="all">{t('walltype.allCountries')}</option>
             {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name[language]}</option>)}
           </select>
-          <input style={input} placeholder={t('walltype.search')} value={search} onChange={e => setSearch(e.target.value)} />
+          <input style={input} placeholder={t('surface.search')} value={search} onChange={e => setSearch(e.target.value)} />
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" style={{ ...ui.button, flex: 1 }} disabled={busy} onClick={() => void create()}>+ {t(family.msg.new)}</button>
             <button type="button" style={{ ...ghostBtn, flex: 1 }} disabled={busy} onClick={() => void addStandard()} title={t(family.msg.standardHint)}>{t(family.msg.addStandard)}</button>
