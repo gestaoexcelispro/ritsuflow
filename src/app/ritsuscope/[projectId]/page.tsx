@@ -1099,10 +1099,14 @@ export default function TakeoffWorkspacePage() {
       const all3d = fillLevelHeights(building.items, page => hOfPage.get(page) ?? null).filter(it => it.shapes.length > 0)
       // Services are shown inside their walls, so the walls come along on that 3D page.
       const items3d = what === 'locations' || what === 'takeoff' ? all3d : all3d.filter(it => printFilter[what](it) || (what === 'mep' && it.kind === 'linear' && !it.struct))
-      if (items3d.length) image3d = await render3DImage({ items: items3d, ptPerM: 1, storeys: building.storeys, width: 2000, height: 1250, tags: true })
+      // Colour-coded (each item in its type colour, not the construction layers): the report is for aligning scope.
+      if (items3d.length) image3d = await render3DImage({ items: items3d, ptPerM: 1, storeys: building.storeys, width: 2000, height: 1250, tags: true, layered: false })
+      // Legend of the 3D page: one swatch per item, in the list order.
+      const legend3d = [...new Map(items3d.map(it => [it.name, { name: it.name, color: hexToRgb(it.color) }])).values()]
       const blob = await buildProjectPdf({
         sheets: sheetsOut,
         image3d,
+        legend3d,
         title: `${projectTitle} · ${kind}`,
         subtitle: pt(sheetsOut.length === 1 ? 'print.projectSubtitleOne' : 'print.projectSubtitle', { sheets: sheetsOut.length, date }),
         fmt: v => pfmt(v, 2),
