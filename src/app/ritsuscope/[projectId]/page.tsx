@@ -1,6 +1,6 @@
 'use client'
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { AppBar } from '../../fieldop/ui'
@@ -64,6 +64,7 @@ import CopyToLevelsDialog from './CopyToLevelsDialog'
 import DeleteFromLevelsDialog from './DeleteFromLevelsDialog'
 import { NO_LEVEL, branchItems, branchOfLevel, levelBranches, withoutHiddenStoreys, type LevelBranch } from '@/lib/takeoff/levelTree'
 import type { Quantities } from '@/lib/takeoff/geometry'
+import { groupRows, type GroupKey, type SubKey } from '@/lib/takeoff/itemGroups'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
 
@@ -122,6 +123,8 @@ export default function TakeoffWorkspacePage() {
   /** Level groups hidden with the level eye: this session only, not saved. */
   const [hiddenBranches, setHiddenBranches] = useState<Set<string>>(new Set())
   const [othersOpen, setOthersOpen] = useState(false)
+  /** Item list groups folded by the user (this session only): "<branch>:<group>" or "<branch>:<group>:<sub>". */
+  const [foldedGroups, setFoldedGroups] = useState<Set<string>>(new Set())
   const [layers, setLayers] = useState<LayerRow[]>([])
   /** Wall-type library (to show and assign the type of a selected wall's item). */
   const [wallTypes, setWallTypes] = useState<WallTypeRow[]>([])
@@ -579,6 +582,18 @@ export default function TakeoffWorkspacePage() {
   const shownItems = levelHidden ? [] : hiddenLayerIds.size ? sourceItems.filter(it => !hiddenLayerIds.has(it.key)) : sourceItems
   const levelShownModel = isIfcModel ? modelData.items : withoutHiddenStoreys(modelData.items, modelData.storeys, hiddenBranches, levels)
   const shownModelItems = hiddenLayerIds.size ? levelShownModel.filter(it => !hiddenLayerIds.has(it.key)) : levelShownModel
+  /** Shows or hides several items at once (a whole list group). */
+  async function setLayersVisible(ids: string[], visible: boolean) {
+    if (!ids.length) return
+    const before = new Map(layers.filter(l => ids.includes(l.id)).map(l => [l.id, l.is_visible]))
+    setLayers(prev => prev.map(l => (ids.includes(l.id) ? { ...l, is_visible: visible } : l)))
+    const { error: e } = await createClient().from('takeoff_layers').update({ is_visible: visible }).in('id', ids)
+    if (e) {
+      setLayers(prev => prev.map(l => (before.has(l.id) ? { ...l, is_visible: before.get(l.id) ?? true } : l)))
+      setError(t('workspace.error', { message: e.message }))
+    }
+  }
+
   async function toggleLayerVisible(id: string) {
     const layer = layers.find(l => l.id === id)
     if (!layer) return
@@ -1366,6 +1381,80 @@ export default function TakeoffWorkspacePage() {
             </div>
     )
   }
+  /** Main figure of an item as a number and unit, for group subtotals (walls in m² when they have a height). */
+  const qtyValue = (item: (typeof layerItems)[number], q: Quantities | null): { v: number; u: string } | null => {
+    if (!q) return null
+    if (item.kind === 'linear') return !item.struct && (q.net ?? 0) > 0 ? { v: q.net ?? 0, u: 'm²' } : { v: q.len, u: 'm' }
+    if (item.kind === 'area') return { v: q.area, u: 'm²' }
+    return { v: q.n, u: t('unit.un') }
+  }
+  const GROUP_LABEL: Record<GroupKey, TakeoffMessageKey> = {
+    arch: 'tool.arch', struct: 'tool.struct', blocking: 'mep.group.blocking', electrical: 'mep.group.electrical', plumbing: 'mep.group.plumbing', other: 'group.other',
+  }
+  const SUB_LABEL: Record<SubKey, TakeoffMessageKey> = { walls: 'group.walls', ceilings: 'group.ceilings', floors: 'group.floors' }
+  /** The item rows under discipline headers (Architecture → Walls / Ceilings / Floors, Structure, …), each foldable, with a subtotal, an eye and a select-all box. */
+  const renderGrouped = (rows: { item: (typeof layerItems)[number]; q: Quantities | null; node: ReactNode }[], prefix: string, indent: number) => {
+    const header = (key: string, label: string, list: typeof rows, level: 0 | 1) => {
+      const ids = list.map(r => r.item.key)
+      const folded = foldedGroups.has(key)
+      const allChecked = ids.every(id => checked.has(id))
+      const someChecked = !allChecked && ids.some(id => checked.has(id))
+      const anyHidden = ids.some(id => hiddenLayerIds.has(id))
+      const allHidden = ids.every(id => hiddenLayerIds.has(id))
+      const sums = new Map<string, number>()
+      for (const r of list) { const v = qtyValue(r.item, r.q); if (v) sums.set(v.u, (sums.get(v.u) || 0) + v.v) }
+      const total = [...sums.entries()].map(([u, v]) => `${formatNumber(v, u === t('unit.un') ? 0 : 2)} ${u}`).join(' · ')
+      return (
+        <div
+          key={`h:${key}`}
+          onClick={() => setFoldedGroups(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n })}
+          style={{ display: 'grid', gridTemplateColumns: '16px 14px minmax(0,1fr) auto 22px', gap: 6, alignItems: 'center', padding: `${level === 0 ? 7 : 5}px 14px ${level === 0 ? 7 : 5}px ${indent + level * 14}px`, cursor: 'pointer', background: level === 0 ? '#f2f7f8' : '#f8fbfb', borderBottom: '1px solid #e8eff1', opacity: allHidden ? 0.55 : 1 }}
+        >
+          <input
+            type="checkbox"
+            checked={allChecked}
+            ref={el => { if (el) el.indeterminate = someChecked }}
+            onClick={event => event.stopPropagation()}
+            onChange={() => setChecked(prev => { const n = new Set(prev); for (const id of ids) { if (allChecked) n.delete(id); else n.add(id) } return n })}
+            title={t('group.selectAll')}
+            style={{ margin: 0 }}
+          />
+          <Icon name="chevron" size={12} style={{ color: '#536d78', transform: folded ? 'rotate(-90deg)' : 'none', transition: 'transform .12s' }} />
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: level === 0 ? 10 : 10, fontWeight: 800, letterSpacing: level === 0 ? '.06em' : '.02em', textTransform: level === 0 ? 'uppercase' : 'none', color: level === 0 ? '#294955' : '#536d78' }}>
+            {label} <span style={{ fontWeight: 650, color: '#8aa0a8' }}>· {t('group.types', { count: list.length })}</span>
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#0d7f77', whiteSpace: 'nowrap' }}>{total}</span>
+          <button
+            type="button"
+            title={t(anyHidden ? 'group.show' : 'group.hide')}
+            onClick={event => { event.stopPropagation(); void setLayersVisible(ids, anyHidden) }}
+            style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: '1px solid #d3dfe2', borderRadius: 5, background: '#fff', cursor: 'pointer', color: anyHidden ? '#a0b0b6' : '#294955' }}
+          >
+            <Icon name={anyHidden ? 'eyeOff' : 'eye'} size={13} />
+          </button>
+        </div>
+      )
+    }
+    return groupRows(rows, r => r.item).map(g => {
+      const gKey = `${prefix}${g.group}`
+      const all = g.subs.flatMap(s => s.rows)
+      return (
+        <div key={gKey}>
+          {header(gKey, t(GROUP_LABEL[g.group]), all, 0)}
+          {!foldedGroups.has(gKey) && g.subs.map(s => {
+            if (!s.sub) return <div key={`${gKey}:rows`}>{s.rows.map(r => r.node)}</div>
+            const sKey = `${gKey}:${s.sub}`
+            return (
+              <div key={sKey}>
+                {header(sKey, t(SUB_LABEL[s.sub]), s.rows, 1)}
+                {!foldedGroups.has(sKey) && s.rows.map(r => r.node)}
+              </div>
+            )
+          })}
+        </div>
+      )
+    })
+  }
   const treeMode = levels.length > 0 && isPdf
   const usedLayerIds = new Set(elements.map(e => e.layer_id))
   /** Under a level: items drawn on its sheets; on the current level also new (never drawn) items, and the others on demand. */
@@ -1380,8 +1469,10 @@ export default function TakeoffWorkspacePage() {
     if (!drawn.length && !fresh.length && !others.length) return <div style={{ ...ui.small, padding: '2px 14px 4px 50px', color: '#a0b0b6' }}>{t('level.noItems')}</div>
     return (
       <>
-        {drawn.map(d => renderItemRow(d.item, quantityText(d.item, d.q), sheetId, `${b.id}:${d.key}`))}
-        {fresh.map(it => renderItemRow(it, quantityText(it, null), undefined, `${b.id}:${it.key}`))}
+        {renderGrouped([
+          ...drawn.map(d => ({ item: d.item, q: d.q, node: renderItemRow(d.item, quantityText(d.item, d.q), sheetId, `${b.id}:${d.key}`) })),
+          ...fresh.map(it => ({ item: it, q: null, node: renderItemRow(it, quantityText(it, null), undefined, `${b.id}:${it.key}`) })),
+        ], `${b.id}:`, 36)}
         {others.length > 0 && (
           <button type="button" onClick={() => setOthersOpen(o => !o)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, background: 'transparent', padding: '6px 14px 6px 50px', color: '#0d7f77', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>
             {othersOpen ? t('level.hideOtherItems') : t('level.otherItems', { count: others.length })}
@@ -1463,7 +1554,7 @@ export default function TakeoffWorkspacePage() {
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {treeMode ? levelsPanel : layerItems.length === 0 ? (
           <div style={{ ...ui.small, padding: 14 }}>{t('workspace.layers.empty')}</div>
-        ) : layerItems.map(item => renderItemRow(item, itemQuantity(item)))}
+        ) : renderGrouped(layerItems.map(item => ({ item, q: ptPerM > 0 && item.shapes.length ? layerQuantities(item, ptPerM) : null, node: renderItemRow(item, itemQuantity(item)) })), 'flat:', 14)}
         {!treeMode && openingSummary.length > 0 && (
           <>
             <div style={{ padding: '10px 14px 4px', fontSize: 10, fontWeight: 800, color: '#536d78', letterSpacing: '.06em', textTransform: 'uppercase', borderTop: '1px solid #e5ecee', background: '#f2f7f8' }}>{t('openings.listTitle')}</div>
