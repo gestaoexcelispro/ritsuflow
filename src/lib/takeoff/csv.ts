@@ -76,7 +76,7 @@ export function buildQuantitiesCsv(
   // Everything tagged, one row per tag: wall stretches (length, height, gross area), areas (perimeter, area)
   // and counted points (tag and item only).
   const k2 = ptPerM * ptPerM
-  const tagged = items.flatMap(it => it.shapes.flatMap(sh => (sh.tags || []).map((tag, i) => {
+  const tagged: { tag: string; it: TakeoffItem; cells: string[]; opening?: boolean }[] = items.flatMap(it => it.shapes.flatMap(sh => (sh.tags || []).map((tag, i) => {
     if (it.kind === 'linear') {
       const len = sh.pts[i + 1] ? dist(sh.pts[i], sh.pts[i + 1]) / ptPerM : 0
       const h = shapeHeight(it, sh)
@@ -85,11 +85,16 @@ export function buildQuantitiesCsv(
     if (it.kind === 'area') return { tag, it, cells: [num(perimeter(sh.pts) / ptPerM), '', num(polyArea(sh.pts) / k2)] }
     return { tag, it, cells: ['', '', ''] }
   })))
+  // Doors, windows and openings: width (length column), height and area.
+  for (const it of items) if (it.kind === 'linear') for (const sh of it.shapes) (sh.openingTags || []).forEach((tag, i) => {
+    const o = sh.openings?.[i]
+    if (tag && o) tagged.push({ tag, it, cells: [num(o.w), num(o.h), num(o.w * o.h)], opening: true })
+  })
   if (L.tag && tagged.length) {
     lines.push('')
     lines.push(row([L.tag, L.layer, L.type, `${L.length} (m)`, `${L.height || ''} (m)`, `${L.area} (m²)`]))
     const byTag = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
-    for (const r of tagged.sort((a, b) => byTag(a.tag, b.tag))) lines.push(row([r.tag, r.it.name, L.kind[r.it.kind], ...r.cells]))
+    for (const r of tagged.sort((a, b) => byTag(a.tag, b.tag))) lines.push(row([r.tag, r.it.name, 'opening' in r ? L.openings : L.kind[r.it.kind], ...r.cells]))
   }
 
   const T = framingTotals(items, ptPerM)

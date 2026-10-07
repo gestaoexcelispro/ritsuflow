@@ -47,17 +47,19 @@ export default function OpeningsEditor({ kind, items, ptPerM, onSaved, onSelectW
     lengthM: ptPerM > 0 ? polyLen(sh.pts) / ptPerM : 0,
     heightM: shapeHeight(it, sh),
     openings: sh.openings || [],
+    tags: sh.openingTags || [],
   }))), [items, ptPerM])
 
   const groups = useMemo(() => {
-    const map = new Map<string, { key: string; w: number; h: number; sill: number; list: { wallId: string; itemName: string; off: number }[] }>()
-    for (const wall of walls) for (const o of wall.openings) {
+    const map = new Map<string, { key: string; w: number; h: number; sill: number; list: { wallId: string; itemName: string; off: number; tag: string }[] }>()
+    for (const wall of walls) for (const [i, o] of wall.openings.entries()) {
       if (!isKind(o, kind)) continue
       const key = `${o.w.toFixed(3)}|${o.h.toFixed(3)}|${o.sill.toFixed(3)}`
       const g = map.get(key) || { key, w: o.w, h: o.h, sill: o.sill, list: [] }
-      g.list.push({ wallId: wall.id, itemName: wall.itemName, off: o.off })
+      g.list.push({ wallId: wall.id, itemName: wall.itemName, off: o.off, tag: wall.tags[i] || '' })
       map.set(key, g)
     }
+    for (const g of map.values()) g.list.sort((a, b) => a.tag.localeCompare(b.tag, undefined, { numeric: true }))
     return [...map.values()].sort((a, b) => b.list.length - a.list.length || a.w - b.w)
   }, [walls, kind])
 
@@ -143,7 +145,7 @@ export default function OpeningsEditor({ kind, items, ptPerM, onSaved, onSelectW
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {g.list.map((o, i) => (
               <button key={`${o.wallId}-${i}`} type="button" style={wallChip} title={t('openings.goToWall')} onClick={() => onSelectWall(o.wallId)}>
-                {o.itemName} · {n(o.off)} m
+                {o.tag && <strong style={{ marginRight: 4 }}>{o.tag}</strong>}{o.itemName} · {n(o.off)} m
               </button>
             ))}
           </div>

@@ -33,6 +33,8 @@ export type TakeoffShape = {
   flipFaces?: boolean
   /** Tag of each straight stretch (pts[i] → pts[i+1]), e.g. "DW01-03". */
   tags?: string[]
+  /** Tag of each opening (door / window / void), aligned with `openings`. */
+  openingTags?: string[]
 }
 
 export type LayerKind = 'linear' | 'area' | 'count'

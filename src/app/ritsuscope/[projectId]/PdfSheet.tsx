@@ -606,6 +606,26 @@ export default function PdfSheet(props: Props) {
             return [pill(`tag-${item.key}-${index}`, pts[0][0] + stroke(w / 2 + 8), pts[0][1] - stroke(14), tag)]
           }))}
 
+          {/* Door, window and opening tags (D-01, W-01…): beside each opening's badge, on the side the wall's normal points to. */}
+          {showTags && !dimItems && ptPerM > 0 && items.filter(item => item.kind === 'linear').flatMap(item => item.shapes.flatMap((shape, index) => {
+            if (!shape.openingTags?.length) return []
+            const pts = drag && shape.id === drag.id ? drag.pts : shape.pts
+            return openingMarks(pts, shape.openings, ptPerM).map(m => {
+              const tag = shape.openingTags![m.index]
+              if (!tag) return null
+              const color = m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B'
+              const off = stroke(26)
+              const cx = (m.a[0] + m.b[0]) / 2 + m.n[0] * off, cy = (m.a[1] + m.b[1]) / 2 + m.n[1] * off
+              const w = stroke(tag.length * 6.2 + 10), h = stroke(15)
+              return (
+                <g key={`otag-${item.key}-${index}-${m.index}`} style={{ pointerEvents: 'none' }}>
+                  <rect x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={stroke(3)} fill="#fff" fillOpacity={0.94} stroke={color} strokeWidth={stroke(1.2)} />
+                  <text x={cx} y={cy + stroke(3.6)} textAnchor="middle" fontSize={stroke(10)} fontWeight={700} fill="#173441" fontFamily="system-ui, sans-serif">{tag}</text>
+                </g>
+              )
+            })
+          }))}
+
           {selectable && onMovePoints && selectedId && items.flatMap(item => item.shapes.filter(sh => sh.id === selectedId).map(sh => {
             const pts = drag && drag.id === sh.id ? drag.pts : sh.pts
             return pts.map((p, i) => (

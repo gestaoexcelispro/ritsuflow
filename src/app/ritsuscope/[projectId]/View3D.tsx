@@ -5,6 +5,7 @@
    package install is needed. Coordinates: sheet x -> world x, sheet y -> world z, height -> y. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { openingMarks } from '@/lib/takeoff/openingMarks'
 import { findJunctions, junctionStudsOnWall, layoutWall, type Junction } from '@/lib/takeoff/framing/framing'
 import { shapeHeight, type TakeoffItem, type TakeoffShape, type Vec2 } from '@/lib/takeoff/geometry'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
@@ -474,6 +475,19 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions) {
           g.add(sprite)
         }
         continue
+      }
+      // Doors, windows and openings: their tag just above the opening's head.
+      for (const sh of it.shapes) {
+        if (!show(sh) || !sh.openingTags?.length) continue
+        for (const m of openingMarks(sh.pts, sh.openings, k)) {
+          const tag = sh.openingTags[m.index]
+          const op = sh.openings?.[m.index]
+          if (!tag || !op) continue
+          const at = M([(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2])
+          const sprite = tagSprite(THREE, tag, m.kind === 'window' ? '#0284C7' : m.kind === 'door' ? '#B45309' : '#64748B')
+          sprite.position.set(at[0], (sh.zrel || 0) + o.elevationOf(sh.page) + (op.sill || 0) + (op.h || 2.1) + 0.25, at[1])
+          g.add(sprite)
+        }
       }
       for (const sh of it.shapes) {
         if (!show(sh) || !sh.tags?.length) continue

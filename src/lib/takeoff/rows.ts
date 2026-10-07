@@ -69,6 +69,8 @@ export type ElementRow = {
   tag_labels?: string[]
   /** Automatic tag of each segment (shown as the placeholder when renaming). */
   tag_auto?: string[]
+  /** Tag of each opening, aligned with `openings` (computed, see segmentTags.ts). */
+  opening_tags?: string[]
 }
 
 export type IfcImportRows = {
@@ -168,6 +170,7 @@ export function rowsToItems(layers: LayerRow[], elements: ElementRow[], pageOfSo
         faceB: e.faces?.faceB,
         flipFaces: e.faces?.flip,
     tags: e.tag_labels,
+        openingTags: e.opening_tags,
       }))
     return {
       key: l.id,
