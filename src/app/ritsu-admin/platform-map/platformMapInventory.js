@@ -61,10 +61,39 @@ export const platformMapInventory = {
       ]
     },
     "pull-planning": {
-      "status": "no-route",
-      "sourceRef": "97a59db66df4cf67fc755567a592c36c7d89d814",
-      "note": "No dedicated page was found in the audited branch. This module remains in the architecture map.",
-      "routes": []
+      "status": "mapped",
+      "sourceRef": "feature/pull-planning",
+      "note": "Standalone v1 (2026-10-07): sticky wall by trade and week, backward pass from the milestone, handoffs and agreement. Tables pull_plans, pull_participants, pull_stickies and pull_handoffs; no link to Master Plan, Lookahead or FieldOp yet.",
+      "routes": [
+        {
+          "label": "Pull plans",
+          "href": "/dashboard/planning/pull-planning",
+          "sourcePath": "src/app/dashboard/planning/pull-planning/page.js"
+        },
+        {
+          "label": "New pull plan",
+          "href": "/dashboard/planning/pull-planning/new",
+          "sourcePath": "src/app/dashboard/planning/pull-planning/new/page.js"
+        },
+        {
+          "label": "Pull board (sticky wall)",
+          "href": "/dashboard/planning/pull-planning/[planId]",
+          "sourcePath": "src/app/dashboard/planning/pull-planning/[planId]/page.js",
+          "dynamic": true
+        },
+        {
+          "label": "Handoffs and agreement",
+          "href": "/dashboard/planning/pull-planning/[planId]/handoffs",
+          "sourcePath": "src/app/dashboard/planning/pull-planning/[planId]/handoffs/page.js",
+          "dynamic": true
+        },
+        {
+          "label": "Pull plan settings",
+          "href": "/dashboard/planning/pull-planning/[planId]/settings",
+          "sourcePath": "src/app/dashboard/planning/pull-planning/[planId]/settings/page.js",
+          "dynamic": true
+        }
+      ]
     },
     "precon-reports": {
       "status": "no-route",
@@ -2550,14 +2579,6 @@ export const platformMapInventory = {
     }
   },
   "gaps": [
-    {
-      "id": "pull-page",
-      "moduleId": "pull-planning",
-      "title": "Dedicated page absent",
-      "detail": "The module exists in the architecture map; no dedicated application route was found.",
-      "line": 1,
-      "sourceRef": "e6b1e807993dfde1c1c19506b3703a1bf0c93c3b"
-    },
     {
       "id": "pre-planning-page",
       "moduleId": "pre-planning",
