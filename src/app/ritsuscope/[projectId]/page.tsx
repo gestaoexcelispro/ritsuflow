@@ -492,7 +492,10 @@ export default function TakeoffWorkspacePage() {
     const q = layerQuantities(item, ptPerM)
     if (!q) return { main: '—', sub: '' }
     if (item.struct) return { ...plainQuantity(item, q), sub: structText(item, q, v => formatNumber(v, 2), t('struct.formwork')) }
-    if (item.kind === 'linear') return { main: `${formatNumber(q.len)} m`, sub: `${formatNumber(q.net ?? 0)} m²` }
+    // Walls lead with their area (net of openings), length below; lines without a height keep metres.
+    if (item.kind === 'linear') return (q.net ?? 0) > 0
+      ? { main: `${formatNumber(q.net ?? 0)} m²`, sub: `${formatNumber(q.len)} m` }
+      : { main: `${formatNumber(q.len)} m`, sub: '' }
     if (item.kind === 'area') return { main: `${formatNumber(q.area)} m²`, sub: `${formatNumber(q.per)} m` }
     return { main: `${q.n} ${t('unit.un')}`, sub: blockingSub(item, q.n) }
   }
@@ -506,7 +509,10 @@ export default function TakeoffWorkspacePage() {
   const quantityText = (item: (typeof layerItems)[number], q: Quantities | null) => {
     if (!q) return { main: '—', sub: '' }
     if (item.struct) return { ...plainQuantity(item, q), sub: structText(item, q, v => formatNumber(v, 2), t('struct.formwork')) }
-    if (item.kind === 'linear') return { main: `${formatNumber(q.len)} m`, sub: `${formatNumber(q.net ?? 0)} m²` }
+    // Walls lead with their area (net of openings), length below; lines without a height keep metres.
+    if (item.kind === 'linear') return (q.net ?? 0) > 0
+      ? { main: `${formatNumber(q.net ?? 0)} m²`, sub: `${formatNumber(q.len)} m` }
+      : { main: `${formatNumber(q.len)} m`, sub: '' }
     if (item.kind === 'area') return { main: `${formatNumber(q.area)} m²`, sub: `${formatNumber(q.per)} m` }
     return { main: `${q.n} ${t('unit.un')}`, sub: blockingSub(item, q.n) }
   }
