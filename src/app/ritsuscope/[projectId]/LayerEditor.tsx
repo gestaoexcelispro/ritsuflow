@@ -6,9 +6,9 @@ import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
-import { DEFAULT_CORNER_STUDS, DEFAULT_LA_PER_STUD_END, DEFAULT_SCREW_SPACING, DEFAULT_TEE_STUDS, defaultFraming, framingLabelsPtBR, parseBars } from '@/lib/takeoff/framing/framing'
+import { DEFAULT_ANCHOR_EDGE, DEFAULT_ANCHOR_SPACING, DEFAULT_CORNER_STUDS, DEFAULT_LA_PER_STUD_END, DEFAULT_SCREW_SPACING, DEFAULT_TEE_STUDS, defaultFixings, defaultFraming, fixingsOf, framingLabelsPtBR, parseBars } from '@/lib/takeoff/framing/framing'
 import { importLabelsEnUS } from '@/lib/takeoff/ifc/importIfcModel'
-import type { FramingConfig } from '@/lib/takeoff/geometry'
+import type { ContactPlaces, FramingConfig } from '@/lib/takeoff/geometry'
 import type { LayerRow } from '@/lib/takeoff/rows'
 import type { Recipe } from '@/lib/takeoff/recipes'
 import { ui } from '../ui'
@@ -48,6 +48,15 @@ type Form = {
   screwsFromLayout: boolean
   screwSpacing: string
   laPerStudEnd: string
+  /** Anchors and acoustic band where the framing meets another system. */
+  fixOn: boolean
+  anchorSpacing: string
+  anchorEdge: string
+  anchorName: string
+  anchorAt: ContactPlaces
+  bandAt: ContactPlaces
+  bandName: string
+  bandRoll: string
 }
 
 export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props) {
@@ -93,6 +102,15 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
       screwsFromLayout: base.screwsFromLayout !== false,
       screwSpacing: n(base.screwSpacing ?? DEFAULT_SCREW_SPACING),
       laPerStudEnd: String(base.laPerStudEnd ?? DEFAULT_LA_PER_STUD_END),
+      ...(() => {
+        const fx = fixingsOf(base.fixings)
+        const d = fx || defaultFixings(language !== 'pt-BR' ? { anchor: 'Anchor + screw (track fixing)', band: 'Acoustic sealing strip' } : {})
+        return {
+          fixOn: !!fx,
+          anchorSpacing: n(d.anchorSpacing), anchorEdge: n(d.anchorEdge), anchorName: d.anchorName, anchorAt: { ...d.anchorAt },
+          bandAt: { ...d.bandAt }, bandName: d.bandName, bandRoll: d.bandRoll ? n(d.bandRoll, 1) : '',
+        }
+      })(),
     })
     setError('')
   }, [layer, language, formatNumber])
@@ -172,6 +190,15 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
         studGap: typeof stored.studGap === 'number' ? stored.studGap : base.studGap,
         headerExtra: typeof stored.headerExtra === 'number' ? stored.headerExtra : base.headerExtra,
         faceOffset: typeof stored.faceOffset === 'number' ? stored.faceOffset : base.faceOffset,
+        fixings: form.fixOn ? {
+          anchorSpacing: num(form.anchorSpacing) || DEFAULT_ANCHOR_SPACING,
+          anchorEdge: num(form.anchorEdge) ?? DEFAULT_ANCHOR_EDGE,
+          anchorAt: form.anchorAt,
+          anchorName: form.anchorName.trim() || defaultFixings().anchorName,
+          bandAt: form.bandAt,
+          bandName: form.bandName.trim() || defaultFixings().bandName,
+          bandRoll: (num(form.bandRoll) || 0) > 0 ? num(form.bandRoll) : null,
+        } : null,
       }
     }
     setSaving(true)
@@ -191,6 +218,21 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
       {label}
       <input style={{ ...inputStyle, width: width || '100%' }} value={form[key] as string} onChange={e => set(key, e.target.value as never)} />
     </label>
+  )
+
+  /** Check boxes for the places where the framing touches another system. */
+  const places = (key: 'anchorAt' | 'bandAt', label: string) => (
+    <div style={fieldStyle}>
+      {label}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {(['floor', 'ceiling', 'walls'] as const).map(pl => (
+          <label key={pl} style={checkStyle}>
+            <input type="checkbox" checked={form[key][pl]} onChange={e => set(key, { ...form[key], [pl]: e.target.checked })} />
+            {t(`fixings.place.${pl}` as Parameters<typeof t>[0])}
+          </label>
+        ))}
+      </div>
+    </div>
   )
 
   return (
@@ -245,6 +287,19 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
               {text('boardA', t('framing.boardA'))}
               {text('boardB', t('framing.boardB'))}
               <div style={rowStyle}>{text('layersA', t('framing.layersA'), 60)}{text('layersB', t('framing.layersB'), 60)}</div>
+              <div style={{ ...ui.small, fontWeight: 800, marginTop: 4 }}>{t('fixings.title')}</div>
+              <label style={checkStyle}><input type="checkbox" checked={form.fixOn} onChange={e => set('fixOn', e.target.checked)} />{t('fixings.on')}</label>
+              {form.fixOn && (
+                <>
+                  <span style={ui.small}>{t('fixings.hint')}</span>
+                  {text('anchorName', t('fixings.anchorName'))}
+                  <div style={rowStyle}>{text('anchorSpacing', t('fixings.anchorSpacing'), 80)}{text('anchorEdge', t('fixings.anchorEdge'), 80)}</div>
+                  {places('anchorAt', t('fixings.anchorAt'))}
+                  {text('bandName', t('fixings.bandName'))}
+                  {places('bandAt', t('fixings.bandAt'))}
+                  {text('bandRoll', t('fixings.bandRoll'), 90)}
+                </>
+              )}
             </>
           )}
         </>

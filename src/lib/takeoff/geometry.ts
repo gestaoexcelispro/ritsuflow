@@ -69,6 +69,25 @@ export type FramingConfig = {
   laPerStudEnd?: number
   taName?: string
   laName?: string
+  /** Fixing to other systems (slab, ceiling, existing walls): anchors and acoustic band from the layout. Unset = not counted by the layout. */
+  fixings?: FixingsConfig | null
+}
+
+/** Where the framing touches another construction system. */
+export type ContactPlaces = { floor: boolean; ceiling: boolean; walls: boolean }
+
+export type FixingsConfig = {
+  /** Anchor spacing along the track (m). */
+  anchorSpacing: number
+  /** Largest distance from a track end to its first anchor (m). */
+  anchorEdge: number
+  anchorAt: ContactPlaces
+  anchorName: string
+  /** Acoustic band under / against the profiles touching another system. */
+  bandAt: ContactPlaces
+  bandName: string
+  /** Metres per roll (whole quantity); null = sold by the metre. */
+  bandRoll?: number | null
 }
 
 export type TakeoffItem = {

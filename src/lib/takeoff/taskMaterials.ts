@@ -1,18 +1,22 @@
 // Materials of planned tasks (RitsuScope › Tarefas): what one activity needs in one location.
-// Each task line lies against one face of a takeoff wall. The wall's framing layout (the same engine as
-// the takeoff) is cut to the stretch the line covers, and only what that activity installs is kept:
-//   framing    → studs (and the corner / tee studs standing in the stretch), tracks, headers, LA screws
-//   board_a/_b → boards of that face (packed into whole sheets) and their TA screws
-//   insulation → the wall type's insulation product, by area
-// Anything the layout does not count (joint compound, tape, anchors, sealant…) comes from the activity's
-// consumption rates (project_scopes.plan_materials), per m² / m / line.
+// A task is one activity (layer) of an estimated wall. Its materials are its part of that wall's estimate:
+//  1. The wall's framing layout (the same engine as the takeoff), cut to the stretch the line covers:
+//       framing    → studs (and the corner / tee studs standing in the stretch), tracks, headers, LA screws,
+//                    anchors and acoustic band where the framing meets another system (wall's fixings)
+//       board_a/_b → boards of that face (packed into whole sheets) and their TA screws
+//  2. The wall's recipe lines that belong to the activity (RecipeLine.step, guessed from the material when
+//     unset): compound and tape → joints, insulation → insulation… taken in proportion to the stretch
+//     (area or length) and split between faces for shared lines (boards, joints).
+//  3. Extras typed for the activity (project_scopes.plan_materials), per m² / m / line.
 // Quantities are kept both exact (for the estimate × planned × actual comparison) and whole (bars,
 // sheets, packs: what the crew takes).
 import { dist, polyLen, shapeHeight, type FramingConfig, type TakeoffItem, type TakeoffShape, type Vec2 } from './geometry'
 import {
   DEFAULT_LA_PER_STUD_END, alongWall, findJunctions, junctionStudsOnWall, layoutWall, packBars, packSheets, screwsAlong, screwsForWall,
   framingLabelsPtBR, type BoardPiece, type WallLayout,
+  fixingsForWall, fixingsOf, type FreeEnds,
 } from './framing/framing'
+import { stepShare, type RecipeLineQty } from './recipes'
 
 export type PlanMaterial = { name: string; unit: string; per: 'm2' | 'm' | 'un'; coef: number; waste?: number; packSize?: number | null; packName?: string | null }
 
@@ -26,7 +30,7 @@ export type TaskMaterialRow = {
   /** What the crew takes: whole bars / sheets / packs / units. */
   whole: number
   wholeUnit: string
-  source: 'layout' | 'rate'
+  source: 'layout' | 'recipe' | 'rate'
 }
 
 export type TaskLine = { points: Vec2[]; side?: number | null; height_m?: number | null }
@@ -43,7 +47,13 @@ export type TaskMaterialsInput = {
   rates: PlanMaterial[]
   /** Insulation product of the wall type (name, unit, pack), when the activity is insulation. */
   insulation?: { name: string; unit: string; packSize?: number | null; packName?: string | null } | null
-  labels: { bars: string; sheets: string; un: string; barLen: (len: number) => string }
+  labels: { bars: string; sheets: string; un: string; barLen: (len: number) => string; rolls?: string }
+  /** The wall's recipe lines evaluated for the whole item (recipeLineQuantities). */
+  recipeLines?: RecipeLineQty[]
+  /** The whole item's net face area (m²) and length (m): a line's quantity is shared by the stretch drawn. */
+  itemBase?: { area: number; length: number } | null
+  /** Free wall ends of the sheet's framed walls (freeEnds), for anchors / band against existing walls. */
+  ends?: Map<TakeoffShape, FreeEnds>
 }
 
 /** Net face area (m²) and length (m) of task lines, openings of the host walls deducted. */
@@ -126,7 +136,8 @@ export function taskMaterials(input: TaskMaterialsInput): TaskMaterialRow[] {
   if (item && F && (framingStep || boardFace)) {
     const studPieces: number[] = [], trackPieces: number[] = []
     const boards = new Map<string, BoardPiece[]>()
-    let ta = 0, la = 0
+    let ta = 0, la = 0, anchors = 0, bandM = 0
+    const fx = framingStep ? fixingsOf(F.fixings) : null
     const layouts = new Map<TakeoffShape, WallLayout>()
     const junctions = framingStep ? findJunctions(sheetItems.length ? sheetItems : [item], ptPerM) : []
     for (const l of lines) {
@@ -146,6 +157,12 @@ export function taskMaterials(input: TaskMaterialsInput): TaskMaterialRow[] {
           if (j.x < host.s0 - 1e-6 || j.x > host.s1 + 1e-6 || !(H > 0)) continue
           for (let n = 0; n < j.studs; n++) studPieces.push(H)
           la += j.studs * 2 * (F.laPerStudEnd ?? DEFAULT_LA_PER_STUD_END)
+        }
+        // Anchors and acoustic band where this stretch meets the slab, the ceiling or an existing wall.
+        if (fx) {
+          const c = fixingsForWall(lay, fx, input.ends?.get(host.shape) || { start: false, end: false }, [host.s0, host.s1])
+          anchors += c.anchors
+          bandM += c.bandM
         }
       } else if (boardFace) {
         // The face the line lies on is the face this activity boards.
@@ -170,6 +187,11 @@ export function taskMaterials(input: TaskMaterialsInput): TaskMaterialRow[] {
       addProfile(F.studName, studPieces)
       addProfile(F.trackName, trackPieces)
       if (la > 0 && F.screwsFromLayout !== false) { const name = F.laName || framingLabelsPtBR.laScrew!; rows.push({ key: `un|${name}`, mat: name, exact: la, unit: labels.un, whole: Math.ceil(la), wholeUnit: labels.un, source: 'layout' }) }
+      if (fx && anchors > 0) rows.push({ key: `un|${fx.anchorName}`, mat: fx.anchorName, exact: anchors, unit: labels.un, whole: Math.ceil(anchors - 1e-9), wholeUnit: labels.un, source: 'layout' })
+      if (fx && bandM > 0) {
+        const roll = fx.bandRoll && fx.bandRoll > 0 ? fx.bandRoll : null
+        rows.push({ key: `m|${fx.bandName}`, mat: fx.bandName, exact: bandM, unit: 'm', whole: roll ? Math.ceil(bandM / roll - 1e-9) : Math.ceil(bandM - 1e-9), wholeUnit: roll ? labels.rolls || 'rolos' : 'm', source: 'layout' })
+      }
     }
     if (boardFace) {
       for (const [name, pieces] of boards) {
@@ -183,7 +205,30 @@ export function taskMaterials(input: TaskMaterialsInput): TaskMaterialRow[] {
   }
 
   const base = taskBase(lines, item, ptPerM)
-  if (step === 'insulation' && insulation && base.area > 0) {
+
+  // The wall's recipe lines that belong to this activity, in proportion to the stretch drawn.
+  let recipeInsulation = false
+  if (item && input.recipeLines?.length && input.itemBase) {
+    const layers = { A: F ? F.layersA : 1, B: F ? F.layersB : 1 }
+    for (const q of input.recipeLines) {
+      const share = step === 'measure' ? (q.step === 'none' ? 0 : 1) : stepShare(q.step, step, layers)
+      if (!(share > 0)) continue
+      const byLength = q.line.base === 'm'
+      const whole = byLength ? input.itemBase.length : input.itemBase.area
+      const part = byLength ? base.length : base.area
+      if (!(whole > 0) || !(part > 0)) continue
+      const exact = q.qty * (part / whole) * share
+      if (!(exact > 0)) continue
+      if (q.step === 'insulation') recipeInsulation = true
+      const pack = q.packSize && q.packSize > 0 ? q.packSize : null
+      rows.push({
+        key: q.materialId ? `id|${q.materialId}` : `rec|${q.mat.toLowerCase()}|${q.unit}`, mat: q.mat, exact, unit: q.unit,
+        whole: pack ? Math.ceil(exact / pack - 1e-9) : Math.ceil(exact - 1e-9), wholeUnit: pack ? q.packName || labels.un : q.unit, source: 'recipe',
+      })
+    }
+  }
+
+  if (step === 'insulation' && insulation && base.area > 0 && !recipeInsulation) {
     const exact = base.area
     const pack = insulation.packSize && insulation.packSize > 0 ? insulation.packSize : null
     rows.push({ key: `ins|${insulation.name}|${insulation.unit}`, mat: insulation.name, exact, unit: insulation.unit || 'm²', whole: pack ? Math.ceil(exact / pack - 1e-9) : Math.ceil(exact - 1e-9), wholeUnit: pack ? insulation.packName || labels.un : insulation.unit || 'm²', source: 'layout' })

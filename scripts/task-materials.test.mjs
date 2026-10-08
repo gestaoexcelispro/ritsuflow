@@ -78,3 +78,79 @@ test('rates use the net area (door deducted), length or line count; insulation b
   const sum = sumMaterials([rows, rows])
   assert.ok(Math.abs(sum.find(r => r.mat === 'Fita de papel').exact - 2 * base.area * 1.4) < 1e-9)
 })
+
+test('anchors along a track: first and last at most 10 cm from the ends, at most 60 cm apart', async () => {
+  const { anchorsAlong } = await import('../src/lib/takeoff/framing/framing.ts')
+  assert.equal(anchorsAlong(3, 0.6, 0.1), 6) // 2.8 m between end anchors → 5 gaps
+  assert.equal(anchorsAlong(0.2, 0.6, 0.1), 1)
+  assert.equal(anchorsAlong(0.8, 0.6, 0.1), 2)
+  assert.equal(anchorsAlong(0, 0.6, 0.1), 0)
+})
+
+test('the framing task carries anchors and acoustic band where the wall meets the slab (and walls when chosen)', async () => {
+  const { defaultFixings, freeEnds } = await import('../src/lib/takeoff/framing/framing.ts')
+  const fx = { ...defaultFixings(), bandAt: { floor: true, ceiling: false, walls: true } }
+  const w = { ...wall, framing: { ...framing, fixings: fx } }
+  const ends = freeEnds([w], K)
+  assert.deepEqual(ends.get(w.shapes[0]), { start: true, end: true }, 'a lone wall stops against other systems at both ends')
+  const rows = taskMaterials({ step: 'framing', item: w, sheetItems: [w], lines: [above], ptPerM: K, rates: [], labels, ends })
+  const anchors = rows.find(r => r.mat === fx.anchorName)
+  const band = rows.find(r => r.mat === fx.bandName)
+  assert.ok(anchors && band)
+  // Bottom track 0…6.6 m (door at 6.6…7.4): 5/6.6 of its anchors; top track 0…10 m: half; start wall end: 2.8 m of stud.
+  const exp = (n, len, part) => Math.ceil((len - 0.2) / 0.6 - 1e-9) + 1 === n ? n * part / len : NaN
+  const expected = exp(12, 6.6, 5) + exp(18, 10, 5)
+  assert.ok(Math.abs(anchors.exact - expected) < 1e-6, `anchors ${anchors.exact} vs ${expected}`)
+  assert.ok(Math.abs(band.exact - (5 + 2.8)) < 1e-6, `band = 5 m under the floor track + 2.8 m at the free end, got ${band.exact}`)
+  // No fixings set: nothing counted (old walls keep their estimate).
+  assert.ok(!taskMaterials({ step: 'framing', item: wall, sheetItems: [wall], lines: [above], ptPerM: K, rates: [], labels }).some(r => r.mat === fx.anchorName))
+  // Boards do not carry fixings.
+  assert.ok(!taskMaterials({ step: 'board_a', item: w, sheetItems: [w], lines: [above], ptPerM: K, rates: [], labels, ends }).some(r => r.mat === fx.anchorName))
+})
+
+test('a wall end that meets another framed wall is not free', async () => {
+  const { freeEnds } = await import('../src/lib/takeoff/framing/framing.ts')
+  const other = { ...wall, key: 'M', shapes: [{ id: 'v', page: 1, pts: [[100, 100], [100, 0]], openings: [] }] }
+  const ends = freeEnds([wall, other], K)
+  assert.deepEqual(ends.get(wall.shapes[0]), { start: true, end: false })
+  assert.deepEqual(ends.get(other.shapes[0]), { start: false, end: true })
+})
+
+test('recipe lines go to their task, shared by the stretch and split between faces', async () => {
+  const { lineStep, recipeLineQuantities, ANCHOR_RX } = await import('../src/lib/takeoff/recipes.ts')
+  assert.equal(lineStep({ mat: 'Massa para juntas' }), 'joints')
+  assert.equal(lineStep({ mat: 'Fita de papel microperfurada' }), 'joints')
+  assert.equal(lineStep({ mat: 'Banda acústica 48 mm' }), 'framing')
+  assert.equal(lineStep({ mat: 'Bucha de nylon S6 + parafuso' }), 'framing')
+  assert.equal(lineStep({ mat: 'Parafuso LA 4,2 x 9,5 mm' }), 'framing')
+  assert.equal(lineStep({ mat: 'Parafuso TA 3,5 x 25 mm' }), 'boards')
+  assert.equal(lineStep({ mat: 'Lã de vidro 50 mm' }), 'insulation')
+  assert.equal(lineStep({ mat: 'Massa', step: 'joints_a' }), 'joints_a')
+  assert.ok(ANCHOR_RX.test('Powder-actuated fastener for runners'))
+
+  const recipe = { id: 'r', name: 'DW', maker: null, system: null, kind: 'linear', heightBasisM: null, wasteIncludedPct: 0, status: 'review', mode: 'fixed', lines: [
+    { mat: 'Massa para juntas', unit: 'kg', coef: 0.7, base: 'm2', waste: 0, packSize: 30, packName: 'balde' },
+    { mat: 'Fita de papel', unit: 'm', coef: 3, base: 'm2', waste: 0 },
+    { mat: 'Bucha de nylon S6 + parafuso', unit: 'un', coef: 3.4, base: 'm', waste: 0 },
+    { mat: 'Montante 48 mm', unit: 'm', coef: 2.3, base: 'm2', waste: 0 },
+  ] }
+  const { defaultFixings } = await import('../src/lib/takeoff/framing/framing.ts')
+  const w = { ...wall, framing: { ...framing, fixings: defaultFixings() } }
+  const q = recipeLineQuantities(w, K, recipe)
+  assert.deepEqual(q.map(x => x.mat), ['Massa para juntas', 'Fita de papel'], 'studs and anchors come from the layout, not the recipe')
+  const itemArea = 10 * 2.8 - 0.8 * 2.1
+  const itemBase = { area: itemArea, length: 10 }
+  const jA = taskMaterials({ step: 'joints_a', item: w, sheetItems: [w], lines: [above], ptPerM: K, rates: [], labels, recipeLines: q, itemBase })
+  const massa = jA.find(r => r.mat === 'Massa para juntas')
+  // 5 m stretch, no opening: 14 m² of face; the wall's compound is shared by both faces.
+  assert.ok(Math.abs(massa.exact - 0.7 * 14 / 2) < 1e-6, `got ${massa.exact}`)
+  assert.equal(massa.whole, 1)
+  assert.equal(massa.wholeUnit, 'balde')
+  assert.equal(massa.source, 'recipe')
+  // The framing task does not take joint materials.
+  assert.ok(!taskMaterials({ step: 'framing', item: w, sheetItems: [w], lines: [above], ptPerM: K, rates: [], labels, recipeLines: q, itemBase }).some(r => r.source === 'recipe'))
+  // Whole wall drawn on both faces = the wall's estimate.
+  const full = (pts, side, st) => taskMaterials({ step: st, item: w, sheetItems: [w], lines: [{ points: pts, side, height_m: 2.8 }], ptPerM: K, rates: [], labels, recipeLines: q, itemBase })
+  const tot = [full([[0, 99.5], [100, 99.5]], -1, 'joints_a'), full([[0, 100.5], [100, 100.5]], 1, 'joints_b')].flat().filter(r => r.mat === 'Massa para juntas').reduce((a, r) => a + r.exact, 0)
+  assert.ok(Math.abs(tot - 0.7 * itemArea) < 1e-6, `both faces = estimate, got ${tot}`)
+})

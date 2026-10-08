@@ -6,7 +6,7 @@ import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
 import { parseLocaleNumber } from '@/lib/takeoff/calibration'
 import type { LayerKind } from '@/lib/takeoff/geometry'
-import { formToLines, lineToForm, type Recipe, type RecipeBase, type RecipeLine, type RecipeLineForm } from '@/lib/takeoff/recipes'
+import { RECIPE_STEPS, formToLines, lineStep, lineToForm, type Recipe, type RecipeBase, type RecipeLine, type RecipeLineForm, type RecipeStep } from '@/lib/takeoff/recipes'
 import { checkFormula } from '@/lib/takeoff/formula'
 import { MATERIAL_COLUMNS, RECIPE_SLOTS, RECIPE_VARIABLES, RECIPE_VARIABLE_NAMES, type MaterialRow, type RecipeSlot } from '@/lib/takeoff/systemRecipes'
 import { COUNTRIES } from '@/lib/takeoff/wallTypes'
@@ -310,12 +310,12 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
                   </div>
                 )}
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 980, fontSize: 11 }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 1140, fontSize: 11 }}>
                     <thead>
                       <tr style={{ background: '#f2f7f8', color: '#536d78', textAlign: 'left' }}>
                         {(form.mode === 'system'
-                          ? ['recipes.line.product', 'recipes.line.mat', 'recipes.line.unit', 'recipes.line.qty', 'recipes.line.waste', 'recipes.line.layout']
-                          : ['recipes.line.product', 'recipes.line.mat', 'recipes.line.code', 'recipes.line.unit', 'recipes.line.coef', 'recipes.line.base', 'recipes.line.waste', 'recipes.line.packSize', 'recipes.line.packName']
+                          ? ['recipes.line.product', 'recipes.line.mat', 'recipes.line.unit', 'recipes.line.qty', 'recipes.line.waste', 'recipes.line.layout', 'recipes.line.step']
+                          : ['recipes.line.product', 'recipes.line.mat', 'recipes.line.code', 'recipes.line.unit', 'recipes.line.coef', 'recipes.line.base', 'recipes.line.waste', 'recipes.line.packSize', 'recipes.line.packName', 'recipes.line.step']
                         ).map(k => (
                           <th key={k} style={th}>{t(k as Parameters<typeof t>[0])}</th>
                         ))}
@@ -352,6 +352,16 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
                             ))}
                           </select>
                         )
+                        // Activity (task) of the wall that uses this material; empty = guessed from the material.
+                        const guessed = lineStep({ step: null, slot: (l.slot || null) as RecipeSlot | null, mat: l.mat || product?.name || '' })
+                        const stepCell = (
+                          <td style={td}>
+                            <select style={{ ...cell, width: 150 }} title={t('recipes.line.stepHint')} value={l.step || ''} onChange={e => setLine(i, { step: e.target.value as RecipeStep | '' })}>
+                              <option value="">{t('recipes.step.auto', { step: t(`recipes.step.${guessed}` as Parameters<typeof t>[0]) })}</option>
+                              {RECIPE_STEPS.map(st => <option key={st} value={st}>{t(`recipes.step.${st}` as Parameters<typeof t>[0])}</option>)}
+                            </select>
+                          </td>
+                        )
                         return form.mode === 'system' ? (
                           <tr key={i} style={{ borderTop: '1px solid #edf1f2', verticalAlign: 'top' }}>
                             <td style={td}>{pick}</td>
@@ -363,6 +373,7 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
                             </td>
                             <td style={td}><input style={{ ...cell, width: 60 }} inputMode="decimal" value={l.waste} onChange={e => setLine(i, { waste: e.target.value })} /></td>
                             <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" title={t('recipes.line.layoutHint')} checked={!!l.layoutCovered} onChange={e => setLine(i, { layoutCovered: e.target.checked })} /></td>
+                            {stepCell}
                             <td style={td}>
                               <button type="button" title={t('recipes.removeLine')} style={removeBtn} onClick={() => set('lines', form.lines.filter((_, k) => k !== i))}>×</button>
                             </td>
@@ -384,6 +395,7 @@ export default function RecipesEditor({ onChanged }: { onChanged?: () => Promise
                             <td style={td}><input style={{ ...cell, width: 70 }} inputMode="decimal" value={l.waste} onChange={e => setLine(i, { waste: e.target.value })} /></td>
                             <td style={td}><input style={{ ...cell, width: 70 }} inputMode="decimal" value={l.packSize} onChange={e => setLine(i, { packSize: e.target.value })} /></td>
                             <td style={td}><input style={{ ...cell, width: 120 }} value={l.packName} onChange={e => setLine(i, { packName: e.target.value })} /></td>
+                            {stepCell}
                             <td style={td}>
                               <button type="button" title={t('recipes.removeLine')} style={removeBtn} onClick={() => set('lines', form.lines.filter((_, k) => k !== i))}>×</button>
                             </td>

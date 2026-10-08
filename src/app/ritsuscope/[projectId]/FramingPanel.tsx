@@ -27,7 +27,8 @@ export default function FramingPanel({ items, ptPerM, recipes }: Props) {
     const tees = totals.junctions.filter(j => j.kind === 'tee').length
     const junctionStuds = totals.junctions.reduce((s, j) => s + j.studs, 0)
     const screws = [...totals.screws].map(([name, n]) => ({ name, n: Math.ceil(n) }))
-    return { profiles, boards, studs, corners, tees, junctionStuds, screws }
+    const fixings = [...totals.fixings.values()]
+    return { profiles, boards, studs, corners, tees, junctionStuds, screws, fixings }
   }, [items, ptPerM])
 
   const pct = (v: number) => formatNumber(v * 100, 1)
@@ -90,6 +91,14 @@ export default function FramingPanel({ items, ptPerM, recipes }: Props) {
             <div key={sc.name} style={{ ...ui.listItem, flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
               <span>{sc.name} <span style={ui.small}>· {t('framing.screwsFromLayout')}</span></span>
               <strong>{formatNumber(sc.n, 0)} un</strong>
+            </div>
+          ))}
+          {result.fixings.map(fx => (
+            <div key={`${fx.unit}|${fx.name}`} style={{ ...ui.listItem, flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+              <span>{fx.name} <span style={ui.small}>· {t('fixings.fromLayout')}</span></span>
+              <strong>{fx.unit === 'm'
+                ? `${formatNumber(fx.qty, 2)} m${fx.roll ? ` · ${t('fixings.rolls', { n: Math.ceil(fx.qty / fx.roll - 1e-9) })}` : ''}`
+                : `${formatNumber(Math.ceil(fx.qty - 1e-9), 0)} un`}</strong>
             </div>
           ))}
         </>

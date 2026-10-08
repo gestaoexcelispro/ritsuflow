@@ -13,8 +13,9 @@ import { layerQuantities } from '@/lib/takeoff/geometry'
 import { openingRows } from '@/lib/takeoff/printMarkup'
 import { IfcReadError } from '@/lib/takeoff/ifc/readIfc'
 import { buildQuantitiesCsv } from '@/lib/takeoff/csv'
-import { sanitizeFramingDefaults, type FramingDefaults } from '@/lib/takeoff/framing/framing'
-import { recipeMaterials, rowToRecipe, type Recipe, type RecipeRow } from '@/lib/takeoff/recipes'
+import { freeEnds, sanitizeFramingDefaults, type FramingDefaults } from '@/lib/takeoff/framing/framing'
+import { recipeLineQuantities, recipeMaterials, rowToRecipe, type Recipe, type RecipeRow } from '@/lib/takeoff/recipes'
+import { recipeVariables } from '@/lib/takeoff/systemRecipes'
 import { projectItemsInMetres, rowsToItems, type ElementRow, type LayerRow, type SourceRow } from '@/lib/takeoff/rows'
 import { computeOpeningTags, computeSegmentTags, withSegmentTags } from '@/lib/takeoff/segmentTags'
 import { ui } from '../ui'
@@ -811,7 +812,7 @@ export default function TakeoffWorkspacePage() {
     setStatus(t('task.panel.heightApplied'))
   }
   // ---------- Materials of planned tasks ----------
-  const matLabels = { bars: t('mat.bars'), sheets: t('mat.sheets'), un: t('mat.un'), barLen: (v: number) => `${formatNumber(v, 2)} m` }
+  const matLabels = { bars: t('mat.bars'), sheets: t('mat.sheets'), un: t('mat.un'), rolls: t('fixings.rollsUnit'), barLen: (v: number) => `${formatNumber(v, 2)} m` }
   /** Materials of one activity's lines in one location (all sheets), from the wall layout and the activity's rates. */
   function materialsFor(scopeId: string, locationId: string): TaskMaterialRow[] {
     const sc = taskScopes.find(x => x.id === scopeId)
@@ -831,8 +832,12 @@ export default function TakeoffWorkspacePage() {
       const wt = item ? projectRecipeCtx.wallTypeOf?.(item) : null
       const insId = wt?.materials?.insulation
       const ins = insId ? projectRecipeCtx.catalog?.get(insId) : undefined
+      // The wall's estimate: its recipe lines for the whole item; the task takes its stretch's share.
+      const recipeLines = item ? recipeLineQuantities(item, k, recipeOfItem(item), projectRecipeCtx) : []
+      const vars = item && recipeLines.length ? recipeVariables(item, k, wt) : null
       out.push(taskMaterials({
         step: sc.takeoff_step || null, item, sheetItems, ptPerM: k, rates, labels: matLabels,
+        recipeLines, itemBase: vars ? { area: vars.area, length: vars.length } : null, ends: freeEnds(sheetItems, k),
         lines: rows.filter(r => r.source_id === sheetId).map(r => ({ points: r.points, side: r.side, height_m: r.height_m })),
         insulation: ins ? { name: ins.name, unit: ins.unit, packSize: ins.pack_size, packName: ins.pack_name } : sc.takeoff_step === 'insulation' && insId ? { name: t('mat.insulation'), unit: 'm²' } : null,
       }))
@@ -2328,7 +2333,7 @@ export default function TakeoffWorkspacePage() {
                 : !mats.length ? <span style={{ ...ui.small, lineHeight: 1.4 }}>{t(taskScope.takeoff_layer_id ? 'mat.noneYet' : 'mat.noLink')}</span>
                 : <div style={{ display: 'grid', gap: 3 }}>
                   {mats.map(r => { const f = fmtMat(r); return <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, fontSize: 11.5, color: '#294955', padding: '3px 0', borderBottom: '1px solid #f0f4f5' }}>
-                    <span>{r.mat}{r.source === 'rate' ? <em style={{ color: '#8aa0a8', fontStyle: 'normal' }}> · {t('mat.rate')}</em> : null}</span>
+                    <span>{r.mat}<em style={{ color: '#8aa0a8', fontStyle: 'normal' }}> · {t(r.source === 'rate' ? 'mat.rate' : r.source === 'recipe' ? 'mat.fromRecipe' : 'mat.fromLayout')}</em></span>
                     <span style={{ textAlign: 'right' }}><b>{f.whole}</b><br /><span style={{ color: '#8aa0a8', fontSize: 10.5 }}>{f.exact}</span></span>
                   </div> })}
                 </div>}

@@ -7,6 +7,7 @@ import {
   polyLen,
   shapeHeight,
   shapeOpeningArea,
+  type FixingsConfig,
   type FramingConfig,
   type OpeningKind,
   type TakeoffItem,
@@ -37,6 +38,110 @@ export const DEFAULT_LA_PER_STUD_END = 2
 /** Junction rules confirmed by Eduardo: 1 extra stud per L-corner, 2 per T-junction. */
 export const DEFAULT_CORNER_STUDS = 1
 export const DEFAULT_TEE_STUDS = 2
+
+/** Fixing rules agreed with Eduardo: anchors every 0.60 m, the first at most 0.10 m from each track end. */
+export const DEFAULT_ANCHOR_SPACING = 0.6
+export const DEFAULT_ANCHOR_EDGE = 0.1
+
+/** Default fixings: anchors in the floor and ceiling slabs, acoustic band under the floor track. */
+export function defaultFixings(names: { anchor?: string; band?: string } = {}): FixingsConfig {
+  return {
+    anchorSpacing: DEFAULT_ANCHOR_SPACING,
+    anchorEdge: DEFAULT_ANCHOR_EDGE,
+    anchorAt: { floor: true, ceiling: true, walls: false },
+    anchorName: names.anchor || 'Bucha de nylon S6 + parafuso (fixação da guia)',
+    bandAt: { floor: true, ceiling: false, walls: false },
+    bandName: names.band || 'Banda acústica',
+    bandRoll: null,
+  }
+}
+
+/** Valid fixings or null (stored JSON may be partial). */
+export function fixingsOf(raw: unknown): FixingsConfig | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const d = defaultFixings()
+  const places = (v: unknown, def: FixingsConfig['anchorAt']) => {
+    const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+    return { floor: typeof o.floor === 'boolean' ? o.floor : def.floor, ceiling: typeof o.ceiling === 'boolean' ? o.ceiling : def.ceiling, walls: typeof o.walls === 'boolean' ? o.walls : def.walls }
+  }
+  const pos = (v: unknown, def: number) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : def)
+  return {
+    anchorSpacing: pos(r.anchorSpacing, d.anchorSpacing),
+    anchorEdge: typeof r.anchorEdge === 'number' && r.anchorEdge >= 0 ? r.anchorEdge : d.anchorEdge,
+    anchorAt: places(r.anchorAt, d.anchorAt),
+    anchorName: typeof r.anchorName === 'string' && r.anchorName.trim() ? r.anchorName.trim() : d.anchorName,
+    bandAt: places(r.bandAt, d.bandAt),
+    bandName: typeof r.bandName === 'string' && r.bandName.trim() ? r.bandName.trim() : d.bandName,
+    bandRoll: typeof r.bandRoll === 'number' && r.bandRoll > 0 ? r.bandRoll : null,
+  }
+}
+
+/** Anchors along a straight piece: the first and last at most `edge` from the ends, none further apart than `spacing`. */
+export function anchorsAlong(len: number, spacing: number, edge: number): number {
+  if (!(len > 0.005)) return 0
+  const sp = spacing > 0 ? spacing : DEFAULT_ANCHOR_SPACING
+  const span = len - 2 * Math.max(0, edge)
+  if (span <= 1e-9) return 1
+  return Math.ceil(span / sp - 1e-9) + 1
+}
+
+/** Which ends of a wall stop against another system (no framed wall there). */
+export type FreeEnds = { start: boolean; end: boolean }
+
+export type FixingCount = { anchors: number; bandM: number }
+
+/**
+ * Anchors and acoustic band of one wall (or of the stretch [s0, s1] of it, metres along the wall).
+ * Floor = bottom tracks, ceiling = top tracks, walls = end studs at free ends (full height).
+ * A stretch takes its share of each track's anchors (by length), so cutting a wall in tasks
+ * does not add end anchors.
+ */
+export function fixingsForWall(lay: WallLayout, fx: FixingsConfig, ends: FreeEnds, range?: [number, number]): FixingCount {
+  const [s0, s1] = range || [-Infinity, Infinity]
+  let anchors = 0, bandM = 0
+  for (const tr of lay.tracks) {
+    const place = tr.kind === 'guia inferior' ? 'floor' : 'ceiling'
+    const len = tr.x1 - tr.x0
+    if (!(len > 0.005)) continue
+    const inside = Math.max(0, Math.min(tr.x1, s1) - Math.max(tr.x0, s0))
+    if (!(inside > 0)) continue
+    if (fx.anchorAt[place]) anchors += anchorsAlong(len, fx.anchorSpacing, fx.anchorEdge) * (inside / len)
+    if (fx.bandAt[place]) bandM += inside
+  }
+  const endAt = (x: number) => x >= s0 - 1e-6 && x <= s1 + 1e-6
+  for (const [free, x] of [[ends.start, 0], [ends.end, lay.L]] as const) {
+    if (!free || !endAt(x)) continue
+    if (fx.anchorAt.walls) anchors += anchorsAlong(lay.H, fx.anchorSpacing, fx.anchorEdge)
+    if (fx.bandAt.walls) bandM += lay.H
+  }
+  return { anchors, bandM }
+}
+
+/** Free ends of every framed wall: ends that do not touch another framed wall (they stop against another system). */
+export function freeEnds(items: TakeoffItem[], ptPerM: number): Map<TakeoffShape, FreeEnds> {
+  const walls: { item: TakeoffItem; shape: TakeoffShape; halfT: number }[] = []
+  for (const item of items) {
+    if (item.kind !== 'linear' || !item.framing?.on) continue
+    for (const shape of item.shapes) if (shape.pts.length >= 2) walls.push({ item, shape, halfT: ((item.thickness || 0.1) / 2) * ptPerM })
+  }
+  const slack = 0.02 * ptPerM
+  const touches = (w: (typeof walls)[number], p: Vec2) => walls.some(o => {
+    if (o === w || o.shape.page !== w.shape.page) return false
+    const tol = w.halfT + o.halfT + slack
+    for (let i = 1; i < o.shape.pts.length; i++) {
+      const r = projectOnSegment(p, o.shape.pts[i - 1], o.shape.pts[i])
+      const t = Math.max(0, Math.min(1, r.t))
+      const a = o.shape.pts[i - 1], b = o.shape.pts[i]
+      const q: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+      if (dist(p, q) <= tol) return true
+    }
+    return false
+  })
+  const out = new Map<TakeoffShape, FreeEnds>()
+  for (const w of walls) out.set(w.shape, { start: !touches(w, w.shape.pts[0]), end: !touches(w, w.shape.pts[w.shape.pts.length - 1]) })
+  return out
+}
 
 /** Prototype defaults: 0.60 m spacing, door jambs 2, window jambs 1, 3.00 m bars, 1.20 × 2.40 m boards. */
 export function defaultFraming(it: Pick<TakeoffItem, 'thickness'>, labels: FramingLabels = framingLabelsPtBR): FramingConfig {
@@ -290,6 +395,9 @@ export type ItemFramingSummary = { studs: number; studM: number; trackM: number;
 /** Collects pieces per material name across every framed linear layer (global optimisation). */
 export type ScrewCount = { ta: number; la: number }
 
+/** Anchors (un) or acoustic band (m) totals; roll = metres per roll for the band. */
+export type FixingTotal = { name: string; unit: 'un' | 'm'; qty: number; roll: number | null }
+
 /** Screws along one straight line of steel that a board covers: one every `spacing`, ends included. */
 export function screwsAlong(overlap: number, spacing: number): number {
   if (!(overlap > 0.005)) return 0
@@ -448,6 +556,16 @@ export function framingTotals(items: TakeoffItem[], ptPerM: number) {
   const perItem = new Map<TakeoffItem, ItemFramingSummary>()
   const screws = new Map<string, number>()
   const addScrews = (name: string, n: number) => { if (n > 0) screws.set(name, (screws.get(name) || 0) + n) }
+  // Anchors (un) and acoustic band (m) where the framing meets another system.
+  const fixings = new Map<string, FixingTotal>()
+  const addFixing = (name: string, unit: 'un' | 'm', qty: number, roll: number | null = null) => {
+    if (!(qty > 0)) return
+    const key = `${unit}|${name}`
+    const e = fixings.get(key) || { name, unit, qty: 0, roll }
+    e.qty += qty
+    fixings.set(key, e)
+  }
+  const ends = freeEnds(items, ptPerM)
   for (const it of items) {
     if (it.kind !== 'linear' || !it.framing || !it.framing.on) continue
     const F = it.framing
@@ -467,6 +585,12 @@ export function framingTotals(items: TakeoffItem[], ptPerM: number) {
         addScrews(F.laName || framingLabelsPtBR.laScrew!, sc.la)
       }
       addProfile(F.trackName, lay.trackLen)
+      const fx = fixingsOf(F.fixings)
+      if (fx) {
+        const c = fixingsForWall(lay, fx, ends.get(sh) || { start: false, end: false })
+        addFixing(fx.anchorName, 'un', c.anchors)
+        addFixing(fx.bandName, 'm', c.bandM, fx.bandRoll ?? null)
+      }
       for (const f of ['A', 'B'] as const) {
         // One-sided walls (furring, shaft): no boards on that face, so no empty "0 sheets" group either.
         if (!lay.board[f].length) continue
@@ -509,7 +633,7 @@ export function framingTotals(items: TakeoffItem[], ptPerM: number) {
       addScrews(F.laName || framingLabelsPtBR.laScrew!, j.studs * 2 * (F.laPerStudEnd ?? DEFAULT_LA_PER_STUD_END))
     }
   }
-  return { prof, boards, perItem, junctions, screws }
+  return { prof, boards, perItem, junctions, screws, fixings }
 }
 
 /** Distance in metres along a wall polyline to the point closest to p. */

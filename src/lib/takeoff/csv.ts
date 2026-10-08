@@ -112,6 +112,7 @@ export function buildQuantitiesCsv(
       lines.push(row([`${g.name} · ${num(g.W)} × ${num(g.H)} m`, L.board, p.count, L.sheets, num(p.waste * 100, 1), '']))
     }
     for (const [name, n] of T.screws) lines.push(row([name, L.screws || '', Math.ceil(n), 'un', '', '']))
+    for (const f of T.fixings.values()) lines.push(row([f.name, L.screws || '', f.unit === 'm' ? num(f.qty) : Math.ceil(f.qty - 1e-9), f.unit, '', '']))
   }
   if (materials.length) {
     lines.push('')
