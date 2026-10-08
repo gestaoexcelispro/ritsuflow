@@ -832,8 +832,8 @@ function drawTagOverlay(ctx: CanvasRenderingContext2D, THREE: Three, cam: any, a
   }
 }
 
-export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean; underlay?: LoadedUnderlay | null; zones?: UnderlayZone[] }): Promise<Uint8Array | null> {
-  const { items, ptPerM, storeys, width, height, layered = true, tags = false, underlay = null, zones = [] } = opts
+export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean; underlay?: LoadedUnderlay | null; zones?: UnderlayZone[]; grid?: boolean }): Promise<Uint8Array | null> {
+  const { items, ptPerM, storeys, width, height, layered = true, tags = false, underlay = null, zones = [], grid = true } = opts
   if (!ptPerM || !items.some(it => it.shapes.length)) return null
   let THREE: Three
   try { THREE = await loadThree() } catch { return null }
@@ -856,7 +856,7 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
     const s: Scene = { THREE, renderer, scene, cam, ctl, group, raf: 0 }
     const elev = new Map((storeys || []).map(st => [st.page, st.elevation]))
     const elevationOf = (page: number) => elev.get(page) || 0
-    const anchors = build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags, underlay, zones: underlay ? zones.filter(z => z.page === underlay.page) : [] })
+    const anchors = build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags, grid, underlay, zones: underlay ? zones.filter(z => z.page === underlay.page) : [] })
     const tgt = fitWhole(THREE, cam, group, width / height)
     if (tags && anchors.length && tgt) {
       // A little more room around the model for the labels above it.

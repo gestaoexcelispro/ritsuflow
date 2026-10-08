@@ -9,6 +9,30 @@ import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { loadPdfLib } from './printPdf'
 import { ICON_PATHS } from './icons'
 import { layoutLabels } from '@/lib/takeoff/labelLayout'
+import { studGaps, type FieldElevation, type WallCard } from '@/lib/takeoff/fieldSheetData'
+
+/** One row of the task table, already formatted. */
+export type FieldTaskCells = { color: string; tag: string; activity: string; wall: string; face: string; length: string; height: string; openings: string; qty: string }
+
+/** Labels of pages 2, 3 and 5. */
+export type FieldPagesText = {
+  view3dTitle: string
+  tasksTitle: string
+  taskCols: [string, string, string, string, string, string, string, string]
+  wallsTitle: string
+  faceA: string
+  faceB: string
+  elevationsTitle: string
+  elevationsNote: string
+  studs: (n: number) => string
+  sequenceTitle: string
+  seqCols: [string, string, string, string, string]
+  logTitle: string
+  logCols: [string, string, string, string, string, string]
+  historyTitle: string
+  histCols: [string, string, string]
+  pageOf: (n: number, total: number) => string
+}
 
 /** A material line: what to take (whole bars / sheets / packs) and the exact quantity. */
 export type FieldMaterialRow = { mat: string; whole: string; exact: string }
@@ -28,6 +52,17 @@ export type FieldSheetInput = {
   info?: { responsible?: string; crew?: string; dates?: string; notes?: string }
   /** Materials page: per activity (colour, title, rows) and the location summary; skipped when null. */
   materials?: { groups: { color: string; title: string; rows: FieldMaterialRow[] }[]; summary: FieldMaterialRow[] | null } | null
+  /** Page 2: the location in 3D (PNG) and the task table. */
+  view3d?: Uint8Array | null
+  tasks?: FieldTaskCells[] | null
+  /** Page 3: wall type cards and the framing elevation of each wall stretch. */
+  walls?: { card: WallCard; spec: [string, string][] }[] | null
+  elevations?: FieldElevation[] | null
+  /** Page 5: order of work with hold points, the production log and the revision history. */
+  sequence?: { color: string | null; title: string; check: string; hold?: boolean }[] | null
+  log?: { color: string; tag: string; activity: string }[] | null
+  history?: { rev: string; date: string; by: string; current?: boolean }[] | null
+  pages?: FieldPagesText
   /** Estimate takeoff (faint) and planning lines (with tags), on this sheet. */
   items: TakeoffItem[]
   zone: { name: string; pts: Vec2[] }
@@ -271,6 +306,193 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
     const t = winAnsi(text.draft)
     page.drawText(t, { x: area.x + 60, y: area.y + 40, size: 40, font: bold, color: rgb(0.86, 0.15, 0.27), opacity: 0.12, rotate: degrees(28) })
   }
+  // ---- Shared look of the pages after the plan: logo, title, location · revision, footer.
+  const subtitle = winAnsi(`${text.location} · ${text.revision} · ${text.issued}`)
+  const pageHead = (pg: any, title: string) => {
+    if (logo) { const h = 20, w = (logo.width / logo.height) * h; pg.drawImage(logo, { x: W - M - w, y: H - M - h + 4, width: w, height: h }) }
+    pg.drawText(winAnsi(title), { x: M, y: H - M - 10, size: 14, font: bold, color: ink })
+    pg.drawText(subtitle.slice(0, 160), { x: M, y: H - M - 24, size: 7.5, font, color: grey })
+    pg.drawText(winAnsi(text.footer), { x: M, y: M - 10, size: 6.5, font, color: grey })
+    return H - M - 40
+  }
+  const PT = input.pages
+  /** Flowing writer: a cursor that starts new pages (same title) when the space runs out. */
+  const flow = (title: string) => {
+    const st = { p: out.addPage([W, H]) as any, y: 0 }
+    st.y = pageHead(st.p, title)
+    const need = (h: number) => { if (st.y - h < M + 6) { st.p = out.addPage([W, H]); st.y = pageHead(st.p, title) } }
+    return { st, need }
+  }
+  /** A table with fixed column widths (fractions of the width); returns after the last row. */
+  const drawTable = (f: ReturnType<typeof flow>, cols: { label: string; w: number; align?: 'right' }[], rows: { cells: string[]; color?: string | null; fill?: [number, number, number] | null; bold?: boolean }[], opts: { rowH?: number; size?: number; x?: number; width?: number } = {}) => {
+    const x0 = opts.x ?? M, TW = opts.width ?? W - 2 * M, rowH = opts.rowH ?? 14, size = opts.size ?? 7.8
+    const xs: number[] = []
+    let acc = x0
+    for (const c of cols) { xs.push(acc); acc += c.w * TW }
+    const header = () => {
+      f.need(rowH + 6)
+      f.st.p.drawRectangle({ x: x0, y: f.st.y - rowH + 4, width: TW, height: rowH, color: rgb(0.93, 0.96, 0.96) })
+      cols.forEach((c, i) => {
+        const tx = winAnsi(c.label)
+        const tw = bold.widthOfTextAtSize(tx, 7)
+        f.st.p.drawText(tx, { x: c.align === 'right' ? xs[i] + c.w * TW - tw - 4 : xs[i] + 4, y: f.st.y - rowH / 2 + 1.5, size: 7, font: bold, color: grey })
+      })
+      f.st.y -= rowH
+    }
+    header()
+    for (const r of rows) {
+      if (f.st.y - rowH < M + 6) { f.need(rowH * 3); header() }
+      if (r.fill) f.st.p.drawRectangle({ x: x0, y: f.st.y - rowH + 4, width: TW, height: rowH, color: rgb(r.fill[0], r.fill[1], r.fill[2]) })
+      cols.forEach((c, i) => {
+        let tx = winAnsi(r.cells[i] || '')
+        const maxW = c.w * TW - 8 - (i === 0 && r.color ? 12 : 0)
+        const fnt = r.bold || (i === 0 && r.color) ? bold : font
+        while (tx.length > 1 && fnt.widthOfTextAtSize(tx, size) > maxW) tx = tx.slice(0, -2) + '…'
+        const tw = fnt.widthOfTextAtSize(tx, size)
+        let tx0 = c.align === 'right' ? xs[i] + c.w * TW - tw - 4 : xs[i] + 4
+        if (i === 0 && r.color) { f.st.p.drawRectangle({ x: xs[i] + 4, y: f.st.y - rowH / 2 - 1, width: 8, height: 6, color: col(r.color) }); tx0 += 12 }
+        f.st.p.drawText(tx, { x: tx0, y: f.st.y - rowH / 2 + 1.5, size, font: fnt, color: i === 0 && r.color ? col(r.color) : ink })
+      })
+      f.st.p.drawLine({ start: { x: x0, y: f.st.y - rowH + 4 }, end: { x: x0 + TW, y: f.st.y - rowH + 4 }, thickness: 0.4, color: line })
+      f.st.y -= rowH
+    }
+    f.st.y -= 10
+  }
+
+  // ---- Page 2: the location in 3D and the task table.
+  if (PT && (input.view3d || input.tasks?.length)) {
+    const f = flow(PT.view3dTitle)
+    if (input.view3d) {
+      try {
+        const img = await out.embedPng(input.view3d)
+        const boxW = W - 2 * M, boxH = input.tasks?.length ? Math.min(H * 0.5, f.st.y - M - 80) : f.st.y - M - 10
+        const s = Math.min(boxW / img.width, boxH / img.height)
+        const iw = img.width * s, ih = img.height * s
+        f.st.p.drawRectangle({ x: M, y: f.st.y - boxH, width: boxW, height: boxH, color: rgb(1, 1, 1), borderColor: line, borderWidth: 0.6 })
+        f.st.p.drawImage(img, { x: M + (boxW - iw) / 2, y: f.st.y - boxH + (boxH - ih) / 2, width: iw, height: ih })
+        f.st.y -= boxH + 16
+      } catch { /* no picture: the table still prints */ }
+    }
+    if (input.tasks?.length) {
+      f.need(40)
+      f.st.p.drawText(winAnsi(PT.tasksTitle).toUpperCase(), { x: M, y: f.st.y, size: 8, font: bold, color: teal }); f.st.y -= 8
+      const c = PT.taskCols
+      drawTable(f, [{ label: c[0], w: 0.11 }, { label: c[1], w: 0.25 }, { label: c[2], w: 0.24 }, { label: c[3], w: 0.06 }, { label: c[4], w: 0.08, align: 'right' }, { label: c[5], w: 0.08, align: 'right' }, { label: c[6], w: 0.08, align: 'right' }, { label: c[7], w: 0.10, align: 'right' }],
+        input.tasks.map(t => ({ color: t.color, cells: [t.tag, t.activity, t.wall, t.face, t.length, t.height, t.openings, t.qty] })))
+    }
+  }
+
+  // ---- Page 3: wall type cards, then the framing elevation of each wall stretch.
+  if (PT && (input.walls?.length || input.elevations?.length)) {
+    const f = flow(PT.wallsTitle)
+    for (const w of input.walls || []) {
+      const cardH = Math.max(96, 22 + Math.ceil(w.spec.length / 2) * 12)
+      f.need(cardH + 10)
+      const top = f.st.y
+      const p = f.st.p
+      p.drawRectangle({ x: M, y: top - cardH, width: W - 2 * M, height: cardH, borderColor: line, borderWidth: 0.7, color: rgb(0.99, 1, 1) })
+      p.drawRectangle({ x: M, y: top - cardH, width: 4, height: cardH, color: col(w.card.color) })
+      p.drawText(winAnsi(w.card.name).slice(0, 110), { x: M + 12, y: top - 15, size: 10.5, font: bold, color: ink })
+      // Specification in two columns (left 62% of the card).
+      const specW = (W - 2 * M) * 0.62
+      w.spec.forEach(([label, value], i) => {
+        const cx = M + 12 + (i % 2) * (specW / 2), cy = top - 32 - Math.floor(i / 2) * 12
+        const l = winAnsi(`${label}: `)
+        const lw = bold.widthOfTextAtSize(l, 7)
+        p.drawText(l, { x: cx, y: cy, size: 7, font: bold, color: grey })
+        let v = winAnsi(value)
+        while (v.length > 1 && font.widthOfTextAtSize(v, 7.3) > specW / 2 - lw - 10) v = v.slice(0, -2) + '…'
+        p.drawText(v, { x: cx + lw, y: cy, size: 7.3, font, color: ink })
+      })
+      // Section across the wall (to scale): face A boards, the stud with insulation, face B boards.
+      const c = w.card
+      const total = c.faceA.layers * c.faceA.thkMm + c.coreMm + c.faceB.layers * c.faceB.thkMm
+      const sx0 = M + 12 + specW + 14, sw = W - M - 14 - sx0
+      const k3 = Math.min(sw / Math.max(total, 1), 1.6)
+      const secH = Math.min(cardH - 40, 52)
+      const sy = top - 24 - secH
+      let x = sx0 + (sw - total * k3) / 2
+      const boardCol = (n: string) => (/\bRU\b|umid|water|mold|moisture/i.test(n) ? rgb(0.43, 0.75, 0.49) : /\bRF\b|fogo|fire|type x/i.test(n) ? rgb(0.93, 0.56, 0.56) : rgb(0.86, 0.88, 0.9))
+      const boards = (face: WallCard['faceA']) => { for (let i = 0; i < face.layers; i++) { p.drawRectangle({ x, y: sy, width: face.thkMm * k3, height: secH, color: boardCol(face.name), borderColor: grey, borderWidth: 0.4 }); x += face.thkMm * k3 } }
+      const xa = x
+      boards(c.faceA)
+      const coreX = x, coreW = c.coreMm * k3
+      if (c.insulation) {
+        p.drawRectangle({ x: coreX, y: sy, width: coreW, height: secH, color: rgb(0.99, 0.95, 0.8) })
+        const zig: string[] = []
+        const n = 8
+        for (let i = 0; i <= n; i++) zig.push(`${i ? 'L' : 'M'}${(coreX + (i % 2 ? coreW - 2 : 2)).toFixed(1)},${(-(sy + (secH * i) / n)).toFixed(1)}`)
+        p.drawSvgPath(zig.join(' '), { x: 0, y: 0, borderColor: rgb(0.85, 0.65, 0.2), borderWidth: 0.6 })
+      }
+      // The stud: a C profile drawn as the web and two flanges.
+      p.drawLine({ start: { x: coreX, y: sy + secH / 2 - 10 }, end: { x: coreX + coreW, y: sy + secH / 2 - 10 }, thickness: 1.2, color: ink })
+      p.drawLine({ start: { x: coreX, y: sy + secH / 2 - 10 }, end: { x: coreX, y: sy + secH / 2 + 10 }, thickness: 1.2, color: ink })
+      p.drawLine({ start: { x: coreX + coreW, y: sy + secH / 2 - 10 }, end: { x: coreX + coreW, y: sy + secH / 2 + 10 }, thickness: 1.2, color: ink })
+      x = coreX + coreW
+      boards(c.faceB)
+      p.drawText(winAnsi(PT.faceA), { x: xa - 4 - bold.widthOfTextAtSize(winAnsi(PT.faceA), 7), y: sy + secH / 2 - 2, size: 7, font: bold, color: grey })
+      p.drawText(winAnsi(PT.faceB), { x: x + 4, y: sy + secH / 2 - 2, size: 7, font: bold, color: grey })
+      const totTxt = winAnsi(`${fmt(total)} mm`)
+      p.drawText(totTxt, { x: sx0 + (sw - font.widthOfTextAtSize(totTxt, 7)) / 2, y: sy - 10, size: 7, font, color: grey })
+      f.st.y = top - cardH - 12
+    }
+    const els = input.elevations || []
+    if (els.length) {
+      f.need(60)
+      f.st.p.drawText(winAnsi(PT.elevationsTitle).toUpperCase(), { x: M, y: f.st.y, size: 8, font: bold, color: teal })
+      f.st.p.drawText(winAnsi(PT.elevationsNote), { x: M + bold.widthOfTextAtSize(winAnsi(PT.elevationsTitle).toUpperCase(), 8) + 10, y: f.st.y, size: 6.8, font, color: grey })
+      f.st.y -= 12
+      const colsN = 2, gap = 14
+      const cellW = (W - 2 * M - gap * (colsN - 1)) / colsN, cellH = paper === 'A3' ? 230 : 160
+      for (let i = 0; i < els.length; i += colsN) {
+        f.need(cellH)
+        const top = f.st.y
+        for (let j = 0; j < colsN && i + j < els.length; j++) drawElevation(f.st.p, els[i + j], M + j * (cellW + gap), top - cellH, cellW, cellH)
+        f.st.y = top - cellH - 8
+      }
+    }
+  }
+
+  /** One framing elevation in a box: the stretch to scale, studs, tracks, headers, openings and the stud spacing below. */
+  function drawElevation(p: any, e: FieldElevation, bx: number, by: number, bw: number, bh: number) {
+    const c = col(e.color)
+    const title = winAnsi(`${e.tags.join(', ')} · ${e.wall}`)
+    let tt = title
+    while (tt.length > 1 && bold.widthOfTextAtSize(tt, 8) > bw - 4) tt = tt.slice(0, -2) + '…'
+    p.drawText(tt, { x: bx, y: by + bh - 9, size: 8, font: bold, color: c })
+    const meta = winAnsi(`${fmt(e.lengthM)} × ${fmt(e.heightM)} m · ${PT!.studs(e.studs.length)} · ${fmt(e.spacingM)} m`)
+    p.drawText(meta, { x: bx, y: by + bh - 19, size: 6.8, font, color: grey })
+    const L = Math.max(e.lengthM, 0.1), Hh = Math.max(e.heightM, 0.1)
+    const s = Math.min((bw - 24) / L, (bh - 54) / Hh)
+    const ox = bx + 12 + (bw - 24 - L * s) / 2, oy = by + 24
+    const X = (v: number) => ox + v * s, Y = (v: number) => oy + v * s
+    p.drawRectangle({ x: X(0), y: Y(0), width: L * s, height: Hh * s, color: rgb(0.98, 0.99, 0.99), borderColor: line, borderWidth: 0.5 })
+    for (const o of e.openings) {
+      p.drawRectangle({ x: X(o.x0), y: Y(o.y0), width: (o.x1 - o.x0) * s, height: (o.y1 - o.y0) * s, color: o.kind === 'window' ? rgb(0.88, 0.95, 1) : rgb(1, 0.95, 0.88), borderColor: o.kind === 'window' ? rgb(0.01, 0.52, 0.78) : rgb(0.71, 0.33, 0.04), borderWidth: 0.6, borderDashArray: [2, 1.5] })
+    }
+    for (const t of e.tracks) p.drawLine({ start: { x: X(t.x0), y: Y(t.y) }, end: { x: X(t.x1), y: Y(t.y) }, thickness: 1.8, color: rgb(0.45, 0.52, 0.56) })
+    for (const h of e.headers) p.drawLine({ start: { x: X(h.x0), y: Y(h.y) }, end: { x: X(h.x1), y: Y(h.y) }, thickness: 1.4, color: rgb(0.45, 0.52, 0.56) })
+    for (const st of e.studs) p.drawLine({ start: { x: X(st.x), y: Y(st.y0) }, end: { x: X(st.x), y: Y(st.y1) }, thickness: st.kind === 'batente' ? 1.4 : st.kind === 'complemento' ? 0.6 : 0.9, color: c, opacity: st.kind === 'complemento' ? 0.7 : 1 })
+    // Dimension chain: one tick per stud, the gap written when it fits.
+    const dy = oy - 9
+    p.drawLine({ start: { x: X(0), y: dy }, end: { x: X(L), y: dy }, thickness: 0.4, color: grey })
+    const gaps = studGaps(e.studs, L)
+    let acc = 0
+    p.drawLine({ start: { x: X(0), y: dy - 2.5 }, end: { x: X(0), y: dy + 2.5 }, thickness: 0.4, color: grey })
+    for (const g of gaps) {
+      const a = acc
+      acc += g
+      p.drawLine({ start: { x: X(acc), y: dy - 2.5 }, end: { x: X(acc), y: dy + 2.5 }, thickness: 0.4, color: grey })
+      const label = fmt(g)
+      const lw = font.widthOfTextAtSize(label, 5)
+      if (g * s > lw + 2) p.drawText(label, { x: X(a + g / 2) - lw / 2, y: dy + 2, size: 5, font, color: grey })
+    }
+    const total = winAnsi(`${fmt(L)} m`)
+    p.drawText(total, { x: X(L / 2) - font.widthOfTextAtSize(total, 6.5) / 2, y: dy - 10, size: 6.5, font: bold, color: ink })
+    const hTxt = winAnsi(`${fmt(Hh)} m`)
+    p.drawText(hTxt, { x: X(0) - 4, y: Y(Hh / 2), size: 6, font, color: grey, rotate: degrees(90) })
+  }
+
   // ---- Materials page(s): per activity, then the location summary.
   const mats = input.materials
   if (mats && (mats.groups.length || mats.summary?.length)) {
@@ -311,6 +533,42 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
       table(text.materialsSummary || '', null, mats.summary)
     }
     if (text.materialsNote) { need(16); p.drawText(winAnsi(text.materialsNote), { x: M, y: Math.max(M, yy - 4), size: 7, font, color: grey }) }
+  }
+
+  // ---- Page 5: order of work with hold points, the production log to fill in, the revision history.
+  if (PT && (input.sequence?.length || input.log?.length || input.history?.length)) {
+    const f = flow(PT.sequenceTitle)
+    if (input.sequence?.length) {
+      const c = PT.seqCols
+      let n = 0
+      drawTable(f, [{ label: c[0], w: 0.05 }, { label: c[1], w: 0.33 }, { label: c[2], w: 0.36 }, { label: c[3], w: 0.15 }, { label: c[4], w: 0.11 }],
+        input.sequence.map(r => (r.hold
+          ? { cells: ['', r.title, r.check, '', ''], fill: [1, 0.95, 0.8] as [number, number, number], bold: true }
+          : { cells: [String(++n), r.title, r.check, '', ''], color: null })), { rowH: 18 })
+    }
+    if (input.log?.length) {
+      f.need(60)
+      f.st.p.drawText(winAnsi(PT.logTitle).toUpperCase(), { x: M, y: f.st.y, size: 8, font: bold, color: teal }); f.st.y -= 8
+      const c = PT.logCols
+      drawTable(f, [{ label: c[0], w: 0.11 }, { label: c[1], w: 0.27 }, { label: c[2], w: 0.11 }, { label: c[3], w: 0.17 }, { label: c[4], w: 0.08 }, { label: c[5], w: 0.26 }],
+        [...input.log.map(r => ({ color: r.color, cells: [r.tag, r.activity, '', '', '', ''] })), ...[0, 1, 2].map(() => ({ cells: ['', '', '', '', '', ''] }))], { rowH: 20 })
+    }
+    if (input.history?.length) {
+      f.need(50)
+      f.st.p.drawText(winAnsi(PT.historyTitle).toUpperCase(), { x: M, y: f.st.y, size: 8, font: bold, color: teal }); f.st.y -= 8
+      const c = PT.histCols
+      drawTable(f, [{ label: c[0], w: 0.15 }, { label: c[1], w: 0.25 }, { label: c[2], w: 0.6 }],
+        input.history.map(h => ({ cells: [h.rev, h.date, h.by], bold: !!h.current })), { width: (W - 2 * M) * 0.6 })
+    }
+  }
+
+  // Page numbers on every page ("2 / 5").
+  if (PT) {
+    const pages = out.getPages()
+    pages.forEach((pg: any, i: number) => {
+      const t = winAnsi(PT.pageOf(i + 1, pages.length))
+      pg.drawText(t, { x: W - M - font.widthOfTextAtSize(t, 6.5), y: M - 10, size: 6.5, font, color: grey })
+    })
   }
 
   const bytes = await out.save()

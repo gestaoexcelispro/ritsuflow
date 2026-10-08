@@ -17,6 +17,7 @@
     "test:task-drawings": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/task-drawings.test.mjs",
     "test:field-sheet": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/field-sheet.test.mjs",
     "test:task-materials": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/task-materials.test.mjs",
+    "test:field-sheet-data": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/field-sheet-data.test.mjs",
     "test:library": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/standard-library.test.mjs",
     "library:sql": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/standard-library/generate.mjs"
   },
