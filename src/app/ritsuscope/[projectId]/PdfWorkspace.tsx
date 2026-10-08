@@ -1382,7 +1382,7 @@ export default function PdfWorkspace(props: Props) {
               multiSelected={boxSelSet}
               onMovePoints={tasksMode ? undefined : (id, pts) => void movePoints(id, pts)}
               snap={snapOn}
-              showTags={tagsOn && !zoning && !tasksMode}
+              showTags={tagsOn && !zoning}
               backgroundFade={backgroundFade}
               ortho={orthoOn}
               onSize={size => { setPageSize(size); setLoadTick(n => n + 1) }}

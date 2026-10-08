@@ -1,0 +1,191 @@
+// Field sheet PDF (RitsuScope › Tarefas): one A4 landscape page for one location.
+// Left: the location (its zone + 1 m) cut out of the original sheet, still vector, with the estimate
+// takeoff faint and the planning lines in their activity colours and labels. Right: title block with
+// the location, the activities and quantities, the revision, and the location's FieldOp QR code.
+import { buildMarks, invert, winAnsi, type Matrix } from '@/lib/takeoff/printMarkup'
+import type { TakeoffItem, Vec2 } from '@/lib/takeoff/geometry'
+import { fitCrop, printedRatio, userBox, wrapText } from '@/lib/takeoff/fieldSheet'
+import { hexToRgb } from '@/lib/takeoff/printMarkup'
+import { loadPdfLib } from './printPdf'
+import { ICON_PATHS } from './icons'
+
+export type FieldSheetRow = { color: string; code: string; name: string; qty: string; detail?: string }
+
+export type FieldSheetInput = {
+  url: string
+  pageNumber: number
+  ptPerM: number
+  /** Viewport box (PDF points, y down) to cut out: the zone + 1 m. */
+  frame: [number, number, number, number]
+  /** Estimate takeoff (faint) and planning lines (with tags), on this sheet. */
+  items: TakeoffItem[]
+  zone: { name: string; pts: Vec2[] }
+  backgroundFade?: number
+  rows: FieldSheetRow[]
+  /** Absolute URL of the location's FieldOp scan page (QR); skipped when null. */
+  qrUrl: string | null
+  logoUrl?: string
+  text: {
+    kicker: string // "FICHA DE CAMPO"
+    location: string
+    path: string // project · level · sheet
+    scope: string // "Todas as atividades" / "Atividade 1.1"
+    revision: string // "REV 0"
+    issued: string // "Emitida em 08/10/2026 por Eduardo"
+    activities: string
+    qrCaption: string
+    scale: string // "Escala aprox. 1:{ratio} · local + 1 m" with {ratio}
+    footer: string
+    draft?: string // "PRÉVIA · NÃO EMITIDA" watermark when previewing
+  }
+  fmt: (v: number) => string
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function qrPath(value: string): Promise<{ d: string; size: number } | null> {
+  try {
+    const [{ createElement }, { renderToStaticMarkup }, { QRCodeSVG }] = await Promise.all([import('react'), import('react-dom/server'), import('qrcode.react')])
+    const svg = renderToStaticMarkup(createElement(QRCodeSVG, { value, size: 256, level: 'M', marginSize: 0 }))
+    const vb = /viewBox="0 0 (\d+) (\d+)"/.exec(svg)
+    const paths = [...svg.matchAll(/<path[^>]*?fill="([^"]+)"[^>]*?d="([^"]+)"|<path[^>]*?d="([^"]+)"[^>]*?fill="([^"]+)"/g)]
+      .map(m => ({ fill: (m[1] || m[4] || '').toLowerCase(), d: m[2] || m[3] || '' }))
+    const fg = paths.find(p => p.fill !== '#ffffff' && p.fill !== 'white' && p.d)
+    if (!vb || !fg) return null
+    return { d: fg.d, size: Number(vb[1]) }
+  } catch { return null }
+}
+
+export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> {
+  const { url, pageNumber, ptPerM, frame, items, zone, backgroundFade = 0, rows, qrUrl, logoUrl, text, fmt } = input
+  const [PDFLib, srcBytes, logoBytes, qr] = await Promise.all([
+    loadPdfLib(),
+    fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer() }),
+    logoUrl ? fetch(logoUrl).then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null) : Promise.resolve(null),
+    qrUrl ? qrPath(qrUrl) : Promise.resolve(null),
+  ])
+  const { PDFDocument, StandardFonts, rgb, LineCapStyle, pushGraphicsState, popGraphicsState, rectangle, clip, endPath, degrees } = PDFLib
+
+  // Page transform (viewport → user space), from pdf.js like the project print.
+  const pdfjs = await import('pdfjs-dist-v5')
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+  let toUser: Matrix
+  {
+    const task = pdfjs.getDocument({ data: new Uint8Array(srcBytes.slice(0)) })
+    try {
+      const doc = await task.promise
+      const page = await doc.getPage(pageNumber)
+      toUser = invert(page.getViewport({ scale: 1 }).transform as Matrix)
+    } finally { await task.destroy() }
+  }
+
+  const out = await PDFDocument.create()
+  const font = await out.embedFont(StandardFonts.Helvetica)
+  const bold = await out.embedFont(StandardFonts.HelveticaBold)
+  const ink = rgb(0.09, 0.2, 0.25), grey = rgb(0.4, 0.48, 0.52), teal = rgb(0.06, 0.62, 0.57), line = rgb(0.83, 0.88, 0.89)
+  const col = (hex: string | [number, number, number]) => { const c = typeof hex === 'string' ? hexToRgb(hex) : hex; return rgb(c[0], c[1], c[2]) }
+  const W = 842, H = 595, M = 22
+  const page = out.addPage([W, H])
+
+  // ---- Map: the location cut out of the original sheet (vector), clipped to its frame.
+  const src = await PDFDocument.load(srcBytes, { ignoreEncryption: true })
+  const crop = userBox(frame, toUser)
+  const area = { x: M, y: M + 16, w: 560, h: H - 2 * M - 16 }
+  const fit = fitCrop(crop, area)
+  const embedded = await out.embedPage(src.getPage(pageNumber - 1), crop)
+  page.drawRectangle({ x: area.x, y: area.y, width: area.w, height: area.h, color: rgb(1, 1, 1) })
+  page.pushOperators(pushGraphicsState(), rectangle(area.x, area.y, area.w, area.h), clip(), endPath())
+  page.drawPage(embedded, { x: fit.x, y: fit.y, width: fit.w, height: fit.h })
+  if (backgroundFade > 0) page.drawRectangle({ x: area.x, y: area.y, width: area.w, height: area.h, color: rgb(1, 1, 1), opacity: Math.min(0.8, backgroundFade) })
+
+  const k = fit.k
+  const P = (p: Vec2) => fit.map(p)
+  const pathOf = (pts: Vec2[], close: boolean) => pts.map((p, i) => { const q = P(p); return `${i ? 'L' : 'M'}${q[0].toFixed(2)},${(-q[1]).toFixed(2)}` }).join(' ') + (close ? ' Z' : '')
+  // The location's outline (dashed) under everything else.
+  const zUser = zone.pts.map(p => [toUser[0] * p[0] + toUser[2] * p[1] + toUser[4], toUser[1] * p[0] + toUser[3] * p[1] + toUser[5]] as Vec2)
+  if (zUser.length >= 3) page.drawSvgPath(pathOf(zUser, true), { x: 0, y: 0, color: rgb(0.05, 0.65, 0.91), opacity: 0.06, borderColor: rgb(0.05, 0.65, 0.91), borderWidth: 1, borderDashArray: [5, 3] })
+
+  const tagScale = 1.15
+  for (const m of buildMarks(items, [], toUser, ptPerM, fmt)) {
+    if (m.type === 'polygon') page.drawSvgPath(pathOf(m.pts, true), { x: 0, y: 0, color: col(m.color), opacity: m.fillOpacity, borderColor: col(m.color), borderWidth: m.borderWidth, borderOpacity: 0.6 })
+    else if (m.type === 'polyline') page.drawSvgPath(pathOf(m.pts, false), { x: 0, y: 0, borderColor: col(m.color), borderWidth: Math.max(0.6, m.width * k), borderOpacity: m.opacity, borderLineCap: LineCapStyle.Round })
+    else if (m.type === 'opening') {
+      const a = P(m.a), b = P(m.b), at = P(m.at)
+      page.drawLine({ start: { x: a[0], y: a[1] }, end: { x: b[0], y: b[1] }, thickness: Math.max(0.8, m.width * k), color: col(m.color), opacity: 0.85 })
+      page.drawCircle({ x: at[0], y: at[1], size: 6, color: rgb(1, 1, 1), borderColor: col(m.color), borderWidth: 0.8 })
+      const icon = ICON_PATHS[m.kind === 'door' ? 'door' : m.kind === 'window' ? 'window' : 'opening']
+      page.drawSvgPath(icon, { x: at[0] - 3.6, y: at[1] + 3.6, scale: 0.3, borderColor: col(m.color), borderWidth: 2.4, borderLineCap: LineCapStyle.Round })
+    } else if (m.type === 'tag') {
+      const at = P(m.at)
+      const t = winAnsi(m.text)
+      const size = 6.5 * tagScale
+      const w = bold.widthOfTextAtSize(t, size) + 6
+      page.drawRectangle({ x: at[0] - w / 2, y: at[1] - 5, width: w, height: 10.5, color: rgb(1, 1, 1), opacity: 0.95, borderColor: col(m.color), borderWidth: 0.9 })
+      page.drawText(t, { x: at[0] - w / 2 + 3, y: at[1] - 2.4, size, font: bold, color: col(m.color) })
+    } else if (m.type === 'dot') {
+      const at = P(m.at)
+      page.drawCircle({ x: at[0], y: at[1], size: Math.max(2, m.radius * Math.min(2, k)), color: col(m.color), opacity: m.opacity ?? 1 })
+    }
+  }
+  page.pushOperators(popGraphicsState())
+  page.drawRectangle({ x: area.x, y: area.y, width: area.w, height: area.h, borderColor: line, borderWidth: 0.8 })
+  const ratio = printedRatio(ptPerM, k)
+  page.drawText(winAnsi(text.scale.replace('{ratio}', ratio ? String(ratio) : '—')), { x: area.x, y: M + 4, size: 7.5, font, color: grey })
+
+  // ---- Title block (right column).
+  const X = area.x + area.w + 14, CW = W - M - X
+  let y = H - M
+  let logo: any = null
+  if (logoBytes) { try { logo = await out.embedPng(logoBytes) } catch { logo = null } }
+  if (logo) { const h = 24, w = (logo.width / logo.height) * h; page.drawImage(logo, { x: X, y: y - h, width: w, height: h }); y -= h + 10 }
+  page.drawText(winAnsi(text.kicker), { x: X, y: y - 8, size: 8, font: bold, color: teal }); y -= 26
+  for (const l of wrapText(winAnsi(text.location), CW, s => bold.widthOfTextAtSize(s, 17), 2)) { page.drawText(l, { x: X, y, size: 17, font: bold, color: ink }); y -= 20 }
+  for (const l of wrapText(winAnsi(text.path), CW, s => font.widthOfTextAtSize(s, 8), 2)) { page.drawText(l, { x: X, y, size: 8, font, color: grey }); y -= 11 }
+  y -= 4
+  page.drawText(winAnsi(text.scope), { x: X, y, size: 9, font: bold, color: ink }); y -= 16
+
+  // Revision box.
+  page.drawRectangle({ x: X, y: y - 34, width: CW, height: 38, color: rgb(0.94, 0.98, 0.97), borderColor: teal, borderWidth: 0.8 })
+  page.drawText(winAnsi(text.revision), { x: X + 8, y: y - 17, size: 15, font: bold, color: teal })
+  const issued = wrapText(winAnsi(text.issued), CW - 80, s => font.widthOfTextAtSize(s, 7), 2)
+  issued.forEach((l, i) => page.drawText(l, { x: X + 74, y: y - 12 - i * 9, size: 7, font, color: grey }))
+  y -= 50
+
+  // Activities and quantities.
+  page.drawText(winAnsi(text.activities).toUpperCase(), { x: X, y, size: 7.5, font: bold, color: grey }); y -= 6
+  page.drawLine({ start: { x: X, y }, end: { x: X + CW, y }, thickness: 0.5, color: line }); y -= 12
+  const qrSize = qr ? 92 : 0
+  const bottomLimit = M + (qr ? qrSize + 26 : 10)
+  for (const r of rows) {
+    const qty = winAnsi(r.qty)
+    const qw = bold.widthOfTextAtSize(qty, 8.5)
+    const nameLines = wrapText(winAnsi(`${r.code} ${r.name}`.trim()), CW - qw - 22, s => font.widthOfTextAtSize(s, 7.8), 2)
+    const need = nameLines.length * 10 + (r.detail ? 9 : 0) + 6
+    if (y - need < bottomLimit) break
+    page.drawRectangle({ x: X, y: y - 1, width: 9, height: 7, color: col(r.color) })
+    nameLines.forEach((l, i) => page.drawText(l, { x: X + 14, y: y - i * 10, size: 7.8, font, color: ink }))
+    page.drawText(qty, { x: X + CW - qw, y, size: 8.5, font: bold, color: col(r.color) })
+    y -= nameLines.length * 10
+    if (r.detail) { page.drawText(winAnsi(r.detail).slice(0, 70), { x: X + 14, y, size: 6.8, font, color: grey }); y -= 9 }
+    y -= 5
+  }
+
+  // FieldOp QR code of the location.
+  if (qr) {
+    const s = qrSize / qr.size
+    const qx = X, qy = M + 18 + qrSize
+    page.drawRectangle({ x: qx - 4, y: M + 14, width: qrSize + 8, height: qrSize + 8, color: rgb(1, 1, 1), borderColor: line, borderWidth: 0.6 })
+    page.drawSvgPath(qr.d, { x: qx, y: qy, scale: s, color: rgb(0, 0, 0) })
+    for (const [i, l] of wrapText(winAnsi(text.qrCaption), CW - qrSize - 14, s2 => font.widthOfTextAtSize(s2, 7.5), 4).entries()) {
+      page.drawText(l, { x: qx + qrSize + 12, y: qy - 10 - i * 10, size: 7.5, font, color: grey })
+    }
+  }
+  page.drawText(winAnsi(text.footer), { x: X, y: M + 2, size: 6.5, font, color: grey })
+
+  // Preview watermark.
+  if (text.draft) {
+    const t = winAnsi(text.draft)
+    page.drawText(t, { x: area.x + 60, y: area.y + 40, size: 40, font: bold, color: rgb(0.86, 0.15, 0.27), opacity: 0.12, rotate: degrees(28) })
+  }
+  const bytes = await out.save()
+  return new Blob([bytes], { type: 'application/pdf' })
+}

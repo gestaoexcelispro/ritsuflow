@@ -74,6 +74,8 @@ import { itemShareByZone, NONE } from '@/lib/takeoff/locationShare'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
 import { frameOf, measureTaskLines, takeWallAt, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
+import { fingerprint, planColor, planLabel, tagsOnLongest } from '@/lib/takeoff/fieldSheet'
+import { buildFieldSheetPdf, type FieldSheetRow } from './fieldSheetPdf'
 
 type Project = { id: string; project_code: string | null; name: string; country: string | null; country_code: string | null; stage?: string | null }
 
@@ -117,7 +119,8 @@ const TASK_COLOR = '#E11D48'
 /** Location kinds that group others (not where work is built). */
 const TASK_GROUP_KINDS = new Set(['building', 'floor', 'zone'])
 type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null }
-type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null }
+type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null; qr_token: string | null }
+type FieldIssueRow = { id: string; location_id: string; kind: 'location' | 'activity'; scope_item_id: string | null; revision: number; fingerprint: string | null; file_path: string | null; issued_by_name: string | null; issued_at: string }
 
 export default function TakeoffWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -191,6 +194,10 @@ export default function TakeoffWorkspacePage() {
   const [taskWalls, setTaskWalls] = useState(true)
   const [taskFrameTick, setTaskFrameTick] = useState(0)
   const [tasksLoaded, setTasksLoaded] = useState(false)
+  /** Planning layer (the planner's lines) shown on the sheet; `taskWalls` is the estimate layer. */
+  const [taskPlan, setTaskPlan] = useState(true)
+  const [fieldIssues, setFieldIssues] = useState<FieldIssueRow[]>([])
+  const [fieldBusy, setFieldBusy] = useState<string | null>(null)
   /** Kind given to the next zone drawn in Zoning. */
   const [drawKind, setDrawKind] = useState<ZoneKind>('room')
   /** Old Location Map pages not moved into RitsuScope yet. */
@@ -285,11 +292,14 @@ export default function TakeoffWorkspacePage() {
 
   const loadTasks = useCallback(async () => {
     const supabase = createClient()
-    const [sc, lc, td] = await Promise.all([
+    const [sc, lc, td, fi] = await Promise.all([
       supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code'),
-      supabase.from('locations').select('id, name, location_type, parent_id, sequence_number').eq('project_id', projectId).order('sequence_number'),
+      supabase.from('locations').select('id, name, location_type, parent_id, sequence_number, qr_token').eq('project_id', projectId).order('sequence_number'),
       supabase.from('location_task_drawings').select('*').eq('project_id', projectId),
+      supabase.from('field_sheet_issues').select('id, location_id, kind, scope_item_id, revision, fingerprint, file_path, issued_by_name, issued_at').eq('project_id', projectId).order('revision', { ascending: false }),
     ])
+    // Field sheet revisions are optional: without their table the rest still works.
+    setFieldIssues(fi.error ? [] : ((fi.data || []) as FieldIssueRow[]))
     const failure = sc.error || lc.error || td.error
     if (failure) setError(t('workspace.error', { message: failure.message }))
     setTaskScopes((sc.data || []) as TaskScopeRow[])
@@ -697,14 +707,30 @@ export default function TakeoffWorkspacePage() {
   const levelHidden = currentBranch != null && hiddenBranches.has(currentBranch)
   const shownItems = levelHidden ? [] : hiddenLayerIds.size ? sourceItems.filter(it => !hiddenLayerIds.has(it.key)) : sourceItems
 
+  /** Planning layer colour of a scope item (its place in the scope list). */
+  const colorOfScope = (scopeId: string | null | undefined) => planColor(Math.max(0, taskScopes.findIndex(x => x.id === scopeId)))
+  /** Estimate layer: the takeoff, faint, without its tags (the planning labels must read). */
+  const estimateLayer = (list: TakeoffItem[]): TakeoffItem[] => list.map(it => ({ ...it, planTransparency: 0.8, shapes: it.shapes.map(sh => ({ ...sh, tags: undefined, openingTags: undefined })) }))
+  /** Planning layer on a sheet: one item per activity, each line labelled "code · quantity unit". */
+  const planningLayer = (sheetId: string, opts: { locationId?: string | null; scopeId?: string | null; emphasize?: string | null; selectable?: { scopeId: string | null; locationId: string | null } }): TakeoffItem[] =>
+    taskScopes.map(sc => {
+      const rows = taskRows.filter(r => r.scope_item_id === sc.id && r.source_id === sheetId && (!opts.locationId || r.location_id === opts.locationId) && (!opts.scopeId || r.scope_item_id === opts.scopeId))
+      if (!rows.length) return null
+      const faded = opts.emphasize && sc.id !== opts.emphasize
+      return {
+        key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: 0.09, planTransparency: faded ? 0.6 : 0,
+        shapes: rows.map(r => ({
+          id: opts.selectable && r.scope_item_id === opts.selectable.scopeId && r.location_id === opts.selectable.locationId ? `task:${r.id}` : `plan:${r.id}`,
+          page: 1, pts: r.points, tags: tagsOnLongest(r.points, planLabel(sc.scope_code, formatNumber(Number(r.quantity || 0), 2), sc.unit)),
+        })),
+      }
+    }).filter(Boolean) as TakeoffItem[]
   const taskShownItems: TakeoffItem[] = (() => {
     if (section !== 'tasks' || !selectedSource) return shownItems
-    const out: TakeoffItem[] = taskWalls ? shownItems.map(it => ({ ...it, planTransparency: 0.8 })) : []
-    const rows = taskRows.filter(r => r.scope_item_id === taskScopeId && r.source_id === selectedSource.id)
-    const others = rows.filter(r => r.location_id !== taskLocationId)
-    if (others.length) out.push({ key: '__task_others', kind: 'linear', name: '', system: '', color: '#64748B', thickness: 0.06, planTransparency: 0.45, shapes: others.map(r => ({ id: `other:${r.id}`, page: 1, pts: r.points })) })
-    out.push({ key: '__task', kind: 'linear', name: taskScope?.scope_name || '', system: '', color: TASK_COLOR, thickness: 0.1, planTransparency: 0, shapes: rows.filter(r => r.location_id === taskLocationId).map(r => ({ id: `task:${r.id}`, page: 1, pts: r.points })) })
-    return out
+    return [
+      ...(taskWalls ? estimateLayer(shownItems) : []),
+      ...(taskPlan ? planningLayer(selectedSource.id, { emphasize: taskScopeId, selectable: { scopeId: taskScopeId, locationId: taskLocationId } }) : []),
+    ]
   })()
 
   /** Saves one task line for the chosen activity and location, measured now. */
@@ -744,6 +770,126 @@ export default function TakeoffWorkspacePage() {
     await loadTasks()
     setStatus(t('task.panel.heightApplied'))
   }
+  // ---------- Field sheets (PDF to the field, issued as revisions) ----------
+  type FieldKind = 'location' | 'activity'
+  const fieldLines = (kind: FieldKind) => taskRows.filter(r => r.location_id === taskLocationId && (kind === 'location' || r.scope_item_id === taskScopeId))
+  const latestIssue = (kind: FieldKind) => fieldIssues.find(i => i.location_id === taskLocationId && i.kind === kind && (kind === 'location' || i.scope_item_id === taskScopeId)) || null
+  const fieldState = (kind: FieldKind) => {
+    const last = latestIssue(kind)
+    const lines = fieldLines(kind)
+    return { last, lines, changed: !!last && last.fingerprint !== fingerprint(lines), next: last ? last.revision + 1 : 0 }
+  }
+  async function actorName(): Promise<string> {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return ''
+    const { data: p } = await supabase.from('user_profiles').select('full_name, display_name, email').eq('user_id', user.id).maybeSingle()
+    return p?.full_name || p?.display_name || p?.email || user.email || ''
+  }
+  function saveBlob(blob: Blob, name: string) {
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(href), 60_000)
+  }
+  const fileSafe = (v: string) => v.replace(/[\\/:*?"<>|]+/g, '-').trim()
+  /** Builds the PDF of the chosen location (all activities or just the chosen one), as a preview or as revision `revision`. */
+  async function makeFieldSheet(kind: FieldKind, revision: number | null, issuedBy: string) {
+    if (!taskLocation || !taskZone || (kind === 'activity' && !taskScope)) throw new Error(t('task.panel.pick'))
+    const sheet = sources.find(x => x.id === taskZone.source_id)
+    if (!sheet || sheet.kind !== 'pdf_page') throw new Error(t('zone.pdfOnly'))
+    const k = Number(sheet.scale_pt_per_m) || 0
+    const frame = frameOf(taskZone.points as Vec2[], k, 1)
+    if (!frame || !(k > 0)) throw new Error(t('draw.needScale'))
+    const lines = fieldLines(kind)
+    const { data: signed, error: se } = await createClient().storage.from(BUCKET).createSignedUrl(sheet.file_path, 600)
+    if (se || !signed) throw se || new Error('no URL')
+    const sheetItems = rowsToItems(layers, rawElements, new Map([[sheet.id, 1]])).filter(it => it.shapes.length > 0)
+    const items = [...estimateLayer(sheetItems), ...planningLayer(sheet.id, { locationId: taskLocation.id, scopeId: kind === 'activity' ? taskScopeId : null })]
+    const walls: WallRef[] = sheetItems.filter(it => it.kind === 'linear').flatMap(it => it.shapes.map(sh => ({ pts: sh.pts, openings: sh.openings, kind: it.kind })))
+    const scopes = taskScopes.filter(sc => lines.some(r => r.scope_item_id === sc.id))
+    const rows: FieldSheetRow[] = scopes.map(sc => {
+      const mine = lines.filter(r => r.scope_item_id === sc.id)
+      const qty = mine.reduce((a, r) => a + Number(r.quantity || 0), 0)
+      let detail: string | undefined
+      if (kind === 'activity') {
+        const h = Number(mine.find(r => r.height_m)?.height_m) || null
+        const m = measureTaskLines(mine.map(r => r.points), { ptPerM: k, heightM: h, unit: sc.unit, walls })
+        if (m.measure === 'wallArea') detail = t('task.panel.breakdown', { length: formatNumber(m.length, 2), height: h ? formatNumber(h, 2) : '—', openings: formatNumber(m.openings, 2) })
+      }
+      return { color: colorOfScope(sc.id), code: sc.scope_code || '', name: sc.scope_name, qty: `${formatNumber(qty, 2)} ${sc.unit || ''}`.trim(), detail }
+    })
+    const level = sheet.level_id ? levels.find(l => l.id === sheet.level_id) : null
+    const date = new Date().toLocaleDateString(language)
+    const blob = await buildFieldSheetPdf({
+      url: signed.signedUrl, pageNumber: sheet.page_number || 1, ptPerM: k, frame, items,
+      zone: { name: taskLocation.name, pts: taskZone.points as Vec2[] },
+      backgroundFade: fadeOf(sheet), rows,
+      qrUrl: taskLocation.qr_token ? `${window.location.origin}/field/scan/${taskLocation.qr_token}` : null,
+      logoUrl: '/ritsu-logo.png',
+      fmt: v => formatNumber(v, 2),
+      text: {
+        kicker: t('field.kicker'),
+        location: taskLocation.name,
+        path: [project?.name, level?.name, sheet.name].filter(Boolean).join(' · '),
+        scope: kind === 'location' ? t('field.scopeAll') : t('field.scopeOne', { code: taskScope?.scope_code || '' }),
+        revision: revision == null ? t('field.previewShort') : `REV ${revision}`,
+        issued: revision == null ? t('field.previewNote', { date }) : t('field.issuedLine', { date, name: issuedBy || '—' }),
+        activities: t('field.activities'),
+        qrCaption: t('field.qrCaption'),
+        scale: t('field.scale'),
+        footer: `${project?.name || ''}${project?.project_code ? ` · ${project.project_code}` : ''} · RitsuFlow`,
+        draft: revision == null ? t('field.watermark') : undefined,
+      },
+    })
+    const snapshot = {
+      location: { id: taskLocation.id, name: taskLocation.name },
+      sheet: { id: sheet.id, name: sheet.name },
+      lines: lines.map(r => ({ id: r.id, scope_item_id: r.scope_item_id, source_id: r.source_id, points: r.points, height_m: r.height_m, quantity: Number(r.quantity || 0), unit: r.unit })),
+      totals: scopes.map(sc => ({ scope_item_id: sc.id, code: sc.scope_code, name: sc.scope_name, unit: sc.unit, quantity: lines.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0) })),
+    }
+    return { blob, snapshot, fp: fingerprint(lines), fileName: fileSafe(`${taskLocation.name}${kind === 'activity' ? ` - ${taskScope?.scope_code || ''}` : ''}`) }
+  }
+  async function previewFieldSheet(kind: FieldKind) {
+    setFieldBusy(`${kind}:preview`); setError('')
+    try { const r = await makeFieldSheet(kind, null, ''); saveBlob(r.blob, `${r.fileName} - ${t('field.previewShort')}.pdf`) }
+    catch (e) { setError(t('workspace.error', { message: (e as Error)?.message || String(e) })) }
+    finally { setFieldBusy(null) }
+  }
+  async function issueFieldSheet(kind: FieldKind) {
+    const st = fieldState(kind)
+    if (!st.lines.length) { setError(t('field.nothing')); return }
+    if (!window.confirm(t('field.confirmIssue', { rev: st.next, location: taskLocation?.name || '' }))) return
+    setFieldBusy(`${kind}:issue`); setError('')
+    const supabase = createClient()
+    let path: string | null = null
+    try {
+      const name = await actorName()
+      const r = await makeFieldSheet(kind, st.next, name)
+      path = `${projectId}/field-sheets/${taskLocationId}/${kind}-${kind === 'activity' ? taskScopeId : 'all'}-rev${st.next}-${Date.now()}.pdf`
+      const up = await supabase.storage.from(BUCKET).upload(path, r.blob, { contentType: 'application/pdf', upsert: false })
+      if (up.error) throw up.error
+      const { error: ie } = await supabase.from('field_sheet_issues').insert({
+        project_id: projectId, location_id: taskLocationId, kind, scope_item_id: kind === 'activity' ? taskScopeId : null,
+        revision: st.next, snapshot: r.snapshot, fingerprint: r.fp, file_path: path, issued_by_name: name || null,
+      })
+      if (ie) throw ie
+      path = null
+      await loadTasks()
+      saveBlob(r.blob, `${r.fileName} - Rev ${st.next}.pdf`)
+      setStatus(t('field.issued', { rev: st.next }))
+    } catch (e) {
+      if (path) await supabase.storage.from(BUCKET).remove([path])
+      setError(t('workspace.error', { message: (e as Error)?.message || String(e) }))
+    } finally { setFieldBusy(null) }
+  }
+  async function downloadIssue(issue: FieldIssueRow) {
+    if (!issue.file_path) return
+    const { data, error: e } = await createClient().storage.from(BUCKET).createSignedUrl(issue.file_path, 600, { download: `${fileSafe(taskLocation?.name || 'ficha')} - Rev ${issue.revision}.pdf` })
+    if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return }
+    window.location.assign(data.signedUrl)
+  }
+
   async function deleteTaskLine(id: string) {
     if (!window.confirm(t('task.confirmDelete'))) return
     const { error: e } = await createClient().from('location_task_drawings').delete().eq('id', id)
@@ -872,7 +1018,7 @@ export default function TakeoffWorkspacePage() {
       newLayerRequest={newLayerRequest}
       workMode={section === 'zoning' ? 'zoning' : section === 'tasks' ? 'tasks' : 'takeoff'}
       task={section === 'tasks' ? {
-        color: TASK_COLOR,
+        color: taskScopeId ? colorOfScope(taskScopeId) : TASK_COLOR,
         zone: taskZone && taskZone.source_id === selectedSource.id ? { id: taskZone.id, name: taskLocation?.name || taskZone.name, pts: taskZone.points as Vec2[] } : null,
         frame: taskZone && taskZone.source_id === selectedSource.id ? frameOf(taskZone.points as Vec2[], Number(selectedSource.scale_pt_per_m) || 0, 1) : null,
         frameTick: taskFrameTick,
@@ -1933,7 +2079,7 @@ export default function TakeoffWorkspacePage() {
             const total = taskRows.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0)
             return <div key={sc.id} style={{ marginTop: 4, border: '1px solid ' + (open ? '#9fd6cf' : '#e5edef'), borderRadius: 8, background: open ? '#f2fbfa' : '#fff', overflow: 'hidden' }}>
               <button type="button" onClick={() => { setTaskScopeId(open ? null : sc.id) }} style={{ display: 'grid', gap: 2, width: '100%', padding: '8px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#173441' }}>
-                <span style={{ fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}>{sc.scope_code}{sc.unit ? ` · ${sc.unit}` : ''}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}><i style={{ width: 14, height: 4, borderRadius: 2, background: colorOfScope(sc.id) }} />{sc.scope_code}{sc.unit ? ` · ${sc.unit}` : ''}</span>
                 <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>{sc.scope_name}</span>
                 <span style={{ fontSize: 10.5, color: total > 0 ? '#be123c' : '#8aa0a8' }}>{t('task.sidebar.drawnTotal', { value: `${fmtQty(total)} / ${fmtQty(Number(sc.quantity || 0))} ${sc.unit || ''}` })}</span>
               </button>
@@ -1974,17 +2120,48 @@ export default function TakeoffWorkspacePage() {
           {taskMeasured.measure === 'wallArea' && <label style={{ display: 'grid', gap: 4, fontSize: 11, fontWeight: 700, color: '#42636f' }}>{t('task.panel.height')}
             <input type="number" min="0" step="0.01" value={taskHeight} onChange={e => setTaskHeight(e.target.value)} onBlur={() => void applyTaskHeight()} style={{ height: 32, padding: '0 8px', border: '1px solid ' + (taskHeightM ? '#cddcdf' : '#e5a3a3'), borderRadius: 6, fontSize: 13 }} />
           </label>}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#42636f', cursor: 'pointer' }}><input type="checkbox" checked={taskWalls} onChange={e => setTaskWalls(e.target.checked)} />{t('task.panel.walls')}</label>
+          <div style={{ display: 'grid', gap: 6, padding: '8px 10px', border: '1px solid #e5edef', borderRadius: 8 }}>
+            <div style={paneTitle}>{t('task.layers')}</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#42636f', cursor: 'pointer' }}><input type="checkbox" checked={taskWalls} onChange={e => setTaskWalls(e.target.checked)} /><span><b>{t('task.layer.estimate')}</b> · {t('task.layer.estimateHint')}</span></label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#42636f', cursor: 'pointer' }}><input type="checkbox" checked={taskPlan} onChange={e => setTaskPlan(e.target.checked)} /><span><b>{t('task.layer.planning')}</b> · {t('task.layer.planningHint')}</span></label>
+          </div>
           <button type="button" onClick={() => { if (taskZone.source_id !== selectedSourceId) setSelectedSourceId(taskZone.source_id); setTaskFrameTick(n => n + 1) }} style={{ alignSelf: 'flex-start', height: 30, padding: '0 12px', border: '1px solid #cddcdf', borderRadius: 7, background: '#fff', color: '#173441', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('task.panel.frame')}</button>
           <div>
             <div style={paneTitle}>{t('task.panel.lines', { count: taskHere.length })}</div>
             {!taskHere.length ? <div style={{ ...ui.small, marginTop: 6, lineHeight: 1.5 }}>{t('task.panel.noLines')}</div> : <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {taskHere.map((r, i) => <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', border: '1px solid #f3d0d7', borderRadius: 6, fontSize: 12 }}>
-                <span style={{ width: 10, height: 3, background: TASK_COLOR, borderRadius: 2 }} />
+                <span style={{ width: 10, height: 3, background: colorOfScope(taskScopeId), borderRadius: 2 }} />
                 <span style={{ flex: 1, color: '#294955' }}>#{i + 1}</span>
                 <b style={{ color: '#be123c' }}>{fmtQty(Number(r.quantity || 0))} {taskScope.unit || ''}</b>
                 <button type="button" onClick={() => void deleteTaskLine(r.id)} title={t('task.delete')} aria-label={t('task.delete')} style={{ border: 0, background: 'transparent', color: '#a44343', cursor: 'pointer', fontSize: 14 }}>×</button>
               </div>)}
+            </div>}
+          </div>
+          <div style={{ display: 'grid', gap: 8, padding: '10px', border: '1px solid #cfe9e5', borderRadius: 8, background: '#f7fcfb' }}>
+            <div style={paneTitle}>{t('field.title')}</div>
+            {(['location', 'activity'] as FieldKind[]).map(kind => {
+              const st = fieldState(kind)
+              const busy = fieldBusy?.startsWith(`${kind}:`)
+              return <div key={kind} style={{ display: 'grid', gap: 5, padding: '8px', background: '#fff', border: '1px solid #e5edef', borderRadius: 7 }}>
+                <b style={{ fontSize: 12, color: '#173441' }}>{kind === 'location' ? t('field.kindLocation', { location: taskLocation.name }) : t('field.kindActivity', { code: taskScope.scope_code || '' })}</b>
+                <span style={{ fontSize: 11, color: st.changed ? '#b45309' : '#6b8089' }}>
+                  {!st.last ? t('field.notIssued') : st.changed ? t('field.changedSince', { rev: st.last.revision }) : t('field.upToDate', { rev: st.last.revision, date: new Date(st.last.issued_at).toLocaleDateString(language) })}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" disabled={!!fieldBusy || !st.lines.length} onClick={() => void previewFieldSheet(kind)} style={{ height: 28, padding: '0 10px', border: '1px solid #cddcdf', borderRadius: 6, background: '#fff', color: '#173441', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', opacity: !st.lines.length ? 0.5 : 1 }}>{fieldBusy === `${kind}:preview` ? t('field.working') : t('field.preview')}</button>
+                  <button type="button" disabled={!!fieldBusy || !st.lines.length || (!!st.last && !st.changed)} onClick={() => void issueFieldSheet(kind)} style={{ height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: '#109d91', color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', opacity: (!st.lines.length || (!!st.last && !st.changed)) ? 0.45 : 1 }}>{busy && fieldBusy?.endsWith('issue') ? t('field.working') : t('field.issue', { rev: st.next })}</button>
+                </div>
+              </div>
+            })}
+            {fieldIssues.some(i => i.location_id === taskLocationId) && <div style={{ display: 'grid', gap: 3 }}>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: '#6b8089', textTransform: 'uppercase', letterSpacing: '.05em' }}>{t('field.history')}</span>
+              {fieldIssues.filter(i => i.location_id === taskLocationId).map(i => {
+                const sc = i.scope_item_id ? taskScopes.find(x => x.id === i.scope_item_id) : null
+                return <button key={i.id} type="button" onClick={() => void downloadIssue(i)} title={t('field.download')} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, padding: '4px 6px', border: 0, borderRadius: 5, background: 'transparent', fontSize: 11, color: '#294955', cursor: 'pointer', textAlign: 'left' }}>
+                  <span><b>Rev {i.revision}</b> · {i.kind === 'location' ? t('field.allShort') : sc?.scope_code || '—'}</span>
+                  <span style={{ color: '#6b8089' }}>{new Date(i.issued_at).toLocaleDateString(language)}{i.issued_by_name ? ` · ${i.issued_by_name}` : ''} ↓</span>
+                </button>
+              })}
             </div>}
           </div>
           {taskOthers.length > 0 && <div>
