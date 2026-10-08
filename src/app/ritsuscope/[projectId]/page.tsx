@@ -213,6 +213,8 @@ export default function TakeoffWorkspacePage() {
   const [taskRows, setTaskRows] = useState<TaskDrawingRow[]>([])
   const [taskScopeId, setTaskScopeId] = useState<string | null>(null)
   const [taskLocationId, setTaskLocationId] = useState<string | null>(null)
+  /** Task line clicked on the drawing: its properties show in the right panel. */
+  const [inspectLineId, setInspectLineId] = useState<string | null>(null)
   const [taskHeight, setTaskHeight] = useState('')
   const [taskWalls, setTaskWalls] = useState(true)
   const [taskFrameTick, setTaskFrameTick] = useState(0)
@@ -794,7 +796,8 @@ export default function TakeoffWorkspacePage() {
     const value = at ? [Math.round(at[0] * 100) / 100, Math.round(at[1] * 100) / 100] as Vec2 : null
     setTaskRows(prev => prev.map(r => (r.id === id ? { ...r, label_at: value } : r)))
     const { error: e } = await createClient().from('location_task_drawings').update({ label_at: value }).eq('id', id)
-    if (e) setError(t('workspace.error', { message: e.message }))
+    // Without the label_at column (migration not run yet) the label still moves on screen, but is not kept.
+    if (e) setError(/label_at/.test(e.message) ? t('task.labelNotSaved') : t('workspace.error', { message: e.message }))
   }
   /** "Take wall": the clicked wall's stretch along the location (the side click then places the task line). */
   function pickTaskWall(p: Vec2): { a: Vec2; b: Vec2; thicknessM: number } | null {
@@ -1187,6 +1190,9 @@ export default function TakeoffWorkspacePage() {
         },
         area: reportOpen && reportCfg.areaMode === 'custom' && reportCfg.area?.sourceId === selectedSource.id ? reportCfg.area.box : null,
         onMoveTag: (shapeId, at) => void moveTaskLabel(shapeId, at),
+        estimateOn: taskWalls,
+        onToggleEstimate: () => setTaskWalls(v => !v),
+        onInspect: setInspectLineId,
       } : null}
       onTaskLine={saveTaskLine}
       onTaskPick={pickTaskWall}
@@ -2268,9 +2274,42 @@ export default function TakeoffWorkspacePage() {
 
   const backToAllocation = `/projects/${projectId}/locations?tab=allocation${taskScopeId ? `&scope=${taskScopeId}` : ''}${taskScopeId && taskLocationId ? `&drawn=${taskLocationId}` : ''}`
   const taskOthers = taskScopeId ? taskProduction.filter(l => l.id !== taskLocationId).map(l => ({ l, q: drawnOf(taskScopeId, l.id) })).filter(x => x.q > 0) : []
+  /** Properties of the task line clicked on the drawing. */
+  const inspectCard = (() => {
+    const r = inspectLineId ? taskRows.find(x => x.id === inspectLineId) : null
+    if (!r) return null
+    const sc = taskScopes.find(x => x.id === r.scope_item_id)
+    const loc = taskLocations.find(x => x.id === r.location_id)
+    const sheet = sources.find(x => x.id === r.source_id)
+    const k = Number(sheet?.scale_pt_per_m) || 0
+    const len = k > 0 ? r.points.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - r.points[i][0], p[1] - r.points[i][1]), 0) / k : 0
+    const current = r.scope_item_id === taskScopeId && r.location_id === taskLocationId
+    const row = (label: string, value: string) => <div style={{ display: 'grid', gridTemplateColumns: '92px 1fr', gap: 6, fontSize: 11.5 }}><span style={{ color: '#6b8089' }}>{label}</span><b style={{ color: '#173441', fontWeight: 700 }}>{value}</b></div>
+    const btn = { height: 28, padding: '0 10px', border: '1px solid #cddcdf', borderRadius: 6, background: '#fff', color: '#173441', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' } as const
+    return <div style={{ display: 'grid', gap: 6, padding: '10px', border: `2px solid ${colorOfScope(r.scope_item_id)}`, borderRadius: 8, background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 12, height: 4, borderRadius: 2, background: colorOfScope(r.scope_item_id) }} />
+        <b style={{ flex: 1, fontSize: 13, color: '#173441' }}>{r.tag || t('task.inspect.title')}</b>
+        <button type="button" onClick={() => setInspectLineId(null)} aria-label="×" style={{ border: 0, background: 'transparent', cursor: 'pointer', fontSize: 15, color: '#6b8089' }}>×</button>
+      </div>
+      {row(t('task.inspect.activity'), sc ? `${sc.scope_code || ''} ${sc.scope_name}`.trim() : '—')}
+      {row(t('task.inspect.location'), loc?.name || '—')}
+      {row(t('task.inspect.sheet'), sheet?.name || '—')}
+      {row(t('task.inspect.quantity'), `${formatNumber(Number(r.quantity || 0), 2)} ${r.unit || sc?.unit || ''}`.trim())}
+      {k > 0 && row(t('task.inspect.length'), `${formatNumber(len, 2)} m`)}
+      {r.height_m != null && row(t('task.inspect.height'), `${formatNumber(Number(r.height_m), 2)} m`)}
+      {row(t('task.inspect.label'), r.label_at ? t('task.inspect.labelMoved') : t('task.inspect.labelAuto'))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+        {!current && <button type="button" style={btn} onClick={() => { setTaskScopeId(r.scope_item_id); setTaskLocationId(r.location_id) }}>{t('task.inspect.open')}</button>}
+        {r.label_at && <button type="button" style={btn} onClick={() => void moveTaskLabel(r.id, null)}>{t('task.inspect.resetLabel')}</button>}
+        <button type="button" style={{ ...btn, color: '#a44343', borderColor: '#efcaca' }} onClick={async () => { await deleteTaskLine(r.id); setInspectLineId(null) }}>{t('task.delete')}</button>
+      </div>
+    </div>
+  })()
   const tasksRight = (
     <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
       <a href={backToAllocation} style={{ ...ui.backLink, fontSize: 12 }}>← {t('task.panel.back')}</a>
+      {inspectCard}
       {!taskScope || !taskLocation ? <div style={{ ...ui.small, lineHeight: 1.5 }}>{t('task.panel.pick')}</div> : <>
         <div>
           <div style={{ fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}>{taskScope.scope_code} · {t('task.panel.in', { location: taskLocation.name })}</div>

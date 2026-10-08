@@ -57,6 +57,11 @@ export type TaskDrawing = {
   area?: [number, number, number, number] | null
   /** A task label (callout) was dragged: shape id (`task:<id>` / `plan:<id>`) and label centre, or null = automatic again. */
   onMoveTag?: (shapeId: string, at: Vec2 | null) => void
+  /** Estimate layer (the takeoff, faint) shown under the task lines; toggled from the toolbar. */
+  estimateOn?: boolean
+  onToggleEstimate?: () => void
+  /** A task line was clicked (Select): its id, or null when the selection is cleared. */
+  onInspect?: (lineId: string | null) => void
 }
 
 type Props = {
@@ -233,6 +238,9 @@ export default function PdfWorkspace(props: Props) {
   const [takeWall, setTakeWall] = useState(false)
   /** Tasks mode: the selected task line (`task:<id>`). */
   const [taskSel, setTaskSel] = useState<string | null>(null)
+  // Any task line clicked (this activity and location, or another one): the page shows its properties.
+  const inspect = task?.onInspect
+  useEffect(() => { inspect?.(taskSel ? taskSel.slice(5) : null) }, [taskSel]) // eslint-disable-line react-hooks/exhaustive-deps
   /** Tasks mode, "take a wall": thickness (m) of the wall picked by the first click (the band starts at its face). */
   const [taskWallT, setTaskWallT] = useState(0)
   /** Task report area: the first corner picked. */
@@ -1190,6 +1198,7 @@ export default function PdfWorkspace(props: Props) {
     ...(tasksMode ? [
       { key: 'take', group: 'draw' as ToolGroup, icon: 'wall', label: 'task.tool.take' as TakeoffMessageKey, title: t('task.hint.take'), active: isTool('draw', 'line') && takeWall, onClick: () => chooseTool('draw', 'line', true) },
       { key: 'line', group: 'draw' as ToolGroup, icon: 'line', label: 'tool.line' as TakeoffMessageKey, title: t('task.hint.draw'), active: isTool('draw', 'line') && !takeWall, onClick: () => chooseTool('draw', 'line') },
+      ...(task?.onToggleEstimate ? [{ key: 'estimate', group: 'draw' as ToolGroup, icon: task.estimateOn ? 'eye' : 'eyeOff', label: 'task.tool.estimate' as TakeoffMessageKey, title: t(task.estimateOn ? 'task.tool.estimateHide' : 'task.tool.estimateShow'), active: !!task.estimateOn, onClick: () => task.onToggleEstimate!() }] : []),
     ] : [
       { key: 'line', group: 'draw' as ToolGroup, icon: 'line', label: 'tool.line' as TakeoffMessageKey, active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
       { key: 'rect', group: 'draw' as ToolGroup, icon: 'rect', label: 'tool.rect' as TakeoffMessageKey, active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },
@@ -1410,7 +1419,7 @@ export default function PdfWorkspace(props: Props) {
               fmt={v => formatNumber(v, 2)}
               selectable={mode === 'select' && !zoning && !openingPick}
               selectedId={tasksMode ? taskSel : selectedId}
-              onSelect={tasksMode ? (id => setTaskSel(id && id.startsWith('task:') ? id : null)) : onSelect}
+              onSelect={tasksMode ? (id => setTaskSel(id && (id.startsWith('task:') || id.startsWith('plan:')) ? id : null)) : onSelect}
               multiSelected={boxSelSet}
               onMovePoints={tasksMode ? undefined : (id, pts) => void movePoints(id, pts)}
               snap={snapOn}
