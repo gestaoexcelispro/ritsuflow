@@ -115,3 +115,13 @@ test('lines keep the face and side, so any band thickness still touches the face
   assert.deepEqual(planStyleOf({ thickness_m: 2, transparency: 5, color: 'red' }), { thickness_m: 0.5, transparency: 0.9, color: undefined })
   assert.equal(planStyleOf({ color: '#2563EB' }).color, '#2563EB')
 })
+
+test('task lines on the same face are found (for stacking in 3D)', async () => {
+  const { sameFace } = await import('../src/lib/takeoff/taskDrawings.ts')
+  const a = { points: [[0, 100], [100, 100]], side: -1 }
+  assert.equal(sameFace(a, { points: [[50, 100], [150, 100]], side: -1 }, K), true)
+  assert.equal(sameFace(a, { points: [[150, 100], [50, 100]], side: 1 }, K), true, 'drawn the other way, same face')
+  assert.equal(sameFace(a, { points: [[0, 100], [100, 100]], side: 1 }, K), false, 'other face')
+  assert.equal(sameFace(a, { points: [[0, 101], [100, 101]], side: -1 }, K), false, 'another wall, 10 cm away')
+  assert.equal(sameFace(a, { points: [[120, 100], [200, 100]], side: -1 }, K), false, 'no overlap')
+})

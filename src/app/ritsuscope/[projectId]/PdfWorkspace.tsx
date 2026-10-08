@@ -62,6 +62,10 @@ export type TaskDrawing = {
   onToggleEstimate?: () => void
   /** A task line was clicked (Select): its id, or null when the selection is cleared. */
   onInspect?: (lineId: string | null) => void
+  /** Locations of the sheet in their colour code, under the drawing; toggled from the toolbar. */
+  zones?: { id: string; name: string; color: string; pts: Vec2[] }[]
+  zonesOn?: boolean
+  onToggleZones?: () => void
 }
 
 type Props = {
@@ -1198,6 +1202,7 @@ export default function PdfWorkspace(props: Props) {
     ...(tasksMode ? [
       { key: 'take', group: 'draw' as ToolGroup, icon: 'wall', label: 'task.tool.take' as TakeoffMessageKey, title: t('task.hint.take'), active: isTool('draw', 'line') && takeWall, onClick: () => chooseTool('draw', 'line', true) },
       { key: 'line', group: 'draw' as ToolGroup, icon: 'line', label: 'tool.line' as TakeoffMessageKey, title: t('task.hint.draw'), active: isTool('draw', 'line') && !takeWall, onClick: () => chooseTool('draw', 'line') },
+      ...(task?.onToggleZones ? [{ key: 'locations', group: 'draw' as ToolGroup, icon: 'zoning', label: 'task.tool.locations' as TakeoffMessageKey, title: t(task.zonesOn ? 'task.tool.locationsHide' : 'task.tool.locationsShow'), active: !!task.zonesOn, onClick: () => task.onToggleZones!() }] : []),
       ...(task?.onToggleEstimate ? [{ key: 'estimate', group: 'draw' as ToolGroup, icon: task.estimateOn ? 'eye' : 'eyeOff', label: 'task.tool.estimate' as TakeoffMessageKey, title: t(task.estimateOn ? 'task.tool.estimateHide' : 'task.tool.estimateShow'), active: !!task.estimateOn, onClick: () => task.onToggleEstimate!() }] : []),
     ] : [
       { key: 'line', group: 'draw' as ToolGroup, icon: 'line', label: 'tool.line' as TakeoffMessageKey, active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
@@ -1435,7 +1440,11 @@ export default function PdfWorkspace(props: Props) {
               onVectors={setVectors}
               onTexts={setTexts}
               onCursor={p => { onCursor?.(p); if (openingPick) setPickHover(p) }}
-              zones={zoning ? zoneShapes : tasksMode && task?.zone ? [{ id: task.zone.id, name: task.zone.name, color: '#0EA5E9', pts: task.zone.pts, label: task.zone.name, selected: false }] : []}
+              zones={zoning ? zoneShapes : tasksMode ? [
+                // The locations' colour code underneath; the chosen location outlined on top when it has no colour shown.
+                ...(task?.zones || []).map(z => ({ id: z.id, name: z.name, color: z.color, pts: z.pts, label: '', selected: false })),
+                ...(task?.zone && !(task.zones || []).some(z => z.id === task.zone!.id) ? [{ id: task.zone.id, name: task.zone.name, color: '#0EA5E9', pts: task.zone.pts, label: task.zone.name, selected: false }] : []),
+              ] : []}
               onSelectZone={zoning && mode === 'select' ? id => {
                 if (id.startsWith('sug:')) {
                   const rid = id.slice(4)

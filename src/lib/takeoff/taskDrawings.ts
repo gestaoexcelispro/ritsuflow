@@ -213,3 +213,28 @@ export function drawnTotals(rows: Pick<TaskDrawingRow, 'scope_item_id' | 'locati
   for (const r of rows) m.set(`${r.scope_item_id}:${r.location_id}`, (m.get(`${r.scope_item_id}:${r.location_id}`) || 0) + Number(r.quantity || 0))
   return m
 }
+
+/**
+ * Two task lines lie on the same wall face: parallel, the same side, the faces within 5 cm of each other and
+ * overlapping along the wall (used to stack activities that share a face in the 3D view).
+ */
+export function sameFace(a: Pick<TaskDrawingRow, 'points' | 'side'>, b: Pick<TaskDrawingRow, 'points' | 'side'>, ptPerM: number): boolean {
+  if (a.points.length < 2 || b.points.length < 2) return false
+  const [a0, a1] = [a.points[0], a.points[a.points.length - 1]]
+  const [b0, b1] = [b.points[0], b.points[b.points.length - 1]]
+  const La = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]), Lb = Math.hypot(b1[0] - b0[0], b1[1] - b0[1])
+  if (La < 1e-6 || Lb < 1e-6) return false
+  const u: Vec2 = [(a1[0] - a0[0]) / La, (a1[1] - a0[1]) / La]
+  const v: Vec2 = [(b1[0] - b0[0]) / Lb, (b1[1] - b0[1]) / Lb]
+  const cross = u[0] * v[1] - u[1] * v[0]
+  if (Math.abs(cross) > 0.05) return false
+  // Normals of the band side, in sheet terms (b drawn the other way flips its side).
+  const dir = u[0] * v[0] + u[1] * v[1] > 0 ? 1 : -1
+  const sa = Math.sign(a.side || 0), sb = Math.sign(b.side || 0) * dir
+  if (sa && sb && sa !== sb) return false
+  const off = Math.abs((b0[0] - a0[0]) * u[1] - (b0[1] - a0[1]) * u[0])
+  if (off > 0.05 * ptPerM) return false
+  const t0 = (b0[0] - a0[0]) * u[0] + (b0[1] - a0[1]) * u[1]
+  const t1 = (b1[0] - a0[0]) * u[0] + (b1[1] - a0[1]) * u[1]
+  return Math.min(La, Math.max(t0, t1)) - Math.max(0, Math.min(t0, t1)) > 0.01 * ptPerM
+}

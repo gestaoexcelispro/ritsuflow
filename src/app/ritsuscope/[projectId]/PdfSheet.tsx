@@ -12,6 +12,7 @@ import { openingMarks } from '@/lib/takeoff/openingMarks'
 import { areaAt, paintOrder } from '@/lib/takeoff/pick'
 import { ICON_PATHS } from './icons'
 import { layoutLabels, type LabelIn } from '@/lib/takeoff/labelLayout'
+import { TASK_TAG_PT, tagBox } from '@/lib/takeoff/fieldSheet'
 
 export type Suggestion = { id: string; pts: [Vec2, Vec2]; on: boolean }
 export type ZoneShape = { id: string; name: string; color: string; pts: Vec2[]; label: string; selected: boolean; suggested?: boolean; on?: boolean; /** Block / Zone / Area: dashed outline, light fill, label at the top. */ macro?: boolean }
@@ -639,20 +640,22 @@ export default function PdfSheet(props: Props) {
               const tag = shape.tags[i]
               const ax = ((a[0] + b[0]) / 2) * zoom, ay = ((a[1] + b[1]) / 2) * zoom
               const own = tagDrag && tagDrag.id === shape.id ? tagDrag.at : shape.tagAt || null
-              list.push({ id: shape.id, x: ax, y: ay, w: tag.length * 6.2 + 10, h: 15, fixed: own ? [own[0] * zoom, own[1] * zoom] : null, color: item.color, tag, ax, ay })
+              // Fixed height on paper (sheet points): the tag zooms with the drawing, like CAD text.
+              const box = tagBox(tag.length, TASK_TAG_PT)
+              list.push({ id: shape.id, x: ax, y: ay, w: box.w * zoom, h: box.h * zoom, fixed: own ? [own[0] * zoom, own[1] * zoom] : null, color: item.color, tag, ax, ay })
             }
             if (!list.length) return null
-            const placed = layoutLabels(list, W * zoom, H * zoom)
+            const placed = layoutLabels(list, W * zoom, H * zoom, Math.max(0.3, (tagBox(1, TASK_TAG_PT).h * zoom) / 15))
             return placed.map((l, n) => {
               const c = list[n]
-              const cx = l.bx / zoom, cy = l.by / zoom, w = stroke(c.w), h = stroke(c.h)
+              const cx = l.bx / zoom, cy = l.by / zoom, w = c.w / zoom, h = c.h / zoom
               const movable = !!onMoveTag
               return (
                 <g key={`callout-${l.id}`} style={{ pointerEvents: movable ? 'auto' : 'none', userSelect: 'none', WebkitUserSelect: 'none' }}>
                   <line x1={c.ax / zoom} y1={c.ay / zoom} x2={l.lx / zoom} y2={l.ly / zoom} stroke={c.color} strokeWidth={stroke(1.3)} />
                   <circle cx={c.ax / zoom} cy={c.ay / zoom} r={stroke(3)} fill={c.color} stroke="#fff" strokeWidth={stroke(1)} />
                   <rect
-                    x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={stroke(3)} fill="#fff" fillOpacity={0.95} stroke={c.color} strokeWidth={stroke(1.4)}
+                    x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={h * 0.2} fill="#fff" fillOpacity={0.95} stroke={c.color} strokeWidth={Math.min(stroke(1.4), h * 0.12)}
                     style={movable ? { cursor: tagDrag?.id === l.id ? 'grabbing' : 'grab' } : undefined}
                     onPointerDown={movable ? event => {
                       // A label is grabbed, never text-selected.
@@ -670,7 +673,7 @@ export default function PdfSheet(props: Props) {
                   >
                     {movable && <title>{c.tag}</title>}
                   </rect>
-                  <text x={cx} y={cy + stroke(3.6)} textAnchor="middle" fontSize={stroke(10)} fontWeight={700} fill="#173441" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}>{c.tag}</text>
+                  <text x={cx} y={cy + TASK_TAG_PT * 0.36} textAnchor="middle" fontSize={TASK_TAG_PT} fontWeight={700} fill="#173441" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}>{c.tag}</text>
                 </g>
               )
             })

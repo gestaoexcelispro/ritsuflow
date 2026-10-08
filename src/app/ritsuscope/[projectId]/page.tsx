@@ -74,8 +74,8 @@ import { materialRows, scaleGroup } from '@/lib/takeoff/materialList'
 import { itemShareByZone, NONE } from '@/lib/takeoff/locationShare'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
-import { bandCentre, frameOf, measureTaskLines, nextTaskTag, planStyleOf, takeWallStretch, type PlanStyle, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
-import { fingerprint, planColor, planLabel, tagsOnLongest } from '@/lib/takeoff/fieldSheet'
+import { bandCentre, frameOf, measureTaskLines, nextTaskTag, planStyleOf, sameFace, takeWallStretch, type PlanStyle, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
+import { fingerprint, planColor, tagsOnLongest } from '@/lib/takeoff/fieldSheet'
 import { buildFieldSheetPdf, type FieldSheetRow } from './fieldSheetPdf'
 import { planMaterialsOf, sumMaterials, taskMaterials, type PlanMaterial, type TaskMaterialRow } from '@/lib/takeoff/taskMaterials'
 
@@ -215,6 +215,8 @@ export default function TakeoffWorkspacePage() {
   const [taskLocationId, setTaskLocationId] = useState<string | null>(null)
   /** Task line clicked on the drawing: its properties show in the right panel. */
   const [inspectLineId, setInspectLineId] = useState<string | null>(null)
+  /** Tasks: the locations' colour code under the drawing (plan and 3D). */
+  const [taskZonesOn, setTaskZonesOn] = useState(true)
   const [taskHeight, setTaskHeight] = useState('')
   const [taskWalls, setTaskWalls] = useState(true)
   const [taskFrameTick, setTaskFrameTick] = useState(0)
@@ -439,15 +441,16 @@ export default function TakeoffWorkspacePage() {
     return { ...b, items: fillLevelHeights(b.items, page => hOfPage.get(page) ?? null) }
   }, [selectedSource, layers, elements, sources, levels])
   /** Plan underlays for the 3D: each sheet's framed region (never the whole sheet) and its locations, per 3D scope. */
+  // Locations: the most detailed kind drawn on the sheet (rooms over areas over zones over blocks), so colours don't stack.
+  const locationZonesOf = useCallback((sourceId: string) => {
+    const vis = zones.filter(z => z.source_id === sourceId && z.is_visible && z.points.length >= 3)
+    const rank = ['room', 'area', 'zone', 'block']
+    const kind = rank.find(k => vis.some(z => (z.zone_kind || 'room') === k))
+    return vis.filter(z => (z.zone_kind || 'room') === kind)
+  }, [zones])
   const underlay3d = useMemo(() => {
     const toModelOf = sheetToModelOf(sources)
-    // Locations: the most detailed kind drawn on the sheet (rooms over areas over zones over blocks), so colours don't stack.
-    const zonesOf = (sourceId: string) => {
-      const vis = zones.filter(z => z.source_id === sourceId && z.is_visible && z.points.length >= 3)
-      const rank = ['room', 'area', 'zone', 'block']
-      const kind = rank.find(k => vis.some(z => (z.zone_kind || 'room') === k))
-      return vis.filter(z => (z.zone_kind || 'room') === kind)
-    }
+    const zonesOf = locationZonesOf
     const sheet: { underlays: UnderlaySpec[]; zones: UnderlayZone[] } = { underlays: [], zones: [] }
     if (selectedSource?.kind === 'pdf_page') {
       const region = underlayRegionOf(selectedSource)
@@ -466,7 +469,7 @@ export default function TakeoffWorkspacePage() {
       model.zones.push(...zonesOf(src.id).map(z => ({ page: st.page, pts: z.points.map(toModel), color: z.color, name: z.name })))
     }
     return { sheet, model }
-  }, [sources, zones, selectedSource, pdfBuilding])
+  }, [sources, locationZonesOf, selectedSource, pdfBuilding])
   const isIfcModel = selectedSource?.kind === 'ifc_storey'
   const modelData = isIfcModel ? model3d : pdfBuilding ? { items: pdfBuilding.items.filter(it => it.shapes.length > 0), storeys: pdfBuilding.storeys } : model3d
   const canShowModel = isIfcModel
@@ -755,7 +758,7 @@ export default function TakeoffWorkspacePage() {
         key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: st.thickness_m, flatEnds: true, planTransparency: faded ? Math.max(0.6, st.transparency) : st.transparency,
         shapes: rows.map(r => ({ r, pts: bandCentre(r.points, r.side, st.thickness_m, k) })).map(({ r, pts }) => ({
           id: opts.selectable && r.scope_item_id === opts.selectable.scopeId && r.location_id === opts.selectable.locationId ? `task:${r.id}` : `plan:${r.id}`,
-          page: 1, pts, tags: tagsOnLongest(pts, planLabel(r.tag || sc.scope_code, formatNumber(Number(r.quantity || 0), 2), sc.unit)),
+          page: 1, pts, tags: tagsOnLongest(pts, r.tag || sc.scope_code || ''), // the tag only: quantities go to the report
           tagCallout: true, tagAt: Array.isArray(r.label_at) && r.label_at.length === 2 ? r.label_at as Vec2 : null,
         })),
       }
@@ -1107,6 +1110,54 @@ export default function TakeoffWorkspacePage() {
     }
   }
 
+  /** 3D task view of the open sheet: estimate walls (see-through), task bands with tags, plan and locations underneath. */
+  const tasks3d = (() => {
+    const empty = { items: [] as TakeoffItem[], underlays: [] as UnderlaySpec[], zones: [] as UnderlayZone[] }
+    if (section !== 'tasks' || viewMode !== '3d' || !selectedSource || !(ptPerM > 0)) return empty
+    const k = ptPerM
+    const rowsHere = taskRows.filter(r => r.source_id === selectedSource.id)
+    // Activities sharing a face stack outwards (in scope order), so each band shows.
+    const scopesHere = taskScopes.filter(sc => rowsHere.some(r => r.scope_item_id === sc.id))
+    const layerOf = new Map<string, number>()
+    const placed: { r: TaskDrawingRow; scope: string }[] = []
+    for (const sc of scopesHere) {
+      for (const r of rowsHere.filter(x => x.scope_item_id === sc.id)) {
+        const under = new Set(placed.filter(p => p.scope !== sc.id && sameFace(p.r, r, k)).map(p => layerOf.get(p.r.id) || 0))
+        let n = 0
+        while (under.has(n)) n++
+        layerOf.set(r.id, n)
+        placed.push({ r, scope: sc.id })
+      }
+    }
+    const planItems: TakeoffItem[] = scopesHere.map(sc => {
+      const st = planStyleOf(sc.plan_style)
+      const T = st.thickness_m
+      return {
+        key: `__plan3d_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: T, height: 2.8,
+        shapes: rowsHere.filter(r => r.scope_item_id === sc.id).map(r => {
+          const pts = bandCentre(r.points, r.side, (2 * (layerOf.get(r.id) || 0) + 1) * T, k)
+          return { id: `plan:${r.id}`, page: 1, pts, h: Number(r.height_m) > 0 ? Number(r.height_m) : 0.3, tags: tagsOnLongest(pts, r.tag || sc.scope_code || '') }
+        }),
+      }
+    })
+    const estimate = taskWalls ? shownItems.map(it => ({ ...it, transparency: Math.max(0.65, it.transparency || 0), shapes: it.shapes.map(sh => ({ ...sh, tags: undefined, openingTags: undefined })) })) : []
+    const zonesHere = taskZonesOn ? locationZonesOf(selectedSource.id) : []
+    // The sheet underneath: its framed region, or the box around what is drawn (+ 2 m).
+    let region = selectedSource.kind === 'pdf_page' ? underlayRegionOf(selectedSource) : null
+    if (!region && selectedSource.kind === 'pdf_page') {
+      const all: Vec2[] = [...rowsHere.flatMap(r => r.points), ...zonesHere.flatMap(z => z.points as Vec2[]), ...shownItems.flatMap(it => it.shapes.flatMap(sh => sh.pts))]
+      if (all.length) {
+        const m = 2 * k
+        region = [[Math.min(...all.map(p => p[0])) - m, Math.min(...all.map(p => p[1])) - m], [Math.max(...all.map(p => p[0])) + m, Math.max(...all.map(p => p[1])) + m]]
+      }
+    }
+    return {
+      items: [...estimate, ...planItems],
+      underlays: region && selectedSource.kind === 'pdf_page' ? [{ page: 1, filePath: selectedSource.file_path, pageNumber: selectedSource.page_number || 1, region, toModel: (p: Vec2) => p }] : [],
+      zones: zonesHere.map(z => ({ page: 1, pts: z.points as Vec2[], color: z.color, name: z.name })),
+    }
+  })()
+
   const viewer = !selectedSource ? (
     <div style={{ ...ui.viewer, height: '100%' }}>{t('workspace.viewer.select')}</div>
   ) : viewMode === '3d' && ptPerM > 0 ? (
@@ -1126,7 +1177,12 @@ export default function TakeoffWorkspacePage() {
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0 }}>
-        {canShowModel && scope3d === 'model' ? (
+        {section === 'tasks' ? (
+          // Task view in 3D: the task layers as coloured bands on the wall faces (stacked when several activities share a
+          // face), each with its tag; the estimate walls see-through; the sheet and the locations' colours underneath.
+          <View3D key={`tasks-${selectedSource.id}`} items={tasks3d.items} ptPerM={ptPerM} selectedId={null} onSelect={() => {}} initialTags
+            underlays={tasks3d.underlays} underlayZones={tasks3d.zones} />
+        ) : canShowModel && scope3d === 'model' ? (
           <View3D key={isIfcModel ? 'model' : 'building'} items={shownModelItems} ptPerM={1} storeys={modelData.storeys} selectedId={selectedElementId} onSelect={selectFromModel}
             underlays={isIfcModel ? undefined : underlay3d.model.underlays} underlayZones={isIfcModel ? undefined : underlay3d.model.zones}
             preferPage={modelData.storeys.find(st => st.sourceId === selectedSourceId)?.page} />
@@ -1193,6 +1249,9 @@ export default function TakeoffWorkspacePage() {
         estimateOn: taskWalls,
         onToggleEstimate: () => setTaskWalls(v => !v),
         onInspect: setInspectLineId,
+        zones: taskZonesOn ? locationZonesOf(selectedSource.id).map(z => ({ id: z.id, name: z.name, color: z.color, pts: z.points as Vec2[] })) : [],
+        zonesOn: taskZonesOn,
+        onToggleZones: () => setTaskZonesOn(v => !v),
       } : null}
       onTaskLine={saveTaskLine}
       onTaskPick={pickTaskWall}

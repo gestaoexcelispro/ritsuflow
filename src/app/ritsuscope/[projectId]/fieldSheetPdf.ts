@@ -4,7 +4,7 @@
 // the location, the activities and quantities, the revision, and the location's FieldOp QR code.
 import { buildMarks, invert, winAnsi, type Matrix } from '@/lib/takeoff/printMarkup'
 import type { TakeoffItem, Vec2 } from '@/lib/takeoff/geometry'
-import { fitCrop, printedRatio, userBox, wrapText } from '@/lib/takeoff/fieldSheet'
+import { TASK_TAG_PT, fitCrop, printedRatio, tagBox, userBox, wrapText } from '@/lib/takeoff/fieldSheet'
 import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { loadPdfLib } from './printPdf'
 import { ICON_PATHS } from './icons'
@@ -162,22 +162,23 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
   // Callout tags of the planning lines: labels apart from the lines (no overlaps), each with a leader to its line.
   // Placed in the map's own space (y down from its top edge); a label the user moved on screen stays there.
   {
-    const size = 6.5 * tagScale, h = 10.5
+    // Same paper height as on screen (2.5 mm at the sheet's scale), times the map's enlargement; never below 4 pt.
+    const size = Math.max(4, TASK_TAG_PT * k), h = tagBox(1, size).h
     const calls = marks.filter((m): m is Extract<typeof m, { type: 'callout' }> => m.type === 'callout').map(m => {
       const t = winAnsi(m.text)
       const a = P(m.anchor)
       const f = m.fixed ? P(m.fixed) : null
-      return { m, t, id: m.id, x: a[0] - area.x, y: area.y + area.h - a[1], w: bold.widthOfTextAtSize(t, size) + 6, h, fixed: f ? [f[0] - area.x, area.y + area.h - f[1]] as [number, number] : null }
+      return { m, t, id: m.id, x: a[0] - area.x, y: area.y + area.h - a[1], w: bold.widthOfTextAtSize(t, size) + size * 1.2, h, fixed: f ? [f[0] - area.x, area.y + area.h - f[1]] as [number, number] : null }
     })
     const back = (x: number, yd: number) => ({ x: area.x + x, y: area.y + area.h - yd })
-    for (const l of layoutLabels(calls, area.w, area.h, 0.55)) {
+    for (const l of layoutLabels(calls, area.w, area.h, Math.max(0.3, h / 15))) {
       const c = calls.find(x => x.id === l.id)!
       const color = col(c.m.color)
       const an = back(l.x, l.y), le = back(l.lx, l.ly), bc = back(l.bx, l.by)
       page.drawLine({ start: an, end: le, thickness: 0.7, color })
       page.drawCircle({ x: an.x, y: an.y, size: 1.6, color, borderColor: rgb(1, 1, 1), borderWidth: 0.4 })
       page.drawRectangle({ x: bc.x - c.w / 2, y: bc.y - h / 2, width: c.w, height: h, color: rgb(1, 1, 1), opacity: 0.97, borderColor: color, borderWidth: 0.9 })
-      page.drawText(c.t, { x: bc.x - c.w / 2 + 3, y: bc.y - 2.4, size, font: bold, color })
+      page.drawText(c.t, { x: bc.x - bold.widthOfTextAtSize(c.t, size) / 2, y: bc.y - size * 0.36, size, font: bold, color })
     }
   }
   page.pushOperators(popGraphicsState())

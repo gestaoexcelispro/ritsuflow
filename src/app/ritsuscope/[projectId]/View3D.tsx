@@ -85,6 +85,8 @@ type Props = {
   underlayZones?: UnderlayZone[]
   /** Storey (page) of the sheet open in the editor: its underlay is preferred. */
   preferPage?: number
+  /** Tags shown from the start (task view). */
+  initialTags?: boolean
 }
 
 type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; group: any; raf: number }
@@ -92,7 +94,7 @@ type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; grou
 const NO_UNDERLAYS: UnderlaySpec[] = []
 const NO_ZONES: UnderlayZone[] = []
 
-export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage }: Props) {
+export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage, initialTags = false }: Props) {
   const t = useTakeoffT()
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<Scene | null>(null)
@@ -105,7 +107,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
   /** Construction layers: which board sides are drawn (none = framing only). */
   const [boards, setBoards] = useState<BoardSides>('both')
   /** Tag of each wall stretch floating above it (off by default: busy on big models). */
-  const [tagsOn, setTagsOn] = useState(false)
+  const [tagsOn, setTagsOn] = useState(initialTags)
   /** Doors and windows drawn as objects in their openings. */
   const [openingsOn, setOpeningsOn] = useState(true)
   /** The PDF region under the model (half tone) with the locations in colour. */

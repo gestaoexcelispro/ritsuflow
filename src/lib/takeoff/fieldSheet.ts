@@ -12,6 +12,15 @@ export function planColor(index: number): string {
   return PLAN_PALETTE[((index % PLAN_PALETTE.length) + PLAN_PALETTE.length) % PLAN_PALETTE.length]
 }
 
+/** Task tags are drawing text: a fixed height on paper (mm at the sheet's own scale), like CAD annotation. */
+export const TASK_TAG_MM = 2.5
+/** Tag text height in sheet points (PDF points of the original sheet = paper). */
+export const TASK_TAG_PT = (TASK_TAG_MM / 25.4) * 72
+/** Box around a tag of `n` characters with text height `fs` (same units): width and height. */
+export function tagBox(n: number, fs: number): { w: number; h: number } {
+  return { w: n * fs * 0.62 + fs * 1.2, h: fs * 1.7 }
+}
+
 /** Label of a planning line: "1.1 · 16,81 m²". */
 export function planLabel(code: string | null | undefined, qty: string, unit: string | null | undefined): string {
   return [code, `${qty}${unit ? ` ${unit}` : ''}`].filter(Boolean).join(' · ')
