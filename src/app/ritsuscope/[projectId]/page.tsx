@@ -26,7 +26,7 @@ import SplitPanel from './SplitPanel'
 import ElementPanel from './ElementPanel'
 import ChecksPanel from './ChecksPanel'
 import RevisionPanel from './RevisionPanel'
-import View3D, { render3DImage, type View3DStorey } from './View3D'
+import View3D, { DEFAULT_VIEW3D, render3DImage, type View3DCamera, type View3DStorey } from './View3D'
 import { elevationsOf, hostWall, sequenceOf, taskInfos, wallCards, type FieldScope, type FieldTaskLine, type WallCard, type WallTypeInfo } from '@/lib/takeoff/fieldSheetData'
 import PdfWorkspace, { type WorkCommand } from './PdfWorkspace'
 import PlanView from './PlanView'
@@ -61,7 +61,7 @@ import TagsEditor from './TagsEditor'
 import SurfaceTypePicker from './SurfaceTypePicker'
 import type { SurfaceTypeRow } from './SurfaceTypesLibrary'
 import SurfaceTypesLibrary, { surfaceLabelsFrom, useSurfaceLabels } from './SurfaceTypesLibrary'
-import { loadUnderlay, underlayRegionOf, type UnderlaySpec, type UnderlayZone } from './planUnderlay'
+import { loadUnderlay, underlayRegionOf, type LoadedUnderlay, type UnderlaySpec, type UnderlayZone } from './planUnderlay'
 import { sheetToModelOf } from '@/lib/takeoff/origin'
 import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { CEILING_FAMILY, FAMILIES, FLOOR_FAMILY, surfaceMaterials, type FamilyId } from './surfaceFamilies'
@@ -132,6 +132,8 @@ type ReportCfg = {
   area: { sourceId: string; box: [number, number, number, number] } | null
   show: { estimate: boolean; openings: boolean; tags: boolean; table: boolean; detail: boolean; qr: boolean; materials: boolean; materialSummary: boolean; view3d: boolean; tasks: boolean; walls: boolean; elevations: boolean; sequence: boolean; log: boolean; history: boolean }
   paper: 'A4' | 'A3'
+  /** The 3D picture of page 2: camera, what is in it and how much of the sheet. */
+  view3d: View3DReportCfg
   title: string
   responsible: string
   crew: string
@@ -139,10 +141,19 @@ type ReportCfg = {
   end: string
   notes: string
 }
+type View3DReportCfg = View3DCamera & {
+  /** tasks: the location's task lines + 1.5 m · area: the same area as the plan on page 1. */
+  extent: 'tasks' | 'area'
+  estimate: boolean
+  underlay: boolean
+  zones: boolean
+  tags: boolean
+}
+const VIEW3D_REPORT_DEFAULT: View3DReportCfg = { ...DEFAULT_VIEW3D, extent: 'tasks', estimate: true, underlay: true, zones: true, tags: true }
 const REPORT_DEFAULT: ReportCfg = {
   kind: 'location', areaMode: 'location', marginM: 1, area: null,
   show: { estimate: true, openings: true, tags: true, table: true, detail: true, qr: true, materials: true, materialSummary: true, view3d: true, tasks: true, walls: true, elevations: true, sequence: true, log: true, history: true },
-  paper: 'A4', title: '', responsible: '', crew: '', start: '', end: '', notes: '',
+  paper: 'A4', view3d: VIEW3D_REPORT_DEFAULT, title: '', responsible: '', crew: '', start: '', end: '', notes: '',
 }
 type FieldIssueRow = { id: string; location_id: string; kind: 'location' | 'activity'; scope_item_id: string | null; revision: number; fingerprint: string | null; file_path: string | null; issued_by_name: string | null; issued_at: string }
 
@@ -228,6 +239,30 @@ export default function TakeoffWorkspacePage() {
   const [fieldBusy, setFieldBusy] = useState<string | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportCfg, setReportCfg] = useState<ReportCfg>(REPORT_DEFAULT)
+  /** Rasterised sheet regions for the 3D pictures (the dialog preview redraws often). */
+  const underlayCache = useRef(new Map<string, Promise<LoadedUnderlay | null>>())
+  /** The 3D view last left on screen (Tasks › View › 3D), to copy into the report. */
+  const [liveView3d, setLiveView3d] = useState<View3DCamera | null>(null)
+  /** Report dialog: preview of the 3D picture (object URL) and whether it is being drawn. */
+  const [view3dPreview, setView3dPreview] = useState<{ url: string | null; busy: boolean; empty: boolean }>({ url: null, busy: false, empty: false })
+  // Redraw the dialog's 3D preview a moment after the settings stop changing.
+  useEffect(() => {
+    if (!reportOpen || section !== 'tasks' || !reportCfg.show.view3d) return
+    let alive = true
+    setView3dPreview(p => ({ ...p, busy: true }))
+    const timer = setTimeout(() => {
+      void (async () => {
+        let bytes: Uint8Array | null = null
+        try { bytes = await fieldSheet3d(reportCfg.kind, reportCfg, 800, 410) } catch { bytes = null }
+        if (!alive) return
+        setView3dPreview(prev => {
+          if (prev.url) URL.revokeObjectURL(prev.url)
+          return { url: bytes ? URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/png' })) : null, busy: false, empty: !bytes }
+        })
+      })()
+    }, 350)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [reportOpen, section, reportCfg.kind, reportCfg.areaMode, reportCfg.area, reportCfg.marginM, reportCfg.view3d, reportCfg.show.view3d, taskLocationId, taskRows]) // eslint-disable-line react-hooks/exhaustive-deps
   /** Drawing the report area on the sheet (the dialog is hidden meanwhile). */
   const [areaPicking, setAreaPicking] = useState(false)
   /** Kind given to the next zone drawn in Zoning. */
@@ -909,9 +944,9 @@ export default function TakeoffWorkspacePage() {
   }
   const fileSafe = (v: string) => v.replace(/[\\/:*?"<>|]+/g, '-').trim()
   /** Builds the PDF of the chosen location (all activities or just the chosen one) with the report settings, as a preview or as revision `revision`. */
-  async function makeFieldSheet(kind: FieldKind, revision: number | null, issuedBy: string, cfg: ReportCfg) {
-    if (!taskLocation || (kind === 'activity' && !taskScope)) throw new Error(t('task.panel.pick'))
-    // Which sheet and which part of it.
+  /** The sheet of the report and the part of it on page 1 (null = the whole sheet), from the report settings. */
+  function reportArea(cfg: ReportCfg): { sheet: SourceRow; frame: [number, number, number, number] | null; k: number } {
+    if (!taskLocation) throw new Error(t('task.panel.pick'))
     let sheet: SourceRow | undefined
     let frame: [number, number, number, number] | null = null
     if (cfg.areaMode === 'custom') {
@@ -928,6 +963,36 @@ export default function TakeoffWorkspacePage() {
     if (!sheet || sheet.kind !== 'pdf_page') throw new Error(t('zone.pdfOnly'))
     const k = Number(sheet.scale_pt_per_m) || 0
     if (!(k > 0)) throw new Error(t('draw.needScale'))
+    return { sheet, frame, k }
+  }
+  /** Walls of a sheet with their level height. */
+  function tallSheetItems(sheet: SourceRow): TakeoffItem[] {
+    const raw = rowsToItems(layers, rawElements, new Map([[sheet.id, 1]])).filter(it => it.shapes.length > 0)
+    const lv = sheetLevel(sheet, new Map<string, LevelRow>(levels.map(l => [l.id, l] as [string, LevelRow])))
+    const h = wallHeightOf(lv?.level)
+    return h ? fillLevelHeights(raw, () => h) : raw
+  }
+  /** The 3D picture of page 2 with the report's 3D settings (PNG), or null when there is nothing to show. */
+  async function fieldSheet3d(kind: FieldKind, cfg: ReportCfg, width: number, height: number): Promise<Uint8Array | null> {
+    const { sheet, frame, k } = reportArea(cfg)
+    const v = cfg.view3d
+    const lines = fieldLines(kind).filter(r => r.source_id === sheet.id)
+    const box = v.extent === 'area' && frame ? frame : boxAround(lines.flatMap(r => r.points), 1.5 * k) || frame
+    if (!box) return null
+    const scene = task3dScene(sheet.id, k, { rows: lines, estimateItems: v.estimate ? tallSheetItems(sheet) : [], zonesOn: v.zones, box })
+    if (!scene.items.length) return null
+    let under: LoadedUnderlay | null = null
+    if (v.underlay) {
+      const key = `${sheet.id}|${box.map(n => n.toFixed(1)).join(',')}`
+      let job = underlayCache.current.get(key)
+      if (!job) { job = loadUnderlay({ page: 1, filePath: sheet.file_path, pageNumber: sheet.page_number || 1, region: [[box[0], box[1]], [box[2], box[3]]], toModel: p => p }).catch(() => null); underlayCache.current.set(key, job) }
+      under = await job
+    }
+    return render3DImage({ items: scene.items, ptPerM: k, width, height, tags: v.tags, underlay: under, zones: v.zones ? scene.zones : [], grid: false, view: v }).catch(() => null)
+  }
+  async function makeFieldSheet(kind: FieldKind, revision: number | null, issuedBy: string, cfg: ReportCfg) {
+    if (!taskLocation || (kind === 'activity' && !taskScope)) throw new Error(t('task.panel.pick'))
+    const { sheet, frame, k } = reportArea(cfg)
     const lines = fieldLines(kind)
     const { data: signed, error: se } = await createClient().storage.from(BUCKET).createSignedUrl(sheet.file_path, 600)
     if (se || !signed) throw se || new Error('no URL')
@@ -984,16 +1049,8 @@ export default function TakeoffWorkspacePage() {
         .map(i => ({ rev: `REV ${i.revision}${i.kind === 'activity' ? ` · ${scopes.find(x => x.id === i.scope_item_id)?.scope_code || taskScopes.find(x => x.id === i.scope_item_id)?.scope_code || ''}` : ''}`, date: new Date(i.issued_at).toLocaleDateString(language), by: i.issued_by_name || '—' })),
       { rev: revision == null ? t('field.previewShort') : `REV ${revision}${kind === 'activity' ? ` · ${taskScope?.scope_code || ''}` : ''}`, date: new Date().toLocaleDateString(language), by: issuedBy || '—', current: true },
     ] : null
-    // The location in 3D: its task bands with tags, the walls around see-through, the sheet and the locations underneath.
-    let view3d: Uint8Array | null = null
-    if (cfg.show.view3d) {
-      const box = frame || boxAround(fLines.flatMap(r => r.points), 2 * k)
-      if (box) {
-        const scene = task3dScene(sheet.id, k, { rows: lines.filter(r => r.source_id === sheet!.id), estimateItems: cfg.show.estimate ? tallItems : [], zonesOn: true, box })
-        const under = await loadUnderlay({ page: 1, filePath: sheet.file_path, pageNumber: sheet.page_number || 1, region: [[box[0], box[1]], [box[2], box[3]]], toModel: p => p }).catch(() => null)
-        view3d = await render3DImage({ items: scene.items, ptPerM: k, width: 1600, height: 820, tags: true, underlay: under, zones: scene.zones, grid: false }).catch(() => null)
-      }
-    }
+    // The location in 3D, with the report's 3D settings.
+    const view3d = cfg.show.view3d ? await fieldSheet3d(kind, cfg, 1600, 820) : null
     const matSummary = sumMaterials(matGroups.map(g => g.rows))
     const level = sheet.level_id ? levels.find(l => l.id === sheet!.level_id) : null
     const date = new Date().toLocaleDateString(language)
@@ -1294,7 +1351,7 @@ export default function TakeoffWorkspacePage() {
         {section === 'tasks' ? (
           // Task view in 3D: the task layers as coloured bands on the wall faces (stacked when several activities share a
           // face), each with its tag; the estimate walls see-through; the sheet and the locations' colours underneath.
-          <View3D key={`tasks-${selectedSource.id}`} items={tasks3d.items} ptPerM={ptPerM} selectedId={null} onSelect={() => {}} initialTags
+          <View3D key={`tasks-${selectedSource.id}`} items={tasks3d.items} ptPerM={ptPerM} selectedId={null} onSelect={() => {}} initialTags onView={setLiveView3d}
             underlays={tasks3d.underlays} underlayZones={tasks3d.zones} />
         ) : canShowModel && scope3d === 'model' ? (
           <View3D key={isIfcModel ? 'model' : 'building'} items={shownModelItems} ptPerM={1} storeys={modelData.storeys} selectedId={selectedElementId} onSelect={selectFromModel}
@@ -2973,6 +3030,50 @@ export default function TakeoffWorkspacePage() {
                   </div>
                   <label style={lbl}>{t('report.notes')}<textarea rows={3} value={cfg.notes} onChange={e => set({ notes: e.target.value })} style={{ ...inp, height: 'auto', padding: 8, resize: 'vertical' }} /></label>
                 </div>
+
+                {cfg.show.view3d && (() => {
+                  // The 3D picture of page 2: direction, height of the eye, zoom, how much of the sheet and what is in it.
+                  const v = cfg.view3d
+                  const setV = (patch: Partial<View3DReportCfg>) => setReportCfg(c => ({ ...c, view3d: { ...c.view3d, ...patch } }))
+                  const presets: [TakeoffMessageKey, { azimuth: number; elevation: number }][] = [
+                    ['report.v3d.sw', { azimuth: 329, elevation: 32 }], ['report.v3d.se', { azimuth: 31, elevation: 32 }],
+                    ['report.v3d.ne', { azimuth: 149, elevation: 32 }], ['report.v3d.nw', { azimuth: 211, elevation: 32 }],
+                    ['report.v3d.front', { azimuth: 0, elevation: 12 }], ['report.v3d.top', { azimuth: 0, elevation: 89 }],
+                  ]
+                  const chip = (on: boolean) => ({ height: 28, padding: '0 10px', border: '1px solid ' + (on ? '#109d91' : '#cddcdf'), borderRadius: 6, background: on ? '#f0faf8' : '#fff', color: '#173441', fontSize: 12, fontWeight: 700, cursor: 'pointer' }) as const
+                  const slider = (label: string, value: number, min: number, max: number, step: number, text: string, on: (n: number) => void) => (
+                    <label style={{ display: 'grid', gridTemplateColumns: '92px 1fr 52px', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: '#42636f' }}>{label}<input type="range" min={min} max={max} step={step} value={value} onChange={e => on(Number(e.target.value))} /><span style={{ fontWeight: 600, color: '#294955', textAlign: 'right' }}>{text}</span></label>
+                  )
+                  return (
+                    <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 10, paddingTop: 6, borderTop: '1px solid #e5edef' }}>
+                      <div style={sectionTitle}>{t('report.v3d.title')}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, alignItems: 'start' }}>
+                        <div style={{ position: 'relative', aspectRatio: '1600 / 820', border: '1px solid #e0e8ea', borderRadius: 8, background: '#fff', overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                          {view3dPreview.url && <img src={view3dPreview.url} alt={t('report.v3d.title')} style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: view3dPreview.busy ? 0.55 : 1 }} />}
+                          {(!view3dPreview.url || view3dPreview.busy) && <span style={{ position: 'absolute', fontSize: 12, color: '#6b8089' }}>{view3dPreview.busy ? t('report.v3d.drawing') : view3dPreview.empty ? t('report.v3d.empty') : ''}</span>}
+                        </div>
+                        <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {presets.map(([key, p]) => <button key={key} type="button" onClick={() => setV(p)} style={chip(v.azimuth === p.azimuth && v.elevation === p.elevation)}>{t(key)}</button>)}
+                            <button type="button" disabled={!liveView3d} title={t('report.v3d.fromScreenHint')} onClick={() => liveView3d && setV({ azimuth: liveView3d.azimuth, elevation: liveView3d.elevation })} style={{ ...chip(false), opacity: liveView3d ? 1 : 0.45 }}>{t('report.v3d.fromScreen')}</button>
+                          </div>
+                          {slider(t('report.v3d.azimuth'), v.azimuth, 0, 359, 1, `${v.azimuth}°`, n => setV({ azimuth: n }))}
+                          {slider(t('report.v3d.elevation'), v.elevation, 5, 89, 1, `${v.elevation}°`, n => setV({ elevation: n }))}
+                          {slider(t('report.v3d.zoom'), v.zoom, 0.6, 2.5, 0.05, `${Math.round(v.zoom * 100)}%`, n => setV({ zoom: n }))}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            {(['tasks', 'area'] as const).map(x => <label key={x} style={{ ...radio(v.extent === x), flex: 1, padding: '6px 8px', opacity: x === 'area' && cfg.areaMode === 'sheet' ? 0.5 : 1 }}><input type="radio" disabled={x === 'area' && cfg.areaMode === 'sheet'} checked={v.extent === x} onChange={() => setV({ extent: x })} /><span>{t(x === 'tasks' ? 'report.v3d.extentTasks' : 'report.v3d.extentArea')}</span></label>)}
+                          </div>
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                            {(['estimate', 'underlay', 'zones', 'tags'] as const).map(key => (
+                              <label key={key} style={check}><input type="checkbox" checked={v[key]} onChange={e => setV({ [key]: e.target.checked } as Partial<View3DReportCfg>)} />{t(`report.v3d.${key}` as TakeoffMessageKey)}</label>
+                            ))}
+                          </div>
+                          <button type="button" onClick={() => setV({ ...VIEW3D_REPORT_DEFAULT })} style={{ justifySelf: 'start', border: 0, background: 'transparent', padding: 0, color: '#0b7f75', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('report.v3d.reset')}</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
               <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 18px', borderTop: '1px solid #e5edef', background: '#f7fafb', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11.5, color: st.changed ? '#b45309' : '#6b8089' }}>{!st.lines.length ? t('field.nothing') : !st.last ? t('field.notIssued') : st.changed ? t('field.changedSince', { rev: st.last.revision }) : t('field.upToDate', { rev: st.last.revision, date: new Date(st.last.issued_at).toLocaleDateString(language) })}</span>

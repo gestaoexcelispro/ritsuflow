@@ -87,6 +87,8 @@ type Props = {
   preferPage?: number
   /** Tags shown from the start (task view). */
   initialTags?: boolean
+  /** Called when the user stops orbiting: the view on screen (for the field sheet's 3D picture). */
+  onView?: (view: View3DCamera) => void
 }
 
 type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; group: any; raf: number }
@@ -94,13 +96,15 @@ type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; grou
 const NO_UNDERLAYS: UnderlaySpec[] = []
 const NO_ZONES: UnderlayZone[] = []
 
-export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage, initialTags = false }: Props) {
+export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage, initialTags = false, onView }: Props) {
   const t = useTakeoffT()
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<Scene | null>(null)
   const fittedRef = useRef(false)
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
+  const onViewRef = useRef(onView)
+  onViewRef.current = onView
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [layered, setLayered] = useState(true)
   const [explode, setExplode] = useState(false)
@@ -173,6 +177,10 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
         // Touch: one finger orbits, two fingers pinch to zoom (and turn) without panning,
         // so the model stays centred on phones; the page itself must not scroll or zoom.
         ctl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }
+        ctl.addEventListener('end', () => {
+          const d = cam.position.clone().sub(ctl.target)
+          onViewRef.current?.(viewOfDir([d.x, d.y, d.z]))
+        })
         renderer.domElement.style.touchAction = 'none'
         renderer.domElement.style.display = 'block'
         scene.add(new THREE.HemisphereLight(0xffffff, 0x88939e, 0.85))
@@ -832,8 +840,8 @@ function drawTagOverlay(ctx: CanvasRenderingContext2D, THREE: Three, cam: any, a
   }
 }
 
-export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean; underlay?: LoadedUnderlay | null; zones?: UnderlayZone[]; grid?: boolean }): Promise<Uint8Array | null> {
-  const { items, ptPerM, storeys, width, height, layered = true, tags = false, underlay = null, zones = [], grid = true } = opts
+export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number; storeys?: View3DStorey[]; width: number; height: number; layered?: boolean; tags?: boolean; underlay?: LoadedUnderlay | null; zones?: UnderlayZone[]; grid?: boolean; view?: View3DCamera | null }): Promise<Uint8Array | null> {
+  const { items, ptPerM, storeys, width, height, layered = true, tags = false, underlay = null, zones = [], grid = true, view = null } = opts
   if (!ptPerM || !items.some(it => it.shapes.length)) return null
   let THREE: Three
   try { THREE = await loadThree() } catch { return null }
@@ -857,7 +865,7 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
     const elev = new Map((storeys || []).map(st => [st.page, st.elevation]))
     const elevationOf = (page: number) => elev.get(page) || 0
     const anchors = build(s, items, ptPerM, { selectedId: null, layered, explode: 0, isolate: false, elevationOf, center: items, tags, grid, underlay, zones: underlay ? zones.filter(z => z.page === underlay.page) : [] })
-    const tgt = fitWhole(THREE, cam, group, width / height)
+    const tgt = fitWhole(THREE, cam, group, width / height, view)
     if (tags && anchors.length && tgt) {
       // A little more room around the model for the labels above it.
       cam.position.sub(tgt).multiplyScalar(1.06).add(tgt)
@@ -897,13 +905,13 @@ export async function render3DImage(opts: { items: TakeoffItem[]; ptPerM: number
  * 3D view angle: the model's 8 bounding-box corners are projected and the camera is moved
  * until they all sit inside the picture with a small margin.
  */
-function fitWhole(THREE: Three, cam: any, group: any, aspect: number) {
+function fitWhole(THREE: Three, cam: any, group: any, aspect: number, view?: View3DCamera | null) {
   const box = new THREE.Box3()
   for (const c of group.children) if (c.type !== 'GridHelper' && !c.userData?.noFit) box.expandByObject(c)
   if (box.isEmpty()) return null
   const center = box.getCenter(new THREE.Vector3())
   const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1)
-  const dir = new THREE.Vector3(-0.55, 0.65, 0.9).normalize()
+  const dir = view ? new THREE.Vector3(...cameraDir(view)) : new THREE.Vector3(-0.55, 0.65, 0.9).normalize()
   cam.aspect = aspect
   const corners: any[] = []
   for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(x, y, z))
@@ -933,6 +941,27 @@ function fitWhole(THREE: Three, cam: any, group: any, aspect: number) {
     const extent = Math.max((x1 - x0) / 2, (y1 - y0) / 2)
     if (extent > 0) dist *= extent / 0.94
   }
+  if (view && view.zoom > 0) dist /= view.zoom
   place()
   return target
+}
+
+/**
+ * A view of the model for pictures (field sheet): where the camera looks from — azimuth (degrees, 0 = from the
+ * bottom of the sheet, clockwise seen from above) and elevation (degrees above the floor) — and a zoom on the fitted
+ * frame (1 = the whole model fills the picture).
+ */
+export type View3DCamera = { azimuth: number; elevation: number; zoom: number }
+/** The usual 3D view angle (from the bottom-left of the sheet, about 32° up). */
+export const DEFAULT_VIEW3D: View3DCamera = { azimuth: 329, elevation: 32, zoom: 1 }
+/** Unit vector from the target to the camera for a view (x right, y up, z towards the bottom of the sheet). */
+export function cameraDir(v: Pick<View3DCamera, 'azimuth' | 'elevation'>): [number, number, number] {
+  const az = (v.azimuth * Math.PI) / 180, el = (Math.max(1, Math.min(89.5, v.elevation)) * Math.PI) / 180
+  return [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)]
+}
+/** The view a camera direction stands for (the inverse of cameraDir); zoom kept at 1. */
+export function viewOfDir(d: [number, number, number]): View3DCamera {
+  const L = Math.hypot(d[0], d[1], d[2]) || 1
+  const az = (Math.atan2(d[0] / L, d[2] / L) * 180) / Math.PI
+  return { azimuth: Math.round(((az % 360) + 360) % 360), elevation: Math.round((Math.asin(Math.max(-1, Math.min(1, d[1] / L))) * 180) / Math.PI), zoom: 1 }
 }
