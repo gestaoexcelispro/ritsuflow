@@ -154,3 +154,28 @@ test('recipe lines go to their task, shared by the stretch and split between fac
   const tot = [full([[0, 99.5], [100, 99.5]], -1, 'joints_a'), full([[0, 100.5], [100, 100.5]], 1, 'joints_b')].flat().filter(r => r.mat === 'Massa para juntas').reduce((a, r) => a + r.exact, 0)
   assert.ok(Math.abs(tot - 0.7 * itemArea) < 1e-6, `both faces = estimate, got ${tot}`)
 })
+
+test('the activity of an old or typed scope line is guessed from its name', async () => {
+  const { inferStep } = await import('../src/lib/takeoff/taskMaterials.ts')
+  assert.equal(inferStep('board_b', 'whatever'), 'board_b', 'an imported step wins')
+  assert.equal(inferStep(null, 'Metal stud framing – 3-5/8" 25 ga (18 mil) stud'), 'framing')
+  assert.equal(inferStep(null, 'Gypsum board installation – Side A (1× 5/8" Type X gypsum board 4\'×12\')'), 'board_a')
+  assert.equal(inferStep(null, 'Gypsum board installation – Side B'), 'board_b')
+  assert.equal(inferStep(null, 'Joint treatment – Side B'), 'joints_b')
+  assert.equal(inferStep(null, 'Tratamento de juntas'), 'joints_a')
+  assert.equal(inferStep(null, 'Isolamento acústico'), 'insulation')
+  assert.equal(inferStep(null, 'Estruturação'), 'framing')
+  assert.equal(inferStep(null, 'Pintura'), null)
+})
+
+test('double studs (MD) double the regular studs and their framing screws, not the board screws', async () => {
+  const { layoutWall, screwsForWall } = await import('../src/lib/takeoff/framing/framing.ts')
+  const single = layoutWall(wall, wall.shapes[0], K)
+  const dbl = { ...wall, framing: { ...framing, doubleStuds: true } }
+  const double = layoutWall(dbl, dbl.shapes[0], K)
+  const regular = single.studs.filter(s => s.kind === 'montante').length
+  assert.equal(double.studs.length, single.studs.length + regular)
+  const a = screwsForWall(single, framing), b = screwsForWall(double, dbl.framing)
+  assert.equal(b.ta, a.ta, 'boards are screwed once')
+  assert.ok(b.la > a.la, 'each twin is fixed in the tracks')
+})

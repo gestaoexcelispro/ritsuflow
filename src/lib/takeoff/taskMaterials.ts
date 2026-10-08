@@ -108,6 +108,21 @@ export function sliceLayout(lay: WallLayout, s0: number, s1: number, face: 'A' |
   return { ...lay, studs, tracks, headers, board: { A: boardOf('A'), B: boardOf('B') }, studLen: [], trackLen: [] }
 }
 
+/**
+ * The activity of a scope line on a wall: its takeoff step when it was imported from RitsuScope, else
+ * guessed from its name (old or typed scope): joints, insulation, boards (face B when it says so), framing.
+ */
+export function inferStep(step: string | null | undefined, name: string | null | undefined): string | null {
+  if (step && step !== 'scope') return step
+  const n = (name || '').toLowerCase()
+  const faceB = /\b(side|face|lado)\s*b\b/.test(n)
+  if (/joint|junta|tratamento|massa|tape|fita|taping|finish/.test(n)) return faceB ? 'joints_b' : 'joints_a'
+  if (/insula|isola|(^|\s)l[ãa](\s|$)|wool|batt/.test(n)) return 'insulation'
+  if (/board|chapa|placa|gypsum|drywall sheet|sheathing|plasterboard/.test(n)) return faceB ? 'board_b' : 'board_a'
+  if (/fram|stud|estrutur|montante|perfil|steel|metal/.test(n)) return 'framing'
+  return null
+}
+
 /** Net face area and length of the lines (each line's height; openings of the host wall in the stretch deducted). */
 export function taskBase(lines: TaskLine[], item: TakeoffItem | null, ptPerM: number): TaskBase {
   let area = 0, length = 0

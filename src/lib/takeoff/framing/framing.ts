@@ -188,7 +188,8 @@ export function parseBars(s: string): number[] {
 }
 
 export type StudKind = 'montante' | 'batente' | 'complemento'
-export type Stud = { x: number; y0: number; y1: number; kind: StudKind }
+/** twin: the second stud of a double-stud pair (same place; boards are screwed to the first one). */
+export type Stud = { x: number; y0: number; y1: number; kind: StudKind; twin?: boolean }
 export type TrackPiece = { x0: number; x1: number; y: number; kind: 'guia superior' | 'guia inferior' }
 export type HeaderPiece = { x0: number; x1: number; y: number; kind: 'verga' | 'contraverga' }
 export type BoardPiece = { x0: number; x1: number; y0: number; y1: number; layer: number; notch: boolean }
@@ -263,7 +264,11 @@ export function layoutWall(it: TakeoffItem, sh: TakeoffShape, ptPerM: number): W
     for (const x of grid) {
       if (jambs.some(j => Math.abs(j - x) < 0.05)) continue
       const o = s.ops.find(o => x > o.x0 + 0.02 && x < o.x1 - 0.02)
-      if (!o) { studs.push({ x: X + x, y0: 0, y1: H, kind: 'montante' }); continue }
+      if (!o) {
+        studs.push({ x: X + x, y0: 0, y1: H, kind: 'montante' })
+        if (F.doubleStuds) studs.push({ x: X + x, y0: 0, y1: H, kind: 'montante', twin: true })
+        continue
+      }
       if (H - o.y1 > 0.05) studs.push({ x: X + x, y0: o.y1, y1: H, kind: 'complemento' })
       if (o.y0 > 0.05) studs.push({ x: X + x, y0: 0, y1: o.y0, kind: 'complemento' })
     }
@@ -420,7 +425,7 @@ export function screwsForWall(lay: WallLayout, F: FramingConfig): ScrewCount {
   for (const face of ['A', 'B'] as const) {
     for (const b of lay.board[face]) {
       for (const st of lay.studs) {
-        if (st.x < b.x0 - 1e-6 || st.x > b.x1 + 1e-6) continue
+        if (st.twin || st.x < b.x0 - 1e-6 || st.x > b.x1 + 1e-6) continue
         ta += screwsAlong(Math.min(b.y1, st.y1) - Math.max(b.y0, st.y0), spacing)
       }
       for (const h of horizontals) {

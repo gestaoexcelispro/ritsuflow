@@ -27,7 +27,7 @@ import ElementPanel from './ElementPanel'
 import ChecksPanel from './ChecksPanel'
 import RevisionPanel from './RevisionPanel'
 import View3D, { render3DImage, type View3DStorey } from './View3D'
-import { elevationsOf, sequenceOf, taskInfos, wallCards, type FieldScope, type FieldTaskLine, type WallCard, type WallTypeInfo } from '@/lib/takeoff/fieldSheetData'
+import { elevationsOf, hostWall, sequenceOf, taskInfos, wallCards, type FieldScope, type FieldTaskLine, type WallCard, type WallTypeInfo } from '@/lib/takeoff/fieldSheetData'
 import PdfWorkspace, { type WorkCommand } from './PdfWorkspace'
 import PlanView from './PlanView'
 import ProjectPurchases from './ProjectPurchases'
@@ -78,7 +78,7 @@ import { IfcEmptyError, importIfcFile } from './importIfc'
 import { bandCentre, frameOf, measureTaskLines, nextTaskTag, planStyleOf, sameFace, takeWallStretch, type PlanStyle, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
 import { fingerprint, planColor, tagsOnLongest } from '@/lib/takeoff/fieldSheet'
 import { buildFieldSheetPdf, type FieldSheetRow } from './fieldSheetPdf'
-import { planMaterialsOf, sumMaterials, taskMaterials, type PlanMaterial, type TaskMaterialRow } from '@/lib/takeoff/taskMaterials'
+import { inferStep, planMaterialsOf, sumMaterials, taskMaterials, type PlanMaterial, type TaskMaterialRow } from '@/lib/takeoff/taskMaterials'
 
 type Project = { id: string; project_code: string | null; name: string; country: string | null; country_code: string | null; stage?: string | null }
 
@@ -829,12 +829,17 @@ export default function TakeoffWorkspacePage() {
   }
   // ---------- Materials of planned tasks ----------
   const matLabels = { bars: t('mat.bars'), sheets: t('mat.sheets'), un: t('mat.un'), rolls: t('fixings.rollsUnit'), barLen: (v: number) => `${formatNumber(v, 2)} m` }
-  /** Materials of one activity's lines in one location (all sheets), from the wall layout and the activity's rates. */
+  /**
+   * Materials of one activity's lines in one location (all sheets): each line takes its part of the estimate of the wall
+   * it lies on (layout + material list), plus the activity's extras. The wall is the activity's own takeoff item when the
+   * scope was imported from RitsuScope, else whatever wall the line was drawn on (old or typed scope lines).
+   */
   function materialsFor(scopeId: string, locationId: string): TaskMaterialRow[] {
     const sc = taskScopes.find(x => x.id === scopeId)
     if (!sc) return []
     const rows = taskRows.filter(r => r.scope_item_id === scopeId && r.location_id === locationId)
     const rates = planMaterialsOf(sc.plan_materials)
+    const step = inferStep(sc.takeoff_step, sc.scope_name)
     const out: TaskMaterialRow[][] = []
     for (const sheetId of [...new Set(rows.map(r => r.source_id))]) {
       const sheet = sources.find(x => x.id === sheetId)
@@ -844,19 +849,30 @@ export default function TakeoffWorkspacePage() {
       const h = wallHeightOf(lv?.level)
       const raw = rowsToItems(layers, rawElements, new Map([[sheetId, 1]]))
       const sheetItems = (h ? fillLevelHeights(raw, () => h) : raw).filter(it => it.shapes.length > 0)
-      const item = sc.takeoff_layer_id ? sheetItems.find(it => it.key === sc.takeoff_layer_id) || null : null
-      const wt = item ? projectRecipeCtx.wallTypeOf?.(item) : null
-      const insId = wt?.materials?.insulation
-      const ins = insId ? projectRecipeCtx.catalog?.get(insId) : undefined
-      // The wall's estimate: its recipe lines for the whole item; the task takes its stretch's share.
-      const recipeLines = item ? recipeLineQuantities(item, k, recipeOfItem(item), projectRecipeCtx) : []
-      const vars = item && recipeLines.length ? recipeVariables(item, k, wt) : null
-      out.push(taskMaterials({
-        step: sc.takeoff_step || null, item, sheetItems, ptPerM: k, rates, labels: matLabels,
-        recipeLines, itemBase: vars ? { area: vars.area, length: vars.length } : null, ends: freeEnds(sheetItems, k),
-        lines: rows.filter(r => r.source_id === sheetId).map(r => ({ points: r.points, side: r.side, height_m: r.height_m })),
-        insulation: ins ? { name: ins.name, unit: ins.unit, packSize: ins.pack_size, packName: ins.pack_name } : sc.takeoff_step === 'insulation' && insId ? { name: t('mat.insulation'), unit: 'm²' } : null,
-      }))
+      const ends = freeEnds(sheetItems, k)
+      // Lines grouped by the wall they lie on.
+      const groups = new Map<string, { item: TakeoffItem | null; lines: TaskDrawingRow[] }>()
+      for (const r of rows.filter(x => x.source_id === sheetId)) {
+        const host = hostWall(r, sheetItems, k, sc.takeoff_layer_id || null)
+        const key = host?.item.key || '__none'
+        const g = groups.get(key) || { item: host?.item || null, lines: [] }
+        g.lines.push(r)
+        groups.set(key, g)
+      }
+      for (const { item, lines: gl } of groups.values()) {
+        const wt = item ? projectRecipeCtx.wallTypeOf?.(item) : null
+        const insId = wt?.materials?.insulation
+        const ins = insId ? projectRecipeCtx.catalog?.get(insId) : undefined
+        // The wall's estimate: its recipe lines for the whole item; the task takes its stretch's share.
+        const recipeLines = item ? recipeLineQuantities(item, k, recipeOfItem(item), projectRecipeCtx) : []
+        const vars = item && recipeLines.length ? recipeVariables(item, k, wt) : null
+        out.push(taskMaterials({
+          step, item, sheetItems, ptPerM: k, rates, labels: matLabels,
+          recipeLines, itemBase: vars ? { area: vars.area, length: vars.length } : null, ends,
+          lines: gl.map(r => ({ points: r.points, side: r.side, height_m: r.height_m })),
+          insulation: ins ? { name: ins.name, unit: ins.unit, packSize: ins.pack_size, packName: ins.pack_name } : step === 'insulation' && insId ? { name: t('mat.insulation'), unit: 'm²' } : null,
+        }))
+      }
     }
     return sumMaterials(out)
   }
@@ -940,7 +956,7 @@ export default function TakeoffWorkspacePage() {
     const lv = sheetLevel(sheet, new Map<string, LevelRow>(levels.map(l => [l.id, l] as [string, LevelRow])))
     const wallH = wallHeightOf(lv?.level)
     const tallItems = wallH ? fillLevelHeights(sheetItems, () => wallH) : sheetItems
-    const fScopes: FieldScope[] = scopes.map(sc => ({ id: sc.id, code: sc.scope_code || '', name: sc.scope_name, color: colorOfScope(sc.id), step: sc.takeoff_step || null, unit: sc.unit || null, itemKey: sc.takeoff_layer_id || null }))
+    const fScopes: FieldScope[] = scopes.map(sc => ({ id: sc.id, code: sc.scope_code || '', name: sc.scope_name, color: colorOfScope(sc.id), step: inferStep(sc.takeoff_step, sc.scope_name), unit: sc.unit || null, itemKey: sc.takeoff_layer_id || null }))
     const fLines: FieldTaskLine[] = lines.filter(r => r.source_id === sheet!.id).map(r => ({ id: r.id, tag: r.tag || null, scope_item_id: r.scope_item_id, points: r.points, side: r.side, height_m: r.height_m, quantity: r.quantity, unit: r.unit }))
     const nf = (v: number) => formatNumber(v, 2)
     const actName = (id: string) => { const sc = scopes.find(x => x.id === id); return sc ? `${sc.scope_code || ''} ${sc.scope_name}`.trim() : '' }

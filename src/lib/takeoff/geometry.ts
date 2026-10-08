@@ -73,6 +73,8 @@ export type FramingConfig = {
   laPerStudEnd?: number
   taName?: string
   laName?: string
+  /** Double studs (MD): every regular stud is a pair, back to back (from the wall type). */
+  doubleStuds?: boolean
   /** Fixing to other systems (slab, ceiling, existing walls): anchors and acoustic band from the layout. Unset = not counted by the layout. */
   fixings?: FixingsConfig | null
 }
