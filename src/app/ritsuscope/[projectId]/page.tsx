@@ -876,7 +876,7 @@ export default function TakeoffWorkspacePage() {
     const level = sheet.level_id ? levels.find(l => l.id === sheet!.level_id) : null
     const date = new Date().toLocaleDateString(language)
     const fmtDate = (v: string) => (v ? new Date(`${v}T12:00:00`).toLocaleDateString(language) : '')
-    const dates = cfg.start || cfg.end ? `${fmtDate(cfg.start) || '…'} → ${fmtDate(cfg.end) || '…'}` : ''
+    const dates = cfg.start || cfg.end ? `${fmtDate(cfg.start) || '…'} – ${fmtDate(cfg.end) || '…'}` : ''
     const blob = await buildFieldSheetPdf({
       url: signed.signedUrl, pageNumber: sheet.page_number || 1, ptPerM: k, frame, items, paper: cfg.paper,
       zone: { name: taskLocation.name, pts: taskZone && taskZone.source_id === sheet.id ? taskZone.points as Vec2[] : [] },

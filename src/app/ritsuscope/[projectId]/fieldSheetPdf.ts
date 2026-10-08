@@ -175,9 +175,13 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
 
   // Revision box.
   page.drawRectangle({ x: X, y: y - 34, width: CW, height: 38, color: rgb(0.94, 0.98, 0.97), borderColor: teal, borderWidth: 0.8 })
-  page.drawText(winAnsi(text.revision), { x: X + 8, y: y - 17, size: 15, font: bold, color: teal })
-  const issued = wrapText(winAnsi(text.issued), CW - 80, s => font.widthOfTextAtSize(s, 7), 2)
-  issued.forEach((l, i) => page.drawText(l, { x: X + 74, y: y - 12 - i * 9, size: 7, font, color: grey }))
+  const revText = winAnsi(text.revision)
+  const revW = bold.widthOfTextAtSize(revText, 15)
+  page.drawText(revText, { x: X + 8, y: y - 17, size: 15, font: bold, color: teal })
+  // The issue line sits after the revision stamp, however long it is ("REV 12", "PRÉVIA", "PREVIEW").
+  const ix = X + 8 + revW + 10
+  const issued = wrapText(winAnsi(text.issued), X + CW - 6 - ix, s => font.widthOfTextAtSize(s, 7), 2)
+  issued.forEach((l, i) => page.drawText(l, { x: ix, y: y - 12 - i * 9, size: 7, font, color: grey }))
   y -= 50
 
   // Activities and quantities.
