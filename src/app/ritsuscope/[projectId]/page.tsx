@@ -120,6 +120,27 @@ const TASK_COLOR = '#E11D48'
 const TASK_GROUP_KINDS = new Set(['building', 'floor', 'zone'])
 type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null; plan_style?: PlanStyle | null }
 type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null; qr_token: string | null }
+/** Task report (field sheet) settings, chosen in its dialog and kept with each issued revision. */
+type ReportCfg = {
+  kind: 'location' | 'activity'
+  /** location: the zone + margin · custom: an area drawn on a sheet · sheet: the whole sheet. */
+  areaMode: 'location' | 'custom' | 'sheet'
+  marginM: number
+  area: { sourceId: string; box: [number, number, number, number] } | null
+  show: { estimate: boolean; openings: boolean; tags: boolean; table: boolean; detail: boolean; qr: boolean }
+  paper: 'A4' | 'A3'
+  title: string
+  responsible: string
+  crew: string
+  start: string
+  end: string
+  notes: string
+}
+const REPORT_DEFAULT: ReportCfg = {
+  kind: 'location', areaMode: 'location', marginM: 1, area: null,
+  show: { estimate: true, openings: true, tags: true, table: true, detail: true, qr: true },
+  paper: 'A4', title: '', responsible: '', crew: '', start: '', end: '', notes: '',
+}
 type FieldIssueRow = { id: string; location_id: string; kind: 'location' | 'activity'; scope_item_id: string | null; revision: number; fingerprint: string | null; file_path: string | null; issued_by_name: string | null; issued_at: string }
 
 export default function TakeoffWorkspacePage() {
@@ -198,6 +219,10 @@ export default function TakeoffWorkspacePage() {
   const [taskPlan, setTaskPlan] = useState(true)
   const [fieldIssues, setFieldIssues] = useState<FieldIssueRow[]>([])
   const [fieldBusy, setFieldBusy] = useState<string | null>(null)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportCfg, setReportCfg] = useState<ReportCfg>(REPORT_DEFAULT)
+  /** Drawing the report area on the sheet (the dialog is hidden meanwhile). */
+  const [areaPicking, setAreaPicking] = useState(false)
   /** Kind given to the next zone drawn in Zoning. */
   const [drawKind, setDrawKind] = useState<ZoneKind>('room')
   /** Old Location Map pages not moved into RitsuScope yet. */
@@ -806,26 +831,40 @@ export default function TakeoffWorkspacePage() {
     setTimeout(() => URL.revokeObjectURL(href), 60_000)
   }
   const fileSafe = (v: string) => v.replace(/[\\/:*?"<>|]+/g, '-').trim()
-  /** Builds the PDF of the chosen location (all activities or just the chosen one), as a preview or as revision `revision`. */
-  async function makeFieldSheet(kind: FieldKind, revision: number | null, issuedBy: string) {
+  /** Builds the PDF of the chosen location (all activities or just the chosen one) with the report settings, as a preview or as revision `revision`. */
+  async function makeFieldSheet(kind: FieldKind, revision: number | null, issuedBy: string, cfg: ReportCfg) {
     if (!taskLocation || (kind === 'activity' && !taskScope)) throw new Error(t('task.panel.pick'))
-    if (!taskZone) throw new Error(t('task.panel.noZone', { location: taskLocation.name }))
-    const sheet = sources.find(x => x.id === taskZone.source_id)
+    // Which sheet and which part of it.
+    let sheet: SourceRow | undefined
+    let frame: [number, number, number, number] | null = null
+    if (cfg.areaMode === 'custom') {
+      if (!cfg.area) throw new Error(t('report.area.missing'))
+      sheet = sources.find(x => x.id === cfg.area!.sourceId)
+      frame = cfg.area.box
+    } else if (cfg.areaMode === 'location') {
+      if (!taskZone) throw new Error(t('task.panel.noZone', { location: taskLocation.name }))
+      sheet = sources.find(x => x.id === taskZone.source_id)
+      frame = frameOf(taskZone.points as Vec2[], Number(sheet?.scale_pt_per_m) || 0, Math.max(0, cfg.marginM))
+    } else {
+      sheet = (taskZone && sources.find(x => x.id === taskZone.source_id)) || selectedSource || undefined
+    }
     if (!sheet || sheet.kind !== 'pdf_page') throw new Error(t('zone.pdfOnly'))
     const k = Number(sheet.scale_pt_per_m) || 0
-    const frame = frameOf(taskZone.points as Vec2[], k, 1)
-    if (!frame || !(k > 0)) throw new Error(t('draw.needScale'))
+    if (!(k > 0)) throw new Error(t('draw.needScale'))
     const lines = fieldLines(kind)
     const { data: signed, error: se } = await createClient().storage.from(BUCKET).createSignedUrl(sheet.file_path, 600)
     if (se || !signed) throw se || new Error('no URL')
     const sheetItems = rowsToItems(layers, rawElements, new Map([[sheet.id, 1]])).filter(it => it.shapes.length > 0)
-    const items = [...estimateLayer(sheetItems), ...planningLayer(sheet.id, { locationId: taskLocation.id, scopeId: kind === 'activity' ? taskScopeId : null })]
+    const estimate = cfg.show.estimate ? estimateLayer(sheetItems).map(it => (cfg.show.openings ? it : { ...it, shapes: it.shapes.map(sh => ({ ...sh, openings: [] })) })) : []
+    const planning = planningLayer(sheet.id, { locationId: taskLocation.id, scopeId: kind === 'activity' ? taskScopeId : null })
+      .map(it => (cfg.show.tags ? it : { ...it, shapes: it.shapes.map(sh => ({ ...sh, tags: undefined })) }))
+    const items = [...estimate, ...planning]
     const walls: WallRef[] = sheetItems.filter(it => it.kind === 'linear').flatMap(it => it.shapes.map(sh => ({ pts: sh.pts, openings: sh.openings, kind: it.kind })))
     const scopes = taskScopes.filter(sc => lines.some(r => r.scope_item_id === sc.id))
     const rows: FieldSheetRow[] = scopes.map(sc => {
       const mine = lines.filter(r => r.scope_item_id === sc.id)
       const qty = mine.reduce((a, r) => a + Number(r.quantity || 0), 0)
-      const tags = mine.map(r => r.tag).filter(Boolean).join(', ')
+      const tags = cfg.show.tags ? mine.map(r => r.tag).filter(Boolean).join(', ') : ''
       let detail: string | undefined = tags || undefined
       if (kind === 'activity') {
         const h = Number(mine.find(r => r.height_m)?.height_m) || null
@@ -834,25 +873,33 @@ export default function TakeoffWorkspacePage() {
       }
       return { color: colorOfScope(sc.id), code: sc.scope_code || '', name: sc.scope_name, qty: `${formatNumber(qty, 2)} ${sc.unit || ''}`.trim(), detail }
     })
-    const level = sheet.level_id ? levels.find(l => l.id === sheet.level_id) : null
+    const level = sheet.level_id ? levels.find(l => l.id === sheet!.level_id) : null
     const date = new Date().toLocaleDateString(language)
+    const fmtDate = (v: string) => (v ? new Date(`${v}T12:00:00`).toLocaleDateString(language) : '')
+    const dates = cfg.start || cfg.end ? `${fmtDate(cfg.start) || '…'} → ${fmtDate(cfg.end) || '…'}` : ''
     const blob = await buildFieldSheetPdf({
-      url: signed.signedUrl, pageNumber: sheet.page_number || 1, ptPerM: k, frame, items,
-      zone: { name: taskLocation.name, pts: taskZone.points as Vec2[] },
+      url: signed.signedUrl, pageNumber: sheet.page_number || 1, ptPerM: k, frame, items, paper: cfg.paper,
+      zone: { name: taskLocation.name, pts: taskZone && taskZone.source_id === sheet.id ? taskZone.points as Vec2[] : [] },
       backgroundFade: fadeOf(sheet), rows,
       qrUrl: taskLocation.qr_token ? `${window.location.origin}/field/scan/${taskLocation.qr_token}` : null,
+      show: { table: cfg.show.table, detail: cfg.show.detail, qr: cfg.show.qr },
+      info: { responsible: cfg.responsible, crew: cfg.crew, dates, notes: cfg.notes },
       logoUrl: '/ritsu-logo.png',
       fmt: v => formatNumber(v, 2),
       text: {
         kicker: t('field.kicker'),
-        location: taskLocation.name,
-        path: [project?.name, level?.name, sheet.name].filter(Boolean).join(' · '),
+        location: cfg.title.trim() || taskLocation.name,
+        path: [cfg.title.trim() ? taskLocation.name : null, project?.name, level?.name, sheet.name].filter(Boolean).join(' · '),
         scope: kind === 'location' ? t('field.scopeAll') : t('field.scopeOne', { code: taskScope?.scope_code || '' }),
         revision: revision == null ? t('field.previewShort') : `REV ${revision}`,
         issued: revision == null ? t('field.previewNote', { date }) : t('field.issuedLine', { date, name: issuedBy || '—' }),
+        responsible: t('report.responsible'),
+        crew: t('report.crew'),
+        dates: t('report.dates'),
+        notes: t('report.notes'),
         activities: t('field.activities'),
         qrCaption: t('field.qrCaption'),
-        scale: t('field.scale'),
+        scale: t(cfg.areaMode === 'location' ? 'field.scaleMargin' : 'field.scaleArea', { margin: formatNumber(cfg.marginM, 2) }),
         footer: `${project?.name || ''}${project?.project_code ? ` · ${project.project_code}` : ''} · RitsuFlow`,
         draft: revision == null ? t('field.watermark') : undefined,
       },
@@ -860,27 +907,41 @@ export default function TakeoffWorkspacePage() {
     const snapshot = {
       location: { id: taskLocation.id, name: taskLocation.name },
       sheet: { id: sheet.id, name: sheet.name },
-      lines: lines.map(r => ({ id: r.id, tag: r.tag || null, scope_item_id: r.scope_item_id, source_id: r.source_id, points: r.points, height_m: r.height_m, quantity: Number(r.quantity || 0), unit: r.unit })),
+      config: cfg,
+      lines: lines.map(r => ({ id: r.id, tag: r.tag || null, scope_item_id: r.scope_item_id, source_id: r.source_id, points: r.points, side: r.side ?? null, height_m: r.height_m, quantity: Number(r.quantity || 0), unit: r.unit })),
       totals: scopes.map(sc => ({ scope_item_id: sc.id, code: sc.scope_code, name: sc.scope_name, unit: sc.unit, quantity: lines.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0) })),
     }
     return { blob, snapshot, fp: fingerprint(lines), fileName: fileSafe(`${taskLocation.name}${kind === 'activity' ? ` - ${taskScope?.scope_code || ''}` : ''}`) }
   }
+  /** Shows a PDF in the tab opened by the click (pop-up blockers allow it), or downloads it. */
+  function showPdf(win: Window | null, blob: Blob, name: string) {
+    if (win && !win.closed) { win.location.href = URL.createObjectURL(blob); return }
+    saveBlob(blob, name)
+  }
+  function openReport(kind?: FieldKind) {
+    setReportCfg(c => ({ ...c, kind: kind || c.kind, areaMode: c.areaMode === 'location' && !taskZone ? 'sheet' : c.areaMode }))
+    setReportOpen(true)
+  }
   async function previewFieldSheet(kind: FieldKind) {
+    const win = window.open('', '_blank')
+    win?.document.write(`<p style="font:14px system-ui;padding:24px;color:#294955">${t('print.preparing')}</p>`)
     setFieldBusy(`${kind}:preview`); setError('')
-    try { const r = await makeFieldSheet(kind, null, ''); saveBlob(r.blob, `${r.fileName} - ${t('field.previewShort')}.pdf`) }
-    catch (e) { setError(t('workspace.error', { message: (e as Error)?.message || String(e) })) }
+    try { const r = await makeFieldSheet(kind, null, '', reportCfg); showPdf(win, r.blob, `${r.fileName} - ${t('field.previewShort')}.pdf`) }
+    catch (e) { win?.close(); setError(t('workspace.error', { message: (e as Error)?.message || String(e) })) }
     finally { setFieldBusy(null) }
   }
   async function issueFieldSheet(kind: FieldKind) {
     const st = fieldState(kind)
     if (!st.lines.length) { setError(t('field.nothing')); return }
     if (!window.confirm(t('field.confirmIssue', { rev: st.next, location: taskLocation?.name || '' }))) return
+    const win = window.open('', '_blank')
+    win?.document.write(`<p style="font:14px system-ui;padding:24px;color:#294955">${t('print.preparing')}</p>`)
     setFieldBusy(`${kind}:issue`); setError('')
     const supabase = createClient()
     let path: string | null = null
     try {
       const name = await actorName()
-      const r = await makeFieldSheet(kind, st.next, name)
+      const r = await makeFieldSheet(kind, st.next, name, reportCfg)
       path = `${projectId}/field-sheets/${taskLocationId}/${kind}-${kind === 'activity' ? taskScopeId : 'all'}-rev${st.next}-${Date.now()}.pdf`
       const up = await supabase.storage.from(BUCKET).upload(path, r.blob, { contentType: 'application/pdf', upsert: false })
       if (up.error) throw up.error
@@ -891,9 +952,11 @@ export default function TakeoffWorkspacePage() {
       if (ie) throw ie
       path = null
       await loadTasks()
-      saveBlob(r.blob, `${r.fileName} - Rev ${st.next}.pdf`)
+      showPdf(win, r.blob, `${r.fileName} - Rev ${st.next}.pdf`)
+      setReportOpen(false)
       setStatus(t('field.issued', { rev: st.next }))
     } catch (e) {
+      win?.close()
       if (path) await supabase.storage.from(BUCKET).remove([path])
       setError(t('workspace.error', { message: (e as Error)?.message || String(e) }))
     } finally { setFieldBusy(null) }
@@ -1049,6 +1112,13 @@ export default function TakeoffWorkspacePage() {
         frame: taskZone && taskZone.source_id === selectedSource.id ? frameOf(taskZone.points as Vec2[], Number(selectedSource.scale_pt_per_m) || 0, 1) : null,
         frameTick: taskFrameTick,
         bandM: styleOfScope(taskScopeId).thickness_m,
+        areaPick: areaPicking,
+        onAreaPicked: box => {
+          setAreaPicking(false)
+          if (box && selectedSource) setReportCfg(c => ({ ...c, areaMode: 'custom', area: { sourceId: selectedSource.id, box } }))
+          setReportOpen(true)
+        },
+        area: reportOpen && reportCfg.areaMode === 'custom' && reportCfg.area?.sourceId === selectedSource.id ? reportCfg.area.box : null,
       } : null}
       onTaskLine={saveTaskLine}
       onTaskPick={pickTaskWall}
@@ -2155,7 +2225,7 @@ export default function TakeoffWorkspacePage() {
           </div>
           {(() => {
             const st = styleOfScope(taskScope.id)
-            const cm = Math.round(st.thickness_m * 100)
+            const mm = Math.round(st.thickness_m * 1000)
             const pct = Math.round(st.transparency * 100)
             const row = { display: 'grid', gridTemplateColumns: '92px 1fr 46px', alignItems: 'center', gap: 8, fontSize: 12, color: '#42636f' } as const
             return <div style={{ display: 'grid', gap: 7, padding: '8px 10px', border: '1px solid #e5edef', borderRadius: 8 }}>
@@ -2164,10 +2234,15 @@ export default function TakeoffWorkspacePage() {
                 <input type="color" value={colorOfScope(taskScope.id)} onChange={e => setStyleLocal(taskScope.id, { color: e.target.value })} onBlur={e => void commitStyle(taskScope.id, { color: e.currentTarget.value })} style={{ width: 44, height: 26, padding: 0, border: '1px solid #cddcdf', borderRadius: 5, background: '#fff' }} />
                 <span />
               </label>
-              <label style={row}>{t('task.style.thickness')}
-                <input type="range" min={2} max={50} step={1} value={cm} onChange={e => setStyleLocal(taskScope.id, { thickness_m: Number(e.target.value) / 100 })} onPointerUp={e => void commitStyle(taskScope.id, { thickness_m: Number(e.currentTarget.value) / 100 })} onKeyUp={e => void commitStyle(taskScope.id, { thickness_m: Number(e.currentTarget.value) / 100 })} />
-                <b style={{ textAlign: 'right' }}>{cm} cm</b>
-              </label>
+              <div style={{ ...row, gridTemplateColumns: '92px 1fr 78px' }}>{t('task.style.thickness')}
+                <input type="range" min={5} max={500} step={5} value={mm} aria-label={t('task.style.thickness')} onChange={e => setStyleLocal(taskScope.id, { thickness_m: Number(e.target.value) / 1000 })} onPointerUp={e => void commitStyle(taskScope.id, { thickness_m: Number(e.currentTarget.value) / 1000 })} onKeyUp={e => void commitStyle(taskScope.id, { thickness_m: Number(e.currentTarget.value) / 1000 })} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input key={`mm-${taskScope.id}-${mm}`} type="number" min={5} max={500} step={1} defaultValue={mm} aria-label={t('task.style.thicknessMm')}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur() }}
+                    onBlur={e => { const v = Math.round(Number(e.currentTarget.value)); if (Number.isFinite(v) && v > 0 && v !== mm) void commitStyle(taskScope.id, { thickness_m: Math.min(500, Math.max(5, v)) / 1000 }) }}
+                    style={{ width: 50, height: 26, padding: '0 4px', border: '1px solid #cddcdf', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />mm
+                </span>
+              </div>
               <label style={row}>{t('task.style.transparency')}
                 <input type="range" min={0} max={90} step={5} value={pct} onChange={e => setStyleLocal(taskScope.id, { transparency: Number(e.target.value) / 100 })} onPointerUp={e => void commitStyle(taskScope.id, { transparency: Number(e.currentTarget.value) / 100 })} onKeyUp={e => void commitStyle(taskScope.id, { transparency: Number(e.currentTarget.value) / 100 })} />
                 <b style={{ textAlign: 'right' }}>{pct}%</b>
@@ -2199,8 +2274,8 @@ export default function TakeoffWorkspacePage() {
                   {!st.last ? t('field.notIssued') : st.changed ? t('field.changedSince', { rev: st.last.revision }) : t('field.upToDate', { rev: st.last.revision, date: new Date(st.last.issued_at).toLocaleDateString(language) })}
                 </span>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button type="button" disabled={!!fieldBusy || !st.lines.length || !taskZone} title={!taskZone ? t('task.panel.noZone', { location: taskLocation.name }) : undefined} onClick={() => void previewFieldSheet(kind)} style={{ height: 28, padding: '0 10px', border: '1px solid #cddcdf', borderRadius: 6, background: '#fff', color: '#173441', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', opacity: !st.lines.length ? 0.5 : 1 }}>{fieldBusy === `${kind}:preview` ? t('field.working') : t('field.preview')}</button>
-                  <button type="button" disabled={!!fieldBusy || !st.lines.length || !taskZone || (!!st.last && !st.changed)} title={!taskZone ? t('task.panel.noZone', { location: taskLocation.name }) : undefined} onClick={() => void issueFieldSheet(kind)} style={{ height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: '#109d91', color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', opacity: (!st.lines.length || (!!st.last && !st.changed)) ? 0.45 : 1 }}>{busy && fieldBusy?.endsWith('issue') ? t('field.working') : t('field.issue', { rev: st.next })}</button>
+                  <button type="button" disabled={!!fieldBusy || !st.lines.length} onClick={() => openReport(kind)} style={{ height: 28, padding: '0 10px', border: '1px solid #cddcdf', borderRadius: 6, background: '#fff', color: '#173441', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', opacity: !st.lines.length ? 0.5 : 1 }}>{fieldBusy === `${kind}:preview` ? t('field.working') : t('field.preview')}</button>
+                  <button type="button" disabled={!!fieldBusy || !st.lines.length || (!!st.last && !st.changed)} onClick={() => openReport(kind)} style={{ height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: '#109d91', color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', opacity: (!st.lines.length || (!!st.last && !st.changed)) ? 0.45 : 1 }}>{busy && fieldBusy?.endsWith('issue') ? t('field.working') : t('field.issue', { rev: st.next })}</button>
                 </div>
               </div>
             })}
@@ -2376,7 +2451,7 @@ export default function TakeoffWorkspacePage() {
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <button type="button" style={{ ...menuBtn(menu === 'print'), border: '1px solid #d6e0e3', opacity: printSheets.length && !printing ? 1 : 0.45 }} disabled={!printSheets.length || printing} title={t('print.title')} onClick={e => { e.stopPropagation(); setMenu(m => (m === 'print' ? null : 'print')) }}>
+          <button type="button" style={{ ...menuBtn(menu === 'print'), border: '1px solid #d6e0e3', opacity: printSheets.length && !printing ? 1 : 0.45 }} disabled={section === 'tasks' ? !taskLocation : !printSheets.length || printing} title={t('print.title')} onClick={e => { e.stopPropagation(); if (section === 'tasks') { setMenu(null); openReport(); return } setMenu(m => (m === 'print' ? null : 'print')) }}>
             <Icon name="print" size={15} />{printing ? t('print.working') : t('print.button')}<Icon name="chevron" size={13} />
           </button>
           {menu === 'print' && (
@@ -2509,6 +2584,82 @@ export default function TakeoffWorkspacePage() {
         />
       )}
       {generateOpen && <GenerateLevelsDialog projectId={projectId} levels={levels} onClose={() => setGenerateOpen(false)} onDone={async message => { await load(); setStatus(message) }} />}
+      {reportOpen && !areaPicking && section === 'tasks' && taskLocation && (() => {
+        const cfg = reportCfg
+        const set = (patch: Partial<ReportCfg>) => setReportCfg(c => ({ ...c, ...patch }))
+        const setShow = (key: keyof ReportCfg['show'], v: boolean) => setReportCfg(c => ({ ...c, show: { ...c.show, [key]: v } }))
+        const st = fieldState(cfg.kind)
+        const areaSheet = cfg.area ? sources.find(x => x.id === cfg.area!.sourceId) : null
+        const areaK = Number(areaSheet?.scale_pt_per_m) || 0
+        const areaText = cfg.area && areaK > 0 ? t('report.area.size', { w: formatNumber((cfg.area.box[2] - cfg.area.box[0]) / areaK, 2), h: formatNumber((cfg.area.box[3] - cfg.area.box[1]) / areaK, 2), sheet: areaSheet?.name || '' }) : t('report.area.none')
+        const lbl = { display: 'grid', gap: 4, fontSize: 11, fontWeight: 700, color: '#42636f' } as const
+        const inp = { height: 32, padding: '0 8px', border: '1px solid #cddcdf', borderRadius: 6, fontSize: 13, fontFamily: 'inherit' } as const
+        const check = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#294955', cursor: 'pointer' } as const
+        const radio = (on: boolean) => ({ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', border: '1px solid ' + (on ? '#109d91' : '#e0e8ea'), borderRadius: 8, background: on ? '#f0faf8' : '#fff', cursor: 'pointer', fontSize: 12, color: '#294955' }) as const
+        const sectionTitle = { fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#6b8089', marginTop: 4 } as const
+        const canIssue = st.lines.length > 0 && (!st.last || st.changed)
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(6,38,55,.45)', display: 'grid', placeItems: 'center', padding: 16 }} onMouseDown={e => { if (e.target === e.currentTarget && !fieldBusy) setReportOpen(false) }}>
+            <div role="dialog" aria-modal="true" style={{ width: 'min(760px, 100%)', maxHeight: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 12, boxShadow: '0 24px 70px rgba(6,38,55,.3)', overflow: 'hidden' }}>
+              <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '14px 18px', borderBottom: '1px solid #e5edef' }}>
+                <div><div style={{ fontSize: 17, fontWeight: 800, color: '#173441' }}>{t('report.title')}</div><div style={{ fontSize: 12, color: '#6b8089', marginTop: 2 }}>{t('report.subtitle', { location: taskLocation.name })}</div></div>
+                <button type="button" onClick={() => setReportOpen(false)} aria-label={t('report.cancel')} style={{ border: 0, background: 'transparent', fontSize: 20, color: '#6b8089', cursor: 'pointer' }}>×</button>
+              </header>
+              <div style={{ overflow: 'auto', padding: '14px 18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+                <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+                  <div style={sectionTitle}>{t('report.content')}</div>
+                  <label style={radio(cfg.kind === 'location')}><input type="radio" checked={cfg.kind === 'location'} onChange={() => set({ kind: 'location' })} style={{ marginTop: 2 }} /><span><b>{t('field.kindLocation', { location: taskLocation.name })}</b></span></label>
+                  <label style={{ ...radio(cfg.kind === 'activity'), opacity: taskScope ? 1 : 0.5 }}><input type="radio" disabled={!taskScope} checked={cfg.kind === 'activity'} onChange={() => set({ kind: 'activity' })} style={{ marginTop: 2 }} /><span><b>{taskScope ? t('field.kindActivity', { code: taskScope.scope_code || '' }) : t('report.pickActivity')}</b>{taskScope ? <><br /><span style={{ color: '#6b8089' }}>{taskScope.scope_name}</span></> : null}</span></label>
+
+                  <div style={sectionTitle}>{t('report.area')}</div>
+                  <label style={{ ...radio(cfg.areaMode === 'location'), opacity: taskZone ? 1 : 0.5 }}><input type="radio" disabled={!taskZone} checked={cfg.areaMode === 'location'} onChange={() => set({ areaMode: 'location' })} style={{ marginTop: 2 }} />
+                    <span style={{ display: 'grid', gap: 6 }}><b>{t('report.area.location')}</b>{!taskZone ? <span style={{ color: '#8a4b0f' }}>{t('task.panel.noZone', { location: taskLocation.name })}</span> : <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('report.area.margin')}<input type="number" min={0} max={20} step={0.5} value={cfg.marginM} onChange={e => set({ marginM: Math.max(0, Number(e.target.value) || 0) })} style={{ ...inp, width: 70, height: 26 }} /> m</span>}</span>
+                  </label>
+                  <label style={radio(cfg.areaMode === 'custom')}><input type="radio" checked={cfg.areaMode === 'custom'} onChange={() => set({ areaMode: 'custom' })} style={{ marginTop: 2 }} />
+                    <span style={{ display: 'grid', gap: 6 }}><b>{t('report.area.custom')}</b><span style={{ color: '#6b8089' }}>{areaText}</span>
+                      <button type="button" onClick={e => { e.preventDefault(); set({ areaMode: 'custom' }); setAreaPicking(true) }} style={{ justifySelf: 'start', height: 28, padding: '0 10px', border: '1px solid #2563EB', borderRadius: 6, background: '#eff5ff', color: '#1d4ed8', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{cfg.area ? t('report.area.redraw') : t('report.area.draw')}</button>
+                    </span>
+                  </label>
+                  <label style={radio(cfg.areaMode === 'sheet')}><input type="radio" checked={cfg.areaMode === 'sheet'} onChange={() => set({ areaMode: 'sheet' })} style={{ marginTop: 2 }} /><span><b>{t('report.area.sheet')}</b></span></label>
+
+                  <div style={sectionTitle}>{t('report.paper')}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {(['A4', 'A3'] as const).map(p => <label key={p} style={{ ...radio(cfg.paper === p), flex: 1 }}><input type="radio" checked={cfg.paper === p} onChange={() => set({ paper: p })} /><b>{p}</b><span style={{ color: '#6b8089' }}>{t('report.landscape')}</span></label>)}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+                  <div style={sectionTitle}>{t('report.include')}</div>
+                  <div style={{ display: 'grid', gap: 6, padding: '8px 10px', border: '1px solid #e0e8ea', borderRadius: 8 }}>
+                    {([['estimate', 'report.show.estimate'], ['openings', 'report.show.openings'], ['tags', 'report.show.tags'], ['table', 'report.show.table'], ['detail', 'report.show.detail'], ['qr', 'report.show.qr']] as [keyof ReportCfg['show'], TakeoffMessageKey][]).map(([key, label]) => (
+                      <label key={key} style={{ ...check, opacity: (key === 'openings' && !cfg.show.estimate) || (key === 'detail' && !cfg.show.table) || (key === 'qr' && !taskLocation.qr_token) ? 0.5 : 1 }}>
+                        <input type="checkbox" checked={cfg.show[key]} disabled={(key === 'openings' && !cfg.show.estimate) || (key === 'detail' && !cfg.show.table)} onChange={e => setShow(key, e.target.checked)} />{t(label)}{key === 'qr' && !taskLocation.qr_token ? ` · ${t('report.noQr')}` : ''}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={sectionTitle}>{t('report.header')}</div>
+                  <label style={lbl}>{t('report.customTitle')}<input value={cfg.title} placeholder={taskLocation.name} onChange={e => set({ title: e.target.value })} style={inp} /></label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <label style={lbl}>{t('report.responsible')}<input value={cfg.responsible} onChange={e => set({ responsible: e.target.value })} style={inp} /></label>
+                    <label style={lbl}>{t('report.crew')}<input value={cfg.crew} onChange={e => set({ crew: e.target.value })} style={inp} /></label>
+                    <label style={lbl}>{t('report.start')}<input type="date" value={cfg.start} onChange={e => set({ start: e.target.value })} style={inp} /></label>
+                    <label style={lbl}>{t('report.end')}<input type="date" value={cfg.end} onChange={e => set({ end: e.target.value })} style={inp} /></label>
+                  </div>
+                  <label style={lbl}>{t('report.notes')}<textarea rows={3} value={cfg.notes} onChange={e => set({ notes: e.target.value })} style={{ ...inp, height: 'auto', padding: 8, resize: 'vertical' }} /></label>
+                </div>
+              </div>
+              <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 18px', borderTop: '1px solid #e5edef', background: '#f7fafb', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11.5, color: st.changed ? '#b45309' : '#6b8089' }}>{!st.lines.length ? t('field.nothing') : !st.last ? t('field.notIssued') : st.changed ? t('field.changedSince', { rev: st.last.revision }) : t('field.upToDate', { rev: st.last.revision, date: new Date(st.last.issued_at).toLocaleDateString(language) })}</span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" onClick={() => setReportOpen(false)} disabled={!!fieldBusy} style={{ height: 34, padding: '0 14px', border: '1px solid #cddcdf', borderRadius: 8, background: '#fff', color: '#173441', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{t('report.cancel')}</button>
+                  <button type="button" onClick={() => void previewFieldSheet(cfg.kind)} disabled={!!fieldBusy || !st.lines.length || (cfg.areaMode === 'custom' && !cfg.area)} style={{ height: 34, padding: '0 14px', border: '1px solid #109d91', borderRadius: 8, background: '#fff', color: '#0b7f75', fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: !st.lines.length ? 0.5 : 1 }}>{fieldBusy?.endsWith('preview') ? t('field.working') : t('report.preview')}</button>
+                  <button type="button" onClick={() => void issueFieldSheet(cfg.kind)} disabled={!!fieldBusy || !canIssue || (cfg.areaMode === 'custom' && !cfg.area)} style={{ height: 34, padding: '0 14px', border: 0, borderRadius: 8, background: '#109d91', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: canIssue ? 1 : 0.45 }}>{fieldBusy?.endsWith('issue') ? t('field.working') : t('field.issue', { rev: st.next })}</button>
+                </div>
+              </footer>
+            </div>
+          </div>
+        )
+      })()}
       {shareOpen && (
         <ShareDialog
           projectId={projectId}

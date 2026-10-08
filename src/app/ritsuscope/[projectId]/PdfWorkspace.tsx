@@ -50,6 +50,11 @@ export type TaskDrawing = {
   frameTick: number
   /** Band width of the chosen activity (m), for the side preview. */
   bandM?: number
+  /** Task report: picking the area to print (two corners); the box (sheet points) goes to `onAreaPicked`. */
+  areaPick?: boolean
+  onAreaPicked?: (box: [number, number, number, number] | null) => void
+  /** The area chosen for the report, outlined on its sheet. */
+  area?: [number, number, number, number] | null
 }
 
 type Props = {
@@ -228,6 +233,10 @@ export default function PdfWorkspace(props: Props) {
   const [taskSel, setTaskSel] = useState<string | null>(null)
   /** Tasks mode, "take a wall": thickness (m) of the wall picked by the first click (the band starts at its face). */
   const [taskWallT, setTaskWallT] = useState(0)
+  /** Task report area: the first corner picked. */
+  const [areaPts, setAreaPts] = useState<Vec2[]>([])
+  const areaPicking = tasksMode && !!task?.areaPick
+  useEffect(() => { if (!areaPicking) setAreaPts([]) }, [areaPicking])
   /** Bumped by every sheet load, so the tasks frame is applied once the page is there. */
   const [loadTick, setLoadTick] = useState(0)
   const sheetZones = useMemo(() => zones.filter(z => z.source_id === source.id), [zones, source.id])
@@ -887,6 +896,7 @@ export default function PdfWorkspace(props: Props) {
       const target = event.target as HTMLElement | null
       if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
       if (event.key === 'Escape' && openingPick) { setPickHover(null); onOpeningPickCancel?.(); return }
+      if (event.key === 'Escape' && areaPicking) { setAreaPts([]); task?.onAreaPicked?.(null); return }
       if (event.key === 'Escape') {
         clearTransient(); setBoxSel([]); onSelect(null); onSelectZone(null); setRoomPicking(false); setRoomPickPts([])
         // End the command: drop any drawing / measuring tool and its menus, back to Select.
@@ -989,6 +999,13 @@ export default function PdfWorkspace(props: Props) {
     if (mode === 'measure') {
       if (measureDone) { setMeasureDone(false); setMeasurePts([p]); return }
       setMeasurePts(prev => [...prev, p])
+      return
+    }
+    if (areaPicking) {
+      if (!areaPts.length) { setAreaPts([p]); return }
+      const a = areaPts[0]
+      setAreaPts([])
+      task?.onAreaPicked?.([Math.min(a[0], p[0]), Math.min(a[1], p[1]), Math.max(a[0], p[0]), Math.max(a[1], p[1])])
       return
     }
     if (!canDraw) return
@@ -1131,6 +1148,7 @@ export default function PdfWorkspace(props: Props) {
   const canDraw = mode === 'draw' && !!scale && kindOk
 
   const hint = useMemo(() => {
+    if (areaPicking) return areaPts.length ? t('report.area.second') : t('report.area.first')
     if (mode === 'calibrate') return scale ? `${t('calibrate.hint')} ${t('calibrate.replace', { scale: formatNumber(scale, 2) })}` : t('calibrate.hint')
     if (mode === 'draw') {
       if (!scale) return t('draw.needScale')
@@ -1151,7 +1169,7 @@ export default function PdfWorkspace(props: Props) {
     if (boxSel.length) return t('box.selectedHint')
     // Nothing selected: no banner over the sheet (the help is in the Select button's tooltip).
     return selectedId ? t('move.hint') : ''
-  }, [boxSel.length, mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length, tasksMode, takeWall, taskSel])
+  }, [boxSel.length, mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length, tasksMode, takeWall, taskSel, areaPicking, areaPts.length])
 
   const zoneShapes = useMemo(() => [
     // Largest first, so the rooms drawn inside a block or zone stay on top and clickable.
@@ -1379,13 +1397,13 @@ export default function PdfWorkspace(props: Props) {
               items={items}
               dimItems={zoning}
               calibration={mode === 'origin' ? originPts : calPts}
-              draft={roomPicking ? roomPickPts : mode === 'detect' ? (pickingRegion && regionPts.length === 1 ? regionPts : []) : draft}
-              draftKind={roomPicking || mode === 'detect' ? 'area' : draftKind}
-              draftColor={roomPicking || mode === 'detect' ? '#2563EB' : tasksMode ? task?.color || '#E11D48' : zoning ? zoneColor : activeLayer?.color || '#109d91'}
-              crosshair={!!openingPick || roomPicking || mode === 'calibrate' || mode === 'origin' || canDraw || (mode === 'measure' && scale > 0) || (mode === 'detect' && pickingRegion)}
+              draft={areaPicking ? areaPts : roomPicking ? roomPickPts : mode === 'detect' ? (pickingRegion && regionPts.length === 1 ? regionPts : []) : draft}
+              draftKind={areaPicking || roomPicking || mode === 'detect' ? 'area' : draftKind}
+              draftColor={areaPicking || roomPicking || mode === 'detect' ? '#2563EB' : tasksMode ? task?.color || '#E11D48' : zoning ? zoneColor : activeLayer?.color || '#109d91'}
+              crosshair={areaPicking || !!openingPick || roomPicking || mode === 'calibrate' || mode === 'origin' || canDraw || (mode === 'measure' && scale > 0) || (mode === 'detect' && pickingRegion)}
               measure={measurePts}
               measureDone={measureDone}
-              rectPreview={roomPicking || (canDraw && shape === 'rect') || (mode === 'detect' && pickingRegion)}
+              rectPreview={areaPicking || roomPicking || (canDraw && shape === 'rect') || (mode === 'detect' && pickingRegion)}
               ptPerM={scale}
               fmt={v => formatNumber(v, 2)}
               selectable={mode === 'select' && !zoning && !openingPick}
@@ -1415,7 +1433,7 @@ export default function PdfWorkspace(props: Props) {
               onMoveZonePoints={zoning && mode === 'select' ? (id, pts) => void moveZonePoints(id, pts) : undefined}
               suggestions={openingPick ? (() => { const pv = pickPreview(pickHover); return pv ? [{ id: 'pick', pts: pv, on: true }] : [] })() : mode === 'detect' ? suggestions.map(w => ({ id: w.id, pts: w.pts, on: picked.has(w.id) })) : openSugs ? openSugs.planned.map(o => ({ id: o.key, pts: [o.a, o.b] as [Vec2, Vec2], on: openPicked.has(o.key) })) : []}
               onToggleSuggestion={id => (openSugs && mode !== 'detect' ? setOpenPicked : setPicked)(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })}
-              regionBox={mode === 'detect' && regionPts.length === 2 ? [regionPts[0], regionPts[1]] : zoning && roomSugs && roomRegion && !roomPicking ? roomRegion : null}
+              regionBox={tasksMode && task?.area && !areaPicking ? [[task.area[0], task.area[1]], [task.area[2], task.area[3]]] : mode === 'detect' && regionPts.length === 2 ? [regionPts[0], regionPts[1]] : zoning && roomSugs && roomRegion && !roomPicking ? roomRegion : null}
               sidePick={faceMode && draft.length === 2 ? { a: draft[0], b: draft[1], thickness: activeThicknessPts, color: activeLayer?.color || '#109d91' }
                 : tasksMode && mode === 'draw' && draft.length === 2 && scale > 0 ? { a: draft[0], b: draft[1], thickness: ((takeWall ? taskWallT / 2 : 0) + (task?.bandM ?? TASK_BAND_M)) * scale, color: task?.color || '#E11D48' }
                 : null}

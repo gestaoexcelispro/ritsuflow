@@ -24,12 +24,12 @@ export type TaskDrawingRow = {
 /** Planning style of an activity (project_scopes.plan_style). */
 export type PlanStyle = { thickness_m?: number; transparency?: number; color?: string }
 export const PLAN_STYLE_DEFAULT = { thickness_m: 0.1, transparency: 0 }
-/** The style with defaults and limits applied: thickness 0.02–0.5 m, transparency 0–0.9. */
+/** The style with defaults and limits applied: thickness 0.005–0.5 m (5–500 mm), transparency 0–0.9. */
 export function planStyleOf(style: PlanStyle | null | undefined): { thickness_m: number; transparency: number; color?: string } {
   const th = Number(style?.thickness_m)
   const tr = Number(style?.transparency)
   return {
-    thickness_m: Number.isFinite(th) && th > 0 ? Math.min(0.5, Math.max(0.02, th)) : PLAN_STYLE_DEFAULT.thickness_m,
+    thickness_m: Number.isFinite(th) && th > 0 ? Math.min(0.5, Math.max(0.005, th)) : PLAN_STYLE_DEFAULT.thickness_m,
     transparency: Number.isFinite(tr) ? Math.min(0.9, Math.max(0, tr)) : PLAN_STYLE_DEFAULT.transparency,
     color: typeof style?.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(style.color) ? style.color : undefined,
   }

@@ -15,8 +15,13 @@ export type FieldSheetInput = {
   url: string
   pageNumber: number
   ptPerM: number
-  /** Viewport box (PDF points, y down) to cut out: the zone + 1 m. */
-  frame: [number, number, number, number]
+  /** Viewport box (PDF points, y down) to cut out (the zone + margin, or a drawn area); null = the whole sheet. */
+  frame: [number, number, number, number] | null
+  paper?: 'A4' | 'A3'
+  /** What goes in the title block (all on by default). */
+  show?: { table?: boolean; detail?: boolean; qr?: boolean }
+  /** Extra header fields, printed when filled. */
+  info?: { responsible?: string; crew?: string; dates?: string; notes?: string }
   /** Estimate takeoff (faint) and planning lines (with tags), on this sheet. */
   items: TakeoffItem[]
   zone: { name: string; pts: Vec2[] }
@@ -32,6 +37,14 @@ export type FieldSheetInput = {
     scope: string // "Todas as atividades" / "Atividade 1.1"
     revision: string // "REV 0"
     issued: string // "Emitida em 08/10/2026 por Eduardo"
+    responsible?: string // "Responsável"
+    crew?: string // "Equipe"
+    dates?: string // "Prazo"
+    notes?: string // "Observações"
+    responsible?: string // "Responsável"
+    crew?: string // "Equipe"
+    dates?: string // "Prazo"
+    notes?: string // "Observações"
     activities: string
     qrCaption: string
     scale: string // "Escala aprox. 1:{ratio} · local + 1 m" with {ratio}
@@ -56,7 +69,9 @@ async function qrPath(value: string): Promise<{ d: string; size: number } | null
 }
 
 export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> {
-  const { url, pageNumber, ptPerM, frame, items, zone, backgroundFade = 0, rows, qrUrl, logoUrl, text, fmt } = input
+  const { url, pageNumber, ptPerM, items, zone, backgroundFade = 0, rows, logoUrl, text, fmt, paper = 'A4', info = {} } = input
+  const show = { table: true, detail: true, qr: true, ...(input.show || {}) }
+  const qrUrl = show.qr ? input.qrUrl : null
   const [PDFLib, srcBytes, logoBytes, qr] = await Promise.all([
     loadPdfLib(),
     fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer() }),
@@ -69,12 +84,15 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
   const pdfjs = await import('pdfjs-dist-v5')
   if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
   let toUser: Matrix
+  let frame: [number, number, number, number]
   {
     const task = pdfjs.getDocument({ data: new Uint8Array(srcBytes.slice(0)) })
     try {
       const doc = await task.promise
       const page = await doc.getPage(pageNumber)
-      toUser = invert(page.getViewport({ scale: 1 }).transform as Matrix)
+      const vp = page.getViewport({ scale: 1 })
+      toUser = invert(vp.transform as Matrix)
+      frame = input.frame || [0, 0, vp.width, vp.height]
     } finally { await task.destroy() }
   }
 
@@ -83,13 +101,15 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
   const bold = await out.embedFont(StandardFonts.HelveticaBold)
   const ink = rgb(0.09, 0.2, 0.25), grey = rgb(0.4, 0.48, 0.52), teal = rgb(0.06, 0.62, 0.57), line = rgb(0.83, 0.88, 0.89)
   const col = (hex: string | [number, number, number]) => { const c = typeof hex === 'string' ? hexToRgb(hex) : hex; return rgb(c[0], c[1], c[2]) }
-  const W = 842, H = 595, M = 22
+  const [W, H] = paper === 'A3' ? [1191, 842] : [842, 595]
+  const M = paper === 'A3' ? 28 : 22
   const page = out.addPage([W, H])
 
   // ---- Map: the location cut out of the original sheet (vector), clipped to its frame.
   const src = await PDFDocument.load(srcBytes, { ignoreEncryption: true })
   const crop = userBox(frame, toUser)
-  const area = { x: M, y: M + 16, w: 560, h: H - 2 * M - 16 }
+  const COL = paper === 'A3' ? 300 : 246
+  const area = { x: M, y: M + 16, w: W - 2 * M - COL - 14, h: H - 2 * M - 16 }
   const fit = fitCrop(crop, area)
   const embedded = await out.embedPage(src.getPage(pageNumber - 1), crop)
   page.drawRectangle({ x: area.x, y: area.y, width: area.w, height: area.h, color: rgb(1, 1, 1) })
@@ -142,6 +162,16 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
   for (const l of wrapText(winAnsi(text.path), CW, s => font.widthOfTextAtSize(s, 8), 2)) { page.drawText(l, { x: X, y, size: 8, font, color: grey }); y -= 11 }
   y -= 4
   page.drawText(winAnsi(text.scope), { x: X, y, size: 9, font: bold, color: ink }); y -= 16
+  const infoLines: [string | undefined, string | undefined][] = [[text.responsible, info.responsible], [text.crew, info.crew], [text.dates, info.dates]]
+  for (const [label, value] of infoLines) {
+    if (!value || !value.trim()) continue
+    const l = winAnsi(`${label || ''}: `), v = winAnsi(value.trim())
+    page.drawText(l, { x: X, y, size: 8, font: bold, color: grey })
+    const lw = bold.widthOfTextAtSize(l, 8)
+    wrapText(v, CW - lw, s2 => font.widthOfTextAtSize(s2, 8), 2).forEach((ln, i) => page.drawText(ln, { x: X + (i ? 0 : lw), y: y - i * 10, size: 8, font, color: ink }))
+    y -= v.length && font.widthOfTextAtSize(v, 8) > CW - lw ? 22 : 12
+  }
+  y -= 2
 
   // Revision box.
   page.drawRectangle({ x: X, y: y - 34, width: CW, height: 38, color: rgb(0.94, 0.98, 0.97), borderColor: teal, borderWidth: 0.8 })
@@ -151,11 +181,16 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
   y -= 50
 
   // Activities and quantities.
+  const qrSize = qr ? 92 : 0
+  const notes = (info.notes || '').trim()
+  const noteLines = notes ? wrapText(winAnsi(notes), CW - 8, s2 => font.widthOfTextAtSize(s2, 7.5), 6) : []
+  const notesH = noteLines.length ? 18 + noteLines.length * 10 : 0
+  const bottomLimit = M + (qr ? qrSize + 26 : 10) + notesH
+  if (show.table) {
   page.drawText(winAnsi(text.activities).toUpperCase(), { x: X, y, size: 7.5, font: bold, color: grey }); y -= 6
   page.drawLine({ start: { x: X, y }, end: { x: X + CW, y }, thickness: 0.5, color: line }); y -= 12
-  const qrSize = qr ? 92 : 0
-  const bottomLimit = M + (qr ? qrSize + 26 : 10)
-  for (const r of rows) {
+  for (const r0 of rows) {
+    const r = show.detail ? r0 : { ...r0, detail: undefined }
     const qty = winAnsi(r.qty)
     const qw = bold.widthOfTextAtSize(qty, 8.5)
     const nameLines = wrapText(winAnsi(`${r.code} ${r.name}`.trim()), CW - qw - 22, s => font.widthOfTextAtSize(s, 7.8), 2)
@@ -165,8 +200,19 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
     nameLines.forEach((l, i) => page.drawText(l, { x: X + 14, y: y - i * 10, size: 7.8, font, color: ink }))
     page.drawText(qty, { x: X + CW - qw, y, size: 8.5, font: bold, color: col(r.color) })
     y -= nameLines.length * 10
-    if (r.detail) { page.drawText(winAnsi(r.detail).slice(0, 70), { x: X + 14, y, size: 6.8, font, color: grey }); y -= 9 }
+    if (r.detail) {
+      for (const dl of wrapText(winAnsi(r.detail), CW - 14, s2 => font.widthOfTextAtSize(s2, 6.8), 2)) { page.drawText(dl, { x: X + 14, y, size: 6.8, font, color: grey }); y -= 9 }
+    }
     y -= 5
+  }
+  }
+
+  // Notes (above the QR code).
+  if (noteLines.length) {
+    const top = M + (qr ? qrSize + 26 : 10) + notesH
+    page.drawText(winAnsi(text.notes || '').toUpperCase(), { x: X, y: top - 8, size: 7.5, font: bold, color: grey })
+    page.drawRectangle({ x: X, y: top - notesH, width: CW, height: notesH - 12, color: rgb(0.98, 0.99, 0.99), borderColor: line, borderWidth: 0.6 })
+    noteLines.forEach((l, i) => page.drawText(l, { x: X + 4, y: top - 22 - i * 10, size: 7.5, font, color: ink }))
   }
 
   // FieldOp QR code of the location.
