@@ -110,6 +110,8 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
   const [tagsOn, setTagsOn] = useState(initialTags)
   /** Doors and windows drawn as objects in their openings. */
   const [openingsOn, setOpeningsOn] = useState(true)
+  /** Ground grid under the model. */
+  const [gridOn, setGridOn] = useState(true)
   /** The PDF region under the model (half tone) with the locations in colour. */
   const [underlayOn, setUnderlayOn] = useState(true)
   const [underlay, setUnderlay] = useState<LoadedUnderlay | null>(null)
@@ -273,9 +275,9 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
   useEffect(() => {
     const s = sceneRef.current
     if (!s || status !== 'ready' || !ptPerM) return
-    anchorsRef.current = build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn, openings: openingsOn, underlay, zones: underlay ? underlayZones.filter(z => z.page === underlay.page) : [] })
+    anchorsRef.current = build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn, openings: openingsOn, grid: gridOn, underlay, zones: underlay ? underlayZones.filter(z => z.page === underlay.page) : [] })
     if (!fittedRef.current) { fit(s, items, ptPerM, elevationOf); fittedRef.current = true }
-  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards, tagsOn, openingsOn, underlay, underlayZones])
+  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards, tagsOn, openingsOn, gridOn, underlay, underlayZones])
 
 
   const toggle = (active: boolean) => ({
@@ -308,6 +310,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
         </span>
         <button type="button" style={toggle(tagsOn)} title={t('tags.hint')} onClick={() => setTagsOn(v => !v)}>{t('tags.toggle')}</button>
         <button type="button" style={toggle(openingsOn)} title={t('view3d.openingsHint')} onClick={() => setOpeningsOn(v => !v)}>{t('view3d.openings')}</button>
+        <button type="button" style={toggle(gridOn)} title={t('view3d.gridHint')} onClick={() => setGridOn(v => !v)}>{t('view3d.grid')}</button>
         {underlays.length > 0 && <button type="button" style={toggle(underlayOn)} title={t('view3d.underlayHint')} onClick={() => setUnderlayOn(v => !v)}>{t('view3d.underlay')}</button>}
         <button type="button" style={toggle(isolate)} disabled={!selectedId && !isolate} onClick={() => setIsolate(v => !v)}>{t('view3d.isolate')}</button>
         <button type="button" style={toggle(false)} onClick={() => { const s = sceneRef.current; if (s) fit(s, items, ptPerM, elevationOf) }}>{t('tool.fit')}</button>
@@ -399,6 +402,8 @@ type BuildOptions = {
   /** PDF region in half tone under its storey, with the locations in colour on it. */
   underlay?: LoadedUnderlay | null
   zones?: UnderlayZone[]
+  /** Ground grid (default on). */
+  grid?: boolean
   layered: boolean
   explode: number
   isolate: boolean
@@ -649,6 +654,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
     }
   }
 
+  if (o.grid === false) return anchors
   const span = Math.max((b.x1 - b.x0) / k, (b.y1 - b.y0) / k, 4)
   const grid = new THREE.GridHelper(Math.ceil(span * 1.4), Math.ceil(span * 1.4), 0x7a8590, 0x9aa4ae)
   grid.material.transparent = true

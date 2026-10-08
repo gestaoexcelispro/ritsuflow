@@ -991,8 +991,19 @@ export default function TakeoffWorkspacePage() {
     if (win && !win.closed) { win.location.href = URL.createObjectURL(blob); return }
     saveBlob(blob, name)
   }
+  /** Locations that have task lines (the report can be printed for them). */
+  const reportLocations = taskLocations.filter(l => taskRows.some(r => r.location_id === l.id))
   function openReport(kind?: FieldKind) {
-    setReportCfg(c => ({ ...c, kind: kind || c.kind, areaMode: c.areaMode === 'location' && !taskZone ? 'sheet' : c.areaMode }))
+    // Nothing picked in the panel: start with the first location drawn on this sheet (then any location with lines).
+    let locId = taskLocationId
+    if (!locId || !taskRows.some(r => r.location_id === locId)) {
+      locId = taskRows.find(r => r.source_id === selectedSourceId)?.location_id || reportLocations[0]?.id || null
+      if (!locId) { setError(t('field.nothing')); return }
+      setTaskLocationId(locId)
+    }
+    const zoneHere = zones.some(z => z.location_id === locId)
+    const activity = (kind || reportCfg.kind) === 'activity' && taskScope && taskRows.some(r => r.location_id === locId && r.scope_item_id === taskScope.id)
+    setReportCfg(c => ({ ...c, kind: activity ? 'activity' : 'location', areaMode: c.areaMode === 'location' && !zoneHere ? 'sheet' : c.areaMode }))
     setReportOpen(true)
   }
   async function previewFieldSheet(kind: FieldKind) {
@@ -2658,7 +2669,7 @@ export default function TakeoffWorkspacePage() {
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <button type="button" style={{ ...menuBtn(menu === 'print'), border: '1px solid #d6e0e3', opacity: printSheets.length && !printing ? 1 : 0.45 }} disabled={section === 'tasks' ? !taskLocation : !printSheets.length || printing} title={t('print.title')} onClick={e => { e.stopPropagation(); if (section === 'tasks') { setMenu(null); openReport(); return } setMenu(m => (m === 'print' ? null : 'print')) }}>
+          <button type="button" style={{ ...menuBtn(menu === 'print'), border: '1px solid #d6e0e3', opacity: (section === 'tasks' ? taskRows.length > 0 : printSheets.length && !printing) ? 1 : 0.45 }} disabled={section === 'tasks' ? !taskRows.length : !printSheets.length || printing} title={t('print.title')} onClick={e => { e.stopPropagation(); if (section === 'tasks') { setMenu(null); openReport(); return } setMenu(m => (m === 'print' ? null : 'print')) }}>
             <Icon name="print" size={15} />{printing ? t('print.working') : t('print.button')}<Icon name="chevron" size={13} />
           </button>
           {menu === 'print' && (
@@ -2814,6 +2825,11 @@ export default function TakeoffWorkspacePage() {
               </header>
               <div style={{ overflow: 'auto', padding: '14px 18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
                 <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+                  <label style={lbl}>{t('report.location')}
+                    <select value={taskLocation.id} onChange={e => { const id = e.target.value; setTaskLocationId(id); const hasZone = zones.some(z => z.location_id === id); setReportCfg(c => ({ ...c, kind: taskScope && taskRows.some(r => r.location_id === id && r.scope_item_id === taskScope.id) ? c.kind : 'location', areaMode: c.areaMode === 'location' && !hasZone ? 'sheet' : c.areaMode })) }} style={inp}>
+                      {reportLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </label>
                   <div style={sectionTitle}>{t('report.content')}</div>
                   <label style={radio(cfg.kind === 'location')}><input type="radio" checked={cfg.kind === 'location'} onChange={() => set({ kind: 'location' })} style={{ marginTop: 2 }} /><span><b>{t('field.kindLocation', { location: taskLocation.name })}</b></span></label>
                   <label style={{ ...radio(cfg.kind === 'activity'), opacity: taskScope ? 1 : 0.5 }}><input type="radio" disabled={!taskScope} checked={cfg.kind === 'activity'} onChange={() => set({ kind: 'activity' })} style={{ marginTop: 2 }} /><span><b>{taskScope ? t('field.kindActivity', { code: taskScope.scope_code || '' }) : t('report.pickActivity')}</b>{taskScope ? <><br /><span style={{ color: '#6b8089' }}>{taskScope.scope_name}</span></> : null}</span></label>
