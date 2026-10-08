@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase/admin'
 import { readTrialApplication } from '../../../lib/trial'
+import { sendTrialEmails } from '../../../lib/trialEmail'
 
 // Simple per-instance throttle: at most 5 applications per IP every 10 minutes.
 const recent = new Map()
@@ -30,6 +31,8 @@ export async function POST(request) {
 
     const { error } = await createAdminClient().from('trial_applications').insert(result.row)
     if (error) throw error
+    // Email ExcelisPro and the applicant when Resend is configured; never fails the application.
+    await sendTrialEmails(result.row).catch((e) => console.error('Trial emails failed:', e))
     return NextResponse.json({ ok: true })
   } catch (error) {
     console.error('Trial application failed:', error)
