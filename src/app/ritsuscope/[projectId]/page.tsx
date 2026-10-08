@@ -73,7 +73,7 @@ import { materialRows, scaleGroup } from '@/lib/takeoff/materialList'
 import { itemShareByZone, NONE } from '@/lib/takeoff/locationShare'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
-import { frameOf, measureTaskLines, takeWallAt, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
+import { TASK_BAND_M, frameOf, measureTaskLines, nextTaskTag, takeWallStretch, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
 import { fingerprint, planColor, planLabel, tagsOnLongest } from '@/lib/takeoff/fieldSheet'
 import { buildFieldSheetPdf, type FieldSheetRow } from './fieldSheetPdf'
 
@@ -668,7 +668,7 @@ export default function TakeoffWorkspacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section, taskZone?.id])
   /** Walls (and their openings) on this sheet: "take a wall" and the openings deducted from task lines. */
-  const taskWallRefs: WallRef[] = useMemo(() => sourceItems.filter(it => it.kind === 'linear').flatMap(it => it.shapes.map(sh => ({ pts: sh.pts, openings: sh.openings, kind: it.kind }))), [sourceItems])
+  const taskWallRefs: WallRef[] = useMemo(() => sourceItems.filter(it => it.kind === 'linear').flatMap(it => it.shapes.map(sh => ({ pts: sh.pts, openings: sh.openings, kind: it.kind, thickness: it.thickness }))), [sourceItems])
   const taskHeightM = (() => { const v = Number(String(taskHeight).replace(',', '.')); return v > 0 ? v : null })()
   // Default wall height: the one already used for these lines, else the item's own takeoff item, else the sheet's level.
   useEffect(() => {
@@ -718,10 +718,10 @@ export default function TakeoffWorkspacePage() {
       if (!rows.length) return null
       const faded = opts.emphasize && sc.id !== opts.emphasize
       return {
-        key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: 0.09, planTransparency: faded ? 0.6 : 0,
+        key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: TASK_BAND_M, planTransparency: faded ? 0.6 : 0,
         shapes: rows.map(r => ({
           id: opts.selectable && r.scope_item_id === opts.selectable.scopeId && r.location_id === opts.selectable.locationId ? `task:${r.id}` : `plan:${r.id}`,
-          page: 1, pts: r.points, tags: tagsOnLongest(r.points, planLabel(sc.scope_code, formatNumber(Number(r.quantity || 0), 2), sc.unit)),
+          page: 1, pts: r.points, tags: tagsOnLongest(r.points, planLabel(r.tag || sc.scope_code, formatNumber(Number(r.quantity || 0), 2), sc.unit)),
         })),
       }
     }).filter(Boolean) as TakeoffItem[]
@@ -739,20 +739,27 @@ export default function TakeoffWorkspacePage() {
     const k = Number(selectedSource.scale_pt_per_m) || 0
     const m = measureTaskLines([pts], { ptPerM: k, heightM: taskHeightM, unit: taskScope.unit, walls: taskWallRefs })
     if (m.measure === 'wallArea' && !taskHeightM) { setError(t('task.needsHeight')); return null }
-    const { data, error: e } = await createClient().from('location_task_drawings').insert({
+    const supabase = createClient()
+    const insert = (tag: string) => supabase.from('location_task_drawings').insert({
       project_id: projectId, scope_item_id: taskScope.id, location_id: taskLocationId, source_id: selectedSource.id,
-      points: pts, height_m: m.measure === 'wallArea' ? taskHeightM : null, quantity: Math.round(m.quantity * 10000) / 10000, unit: taskScope.unit,
+      points: pts, height_m: m.measure === 'wallArea' ? taskHeightM : null, quantity: Math.round(m.quantity * 10000) / 10000, unit: taskScope.unit, tag,
     }).select('id').single()
+    let { data, error: e } = await insert(nextTaskTag(taskScope.scope_code, taskRows.filter(r => r.scope_item_id === taskScope.id).map(r => r.tag)))
+    if (e?.code === '23505') {
+      // Someone else took that tag meanwhile: number again from the database.
+      const { data: used } = await supabase.from('location_task_drawings').select('tag').eq('project_id', projectId).eq('scope_item_id', taskScope.id)
+      ;({ data, error: e } = await insert(nextTaskTag(taskScope.scope_code, (used || []).map(r => (r as { tag: string | null }).tag))))
+    }
     if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return null }
     await loadTasks()
     return data.id as string
   }
-  async function takeTaskWall(p: Vec2): Promise<string | null> {
+  /** "Take wall": the clicked wall's stretch along the location (the side click then places the task line). */
+  function pickTaskWall(p: Vec2): { a: Vec2; b: Vec2; thicknessM: number } | null {
     if (!taskZone || !selectedSource || taskZone.source_id !== selectedSource.id) return null
     const k = Number(selectedSource.scale_pt_per_m) || 0
     const room = frameOf(taskZone.points as Vec2[], k, 0)
-    const seg = room ? takeWallAt(p, taskWallRefs, room, k) : null
-    return seg ? saveTaskLine([seg[0], seg[1]]) : null
+    return room ? takeWallStretch(p, taskWallRefs, room, k) : null
   }
   /** A new wall height re-measures this location's lines. */
   async function applyTaskHeight() {
@@ -811,11 +818,12 @@ export default function TakeoffWorkspacePage() {
     const rows: FieldSheetRow[] = scopes.map(sc => {
       const mine = lines.filter(r => r.scope_item_id === sc.id)
       const qty = mine.reduce((a, r) => a + Number(r.quantity || 0), 0)
-      let detail: string | undefined
+      const tags = mine.map(r => r.tag).filter(Boolean).join(', ')
+      let detail: string | undefined = tags || undefined
       if (kind === 'activity') {
         const h = Number(mine.find(r => r.height_m)?.height_m) || null
         const m = measureTaskLines(mine.map(r => r.points), { ptPerM: k, heightM: h, unit: sc.unit, walls })
-        if (m.measure === 'wallArea') detail = t('task.panel.breakdown', { length: formatNumber(m.length, 2), height: h ? formatNumber(h, 2) : '—', openings: formatNumber(m.openings, 2) })
+        if (m.measure === 'wallArea') detail = [tags, t('task.panel.breakdown', { length: formatNumber(m.length, 2), height: h ? formatNumber(h, 2) : '—', openings: formatNumber(m.openings, 2) })].filter(Boolean).join(' · ')
       }
       return { color: colorOfScope(sc.id), code: sc.scope_code || '', name: sc.scope_name, qty: `${formatNumber(qty, 2)} ${sc.unit || ''}`.trim(), detail }
     })
@@ -845,7 +853,7 @@ export default function TakeoffWorkspacePage() {
     const snapshot = {
       location: { id: taskLocation.id, name: taskLocation.name },
       sheet: { id: sheet.id, name: sheet.name },
-      lines: lines.map(r => ({ id: r.id, scope_item_id: r.scope_item_id, source_id: r.source_id, points: r.points, height_m: r.height_m, quantity: Number(r.quantity || 0), unit: r.unit })),
+      lines: lines.map(r => ({ id: r.id, tag: r.tag || null, scope_item_id: r.scope_item_id, source_id: r.source_id, points: r.points, height_m: r.height_m, quantity: Number(r.quantity || 0), unit: r.unit })),
       totals: scopes.map(sc => ({ scope_item_id: sc.id, code: sc.scope_code, name: sc.scope_name, unit: sc.unit, quantity: lines.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0) })),
     }
     return { blob, snapshot, fp: fingerprint(lines), fileName: fileSafe(`${taskLocation.name}${kind === 'activity' ? ` - ${taskScope?.scope_code || ''}` : ''}`) }
@@ -1024,7 +1032,7 @@ export default function TakeoffWorkspacePage() {
         frameTick: taskFrameTick,
       } : null}
       onTaskLine={saveTaskLine}
-      onTaskTake={takeTaskWall}
+      onTaskPick={pickTaskWall}
       zones={zones}
       zoneKind={drawKind}
       selectedZoneId={selectedZoneId}
@@ -2131,7 +2139,7 @@ export default function TakeoffWorkspacePage() {
             {!taskHere.length ? <div style={{ ...ui.small, marginTop: 6, lineHeight: 1.5 }}>{t('task.panel.noLines')}</div> : <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {taskHere.map((r, i) => <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', border: '1px solid #f3d0d7', borderRadius: 6, fontSize: 12 }}>
                 <span style={{ width: 10, height: 3, background: colorOfScope(taskScopeId), borderRadius: 2 }} />
-                <span style={{ flex: 1, color: '#294955' }}>#{i + 1}</span>
+                <span style={{ flex: 1, color: '#294955', fontWeight: 700 }}>{r.tag || `#${i + 1}`}</span>
                 <b style={{ color: '#be123c' }}>{fmtQty(Number(r.quantity || 0))} {taskScope.unit || ''}</b>
                 <button type="button" onClick={() => void deleteTaskLine(r.id)} title={t('task.delete')} aria-label={t('task.delete')} style={{ border: 0, background: 'transparent', color: '#a44343', cursor: 'pointer', fontSize: 14 }}>×</button>
               </div>)}

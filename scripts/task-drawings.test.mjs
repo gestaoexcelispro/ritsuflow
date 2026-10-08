@@ -72,3 +72,30 @@ test('the automatic split skips the stretch already drawn for a location', () =>
   const other = allocateFromTakeoff(data, { layerIds: ['L'], unit: 'm²', productionLocationIds: all, claimed: [{ source_id: 'X', points: [[0, 100], [100, 100]] }] })
   assert.equal(other.claimed, 0)
 })
+
+test('a task line is projected to the chosen side, against the face', async () => {
+  const { projectTaskLine, TASK_BAND_M } = await import('../src/lib/takeoff/taskDrawings.ts')
+  // Face drawn along y = 100 (10 pt = 1 m); third click above (y < 100) → band centre 0.05 m above.
+  const up = projectTaskLine([0, 100], [100, 100], [50, 80], K)
+  assert.ok(Math.abs(up[0][1] - (100 - TASK_BAND_M / 2 * K)) < 1e-9 && Math.abs(up[1][1] - up[0][1]) < 1e-9)
+  const down = projectTaskLine([0, 100], [100, 100], [50, 130], K)
+  assert.ok(Math.abs(down[0][1] - (100 + TASK_BAND_M / 2 * K)) < 1e-9)
+  // Taken wall (centreline, 0.12 m thick): the band starts at the face, 0.06 m + 0.05 m away.
+  const taken = projectTaskLine([0, 100], [100, 100], [50, 80], K, 0.12)
+  assert.ok(Math.abs(taken[0][1] - (100 - 0.11 * K)) < 1e-9)
+})
+
+test('taking a wall also gives its thickness', async () => {
+  const { takeWallStretch } = await import('../src/lib/takeoff/taskDrawings.ts')
+  const r = takeWallStretch([50, 102], [{ ...wall, thickness: 0.124 }], [0, 0, 100, 99], K)
+  assert.equal(r.thicknessM, 0.124)
+  assert.equal(takeWallStretch([50, 102], [wall], [0, 0, 100, 99], K).thicknessM, 0)
+})
+
+test('tags are numbered per activity and never reuse a gap', async () => {
+  const { nextTaskTag } = await import('../src/lib/takeoff/taskDrawings.ts')
+  assert.equal(nextTaskTag('1.1', []), 'T1.1-01')
+  assert.equal(nextTaskTag('1.1', ['T1.1-01', 'T1.1-03', 'T1.2-07', null]), 'T1.1-04')
+  assert.equal(nextTaskTag('', ['TX-09']), 'TX-10')
+  assert.equal(nextTaskTag('2.1', ['T2.10-05']), 'T2.1-01', 'a longer code is another activity')
+})

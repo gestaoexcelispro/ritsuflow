@@ -29,6 +29,7 @@ import { findOpenings, placeOpenings, type PlannedOpening } from '@/lib/takeoff/
 import { applyFramingDefaults, defaultFraming, framingLabelsPtBR, type FramingDefaults } from '@/lib/takeoff/framing/framing'
 import { importLabelsEnUS } from '@/lib/takeoff/ifc/importIfcModel'
 import { boxSelect } from '@/lib/takeoff/boxSelect'
+import { TASK_BAND_M, projectTaskLine } from '@/lib/takeoff/taskDrawings'
 
 const BUCKET = 'takeoff-files'
 
@@ -70,8 +71,8 @@ type Props = {
   task?: TaskDrawing | null
   /** Tasks mode: a finished line; returns the saved row id (null on failure). */
   onTaskLine?: (pts: Vec2[]) => Promise<string | null>
-  /** Tasks mode, "take a wall": the stretch of the clicked wall along the room; returns the saved row id. */
-  onTaskTake?: (p: Vec2) => Promise<string | null>
+  /** Tasks mode, "take a wall": the stretch of the clicked wall along the room and its thickness (null when none). */
+  onTaskPick?: (p: Vec2) => { a: Vec2; b: Vec2; thicknessM: number } | null
   zones: ZoneRow[]
   /** Kind given to zones drawn now (Block, Zone, Area, Room). */
   zoneKind?: ZoneKind
@@ -118,7 +119,7 @@ function dedupe(points: Vec2[]): Vec2[] {
 }
 
 export default function PdfWorkspace(props: Props) {
-  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, task = null, onTaskLine, onTaskTake, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, backgroundFade = 0, levelLabel = null, quickActions = [], exportActions = [] } = props
+  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, task = null, onTaskLine, onTaskPick, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, backgroundFade = 0, levelLabel = null, quickActions = [], exportActions = [] } = props
   const barH = toolbarSlot ? 0 : TOOLBAR_H
   const t = useTakeoffT()
   const { formatNumber, language } = useLanguage()
@@ -223,6 +224,8 @@ export default function PdfWorkspace(props: Props) {
   const [takeWall, setTakeWall] = useState(false)
   /** Tasks mode: the selected task line (`task:<id>`). */
   const [taskSel, setTaskSel] = useState<string | null>(null)
+  /** Tasks mode, "take a wall": thickness (m) of the wall picked by the first click (the band starts at its face). */
+  const [taskWallT, setTaskWallT] = useState(0)
   /** Bumped by every sheet load, so the tasks frame is applied once the page is there. */
   const [loadTick, setLoadTick] = useState(0)
   const sheetZones = useMemo(() => zones.filter(z => z.source_id === source.id), [zones, source.id])
@@ -740,17 +743,8 @@ export default function PdfWorkspace(props: Props) {
   const finishDraft = useCallback(async (explicit?: Vec2[]) => {
     if (saving) return
     const pts = dedupe(explicit || draft)
-    if (tasksMode) {
-      if (pts.length < 2 || !onTaskLine) return
-      setSaving(true)
-      const id = await onTaskLine(pts)
-      setSaving(false)
-      if (!id) return
-      setCreated(prev => [...prev, { table: 'location_task_drawings', id }])
-      setDraft([])
-      setMessage(t('task.saved'))
-      return
-    }
+    // Tasks: a line is saved by its third click (the side), like a wall drawn by its face.
+    if (tasksMode) return
     if (zoning) {
       if (pts.length < 3) return
       await createZone(pts)
@@ -772,7 +766,7 @@ export default function PdfWorkspace(props: Props) {
     setDraft([])
     setMessage(t('draw.saved', { layer: activeLayer.name }))
     await onChanged()
-  }, [activeLayer, createZone, draft, onChanged, onTaskLine, projectId, saving, source.id, t, tasksMode, zoning])
+  }, [activeLayer, createZone, draft, onChanged, projectId, saving, source.id, t, tasksMode, zoning])
 
   /** Saves a dragged vertex. Walls with openings keep them only if they still fit. */
   async function movePoints(id: string, pts: Vec2[]) {
@@ -898,7 +892,7 @@ export default function PdfWorkspace(props: Props) {
         setArchMenu(null); setStructMenu(null); setMepMenu(null)
       }
       if (event.key === 'Enter' && mode === 'draw' && !faceMode) void finishDraft()
-      if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => prev.slice(0, -1)) }
+      if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => (tasksMode && takeWall ? [] : prev.slice(0, -1))) }
       if (event.key === 'Backspace' && mode === 'measure') { event.preventDefault(); setMeasureDone(false); setMeasurePts(prev => prev.slice(0, -1)) }
       if (event.key === 'Delete' && mode === 'select' && (tasksMode ? taskSel : zoning ? selectedZoneId : selectedId || boxSel.length)) void deleteSelected()
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && draft.length === 0) { event.preventDefault(); void undoLast() }
@@ -996,13 +990,29 @@ export default function PdfWorkspace(props: Props) {
       return
     }
     if (!canDraw) return
-    if (tasksMode && takeWall) {
-      if (!onTaskTake) return
-      setSaving(true)
-      const id = await onTaskTake(p)
-      setSaving(false)
-      if (id) { setCreated(prev => [...prev, { table: 'location_task_drawings', id }]); setMessage(t('task.saved')) }
-      else setError(t('task.noWall'))
+    if (tasksMode) {
+      // Third click: the side the task goes (its band lies against the face, like a wall drawn by its face).
+      if (draft.length >= 2) {
+        if (!onTaskLine || saving) return
+        const seg = projectTaskLine(draft[0], draft[1], p, scale, takeWall ? taskWallT : 0)
+        setSaving(true)
+        const id = await onTaskLine([seg[0], seg[1]])
+        setSaving(false)
+        if (!id) return
+        setCreated(prev => [...prev, { table: 'location_task_drawings', id }])
+        setDraft([])
+        setMessage(t('task.saved'))
+        return
+      }
+      // Take wall: the first click picks the wall's stretch along the room.
+      if (takeWall) {
+        const r = onTaskPick?.(p) ?? null
+        if (!r) { setError(t('task.noWall')); return }
+        setTaskWallT(r.thicknessM)
+        setDraft([r.a, r.b])
+        return
+      }
+      setDraft(prev => [...prev, p])
       return
     }
     if (shape === 'rect') {
@@ -1122,7 +1132,7 @@ export default function PdfWorkspace(props: Props) {
     if (mode === 'calibrate') return scale ? `${t('calibrate.hint')} ${t('calibrate.replace', { scale: formatNumber(scale, 2) })}` : t('calibrate.hint')
     if (mode === 'draw') {
       if (!scale) return t('draw.needScale')
-      if (tasksMode) return takeWall ? t('task.hint.take') : t('task.hint.draw')
+      if (tasksMode) return draft.length >= 2 ? t('task.hint.side') : takeWall ? t('task.hint.take') : draft.length === 1 ? t('task.hint.second') : t('task.hint.draw')
       if (zoning) return kindOk ? t(shape === 'rect' ? 'zone.hint.rect' : 'zone.hint.polygon') : t('zone.hint.tool')
       if (!activeLayer || !kindOk) return t('draw.pickKind', { kind: t(kindKey[kindForShape[shape]]) })
       if (activeLayer.kind === 'count') return t('draw.hint.count')
@@ -1404,7 +1414,9 @@ export default function PdfWorkspace(props: Props) {
               suggestions={openingPick ? (() => { const pv = pickPreview(pickHover); return pv ? [{ id: 'pick', pts: pv, on: true }] : [] })() : mode === 'detect' ? suggestions.map(w => ({ id: w.id, pts: w.pts, on: picked.has(w.id) })) : openSugs ? openSugs.planned.map(o => ({ id: o.key, pts: [o.a, o.b] as [Vec2, Vec2], on: openPicked.has(o.key) })) : []}
               onToggleSuggestion={id => (openSugs && mode !== 'detect' ? setOpenPicked : setPicked)(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })}
               regionBox={mode === 'detect' && regionPts.length === 2 ? [regionPts[0], regionPts[1]] : zoning && roomSugs && roomRegion && !roomPicking ? roomRegion : null}
-              sidePick={faceMode && draft.length === 2 ? { a: draft[0], b: draft[1], thickness: activeThicknessPts, color: activeLayer?.color || '#109d91' } : null}
+              sidePick={faceMode && draft.length === 2 ? { a: draft[0], b: draft[1], thickness: activeThicknessPts, color: activeLayer?.color || '#109d91' }
+                : tasksMode && mode === 'draw' && draft.length === 2 && scale > 0 ? { a: draft[0], b: draft[1], thickness: ((takeWall ? taskWallT / 2 : 0) + TASK_BAND_M) * scale, color: task?.color || '#E11D48' }
+                : null}
               originMark={mode === 'origin' && originPts.length
                 ? { x: originPts[0][0], y: originPts[0][1], angleDeg: originPts.length === 2 ? angleFromPoints(originPts[0], originPts[1]) : 0 }
                 : originOf(source) ? { x: originOf(source)!.x, y: originOf(source)!.y, angleDeg: originOf(source)!.angleDeg } : null}
