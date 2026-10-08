@@ -386,7 +386,7 @@ export default function PdfSheet(props: Props) {
           viewBox={`0 0 ${W} ${H}`}
           width={W * zoom}
           height={H * zoom}
-          style={{ position: 'absolute', inset: 0, cursor: crosshair ? 'crosshair' : 'default' }}
+          style={{ position: 'absolute', inset: 0, cursor: tagDrag ? 'grabbing' : crosshair ? 'crosshair' : 'default', ...(tagDrag ? { userSelect: 'none', WebkitUserSelect: 'none' } : {}) }}
           onClick={event => {
             if (justDragged.current) { justDragged.current = false; return }
             // The second click of a double-click (detail > 1) must not add a point or a count.
@@ -648,13 +648,16 @@ export default function PdfSheet(props: Props) {
               const cx = l.bx / zoom, cy = l.by / zoom, w = stroke(c.w), h = stroke(c.h)
               const movable = !!onMoveTag
               return (
-                <g key={`callout-${l.id}`} style={{ pointerEvents: movable ? 'auto' : 'none' }}>
+                <g key={`callout-${l.id}`} style={{ pointerEvents: movable ? 'auto' : 'none', userSelect: 'none', WebkitUserSelect: 'none' }}>
                   <line x1={c.ax / zoom} y1={c.ay / zoom} x2={l.lx / zoom} y2={l.ly / zoom} stroke={c.color} strokeWidth={stroke(1.3)} />
                   <circle cx={c.ax / zoom} cy={c.ay / zoom} r={stroke(3)} fill={c.color} stroke="#fff" strokeWidth={stroke(1)} />
                   <rect
                     x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={stroke(3)} fill="#fff" fillOpacity={0.95} stroke={c.color} strokeWidth={stroke(1.4)}
                     style={movable ? { cursor: tagDrag?.id === l.id ? 'grabbing' : 'grab' } : undefined}
                     onPointerDown={movable ? event => {
+                      // A label is grabbed, never text-selected.
+                      event.preventDefault()
+                      window.getSelection()?.removeAllRanges()
                       event.stopPropagation()
                       const svg = event.currentTarget.ownerSVGElement as SVGSVGElement | null
                       svg?.setPointerCapture?.(event.pointerId)
@@ -667,7 +670,7 @@ export default function PdfSheet(props: Props) {
                   >
                     {movable && <title>{c.tag}</title>}
                   </rect>
-                  <text x={cx} y={cy + stroke(3.6)} textAnchor="middle" fontSize={stroke(10)} fontWeight={700} fill="#173441" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none' }}>{c.tag}</text>
+                  <text x={cx} y={cy + stroke(3.6)} textAnchor="middle" fontSize={stroke(10)} fontWeight={700} fill="#173441" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}>{c.tag}</text>
                 </g>
               )
             })
