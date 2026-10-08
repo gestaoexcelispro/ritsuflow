@@ -58,6 +58,7 @@ export default function Landing() {
   const navLinks = (
     <>
       <a href="#modules" onClick={() => setMenuOpen(false)}>{t('nav.modules')}</a>
+      <a href="#takeoff" onClick={() => setMenuOpen(false)}>{t('nav.takeoff')}</a>
       <a href="#flow" onClick={() => setMenuOpen(false)}>{t('nav.flow')}</a>
       <a href="#estimating" onClick={() => setMenuOpen(false)}>{t('nav.estimating')}</a>
       <a href="#roadmap" onClick={() => setMenuOpen(false)}>{t('nav.roadmap')}</a>
@@ -162,6 +163,34 @@ export default function Landing() {
                 </article>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* RITSUSCOPE TAKEOFF */}
+        <section id="takeoff" className={`${s.section} ${s.tint}`}>
+          <div className={s.container}>
+            <header className={s.sectionHead}>
+              <span className={s.kicker}>{t('scope.kicker')}</span>
+              <h2>{t('scope.title')}</h2>
+              <p>{t('scope.lead')}</p>
+            </header>
+            <figure className={`${s.window} ${s.scopeMain}`}>
+              <figcaption className={s.windowBar}><span /><span /><span /><em>{t('scope.shot1Label')}</em></figcaption>
+              <Image src="/landing/ritsuscope-takeoff.webp" alt={t('scope.shot1Alt')} width={1913} height={907} sizes="(max-width: 1240px) 100vw, 1192px" />
+            </figure>
+            <div className={s.scopeGrid}>
+              <figure className={s.scopeCard}>
+                <div className={s.scopeArt}><Image src="/landing/ritsuscope-3d-print.webp" alt={t('scope.shot2Alt')} width={978} height={690} sizes="(max-width: 760px) 100vw, 590px" /></div>
+                <figcaption><strong>{t('scope.shot2Title')}</strong><span>{t('scope.shot2Text')}</span></figcaption>
+              </figure>
+              <figure className={s.scopeCard}>
+                <div className={s.scopeArt}><Image src="/landing/ritsuscope-framing-3d.webp" alt={t('scope.shot3Alt')} width={1101} height={565} sizes="(max-width: 760px) 100vw, 590px" /></div>
+                <figcaption><strong>{t('scope.shot3Title')}</strong><span>{t('scope.shot3Text')}</span></figcaption>
+              </figure>
+            </div>
+            <ul className={s.tags} style={{ marginTop: 24 }}>
+              {[1, 2, 3, 4, 5].map(n => <li key={n}>{t(`scope.tag${n}`)}</li>)}
+            </ul>
           </div>
         </section>
 

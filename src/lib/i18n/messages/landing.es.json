@@ -184,5 +184,22 @@
   "privacy.s5.text": "Puedes pedir confirmación, acceso, corrección, anonimización, portabilidad o eliminación de tus datos, y retirar el consentimiento (LGPD art. 18). Escribe al contacto abajo; respondemos en un máximo de 15 días.",
   "privacy.s6.title": "Contacto para asuntos de datos",
   "privacy.s6.text": "Eduardo Fernandes de Freitas, ExcelisPro —",
-  "nav.skip": "Saltar al contenido"
+  "nav.skip": "Saltar al contenido",
+  "nav.takeoff": "Levantamiento",
+  "scope.kicker": "RITSUSCOPE · LEVANTAMIENTO",
+  "scope.title": "Mide en el plano. Míralo en 3D.",
+  "scope.lead": "Calibra el PDF, dibuja muros, cielos, pisos y vanos por tipo, y RitsuScope calcula áreas, longitudes y la estructura —montantes, canales y placas— nivel por nivel.",
+  "scope.shot1Label": "RitsuScope · Levantamiento",
+  "scope.shot1Alt": "Levantamiento en RitsuScope: muros por tipo dibujados en el plano calibrado, puertas descontadas y cantidades por nivel.",
+  "scope.shot2Title": "Vista 3D, lista para la oferta",
+  "scope.shot2Text": "Impresa en PDF con cada muro identificado por tipo y adjunta a la oferta con un clic.",
+  "scope.shot2Alt": "Vista 3D de los muros en RitsuScope, identificados por tipo, impresa en PDF.",
+  "scope.shot3Title": "Estructura calculada, no estimada",
+  "scope.shot3Text": "Montantes a la separación especificada, vanos y encuentros, en 3D y contados en la lista de materiales.",
+  "scope.shot3Alt": "Vista 3D de la estructura en RitsuScope con montantes, vanos y ambientes.",
+  "scope.tag1": "Arquitectura, estructura e instalaciones",
+  "scope.tag2": "Vanos descontados",
+  "scope.tag3": "Estructura de steel framing y drywall",
+  "scope.tag4": "Niveles y desglose de ubicaciones",
+  "scope.tag5": "Exportación en PDF, 3D y CSV"
 }
