@@ -847,6 +847,7 @@ const takeoffPtBR = {
   'task.panel.heightApplied': "Altura aplicada às linhas deste local.",
   'task.panel.walls': "Mostrar paredes do levantamento",
   'task.panel.frame': "Enquadrar local",
+  'task.panel.labelHint': "Arraste uma etiqueta no desenho para movê-la (a linha de chamada acompanha); duplo clique a devolve à posição automática. Vale também para o PDF.",
   'task.panel.lines': "Linhas ({count})",
   'task.panel.noLines': "Nada desenhado ainda. Use Pegar parede ou Linha na barra de ferramentas.",
   'task.panel.others': "Outros locais desta atividade",

@@ -846,6 +846,7 @@ const takeoffEnUS: TakeoffMessages = {
   'task.panel.heightApplied': "Height applied to this location's lines.",
   'task.panel.walls': "Show takeoff walls",
   'task.panel.frame': "Frame location",
+  'task.panel.labelHint': "Drag a label on the drawing to move it (its leader line follows); double-click puts it back in the automatic place. The PDF uses the same place.",
   'task.panel.lines': "Lines ({count})",
   'task.panel.noLines': "Nothing drawn yet. Use Take wall or Line in the tool bar.",
   'task.panel.others': "Other locations of this activity",

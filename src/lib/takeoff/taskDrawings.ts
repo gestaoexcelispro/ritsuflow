@@ -19,6 +19,8 @@ export type TaskDrawingRow = {
   tag?: string | null
   /** +1 / -1: the side of points[0]→points[1] the band lies on (points are then the face); null = centred. */
   side?: number | null
+  /** Label (callout) centre on the sheet, moved by the user; null = placed automatically. */
+  label_at?: Vec2 | null
 }
 
 /** Planning style of an activity (project_scopes.plan_style). */

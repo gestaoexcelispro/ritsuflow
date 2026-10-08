@@ -35,6 +35,10 @@ export type TakeoffShape = {
   tags?: string[]
   /** Tag of each opening (door / window / void), aligned with `openings`. */
   openingTags?: string[]
+  /** Tag drawn as a callout: the label away from the line, with a leader line to it (planning lines). */
+  tagCallout?: boolean
+  /** Callout label centre (sheet points), moved by the user; unset = placed automatically. */
+  tagAt?: Vec2 | null
 }
 
 export type LayerKind = 'linear' | 'area' | 'count'

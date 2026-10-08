@@ -39,6 +39,8 @@ export type Mark =
   | { type: 'opening'; kind: ElementOpening['kind']; a: Vec2; b: Vec2; at: Vec2; width: number; color: [number, number, number] }
   /** Tag of a wall stretch (DW01-03), in a small box at the middle of the stretch. */
   | { type: 'tag'; at: Vec2; text: string; color: [number, number, number] }
+  /** Callout tag (planning lines): anchor on the line, label placed apart with a leader; `fixed` = where the user put it. */
+  | { type: 'callout'; id: string; anchor: Vec2; fixed: Vec2 | null; text: string; color: [number, number, number] }
 
 export type LegendRow = { color: [number, number, number]; name: string; kind: TakeoffItem['kind']; main: string; sub: string; /** What `sub` is, when it is a plain measure. */ detail?: 'length' | 'perimeter' }
 
@@ -100,6 +102,13 @@ export function buildMarks(items: TakeoffItem[], zones: ZoneLike[], toUser: Matr
     const color = hexToRgb(it.color)
     for (const sh of it.shapes) {
       if (!sh.tags?.length || !sh.pts.length) continue
+      if (it.kind === 'linear' && sh.tagCallout) {
+        const i = sh.tags.findIndex(Boolean)
+        if (i < 0 || !sh.pts[i + 1]) continue
+        const a = apply(toUser, sh.pts[i]), b = apply(toUser, sh.pts[i + 1])
+        marks.push({ type: 'callout', id: sh.id || `${it.key}:${i}`, anchor: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], fixed: sh.tagAt ? apply(toUser, sh.tagAt) : null, text: sh.tags[i], color })
+        continue
+      }
       if (it.kind === 'linear') {
         sh.tags.forEach((text, i) => {
           if (!sh.pts[i + 1]) return

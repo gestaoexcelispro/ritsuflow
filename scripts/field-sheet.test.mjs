@@ -43,3 +43,19 @@ test('long names wrap to two lines and are cut with an ellipsis', () => {
   assert.equal(cut.length, 2)
   assert.ok(cut[1].endsWith('…') && cut[1].length <= 10)
 })
+
+test('callout labels never overlap; a label the user moved stays where it was put', async () => {
+  const { layoutLabels, leaderEnd } = await import('../src/lib/takeoff/labelLayout.ts')
+  // Two tasks on the same stretch (same anchor): the second label goes elsewhere.
+  const out = layoutLabels([{ id: 'a', x: 300, y: 300, w: 120, h: 15 }, { id: 'b', x: 302, y: 300, w: 120, h: 15 }], 800, 800)
+  const [A, B] = out
+  const apart = Math.abs(A.bx - B.bx) >= 120 || Math.abs(A.by - B.by) >= 15
+  assert.ok(apart, `labels overlap: ${JSON.stringify(out)}`)
+  // A fixed label keeps its centre and the other one avoids it.
+  const f = layoutLabels([{ id: 'a', x: 300, y: 300, w: 120, h: 15, fixed: [300, 266] }, { id: 'b', x: 300, y: 300, w: 120, h: 15 }], 800, 800)
+  assert.deepEqual([f[0].bx, f[0].by], [300, 266])
+  assert.ok(Math.abs(f[1].bx - 300) >= 120 || Math.abs(f[1].by - 266) >= 15)
+  // Leader from below meets the bottom edge of the box.
+  assert.deepEqual(leaderEnd({ x: 300, y: 300, w: 120, h: 16 }, [300, 250]), [300, 258])
+  assert.deepEqual(leaderEnd({ x: 500, y: 250, w: 120, h: 16 }, [300, 250]), [360, 250])
+})

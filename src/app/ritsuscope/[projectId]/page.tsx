@@ -754,6 +754,7 @@ export default function TakeoffWorkspacePage() {
         shapes: rows.map(r => ({ r, pts: bandCentre(r.points, r.side, st.thickness_m, k) })).map(({ r, pts }) => ({
           id: opts.selectable && r.scope_item_id === opts.selectable.scopeId && r.location_id === opts.selectable.locationId ? `task:${r.id}` : `plan:${r.id}`,
           page: 1, pts, tags: tagsOnLongest(pts, planLabel(r.tag || sc.scope_code, formatNumber(Number(r.quantity || 0), 2), sc.unit)),
+          tagCallout: true, tagAt: Array.isArray(r.label_at) && r.label_at.length === 2 ? r.label_at as Vec2 : null,
         })),
       }
     }).filter(Boolean) as TakeoffItem[]
@@ -786,6 +787,14 @@ export default function TakeoffWorkspacePage() {
     if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return null }
     await loadTasks()
     return data.id as string
+  }
+  /** A task label (callout) dragged on the sheet: its new place, or null to place it automatically again. */
+  async function moveTaskLabel(shapeId: string, at: Vec2 | null) {
+    const id = shapeId.replace(/^(task|plan):/, '')
+    const value = at ? [Math.round(at[0] * 100) / 100, Math.round(at[1] * 100) / 100] as Vec2 : null
+    setTaskRows(prev => prev.map(r => (r.id === id ? { ...r, label_at: value } : r)))
+    const { error: e } = await createClient().from('location_task_drawings').update({ label_at: value }).eq('id', id)
+    if (e) setError(t('workspace.error', { message: e.message }))
   }
   /** "Take wall": the clicked wall's stretch along the location (the side click then places the task line). */
   function pickTaskWall(p: Vec2): { a: Vec2; b: Vec2; thicknessM: number } | null {
@@ -1177,6 +1186,7 @@ export default function TakeoffWorkspacePage() {
           setReportOpen(true)
         },
         area: reportOpen && reportCfg.areaMode === 'custom' && reportCfg.area?.sourceId === selectedSource.id ? reportCfg.area.box : null,
+        onMoveTag: (shapeId, at) => void moveTaskLabel(shapeId, at),
       } : null}
       onTaskLine={saveTaskLine}
       onTaskPick={pickTaskWall}
@@ -2312,6 +2322,7 @@ export default function TakeoffWorkspacePage() {
           {taskZone && <button type="button" onClick={() => { if (taskZone.source_id !== selectedSourceId) setSelectedSourceId(taskZone.source_id); setTaskFrameTick(n => n + 1) }} style={{ alignSelf: 'flex-start', height: 30, padding: '0 12px', border: '1px solid #cddcdf', borderRadius: 7, background: '#fff', color: '#173441', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('task.panel.frame')}</button>}
           <div>
             <div style={paneTitle}>{t('task.panel.lines', { count: taskHere.length })}</div>
+            {taskHere.length > 0 && <div style={{ ...ui.small, marginTop: 4, lineHeight: 1.4 }}>{t('task.panel.labelHint')}</div>}
             {!taskHere.length ? <div style={{ ...ui.small, marginTop: 6, lineHeight: 1.5 }}>{t('task.panel.noLines')}</div> : <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {taskHere.map((r, i) => <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', border: '1px solid #f3d0d7', borderRadius: 6, fontSize: 12 }}>
                 <span style={{ width: 10, height: 3, background: colorOfScope(taskScopeId), borderRadius: 2 }} />

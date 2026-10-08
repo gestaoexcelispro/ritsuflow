@@ -2,7 +2,8 @@
 // anchor and their leader lines never cross another label or leader. Pure (screen pixels in,
 // box positions out), so the 3D view, the PDF picture and the tests share it.
 
-export type LabelIn = { id: string; x: number; y: number; w: number; h: number }
+/** fixed: a label centre chosen by the user (kept as is; the others avoid it). */
+export type LabelIn = { id: string; x: number; y: number; w: number; h: number; fixed?: [number, number] | null }
 export type LabelOut = LabelIn & { bx: number; by: number; lx: number; ly: number; ok: boolean }
 
 type Box = { x0: number; y0: number; x1: number; y1: number }
@@ -26,6 +27,16 @@ function segHitsBox(p: [number, number], q: [number, number], b: Box) {
   return false
 }
 
+/** Where a leader meets a label box centred at c: the nearest point of the box's edge facing the anchor. */
+export function leaderEnd(l: { x: number; y: number; w: number; h: number }, c: [number, number]): [number, number] {
+  const dx = l.x - c[0], dy = l.y - c[1]
+  const hw = l.w / 2, hh = l.h / 2
+  if (Math.abs(dx) <= hw && Math.abs(dy) <= hh) return [l.x, l.y]
+  // Above / below the box: leave from the top or bottom edge; beside it: from the side.
+  if (Math.abs(dy) > hh) return [Math.max(c[0] - hw + 3, Math.min(c[0] + hw - 3, l.x)), c[1] + Math.sign(dy) * hh]
+  return [c[0] + Math.sign(dx) * hw, Math.max(c[1] - hh, Math.min(c[1] + hh, l.y))]
+}
+
 /**
  * Greedy placement: each label tries positions above its anchor (closest first, then shifted
  * sideways, then further up, then below), keeping the first that clears every placed label,
@@ -35,7 +46,8 @@ export function layoutLabels(labels: LabelIn[], width: number, height: number, s
   const gap = 4 * scale
   const dot = 5 * scale
   const lifts = [34, 56, 80, 106, 134, 164, 196, 230, 266].map(v => v * scale)
-  const order = [...labels].sort((a, b) => a.y - b.y || a.x - b.x)
+  // Labels the user placed go first, where they are; the rest are placed around them.
+  const order = [...labels].sort((a, b) => Number(!!b.fixed) - Number(!!a.fixed) || a.y - b.y || a.x - b.x)
   const placed: { box: Box; leader: [[number, number], [number, number]] }[] = []
   const anchors = labels.map(l => boxOf(l.x, l.y, dot, dot))
   const out = new Map<string, LabelOut>()
@@ -46,7 +58,8 @@ export function layoutLabels(labels: LabelIn[], width: number, height: number, s
     for (const lift of lifts) for (const sx of shifts) cands.push([l.x + sx, l.y - lift])
     for (const lift of lifts.slice(0, 3)) for (const sx of shifts) cands.push([l.x + sx, l.y + lift])
     let best: { c: [number, number]; leader: [[number, number], [number, number]]; bad: number } | null = null
-    for (const c of cands) {
+    if (l.fixed) best = { c: l.fixed, leader: [[l.x, l.y], leaderEnd(l, l.fixed)], bad: 0 }
+    for (const c of l.fixed ? [] : cands) {
       const box = boxOf(c[0], c[1], l.w, l.h, gap)
       if (box.x0 < 0 || box.y0 < 0 || box.x1 > width || box.y1 > height) continue
       // Leader: from the anchor to the nearest point of the label's facing edge.

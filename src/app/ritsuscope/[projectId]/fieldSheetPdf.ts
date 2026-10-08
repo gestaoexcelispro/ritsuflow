@@ -8,6 +8,7 @@ import { fitCrop, printedRatio, userBox, wrapText } from '@/lib/takeoff/fieldShe
 import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { loadPdfLib } from './printPdf'
 import { ICON_PATHS } from './icons'
+import { layoutLabels } from '@/lib/takeoff/labelLayout'
 
 /** A material line: what to take (whole bars / sheets / packs) and the exact quantity. */
 export type FieldMaterialRow = { mat: string; whole: string; exact: string }
@@ -136,7 +137,8 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
   if (zUser.length >= 3) page.drawSvgPath(pathOf(zUser, true), { x: 0, y: 0, color: rgb(0.05, 0.65, 0.91), opacity: 0.06, borderColor: rgb(0.05, 0.65, 0.91), borderWidth: 1, borderDashArray: [5, 3] })
 
   const tagScale = 1.15
-  for (const m of buildMarks(items, [], toUser, ptPerM, fmt)) {
+  const marks = buildMarks(items, [], toUser, ptPerM, fmt)
+  for (const m of marks) {
     if (m.type === 'polygon') page.drawSvgPath(pathOf(m.pts, true), { x: 0, y: 0, color: col(m.color), opacity: m.fillOpacity, borderColor: col(m.color), borderWidth: m.borderWidth, borderOpacity: 0.6 })
     else if (m.type === 'polyline') page.drawSvgPath(pathOf(m.pts, false), { x: 0, y: 0, borderColor: col(m.color), borderWidth: Math.max(0.6, m.width * k), borderOpacity: m.opacity, borderLineCap: m.flat ? LineCapStyle.Butt : LineCapStyle.Round })
     else if (m.type === 'opening') {
@@ -155,6 +157,27 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
     } else if (m.type === 'dot') {
       const at = P(m.at)
       page.drawCircle({ x: at[0], y: at[1], size: Math.max(2, m.radius * Math.min(2, k)), color: col(m.color), opacity: m.opacity ?? 1 })
+    }
+  }
+  // Callout tags of the planning lines: labels apart from the lines (no overlaps), each with a leader to its line.
+  // Placed in the map's own space (y down from its top edge); a label the user moved on screen stays there.
+  {
+    const size = 6.5 * tagScale, h = 10.5
+    const calls = marks.filter((m): m is Extract<typeof m, { type: 'callout' }> => m.type === 'callout').map(m => {
+      const t = winAnsi(m.text)
+      const a = P(m.anchor)
+      const f = m.fixed ? P(m.fixed) : null
+      return { m, t, id: m.id, x: a[0] - area.x, y: area.y + area.h - a[1], w: bold.widthOfTextAtSize(t, size) + 6, h, fixed: f ? [f[0] - area.x, area.y + area.h - f[1]] as [number, number] : null }
+    })
+    const back = (x: number, yd: number) => ({ x: area.x + x, y: area.y + area.h - yd })
+    for (const l of layoutLabels(calls, area.w, area.h, 0.55)) {
+      const c = calls.find(x => x.id === l.id)!
+      const color = col(c.m.color)
+      const an = back(l.x, l.y), le = back(l.lx, l.ly), bc = back(l.bx, l.by)
+      page.drawLine({ start: an, end: le, thickness: 0.7, color })
+      page.drawCircle({ x: an.x, y: an.y, size: 1.6, color, borderColor: rgb(1, 1, 1), borderWidth: 0.4 })
+      page.drawRectangle({ x: bc.x - c.w / 2, y: bc.y - h / 2, width: c.w, height: h, color: rgb(1, 1, 1), opacity: 0.97, borderColor: color, borderWidth: 0.9 })
+      page.drawText(c.t, { x: bc.x - c.w / 2 + 3, y: bc.y - 2.4, size, font: bold, color })
     }
   }
   page.pushOperators(popGraphicsState())

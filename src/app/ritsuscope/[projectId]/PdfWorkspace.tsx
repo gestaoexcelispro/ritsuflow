@@ -55,6 +55,8 @@ export type TaskDrawing = {
   onAreaPicked?: (box: [number, number, number, number] | null) => void
   /** The area chosen for the report, outlined on its sheet. */
   area?: [number, number, number, number] | null
+  /** A task label (callout) was dragged: shape id (`task:<id>` / `plan:<id>`) and label centre, or null = automatic again. */
+  onMoveTag?: (shapeId: string, at: Vec2 | null) => void
 }
 
 type Props = {
@@ -1413,6 +1415,7 @@ export default function PdfWorkspace(props: Props) {
               onMovePoints={tasksMode ? undefined : (id, pts) => void movePoints(id, pts)}
               snap={snapOn}
               showTags={tagsOn && !zoning}
+              onMoveTag={workMode === 'tasks' ? task?.onMoveTag : undefined}
               backgroundFade={backgroundFade}
               ortho={orthoOn}
               onSize={size => { setPageSize(size); setLoadTick(n => n + 1) }}
