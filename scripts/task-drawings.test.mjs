@@ -99,3 +99,19 @@ test('tags are numbered per activity and never reuse a gap', async () => {
   assert.equal(nextTaskTag('', ['TX-09']), 'TX-10')
   assert.equal(nextTaskTag('2.1', ['T2.10-05']), 'T2.1-01', 'a longer code is another activity')
 })
+
+test('lines keep the face and side, so any band thickness still touches the face', async () => {
+  const { faceFor, bandCentre, planStyleOf } = await import('../src/lib/takeoff/taskDrawings.ts')
+  // Drawn line on y = 100, side above (towards y < 100).
+  const drawn = faceFor([0, 100], [100, 100], [50, 80], K)
+  assert.deepEqual(drawn.face, [[0, 100], [100, 100]])
+  const thin = bandCentre(drawn.face, drawn.side, 0.1, K), thick = bandCentre(drawn.face, drawn.side, 0.3, K)
+  assert.ok(Math.abs(thin[0][1] - 99.5) < 1e-9 && Math.abs(thick[0][1] - 98.5) < 1e-9, 'both bands start at the face')
+  // Taken wall 0.12 m thick, side below: the face is 0.06 m below the centreline.
+  const taken = faceFor([0, 100], [100, 100], [50, 130], K, 0.12)
+  assert.ok(Math.abs(taken.face[0][1] - 100.6) < 1e-9)
+  assert.deepEqual(bandCentre([[0, 0], [1, 0]], null, 0.1, K), [[0, 0], [1, 0]], 'no side: centred')
+  assert.deepEqual(planStyleOf({}), { thickness_m: 0.1, transparency: 0, color: undefined })
+  assert.deepEqual(planStyleOf({ thickness_m: 2, transparency: 5, color: 'red' }), { thickness_m: 0.5, transparency: 0.9, color: undefined })
+  assert.equal(planStyleOf({ color: '#2563EB' }).color, '#2563EB')
+})

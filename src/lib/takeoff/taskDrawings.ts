@@ -17,6 +17,22 @@ export type TaskDrawingRow = {
   unit: string | null
   /** T<scope code>-<nn>, e.g. T1.1-01 (never reused). */
   tag?: string | null
+  /** +1 / -1: the side of points[0]→points[1] the band lies on (points are then the face); null = centred. */
+  side?: number | null
+}
+
+/** Planning style of an activity (project_scopes.plan_style). */
+export type PlanStyle = { thickness_m?: number; transparency?: number; color?: string }
+export const PLAN_STYLE_DEFAULT = { thickness_m: 0.1, transparency: 0 }
+/** The style with defaults and limits applied: thickness 0.02–0.5 m, transparency 0–0.9. */
+export function planStyleOf(style: PlanStyle | null | undefined): { thickness_m: number; transparency: number; color?: string } {
+  const th = Number(style?.thickness_m)
+  const tr = Number(style?.transparency)
+  return {
+    thickness_m: Number.isFinite(th) && th > 0 ? Math.min(0.5, Math.max(0.02, th)) : PLAN_STYLE_DEFAULT.thickness_m,
+    transparency: Number.isFinite(tr) ? Math.min(0.9, Math.max(0, tr)) : PLAN_STYLE_DEFAULT.transparency,
+    color: typeof style?.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(style.color) ? style.color : undefined,
+  }
 }
 
 /** A takeoff wall as the task view sees it: its polyline (points) and openings (metres along it). */
@@ -111,18 +127,40 @@ export function takeWallStretch(p: Vec2, walls: WallRef[], room: Box, ptPerM: nu
 }
 
 /**
- * A task line projected to one side, like a wall drawn by its face: the band (TASK_BAND_M wide) lies on
- * the side of `towards`, against the line a→b. When a→b is a wall centreline (taken wall), the band
- * starts at that wall's face (half its thickness away). Returns the band's centreline.
+ * A task line placed against a face, like a wall drawn by its face. The third click (`towards`) gives
+ * the side. When a→b is a wall centreline (taken wall), the face is that wall's face on that side (half
+ * its thickness away); otherwise a→b is the face itself. Stored: the face and the side (+1 / -1).
  */
-export function projectTaskLine(a: Vec2, b: Vec2, towards: Vec2, ptPerM: number, wallThicknessM = 0): [Vec2, Vec2] {
+export function faceFor(a: Vec2, b: Vec2, towards: Vec2, ptPerM: number, wallThicknessM = 0): { face: [Vec2, Vec2]; side: 1 | -1 } {
   const len = Math.hypot(b[0] - a[0], b[1] - a[1])
-  if (len < 1e-9 || !(ptPerM > 0)) return [a, b]
   const cross = (b[0] - a[0]) * (towards[1] - a[1]) - (b[1] - a[1]) * (towards[0] - a[0])
-  const s = Math.sign(cross) || 1
-  const nx = (-(b[1] - a[1]) / len) * s, ny = ((b[0] - a[0]) / len) * s
-  const off = (Math.max(0, wallThicknessM) / 2 + TASK_BAND_M / 2) * ptPerM
-  return [[a[0] + nx * off, a[1] + ny * off], [b[0] + nx * off, b[1] + ny * off]]
+  const side = (Math.sign(cross) || 1) as 1 | -1
+  if (len < 1e-9 || !(ptPerM > 0) || !(wallThicknessM > 0)) return { face: [a, b], side }
+  const nx = (-(b[1] - a[1]) / len) * side, ny = ((b[0] - a[0]) / len) * side
+  const off = (wallThicknessM / 2) * ptPerM
+  return { face: [[a[0] + nx * off, a[1] + ny * off], [b[0] + nx * off, b[1] + ny * off]], side }
+}
+
+/** Centreline of the band (bandM wide) that lies against a face on `side`; the line itself when side is null. */
+export function bandCentre(pts: Vec2[], side: number | null | undefined, bandM: number, ptPerM: number): Vec2[] {
+  if (!side || pts.length < 2 || !(ptPerM > 0)) return pts
+  const out: Vec2[] = []
+  for (let i = 0; i < pts.length; i++) {
+    // Normal of the segment(s) at this vertex (averaged at inner vertices).
+    const seg = (j: number): Vec2 | null => { const p = pts[j], q = pts[j + 1]; if (!p || !q) return null; const L = Math.hypot(q[0] - p[0], q[1] - p[1]); return L > 1e-9 ? [-(q[1] - p[1]) / L, (q[0] - p[0]) / L] : null }
+    const n1 = seg(i - 1), n2 = seg(i)
+    const n = n1 && n2 ? [(n1[0] + n2[0]) / 2, (n1[1] + n2[1]) / 2] : (n1 || n2 || [0, 0])
+    const off = (bandM / 2) * ptPerM * Math.sign(side)
+    out.push([pts[i][0] + n[0] * off, pts[i][1] + n[1] * off])
+  }
+  return out
+}
+
+/** Kept for older callers: the band's centreline, as before (face + side → centre). */
+export function projectTaskLine(a: Vec2, b: Vec2, towards: Vec2, ptPerM: number, wallThicknessM = 0, bandM = TASK_BAND_M): [Vec2, Vec2] {
+  const { face, side } = faceFor(a, b, towards, ptPerM, wallThicknessM)
+  const c = bandCentre(face, side, bandM, ptPerM)
+  return [c[0], c[1]]
 }
 
 /** Next tag for a scope item: T<code>-<nn>, one more than the highest used (gaps are never filled). */

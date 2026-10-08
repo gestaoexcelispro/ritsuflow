@@ -73,7 +73,7 @@ import { materialRows, scaleGroup } from '@/lib/takeoff/materialList'
 import { itemShareByZone, NONE } from '@/lib/takeoff/locationShare'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
-import { TASK_BAND_M, frameOf, measureTaskLines, nextTaskTag, takeWallStretch, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
+import { bandCentre, frameOf, measureTaskLines, nextTaskTag, planStyleOf, takeWallStretch, type PlanStyle, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
 import { fingerprint, planColor, planLabel, tagsOnLongest } from '@/lib/takeoff/fieldSheet'
 import { buildFieldSheetPdf, type FieldSheetRow } from './fieldSheetPdf'
 
@@ -118,7 +118,7 @@ const ELEMENT_COLUMNS = 'id, project_id, layer_id, source_id, points, height_ove
 const TASK_COLOR = '#E11D48'
 /** Location kinds that group others (not where work is built). */
 const TASK_GROUP_KINDS = new Set(['building', 'floor', 'zone'])
-type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null }
+type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null; plan_style?: PlanStyle | null }
 type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null; qr_token: string | null }
 type FieldIssueRow = { id: string; location_id: string; kind: 'location' | 'activity'; scope_item_id: string | null; revision: number; fingerprint: string | null; file_path: string | null; issued_by_name: string | null; issued_at: string }
 
@@ -293,7 +293,8 @@ export default function TakeoffWorkspacePage() {
   const loadTasks = useCallback(async () => {
     const supabase = createClient()
     const [sc, lc, td, fi] = await Promise.all([
-      supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code'),
+      supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id, plan_style').eq('project_id', projectId).eq('item_type', 'item').order('scope_code')
+        .then(async r => (r.error && /plan_style/.test(r.error.message) ? await supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code') : r)),
       supabase.from('locations').select('id, name, location_type, parent_id, sequence_number, qr_token').eq('project_id', projectId).order('sequence_number'),
       supabase.from('location_task_drawings').select('*').eq('project_id', projectId),
       supabase.from('field_sheet_issues').select('id, location_id, kind, scope_item_id, revision, fingerprint, file_path, issued_by_name, issued_at').eq('project_id', projectId).order('revision', { ascending: false }),
@@ -708,7 +709,8 @@ export default function TakeoffWorkspacePage() {
   const shownItems = levelHidden ? [] : hiddenLayerIds.size ? sourceItems.filter(it => !hiddenLayerIds.has(it.key)) : sourceItems
 
   /** Planning layer colour of a scope item (its place in the scope list). */
-  const colorOfScope = (scopeId: string | null | undefined) => planColor(Math.max(0, taskScopes.findIndex(x => x.id === scopeId)))
+  const styleOfScope = (scopeId: string | null | undefined) => planStyleOf(taskScopes.find(x => x.id === scopeId)?.plan_style)
+  const colorOfScope = (scopeId: string | null | undefined) => styleOfScope(scopeId).color || planColor(Math.max(0, taskScopes.findIndex(x => x.id === scopeId)))
   /** Estimate layer: the takeoff, faint, without its tags (the planning labels must read). */
   const estimateLayer = (list: TakeoffItem[]): TakeoffItem[] => list.map(it => ({ ...it, planTransparency: 0.8, shapes: it.shapes.map(sh => ({ ...sh, tags: undefined, openingTags: undefined })) }))
   /** Planning layer on a sheet: one item per activity, each line labelled "code · quantity unit". */
@@ -717,11 +719,13 @@ export default function TakeoffWorkspacePage() {
       const rows = taskRows.filter(r => r.scope_item_id === sc.id && r.source_id === sheetId && (!opts.locationId || r.location_id === opts.locationId) && (!opts.scopeId || r.scope_item_id === opts.scopeId))
       if (!rows.length) return null
       const faded = opts.emphasize && sc.id !== opts.emphasize
+      const st = planStyleOf(sc.plan_style)
+      const k = Number(sources.find(x => x.id === sheetId)?.scale_pt_per_m) || 0
       return {
-        key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: TASK_BAND_M, planTransparency: faded ? 0.6 : 0,
-        shapes: rows.map(r => ({
+        key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: st.thickness_m, planTransparency: faded ? Math.max(0.6, st.transparency) : st.transparency,
+        shapes: rows.map(r => ({ r, pts: bandCentre(r.points, r.side, st.thickness_m, k) })).map(({ r, pts }) => ({
           id: opts.selectable && r.scope_item_id === opts.selectable.scopeId && r.location_id === opts.selectable.locationId ? `task:${r.id}` : `plan:${r.id}`,
-          page: 1, pts: r.points, tags: tagsOnLongest(r.points, planLabel(r.tag || sc.scope_code, formatNumber(Number(r.quantity || 0), 2), sc.unit)),
+          page: 1, pts, tags: tagsOnLongest(pts, planLabel(r.tag || sc.scope_code, formatNumber(Number(r.quantity || 0), 2), sc.unit)),
         })),
       }
     }).filter(Boolean) as TakeoffItem[]
@@ -734,15 +738,16 @@ export default function TakeoffWorkspacePage() {
   })()
 
   /** Saves one task line for the chosen activity and location, measured now. */
-  async function saveTaskLine(pts: Vec2[]): Promise<string | null> {
-    if (!taskScope || !taskLocationId || !selectedSource) return null
+  async function saveTaskLine(pts: Vec2[], side: 1 | -1): Promise<string | null> {
+    if (!taskScope || !taskLocationId) { setError(t('task.panel.pick')); return null }
+    if (!selectedSource) return null
     const k = Number(selectedSource.scale_pt_per_m) || 0
     const m = measureTaskLines([pts], { ptPerM: k, heightM: taskHeightM, unit: taskScope.unit, walls: taskWallRefs })
     if (m.measure === 'wallArea' && !taskHeightM) { setError(t('task.needsHeight')); return null }
     const supabase = createClient()
     const insert = (tag: string) => supabase.from('location_task_drawings').insert({
       project_id: projectId, scope_item_id: taskScope.id, location_id: taskLocationId, source_id: selectedSource.id,
-      points: pts, height_m: m.measure === 'wallArea' ? taskHeightM : null, quantity: Math.round(m.quantity * 10000) / 10000, unit: taskScope.unit, tag,
+      points: pts, side, height_m: m.measure === 'wallArea' ? taskHeightM : null, quantity: Math.round(m.quantity * 10000) / 10000, unit: taskScope.unit, tag,
     }).select('id').single()
     let { data, error: e } = await insert(nextTaskTag(taskScope.scope_code, taskRows.filter(r => r.scope_item_id === taskScope.id).map(r => r.tag)))
     if (e?.code === '23505') {
@@ -756,10 +761,11 @@ export default function TakeoffWorkspacePage() {
   }
   /** "Take wall": the clicked wall's stretch along the location (the side click then places the task line). */
   function pickTaskWall(p: Vec2): { a: Vec2; b: Vec2; thicknessM: number } | null {
-    if (!taskZone || !selectedSource || taskZone.source_id !== selectedSource.id) return null
+    if (!selectedSource) return null
     const k = Number(selectedSource.scale_pt_per_m) || 0
-    const room = frameOf(taskZone.points as Vec2[], k, 0)
-    return room ? takeWallStretch(p, taskWallRefs, room, k) : null
+    // With the location's zone on this sheet, the stretch stops at the room; without it, the whole wall stretch.
+    const room = taskZone && taskZone.source_id === selectedSource.id ? frameOf(taskZone.points as Vec2[], k, 0) : null
+    return takeWallStretch(p, taskWallRefs, room || [-1e9, -1e9, 1e9, 1e9], k)
   }
   /** A new wall height re-measures this location's lines. */
   async function applyTaskHeight() {
@@ -802,7 +808,8 @@ export default function TakeoffWorkspacePage() {
   const fileSafe = (v: string) => v.replace(/[\\/:*?"<>|]+/g, '-').trim()
   /** Builds the PDF of the chosen location (all activities or just the chosen one), as a preview or as revision `revision`. */
   async function makeFieldSheet(kind: FieldKind, revision: number | null, issuedBy: string) {
-    if (!taskLocation || !taskZone || (kind === 'activity' && !taskScope)) throw new Error(t('task.panel.pick'))
+    if (!taskLocation || (kind === 'activity' && !taskScope)) throw new Error(t('task.panel.pick'))
+    if (!taskZone) throw new Error(t('task.panel.noZone', { location: taskLocation.name }))
     const sheet = sources.find(x => x.id === taskZone.source_id)
     if (!sheet || sheet.kind !== 'pdf_page') throw new Error(t('zone.pdfOnly'))
     const k = Number(sheet.scale_pt_per_m) || 0
@@ -898,6 +905,17 @@ export default function TakeoffWorkspacePage() {
     window.location.assign(data.signedUrl)
   }
 
+  /** Planning style of an activity: changed live on screen, saved when the control is released. */
+  function setStyleLocal(scopeId: string, patch: PlanStyle) {
+    setTaskScopes(prev => prev.map(x => (x.id === scopeId ? { ...x, plan_style: { ...(x.plan_style || {}), ...patch } } : x)))
+  }
+  async function commitStyle(scopeId: string, patch: PlanStyle | null) {
+    const sc = taskScopes.find(x => x.id === scopeId)
+    const next: PlanStyle = patch ? { ...(sc?.plan_style || {}), ...patch } : {}
+    setTaskScopes(prev => prev.map(x => (x.id === scopeId ? { ...x, plan_style: next } : x)))
+    const { error: e } = await createClient().from('project_scopes').update({ plan_style: next }).eq('id', scopeId)
+    if (e) setError(t('workspace.error', { message: e.message }))
+  }
   async function deleteTaskLine(id: string) {
     if (!window.confirm(t('task.confirmDelete'))) return
     const { error: e } = await createClient().from('location_task_drawings').delete().eq('id', id)
@@ -1030,6 +1048,7 @@ export default function TakeoffWorkspacePage() {
         zone: taskZone && taskZone.source_id === selectedSource.id ? { id: taskZone.id, name: taskLocation?.name || taskZone.name, pts: taskZone.points as Vec2[] } : null,
         frame: taskZone && taskZone.source_id === selectedSource.id ? frameOf(taskZone.points as Vec2[], Number(selectedSource.scale_pt_per_m) || 0, 1) : null,
         frameTick: taskFrameTick,
+        bandM: styleOfScope(taskScopeId).thickness_m,
       } : null}
       onTaskLine={saveTaskLine}
       onTaskPick={pickTaskWall}
@@ -2096,10 +2115,10 @@ export default function TakeoffWorkspacePage() {
                   const on = loc.id === taskLocationId
                   const zoned = hasZone(loc.id)
                   const q = drawnOf(sc.id, loc.id)
-                  return <button key={loc.id} type="button" disabled={!zoned} title={zoned ? undefined : t('task.sidebar.noZoneHint')} onClick={() => { setTaskLocationId(loc.id); setTaskFrameTick(n => n + 1) }}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', marginTop: 3, padding: '6px 8px', border: '1px solid ' + (on ? '#e11d48' : 'transparent'), borderRadius: 6, background: on ? '#fff1f3' : 'transparent', cursor: zoned ? 'pointer' : 'default', color: zoned ? '#294955' : '#9aaeb5', fontSize: 12, textAlign: 'left' }}>
+                  return <button key={loc.id} type="button" title={zoned ? undefined : t('task.sidebar.noZoneHint')} onClick={() => { setTaskLocationId(loc.id); setTaskFrameTick(n => n + 1) }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', marginTop: 3, padding: '6px 8px', border: '1px solid ' + (on ? '#e11d48' : 'transparent'), borderRadius: 6, background: on ? '#fff1f3' : 'transparent', cursor: 'pointer', color: zoned ? '#294955' : '#6b8089', fontSize: 12, textAlign: 'left' }}>
                     <span>{loc.name}</span>
-                    <span style={{ fontWeight: 700, color: q > 0 ? '#be123c' : '#9aaeb5', whiteSpace: 'nowrap' }}>{!zoned ? t('task.sidebar.noZone') : q > 0 ? `${fmtQty(q)} ${sc.unit || ''}` : '—'}</span>
+                    <span style={{ fontWeight: 700, color: q > 0 ? '#be123c' : '#9aaeb5', whiteSpace: 'nowrap' }}>{q > 0 ? `${fmtQty(q)} ${sc.unit || ''}` : !zoned ? t('task.sidebar.noZone') : '—'}</span>
                   </button>
                 })}
               </div>}
@@ -2119,7 +2138,8 @@ export default function TakeoffWorkspacePage() {
           <div style={{ fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}>{taskScope.scope_code} · {t('task.panel.in', { location: taskLocation.name })}</div>
           <div style={{ fontSize: 14, fontWeight: 800, color: '#173441', lineHeight: 1.3, marginTop: 2 }}>{taskScope.scope_name}</div>
         </div>
-        {!taskZone ? <div style={ui.error}>{t('task.panel.noZone', { location: taskLocation.name })}</div> : <>
+        {!taskZone && <div style={{ ...ui.error, background: '#fff8eb', color: '#8a4b0f' }}>{t('task.panel.noZoneDraw', { location: taskLocation.name })}</div>}
+        {<>
           <div style={{ padding: '10px 12px', borderRadius: 8, background: '#fff1f3', display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9f1239' }}>{t('task.panel.drawn')}</span>
             <b style={{ fontSize: 20, color: '#be123c' }}>{fmtQty(taskHere.reduce((a, r) => a + Number(r.quantity || 0), 0))} {taskScope.unit || ''}</b>
@@ -2133,7 +2153,30 @@ export default function TakeoffWorkspacePage() {
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#42636f', cursor: 'pointer' }}><input type="checkbox" checked={taskWalls} onChange={e => setTaskWalls(e.target.checked)} /><span><b>{t('task.layer.estimate')}</b> · {t('task.layer.estimateHint')}</span></label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#42636f', cursor: 'pointer' }}><input type="checkbox" checked={taskPlan} onChange={e => setTaskPlan(e.target.checked)} /><span><b>{t('task.layer.planning')}</b> · {t('task.layer.planningHint')}</span></label>
           </div>
-          <button type="button" onClick={() => { if (taskZone.source_id !== selectedSourceId) setSelectedSourceId(taskZone.source_id); setTaskFrameTick(n => n + 1) }} style={{ alignSelf: 'flex-start', height: 30, padding: '0 12px', border: '1px solid #cddcdf', borderRadius: 7, background: '#fff', color: '#173441', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('task.panel.frame')}</button>
+          {(() => {
+            const st = styleOfScope(taskScope.id)
+            const cm = Math.round(st.thickness_m * 100)
+            const pct = Math.round(st.transparency * 100)
+            const row = { display: 'grid', gridTemplateColumns: '92px 1fr 46px', alignItems: 'center', gap: 8, fontSize: 12, color: '#42636f' } as const
+            return <div style={{ display: 'grid', gap: 7, padding: '8px 10px', border: '1px solid #e5edef', borderRadius: 8 }}>
+              <div style={paneTitle}>{t('task.style.title', { code: taskScope.scope_code || '' })}</div>
+              <label style={row}>{t('task.style.color')}
+                <input type="color" value={colorOfScope(taskScope.id)} onChange={e => setStyleLocal(taskScope.id, { color: e.target.value })} onBlur={e => void commitStyle(taskScope.id, { color: e.currentTarget.value })} style={{ width: 44, height: 26, padding: 0, border: '1px solid #cddcdf', borderRadius: 5, background: '#fff' }} />
+                <span />
+              </label>
+              <label style={row}>{t('task.style.thickness')}
+                <input type="range" min={2} max={50} step={1} value={cm} onChange={e => setStyleLocal(taskScope.id, { thickness_m: Number(e.target.value) / 100 })} onPointerUp={e => void commitStyle(taskScope.id, { thickness_m: Number(e.currentTarget.value) / 100 })} onKeyUp={e => void commitStyle(taskScope.id, { thickness_m: Number(e.currentTarget.value) / 100 })} />
+                <b style={{ textAlign: 'right' }}>{cm} cm</b>
+              </label>
+              <label style={row}>{t('task.style.transparency')}
+                <input type="range" min={0} max={90} step={5} value={pct} onChange={e => setStyleLocal(taskScope.id, { transparency: Number(e.target.value) / 100 })} onPointerUp={e => void commitStyle(taskScope.id, { transparency: Number(e.currentTarget.value) / 100 })} onKeyUp={e => void commitStyle(taskScope.id, { transparency: Number(e.currentTarget.value) / 100 })} />
+                <b style={{ textAlign: 'right' }}>{pct}%</b>
+              </label>
+              <button type="button" onClick={() => void commitStyle(taskScope.id, null)} style={{ justifySelf: 'start', border: 0, background: 'transparent', padding: 0, color: '#0b7f75', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>{t('task.style.reset')}</button>
+              <span style={{ fontSize: 10.5, color: '#8aa0a8', lineHeight: 1.4 }}>{t('task.style.hint')}</span>
+            </div>
+          })()}
+          {taskZone && <button type="button" onClick={() => { if (taskZone.source_id !== selectedSourceId) setSelectedSourceId(taskZone.source_id); setTaskFrameTick(n => n + 1) }} style={{ alignSelf: 'flex-start', height: 30, padding: '0 12px', border: '1px solid #cddcdf', borderRadius: 7, background: '#fff', color: '#173441', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('task.panel.frame')}</button>}
           <div>
             <div style={paneTitle}>{t('task.panel.lines', { count: taskHere.length })}</div>
             {!taskHere.length ? <div style={{ ...ui.small, marginTop: 6, lineHeight: 1.5 }}>{t('task.panel.noLines')}</div> : <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
@@ -2156,8 +2199,8 @@ export default function TakeoffWorkspacePage() {
                   {!st.last ? t('field.notIssued') : st.changed ? t('field.changedSince', { rev: st.last.revision }) : t('field.upToDate', { rev: st.last.revision, date: new Date(st.last.issued_at).toLocaleDateString(language) })}
                 </span>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button type="button" disabled={!!fieldBusy || !st.lines.length} onClick={() => void previewFieldSheet(kind)} style={{ height: 28, padding: '0 10px', border: '1px solid #cddcdf', borderRadius: 6, background: '#fff', color: '#173441', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', opacity: !st.lines.length ? 0.5 : 1 }}>{fieldBusy === `${kind}:preview` ? t('field.working') : t('field.preview')}</button>
-                  <button type="button" disabled={!!fieldBusy || !st.lines.length || (!!st.last && !st.changed)} onClick={() => void issueFieldSheet(kind)} style={{ height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: '#109d91', color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', opacity: (!st.lines.length || (!!st.last && !st.changed)) ? 0.45 : 1 }}>{busy && fieldBusy?.endsWith('issue') ? t('field.working') : t('field.issue', { rev: st.next })}</button>
+                  <button type="button" disabled={!!fieldBusy || !st.lines.length || !taskZone} title={!taskZone ? t('task.panel.noZone', { location: taskLocation.name }) : undefined} onClick={() => void previewFieldSheet(kind)} style={{ height: 28, padding: '0 10px', border: '1px solid #cddcdf', borderRadius: 6, background: '#fff', color: '#173441', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', opacity: !st.lines.length ? 0.5 : 1 }}>{fieldBusy === `${kind}:preview` ? t('field.working') : t('field.preview')}</button>
+                  <button type="button" disabled={!!fieldBusy || !st.lines.length || !taskZone || (!!st.last && !st.changed)} title={!taskZone ? t('task.panel.noZone', { location: taskLocation.name }) : undefined} onClick={() => void issueFieldSheet(kind)} style={{ height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: '#109d91', color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', opacity: (!st.lines.length || (!!st.last && !st.changed)) ? 0.45 : 1 }}>{busy && fieldBusy?.endsWith('issue') ? t('field.working') : t('field.issue', { rev: st.next })}</button>
                 </div>
               </div>
             })}

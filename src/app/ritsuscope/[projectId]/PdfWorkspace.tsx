@@ -29,7 +29,7 @@ import { findOpenings, placeOpenings, type PlannedOpening } from '@/lib/takeoff/
 import { applyFramingDefaults, defaultFraming, framingLabelsPtBR, type FramingDefaults } from '@/lib/takeoff/framing/framing'
 import { importLabelsEnUS } from '@/lib/takeoff/ifc/importIfcModel'
 import { boxSelect } from '@/lib/takeoff/boxSelect'
-import { TASK_BAND_M, projectTaskLine } from '@/lib/takeoff/taskDrawings'
+import { TASK_BAND_M, faceFor } from '@/lib/takeoff/taskDrawings'
 
 const BUCKET = 'takeoff-files'
 
@@ -48,6 +48,8 @@ export type TaskDrawing = {
   /** Room + 1 m to frame (sheet points), applied whenever `frameTick` changes or the sheet loads. */
   frame: [number, number, number, number] | null
   frameTick: number
+  /** Band width of the chosen activity (m), for the side preview. */
+  bandM?: number
 }
 
 type Props = {
@@ -69,8 +71,8 @@ type Props = {
   /** Takeoff (items), zoning (locations) or tasks (where each scope item is built, per location). */
   workMode: 'takeoff' | 'zoning' | 'tasks'
   task?: TaskDrawing | null
-  /** Tasks mode: a finished line; returns the saved row id (null on failure). */
-  onTaskLine?: (pts: Vec2[]) => Promise<string | null>
+  /** Tasks mode: a finished line, as the face it lies against and its side; returns the saved row id (null on failure). */
+  onTaskLine?: (face: Vec2[], side: 1 | -1) => Promise<string | null>
   /** Tasks mode, "take a wall": the stretch of the clicked wall along the room and its thickness (null when none). */
   onTaskPick?: (p: Vec2) => { a: Vec2; b: Vec2; thicknessM: number } | null
   zones: ZoneRow[]
@@ -994,9 +996,9 @@ export default function PdfWorkspace(props: Props) {
       // Third click: the side the task goes (its band lies against the face, like a wall drawn by its face).
       if (draft.length >= 2) {
         if (!onTaskLine || saving) return
-        const seg = projectTaskLine(draft[0], draft[1], p, scale, takeWall ? taskWallT : 0)
+        const { face, side } = faceFor(draft[0], draft[1], p, scale, takeWall ? taskWallT : 0)
         setSaving(true)
-        const id = await onTaskLine([seg[0], seg[1]])
+        const id = await onTaskLine([face[0], face[1]], side)
         setSaving(false)
         if (!id) return
         setCreated(prev => [...prev, { table: 'location_task_drawings', id }])
@@ -1415,7 +1417,7 @@ export default function PdfWorkspace(props: Props) {
               onToggleSuggestion={id => (openSugs && mode !== 'detect' ? setOpenPicked : setPicked)(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })}
               regionBox={mode === 'detect' && regionPts.length === 2 ? [regionPts[0], regionPts[1]] : zoning && roomSugs && roomRegion && !roomPicking ? roomRegion : null}
               sidePick={faceMode && draft.length === 2 ? { a: draft[0], b: draft[1], thickness: activeThicknessPts, color: activeLayer?.color || '#109d91' }
-                : tasksMode && mode === 'draw' && draft.length === 2 && scale > 0 ? { a: draft[0], b: draft[1], thickness: ((takeWall ? taskWallT / 2 : 0) + TASK_BAND_M) * scale, color: task?.color || '#E11D48' }
+                : tasksMode && mode === 'draw' && draft.length === 2 && scale > 0 ? { a: draft[0], b: draft[1], thickness: ((takeWall ? taskWallT / 2 : 0) + (task?.bandM ?? TASK_BAND_M)) * scale, color: task?.color || '#E11D48' }
                 : null}
               originMark={mode === 'origin' && originPts.length
                 ? { x: originPts[0][0], y: originPts[0][1], angleDeg: originPts.length === 2 ? angleFromPoints(originPts[0], originPts[1]) : 0 }
