@@ -507,7 +507,7 @@ export default function PdfSheet(props: Props) {
                 const width = real > 0 ? Math.max(real, stroke(selected ? 3 : 1.5)) : stroke(selected ? 7 : 5)
                 return (
                   <g key={key}>
-                    <polyline points={points} fill="none" stroke={color} strokeOpacity={selected ? Math.max(0.85, planOpacity(item, 'screen')) : planOpacity(item, 'screen')} strokeWidth={width} strokeLinejoin="miter" strokeLinecap={real > 0 ? 'square' : 'round'} {...pick} />
+                    <polyline points={points} fill="none" stroke={color} strokeOpacity={selected ? Math.max(0.85, planOpacity(item, 'screen')) : planOpacity(item, 'screen')} strokeWidth={width} strokeLinejoin="miter" strokeLinecap={item.flatEnds ? 'butt' : real > 0 ? 'square' : 'round'} {...pick} />
                     {selectable && shape.id && <polyline points={points} fill="none" stroke="transparent" strokeWidth={Math.max(width, stroke(10))} strokeLinejoin="round" strokeLinecap="round" style={{ cursor: 'pointer', pointerEvents: 'stroke' }} onClick={event => { event.stopPropagation(); onSelect(shape.id!) }} />}
                     {selected && real > 0 && <polyline points={points} fill="none" stroke="#fff" strokeOpacity={0.9} strokeWidth={stroke(1.2)} strokeDasharray={`${stroke(6)} ${stroke(4)}`} style={{ pointerEvents: 'none' }} />}
                   </g>

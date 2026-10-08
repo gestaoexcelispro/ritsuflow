@@ -722,7 +722,7 @@ export default function TakeoffWorkspacePage() {
       const st = planStyleOf(sc.plan_style)
       const k = Number(sources.find(x => x.id === sheetId)?.scale_pt_per_m) || 0
       return {
-        key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: st.thickness_m, planTransparency: faded ? Math.max(0.6, st.transparency) : st.transparency,
+        key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: st.thickness_m, flatEnds: true, planTransparency: faded ? Math.max(0.6, st.transparency) : st.transparency,
         shapes: rows.map(r => ({ r, pts: bandCentre(r.points, r.side, st.thickness_m, k) })).map(({ r, pts }) => ({
           id: opts.selectable && r.scope_item_id === opts.selectable.scopeId && r.location_id === opts.selectable.locationId ? `task:${r.id}` : `plan:${r.id}`,
           page: 1, pts, tags: tagsOnLongest(pts, planLabel(r.tag || sc.scope_code, formatNumber(Number(r.quantity || 0), 2), sc.unit)),

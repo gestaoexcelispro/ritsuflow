@@ -31,7 +31,7 @@ export function hexToRgb(hex: string): [number, number, number] {
 }
 
 export type Mark =
-  | { type: 'polyline'; pts: Vec2[]; color: [number, number, number]; width: number; opacity: number }
+  | { type: 'polyline'; pts: Vec2[]; color: [number, number, number]; width: number; opacity: number; /** Flat ends (task bands): stop exactly at the end points. */ flat?: boolean }
   | { type: 'polygon'; pts: Vec2[]; color: [number, number, number]; fillOpacity: number; borderWidth: number }
   | { type: 'dot'; at: Vec2; color: [number, number, number]; radius: number; opacity?: number }
   | { type: 'label'; at: Vec2; lines: string[]; size: number }
@@ -66,7 +66,7 @@ export function buildMarks(items: TakeoffItem[], zones: ZoneLike[], toUser: Matr
       else if (it.kind === 'linear' && sh.pts.length >= 2) {
         // Real wall thickness when known (at least 1.5 pt so thin walls stay visible).
         const w = it.thickness && it.thickness > 0 && ptPerM > 0 ? Math.max(1.5, it.thickness * ptPerM) : 3
-        marks.push({ type: 'polyline', pts: u(sh.pts), color, width: w, opacity: planOpacity(it, 'print') })
+        marks.push({ type: 'polyline', pts: u(sh.pts), color, width: w, opacity: planOpacity(it, 'print'), flat: it.flatEnds })
       } else if (it.kind === 'count' && sh.pts[0]) marks.push({ type: 'dot', at: apply(toUser, sh.pts[0]), color, radius: 3.5, opacity: planOpacity(it, 'print') })
     }
   }

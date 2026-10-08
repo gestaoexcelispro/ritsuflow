@@ -97,6 +97,8 @@ export type TakeoffItem = {
   mep?: string
   /** Concrete structure / foundation type (see struct.ts). */
   struct?: string
+  /** Lines that must stop exactly at their end points (task bands): flat ends instead of square / round. */
+  flatEnds?: boolean
   /** Section depth of a point element (column, footing), metres; width is `width`. */
   depth?: number
   layers?: string[]

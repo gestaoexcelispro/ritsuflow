@@ -107,7 +107,7 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
   const tagScale = 1.15
   for (const m of buildMarks(items, [], toUser, ptPerM, fmt)) {
     if (m.type === 'polygon') page.drawSvgPath(pathOf(m.pts, true), { x: 0, y: 0, color: col(m.color), opacity: m.fillOpacity, borderColor: col(m.color), borderWidth: m.borderWidth, borderOpacity: 0.6 })
-    else if (m.type === 'polyline') page.drawSvgPath(pathOf(m.pts, false), { x: 0, y: 0, borderColor: col(m.color), borderWidth: Math.max(0.6, m.width * k), borderOpacity: m.opacity, borderLineCap: LineCapStyle.Round })
+    else if (m.type === 'polyline') page.drawSvgPath(pathOf(m.pts, false), { x: 0, y: 0, borderColor: col(m.color), borderWidth: Math.max(0.6, m.width * k), borderOpacity: m.opacity, borderLineCap: m.flat ? LineCapStyle.Butt : LineCapStyle.Round })
     else if (m.type === 'opening') {
       const a = P(m.a), b = P(m.b), at = P(m.at)
       page.drawLine({ start: { x: a[0], y: a[1] }, end: { x: b[0], y: b[1] }, thickness: Math.max(0.8, m.width * k), color: col(m.color), opacity: 0.85 })
