@@ -184,5 +184,22 @@
   "privacy.s5.text": "You can ask to confirm, access, correct, anonymize, port or delete your data, and to withdraw consent (LGPD art. 18). Write to the contact below; we answer within 15 days.",
   "privacy.s6.title": "Contact for data requests",
   "privacy.s6.text": "Eduardo Fernandes de Freitas, ExcelisPro —",
-  "nav.skip": "Skip to content"
+  "nav.skip": "Skip to content",
+  "nav.takeoff": "Takeoff",
+  "scope.kicker": "RITSUSCOPE · TAKEOFF",
+  "scope.title": "Measure on the drawing. See it in 3D.",
+  "scope.lead": "Calibrate the PDF, draw walls, ceilings, floors and openings by type, and RitsuScope computes areas, lengths and the framing — studs, tracks and boards — level by level.",
+  "scope.shot1Label": "RitsuScope · Takeoff",
+  "scope.shot1Alt": "RitsuScope takeoff: walls by type drawn on the calibrated sheet, doors deducted and quantities per level.",
+  "scope.shot2Title": "3D view, ready for the proposal",
+  "scope.shot2Text": "Printed to PDF with every wall tagged by type, and attached to the proposal in one click.",
+  "scope.shot2Alt": "RitsuScope 3D view of the walls, tagged by type, as printed to PDF.",
+  "scope.shot3Title": "Framing calculated, not guessed",
+  "scope.shot3Text": "Studs at the specified spacing, openings and junctions, shown in 3D and counted in the material list.",
+  "scope.shot3Alt": "RitsuScope 3D framing view with studs, openings and rooms.",
+  "scope.tag1": "Architecture, structure & MEP",
+  "scope.tag2": "Openings deducted",
+  "scope.tag3": "Light steel & drywall framing",
+  "scope.tag4": "Levels & location breakdown",
+  "scope.tag5": "PDF, 3D and CSV export"
 }

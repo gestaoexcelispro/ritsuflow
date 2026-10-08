@@ -184,5 +184,22 @@
   "privacy.s5.text": "Você pode pedir confirmação, acesso, correção, anonimização, portabilidade ou exclusão dos seus dados, e revogar o consentimento (LGPD art. 18). Escreva para o contato abaixo; respondemos em até 15 dias.",
   "privacy.s6.title": "Contato para assuntos de dados (encarregado)",
   "privacy.s6.text": "Eduardo Fernandes de Freitas, ExcelisPro —",
-  "nav.skip": "Pular para o conteúdo"
+  "nav.skip": "Pular para o conteúdo",
+  "nav.takeoff": "Levantamento",
+  "scope.kicker": "RITSUSCOPE · LEVANTAMENTO",
+  "scope.title": "Meça na prancha. Veja em 3D.",
+  "scope.lead": "Calibre o PDF, desenhe paredes, forros, pisos e vãos por tipo, e o RitsuScope calcula áreas, comprimentos e a estrutura — montantes, guias e chapas — pavimento por pavimento.",
+  "scope.shot1Label": "RitsuScope · Levantamento",
+  "scope.shot1Alt": "Levantamento no RitsuScope: paredes por tipo desenhadas na prancha calibrada, portas descontadas e quantitativos por pavimento.",
+  "scope.shot2Title": "Vista 3D, pronta para a proposta",
+  "scope.shot2Text": "Impressa em PDF com cada parede identificada por tipo e anexada à proposta com um clique.",
+  "scope.shot2Alt": "Vista 3D das paredes no RitsuScope, identificadas por tipo, impressa em PDF.",
+  "scope.shot3Title": "Estrutura calculada, não estimada",
+  "scope.shot3Text": "Montantes no espaçamento especificado, vãos e encontros, em 3D e contados na lista de materiais.",
+  "scope.shot3Alt": "Vista 3D da estrutura no RitsuScope com montantes, vãos e ambientes.",
+  "scope.tag1": "Arquitetura, estrutura e instalações",
+  "scope.tag2": "Vãos descontados",
+  "scope.tag3": "Estrutura de light steel e drywall",
+  "scope.tag4": "Pavimentos e EAP de locais",
+  "scope.tag5": "Exportação em PDF, 3D e CSV"
 }
