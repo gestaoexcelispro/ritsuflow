@@ -610,5 +610,9 @@
   "loc.task.drawnHint": "Quantity from the lines drawn in RitsuScope for this location. Edit the drawing to change it.",
   "loc.task.drawnPart": "Drawn: {value} in {count} location(s).",
   "loc.task.drawnCount": "{count} drawn",
-  "loc.task.backFromDraw": "Drawing saved. Drawn locations use their lines; the others were re-split from RitsuScope without the drawn stretches."
+  "loc.task.backFromDraw": "Drawing saved. Drawn locations use their lines; the others were re-split from RitsuScope without the drawn stretches.",
+  "scope.import.orphans": "{count} items came from RitsuScope items that were deleted (takeoff redrawn). They no longer follow the drawing:",
+  "scope.import.removeOrphans": "Remove the {count} orphaned lines",
+  "scope.import.confirmOrphans": "Remove {count} lines from the register? Their FieldOp activities, location quantities and task drawings are removed with them. This cannot be undone.",
+  "scope.import.orphansHistory": "{count} lines removed: their RitsuScope item was deleted"
 }

@@ -60,6 +60,8 @@ export type ImportPlan = {
   uncalibratedSheets: string[]
   /** Linked lines whose step no longer exists in RitsuScope (kept; the user decides). */
   stale: ScopeRowLite[]
+  /** Lines imported from RitsuScope whose item was deleted (redrawn takeoff): they no longer follow the drawing. */
+  orphans: ScopeRowLite[]
   counts: { create: number; update: number; same: number }
 }
 
@@ -130,7 +132,8 @@ export function planImport(data: TakeoffData, wallTypes: Map<string, Pick<WallTy
   }
 
   const stale = existing.filter((r) => r.takeoff_layer_id && r.takeoff_step && !used.has(r.id) && data.layers.some((l) => l.id === r.takeoff_layer_id))
-  return { scopes, empty, uncalibratedSheets: [...uncalibrated], stale, counts }
+  const orphans = existing.filter((r) => !r.takeoff_layer_id && !!r.takeoff_step)
+  return { scopes, empty, uncalibratedSheets: [...uncalibrated], stale, orphans, counts }
 }
 
 /** Loads the takeoff and the wall types it uses. */

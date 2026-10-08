@@ -610,5 +610,9 @@
   "loc.task.drawnHint": "Quantidade das linhas desenhadas no RitsuScope para este local. Edite o desenho para alterá-la.",
   "loc.task.drawnPart": "Desenhado: {value} em {count} local(is).",
   "loc.task.drawnCount": "{count} desenhados",
-  "loc.task.backFromDraw": "Desenho salvo. Os locais desenhados usam suas linhas; os demais foram redivididos pelo RitsuScope sem os trechos desenhados."
+  "loc.task.backFromDraw": "Desenho salvo. Os locais desenhados usam suas linhas; os demais foram redivididos pelo RitsuScope sem os trechos desenhados.",
+  "scope.import.orphans": "{count} itens vieram de itens do RitsuScope que foram excluídos (levantamento redesenhado). Eles não seguem mais o desenho:",
+  "scope.import.removeOrphans": "Remover as {count} linhas órfãs",
+  "scope.import.confirmOrphans": "Remover {count} linhas do registro? As atividades do FieldOp, as quantidades por local e os desenhos de tarefas delas são removidos junto. Não dá para desfazer.",
+  "scope.import.orphansHistory": "{count} linhas removidas: o item do RitsuScope foi excluído"
 }

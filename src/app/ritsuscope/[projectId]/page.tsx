@@ -76,6 +76,7 @@ import { IfcEmptyError, importIfcFile } from './importIfc'
 import { bandCentre, frameOf, measureTaskLines, nextTaskTag, planStyleOf, takeWallStretch, type PlanStyle, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
 import { fingerprint, planColor, planLabel, tagsOnLongest } from '@/lib/takeoff/fieldSheet'
 import { buildFieldSheetPdf, type FieldSheetRow } from './fieldSheetPdf'
+import { planMaterialsOf, sumMaterials, taskMaterials, type PlanMaterial, type TaskMaterialRow } from '@/lib/takeoff/taskMaterials'
 
 type Project = { id: string; project_code: string | null; name: string; country: string | null; country_code: string | null; stage?: string | null }
 
@@ -118,7 +119,7 @@ const ELEMENT_COLUMNS = 'id, project_id, layer_id, source_id, points, height_ove
 const TASK_COLOR = '#E11D48'
 /** Location kinds that group others (not where work is built). */
 const TASK_GROUP_KINDS = new Set(['building', 'floor', 'zone'])
-type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null; plan_style?: PlanStyle | null }
+type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null; takeoff_step?: string | null; plan_style?: PlanStyle | null; plan_materials?: unknown }
 type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null; qr_token: string | null }
 /** Task report (field sheet) settings, chosen in its dialog and kept with each issued revision. */
 type ReportCfg = {
@@ -127,7 +128,7 @@ type ReportCfg = {
   areaMode: 'location' | 'custom' | 'sheet'
   marginM: number
   area: { sourceId: string; box: [number, number, number, number] } | null
-  show: { estimate: boolean; openings: boolean; tags: boolean; table: boolean; detail: boolean; qr: boolean }
+  show: { estimate: boolean; openings: boolean; tags: boolean; table: boolean; detail: boolean; qr: boolean; materials: boolean; materialSummary: boolean }
   paper: 'A4' | 'A3'
   title: string
   responsible: string
@@ -138,7 +139,7 @@ type ReportCfg = {
 }
 const REPORT_DEFAULT: ReportCfg = {
   kind: 'location', areaMode: 'location', marginM: 1, area: null,
-  show: { estimate: true, openings: true, tags: true, table: true, detail: true, qr: true },
+  show: { estimate: true, openings: true, tags: true, table: true, detail: true, qr: true, materials: true, materialSummary: true },
   paper: 'A4', title: '', responsible: '', crew: '', start: '', end: '', notes: '',
 }
 type FieldIssueRow = { id: string; location_id: string; kind: 'location' | 'activity'; scope_item_id: string | null; revision: number; fingerprint: string | null; file_path: string | null; issued_by_name: string | null; issued_at: string }
@@ -318,8 +319,9 @@ export default function TakeoffWorkspacePage() {
   const loadTasks = useCallback(async () => {
     const supabase = createClient()
     const [sc, lc, td, fi] = await Promise.all([
-      supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id, plan_style').eq('project_id', projectId).eq('item_type', 'item').order('scope_code')
-        .then(async r => (r.error && /plan_style/.test(r.error.message) ? await supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code') : r)),
+      // Planning columns are optional (older databases): fall back to the base columns.
+      supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id, takeoff_step, plan_style, plan_materials').eq('project_id', projectId).eq('item_type', 'item').order('scope_code')
+        .then(async r => (r.error && /plan_style|plan_materials|takeoff_step/.test(r.error.message) ? await supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code') : r)),
       supabase.from('locations').select('id, name, location_type, parent_id, sequence_number, qr_token').eq('project_id', projectId).order('sequence_number'),
       supabase.from('location_task_drawings').select('*').eq('project_id', projectId),
       supabase.from('field_sheet_issues').select('id, location_id, kind, scope_item_id, revision, fingerprint, file_path, issued_by_name, issued_at').eq('project_id', projectId).order('revision', { ascending: false }),
@@ -808,6 +810,44 @@ export default function TakeoffWorkspacePage() {
     await loadTasks()
     setStatus(t('task.panel.heightApplied'))
   }
+  // ---------- Materials of planned tasks ----------
+  const matLabels = { bars: t('mat.bars'), sheets: t('mat.sheets'), un: t('mat.un'), barLen: (v: number) => `${formatNumber(v, 2)} m` }
+  /** Materials of one activity's lines in one location (all sheets), from the wall layout and the activity's rates. */
+  function materialsFor(scopeId: string, locationId: string): TaskMaterialRow[] {
+    const sc = taskScopes.find(x => x.id === scopeId)
+    if (!sc) return []
+    const rows = taskRows.filter(r => r.scope_item_id === scopeId && r.location_id === locationId)
+    const rates = planMaterialsOf(sc.plan_materials)
+    const out: TaskMaterialRow[][] = []
+    for (const sheetId of [...new Set(rows.map(r => r.source_id))]) {
+      const sheet = sources.find(x => x.id === sheetId)
+      const k = Number(sheet?.scale_pt_per_m) || 0
+      if (!sheet || !(k > 0)) continue
+      const lv = sheetLevel(sheet, new Map<string, LevelRow>(levels.map(l => [l.id, l] as [string, LevelRow])))
+      const h = wallHeightOf(lv?.level)
+      const raw = rowsToItems(layers, rawElements, new Map([[sheetId, 1]]))
+      const sheetItems = (h ? fillLevelHeights(raw, () => h) : raw).filter(it => it.shapes.length > 0)
+      const item = sc.takeoff_layer_id ? sheetItems.find(it => it.key === sc.takeoff_layer_id) || null : null
+      const wt = item ? projectRecipeCtx.wallTypeOf?.(item) : null
+      const insId = wt?.materials?.insulation
+      const ins = insId ? projectRecipeCtx.catalog?.get(insId) : undefined
+      out.push(taskMaterials({
+        step: sc.takeoff_step || null, item, sheetItems, ptPerM: k, rates, labels: matLabels,
+        lines: rows.filter(r => r.source_id === sheetId).map(r => ({ points: r.points, side: r.side, height_m: r.height_m })),
+        insulation: ins ? { name: ins.name, unit: ins.unit, packSize: ins.pack_size, packName: ins.pack_name } : sc.takeoff_step === 'insulation' && insId ? { name: t('mat.insulation'), unit: 'm²' } : null,
+      }))
+    }
+    return sumMaterials(out)
+  }
+  const fmtMat = (r: TaskMaterialRow) => ({ whole: `${formatNumber(r.whole, 0)} ${r.wholeUnit}`, exact: `${formatNumber(r.exact, 2)} ${r.unit}` })
+  /** Activity rates: changed live, saved when a field is left. */
+  function setRatesLocal(scopeId: string, list: PlanMaterial[]) { setTaskScopes(prev => prev.map(x => (x.id === scopeId ? { ...x, plan_materials: list } : x))) }
+  async function saveRates(scopeId: string, list: PlanMaterial[]) {
+    setRatesLocal(scopeId, list)
+    const { error: e } = await createClient().from('project_scopes').update({ plan_materials: list }).eq('id', scopeId)
+    if (e) setError(t('workspace.error', { message: e.message }))
+  }
+
   // ---------- Field sheets (PDF to the field, issued as revisions) ----------
   type FieldKind = 'location' | 'activity'
   const fieldLines = (kind: FieldKind) => taskRows.filter(r => r.location_id === taskLocationId && (kind === 'location' || r.scope_item_id === taskScopeId))
@@ -873,6 +913,8 @@ export default function TakeoffWorkspacePage() {
       }
       return { color: colorOfScope(sc.id), code: sc.scope_code || '', name: sc.scope_name, qty: `${formatNumber(qty, 2)} ${sc.unit || ''}`.trim(), detail }
     })
+    const matGroups = scopes.map(sc => ({ sc, rows: materialsFor(sc.id, taskLocation.id) })).filter(g => g.rows.length)
+    const matSummary = sumMaterials(matGroups.map(g => g.rows))
     const level = sheet.level_id ? levels.find(l => l.id === sheet!.level_id) : null
     const date = new Date().toLocaleDateString(language)
     const fmtDate = (v: string) => (v ? new Date(`${v}T12:00:00`).toLocaleDateString(language) : '')
@@ -884,6 +926,10 @@ export default function TakeoffWorkspacePage() {
       qrUrl: taskLocation.qr_token ? `${window.location.origin}/field/scan/${taskLocation.qr_token}` : null,
       show: { table: cfg.show.table, detail: cfg.show.detail, qr: cfg.show.qr },
       info: { responsible: cfg.responsible, crew: cfg.crew, dates, notes: cfg.notes },
+      materials: (cfg.show.materials || cfg.show.materialSummary) && matGroups.length ? {
+        groups: cfg.show.materials ? matGroups.map(g => ({ color: colorOfScope(g.sc.id), title: `${g.sc.scope_code || ''} ${g.sc.scope_name}`.trim(), rows: g.rows.map(r => ({ mat: r.mat, ...fmtMat(r) })) })) : [],
+        summary: cfg.show.materialSummary ? matSummary.map(r => ({ mat: r.mat, ...fmtMat(r) })) : null,
+      } : null,
       logoUrl: '/ritsu-logo.png',
       fmt: v => formatNumber(v, 2),
       text: {
@@ -902,6 +948,12 @@ export default function TakeoffWorkspacePage() {
         scale: t(cfg.areaMode === 'location' ? 'field.scaleMargin' : 'field.scaleArea', { margin: formatNumber(cfg.marginM, 2) }),
         footer: `${project?.name || ''}${project?.project_code ? ` · ${project.project_code}` : ''} · RitsuFlow`,
         draft: revision == null ? t('field.watermark') : undefined,
+        materialsTitle: t('mat.title', { location: taskLocation.name }),
+        materialsSummary: t('mat.summary'),
+        colMaterial: t('mat.colMaterial'),
+        colTake: t('mat.colTake'),
+        colExact: t('mat.colExact'),
+        materialsNote: t('mat.note'),
       },
     })
     const snapshot = {
@@ -910,6 +962,7 @@ export default function TakeoffWorkspacePage() {
       config: cfg,
       lines: lines.map(r => ({ id: r.id, tag: r.tag || null, scope_item_id: r.scope_item_id, source_id: r.source_id, points: r.points, side: r.side ?? null, height_m: r.height_m, quantity: Number(r.quantity || 0), unit: r.unit })),
       totals: scopes.map(sc => ({ scope_item_id: sc.id, code: sc.scope_code, name: sc.scope_name, unit: sc.unit, quantity: lines.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0) })),
+      materials: matGroups.map(g => ({ scope_item_id: g.sc.id, rows: g.rows.map(r => ({ key: r.key, mat: r.mat, exact: r.exact, unit: r.unit, whole: r.whole, whole_unit: r.wholeUnit, source: r.source })) })),
     }
     return { blob, snapshot, fp: fingerprint(lines), fileName: fileSafe(`${taskLocation.name}${kind === 'activity' ? ` - ${taskScope?.scope_code || ''}` : ''}`) }
   }
@@ -2263,6 +2316,46 @@ export default function TakeoffWorkspacePage() {
               </div>)}
             </div>}
           </div>
+          {(() => {
+            const mats = materialsFor(taskScope.id, taskLocation.id)
+            const rates = planMaterialsOf(taskScope.plan_materials)
+            const cell = { height: 26, padding: '0 6px', border: '1px solid #cddcdf', borderRadius: 5, fontSize: 11.5, minWidth: 0, width: '100%', boxSizing: 'border-box' } as const
+            const upd = (i: number, patch: Partial<PlanMaterial>) => setRatesLocal(taskScope.id, rates.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+            const commit = () => void saveRates(taskScope.id, planMaterialsOf(taskScopes.find(x => x.id === taskScope.id)?.plan_materials))
+            return <div style={{ display: 'grid', gap: 7, padding: '8px 10px', border: '1px solid #e5edef', borderRadius: 8 }}>
+              <div style={paneTitle}>{t('mat.panelTitle', { code: taskScope.scope_code || '' })}</div>
+              {!taskHere.length ? <span style={{ ...ui.small, lineHeight: 1.4 }}>{t('mat.drawFirst')}</span>
+                : !mats.length ? <span style={{ ...ui.small, lineHeight: 1.4 }}>{t(taskScope.takeoff_layer_id ? 'mat.noneYet' : 'mat.noLink')}</span>
+                : <div style={{ display: 'grid', gap: 3 }}>
+                  {mats.map(r => { const f = fmtMat(r); return <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, fontSize: 11.5, color: '#294955', padding: '3px 0', borderBottom: '1px solid #f0f4f5' }}>
+                    <span>{r.mat}{r.source === 'rate' ? <em style={{ color: '#8aa0a8', fontStyle: 'normal' }}> · {t('mat.rate')}</em> : null}</span>
+                    <span style={{ textAlign: 'right' }}><b>{f.whole}</b><br /><span style={{ color: '#8aa0a8', fontSize: 10.5 }}>{f.exact}</span></span>
+                  </div> })}
+                </div>}
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: '#6b8089', textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 4 }}>{t('mat.rates')}</div>
+              <span style={{ fontSize: 10.5, color: '#8aa0a8', lineHeight: 1.4 }}>{t('mat.ratesHint')}</span>
+              {rates.map((r, i) => <div key={i} style={{ display: 'grid', gap: 4, padding: 6, border: '1px solid #eef3f4', borderRadius: 6 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 22px', gap: 4 }}>
+                  <input value={r.name} placeholder={t('mat.rateName')} onChange={e => upd(i, { name: e.target.value })} onBlur={commit} style={cell} />
+                  <button type="button" title={t('mat.removeRate')} onClick={() => void saveRates(taskScope.id, rates.filter((_, j) => j !== i))} style={{ border: 0, background: 'transparent', color: '#a44343', cursor: 'pointer' }}>×</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '60px 48px 10px 62px 42px', gap: 4, alignItems: 'center', fontSize: 11, color: '#6b8089' }}>
+                  <input type="number" min={0} step="any" value={r.coef || ''} placeholder="0" title={t('mat.coef')} onChange={e => upd(i, { coef: Number(e.target.value) })} onBlur={commit} style={cell} />
+                  <input value={r.unit} placeholder="kg" title={t('mat.unit')} onChange={e => upd(i, { unit: e.target.value })} onBlur={commit} style={cell} />
+                  <span>/</span>
+                  <select value={r.per} title={t('mat.per')} onChange={e => { const list = rates.map((x, j) => (j === i ? { ...x, per: e.target.value as PlanMaterial['per'] } : x)); void saveRates(taskScope.id, list) }} style={cell}>
+                    <option value="m2">m²</option><option value="m">m</option><option value="un">{t('mat.perLine')}</option>
+                  </select>
+                  <input type="number" min={0} step="any" value={r.waste || ''} placeholder="%" title={t('mat.waste')} onChange={e => upd(i, { waste: Number(e.target.value) })} onBlur={commit} style={cell} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 4, alignItems: 'center', fontSize: 11, color: '#6b8089' }}>
+                  <input type="number" min={0} step="any" value={r.packSize || ''} placeholder={t('mat.packSize')} title={t('mat.packSize')} onChange={e => upd(i, { packSize: Number(e.target.value) || null })} onBlur={commit} style={cell} />
+                  <input value={r.packName || ''} placeholder={t('mat.packName')} title={t('mat.packName')} onChange={e => upd(i, { packName: e.target.value || null })} onBlur={commit} style={cell} />
+                </div>
+              </div>)}
+              <button type="button" onClick={() => void saveRates(taskScope.id, [...rates, { name: '', unit: '', per: 'm2', coef: 0, waste: 0, packSize: null, packName: null }])} style={{ justifySelf: 'start', border: 0, background: 'transparent', padding: 0, color: '#0b7f75', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>+ {t('mat.addRate')}</button>
+            </div>
+          })()}
           <div style={{ display: 'grid', gap: 8, padding: '10px', border: '1px solid #cfe9e5', borderRadius: 8, background: '#f7fcfb' }}>
             <div style={paneTitle}>{t('field.title')}</div>
             {(['location', 'activity'] as FieldKind[]).map(kind => {
@@ -2631,7 +2724,7 @@ export default function TakeoffWorkspacePage() {
                 <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
                   <div style={sectionTitle}>{t('report.include')}</div>
                   <div style={{ display: 'grid', gap: 6, padding: '8px 10px', border: '1px solid #e0e8ea', borderRadius: 8 }}>
-                    {([['estimate', 'report.show.estimate'], ['openings', 'report.show.openings'], ['tags', 'report.show.tags'], ['table', 'report.show.table'], ['detail', 'report.show.detail'], ['qr', 'report.show.qr']] as [keyof ReportCfg['show'], TakeoffMessageKey][]).map(([key, label]) => (
+                    {([['estimate', 'report.show.estimate'], ['openings', 'report.show.openings'], ['tags', 'report.show.tags'], ['table', 'report.show.table'], ['detail', 'report.show.detail'], ['qr', 'report.show.qr'], ['materials', 'report.show.materials'], ['materialSummary', 'report.show.materialSummary']] as [keyof ReportCfg['show'], TakeoffMessageKey][]).map(([key, label]) => (
                       <label key={key} style={{ ...check, opacity: (key === 'openings' && !cfg.show.estimate) || (key === 'detail' && !cfg.show.table) || (key === 'qr' && !taskLocation.qr_token) ? 0.5 : 1 }}>
                         <input type="checkbox" checked={cfg.show[key]} disabled={(key === 'openings' && !cfg.show.estimate) || (key === 'detail' && !cfg.show.table)} onChange={e => setShow(key, e.target.checked)} />{t(label)}{key === 'qr' && !taskLocation.qr_token ? ` · ${t('report.noQr')}` : ''}
                       </label>

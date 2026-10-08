@@ -9,6 +9,9 @@ import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { loadPdfLib } from './printPdf'
 import { ICON_PATHS } from './icons'
 
+/** A material line: what to take (whole bars / sheets / packs) and the exact quantity. */
+export type FieldMaterialRow = { mat: string; whole: string; exact: string }
+
 export type FieldSheetRow = { color: string; code: string; name: string; qty: string; detail?: string }
 
 export type FieldSheetInput = {
@@ -22,6 +25,8 @@ export type FieldSheetInput = {
   show?: { table?: boolean; detail?: boolean; qr?: boolean }
   /** Extra header fields, printed when filled. */
   info?: { responsible?: string; crew?: string; dates?: string; notes?: string }
+  /** Materials page: per activity (colour, title, rows) and the location summary; skipped when null. */
+  materials?: { groups: { color: string; title: string; rows: FieldMaterialRow[] }[]; summary: FieldMaterialRow[] | null } | null
   /** Estimate takeoff (faint) and planning lines (with tags), on this sheet. */
   items: TakeoffItem[]
   zone: { name: string; pts: Vec2[] }
@@ -50,6 +55,12 @@ export type FieldSheetInput = {
     scale: string // "Escala aprox. 1:{ratio} · local + 1 m" with {ratio}
     footer: string
     draft?: string // "PRÉVIA · NÃO EMITIDA" watermark when previewing
+    materialsTitle?: string
+    materialsSummary?: string
+    colMaterial?: string
+    colTake?: string
+    colExact?: string
+    materialsNote?: string
   }
   fmt: (v: number) => string
 }
@@ -236,6 +247,48 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
     const t = winAnsi(text.draft)
     page.drawText(t, { x: area.x + 60, y: area.y + 40, size: 40, font: bold, color: rgb(0.86, 0.15, 0.27), opacity: 0.12, rotate: degrees(28) })
   }
+  // ---- Materials page(s): per activity, then the location summary.
+  const mats = input.materials
+  if (mats && (mats.groups.length || mats.summary?.length)) {
+    let p = out.addPage([W, H])
+    let yy = H - M
+    const colTake = W - M - 230, colExact = W - M - 110
+    const head = () => {
+      if (logo) { const h = 22, w = (logo.width / logo.height) * h; p.drawImage(logo, { x: W - M - w, y: H - M - h + 6, width: w, height: h }) }
+      p.drawText(winAnsi(text.materialsTitle || ''), { x: M, y: yy - 4, size: 14, font: bold, color: ink }); yy -= 18
+      p.drawText(winAnsi(`${text.revision} · ${text.issued}`), { x: M, y: yy - 2, size: 8, font, color: grey }); yy -= 20
+    }
+    const newPage = () => { p = out.addPage([W, H]); yy = H - M; head() }
+    const need = (h: number) => { if (yy - h < M + 20) newPage() }
+    head()
+    const table = (title: string, color: string | null, rows: FieldMaterialRow[]) => {
+      if (!rows.length) return
+      need(48)
+      if (color) p.drawRectangle({ x: M, y: yy - 2, width: 10, height: 8, color: col(color) })
+      p.drawText(winAnsi(title).slice(0, 120), { x: M + (color ? 16 : 0), y: yy, size: 10, font: bold, color: color ? col(color) : teal }); yy -= 14
+      p.drawText(winAnsi(text.colMaterial || ''), { x: M + 16, y: yy, size: 7.5, font: bold, color: grey })
+      p.drawText(winAnsi(text.colTake || ''), { x: colTake, y: yy, size: 7.5, font: bold, color: grey })
+      p.drawText(winAnsi(text.colExact || ''), { x: colExact, y: yy, size: 7.5, font: bold, color: grey }); yy -= 5
+      p.drawLine({ start: { x: M, y: yy }, end: { x: W - M, y: yy }, thickness: 0.5, color: line }); yy -= 12
+      for (const r of rows) {
+        need(14)
+        p.drawText(winAnsi(r.mat).slice(0, 110), { x: M + 16, y: yy, size: 8.5, font, color: ink })
+        p.drawText(winAnsi(r.whole), { x: colTake, y: yy, size: 8.5, font: bold, color: ink })
+        p.drawText(winAnsi(r.exact), { x: colExact, y: yy, size: 8, font, color: grey })
+        yy -= 13
+      }
+      yy -= 10
+    }
+    for (const g of mats.groups) table(g.title, g.color, g.rows)
+    if (mats.summary?.length) {
+      need(60)
+      p.drawRectangle({ x: M, y: yy - 6, width: W - 2 * M, height: 20, color: rgb(0.9, 0.96, 0.95) })
+      yy -= 2
+      table(text.materialsSummary || '', null, mats.summary)
+    }
+    if (text.materialsNote) { need(16); p.drawText(winAnsi(text.materialsNote), { x: M, y: Math.max(M, yy - 4), size: 7, font, color: grey }) }
+  }
+
   const bytes = await out.save()
   return new Blob([bytes], { type: 'application/pdf' })
 }

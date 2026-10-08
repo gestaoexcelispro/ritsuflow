@@ -88,6 +88,22 @@ export default function ScopeRegisterPage() {
       setImporting({ plan: planImport(data, wallTypes, rows, labels) })
     } catch (e) { setImportError(e.message); setImporting({ plan: null }) }
   }
+  /** Lines whose RitsuScope item was deleted (takeoff redrawn): removed with what hangs on them, after confirmation. */
+  async function removeOrphans() {
+    const ids = importing?.plan?.orphans.map((r) => r.id) || []
+    if (!ids.length || saving) return
+    if (!window.confirm(t('scope.import.confirmOrphans', { count: ids.length }))) return
+    setSaving(true); setImportError('')
+    try {
+      const a = await actor()
+      const { error: e } = await supabase.from('project_scopes').delete().in('id', ids)
+      if (e) throw e
+      await history(a, 'scope_orphans_removed', 'Scope lines removed (RitsuScope item deleted)', t('scope.import.orphansHistory', { count: ids.length }), projectId, { ids })
+      // Reopened by the user on the refreshed register (the new import is planned from it).
+      setImporting(null)
+      await load()
+    } catch (e) { setImportError(e.message) } finally { setSaving(false) }
+  }
   async function runImport() {
     const plan = importing?.plan
     if (!plan || saving) return
@@ -304,6 +320,11 @@ export default function ScopeRegisterPage() {
                 </tr>)}</tbody></table>
               </div>)}</div> : <p className={styles.help}>{t('scope.import.nothing')}</p>}
               {importing.plan.stale.length > 0 && <p className={styles.help}>{t('scope.import.stale', { items: importing.plan.stale.map((r) => `${r.scope_code} ${r.scope_name}`).join(' · ') })}</p>}
+              {importing.plan.orphans.length > 0 && <div className={styles.orphans}>
+                <p>{t('scope.import.orphans', { count: importing.plan.orphans.filter((r) => r.item_type === 'item').length })}</p>
+                <small>{importing.plan.orphans.filter((r) => r.item_type !== 'item').map((r) => `${r.scope_code} ${r.scope_name}`).join(' · ')}</small>
+                <button type="button" className={`${ui.btnDanger} ${ui.small}`} disabled={saving} onClick={removeOrphans}>{t('scope.import.removeOrphans', { count: importing.plan.orphans.length })}</button>
+              </div>}
               <p className={styles.help}>{t('scope.import.pricesHint')}</p>
             </>}
           {importError && <Notice>{importError}</Notice>}

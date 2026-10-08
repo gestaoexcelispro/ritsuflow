@@ -610,5 +610,9 @@
   "loc.task.drawnHint": "Cantidad de las líneas dibujadas en RitsuScope para esta ubicación. Edite el dibujo para cambiarla.",
   "loc.task.drawnPart": "Dibujado: {value} en {count} ubicación(es).",
   "loc.task.drawnCount": "{count} dibujadas",
-  "loc.task.backFromDraw": "Dibujo guardado. Las ubicaciones dibujadas usan sus líneas; las demás se repartieron de nuevo desde RitsuScope sin los tramos dibujados."
+  "loc.task.backFromDraw": "Dibujo guardado. Las ubicaciones dibujadas usan sus líneas; las demás se repartieron de nuevo desde RitsuScope sin los tramos dibujados.",
+  "scope.import.orphans": "{count} ítems vinieron de ítems de RitsuScope que fueron eliminados (levantamiento redibujado). Ya no siguen el dibujo:",
+  "scope.import.removeOrphans": "Eliminar las {count} líneas huérfanas",
+  "scope.import.confirmOrphans": "¿Eliminar {count} líneas del registro? Sus actividades de FieldOp, cantidades por ubicación y dibujos de tareas se eliminan con ellas. No se puede deshacer.",
+  "scope.import.orphansHistory": "{count} líneas eliminadas: su ítem de RitsuScope fue eliminado"
 }

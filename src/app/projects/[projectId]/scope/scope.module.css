@@ -104,3 +104,7 @@
 .importTable s { color: var(--fo-faint); margin-right: 4px; }
 .importAction { width: 1%; white-space: nowrap; color: var(--fo-muted); font-size: 13px; }
 .importSame td { color: var(--fo-faint); }
+.orphans { display: grid; gap: 6px; margin: 10px 0; padding: 10px 12px; border: 1px solid #f3c6a8; border-radius: 8px; background: #fff7ef; font-size: 13.5px; color: #8a4b0f; }
+.orphans p { margin: 0; font-weight: 600; }
+.orphans small { color: #9a6a3e; }
+.orphans button { justify-self: start; }
