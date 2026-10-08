@@ -11,6 +11,8 @@ import { wallBand } from '@/lib/takeoff/faceWall'
 import { openingMarks } from '@/lib/takeoff/openingMarks'
 import { areaAt, paintOrder } from '@/lib/takeoff/pick'
 import { ICON_PATHS } from './icons'
+import { layoutLabels, type LabelIn } from '@/lib/takeoff/labelLayout'
+import { TASK_TAG_PT, tagBox } from '@/lib/takeoff/fieldSheet'
 
 export type Suggestion = { id: string; pts: [Vec2, Vec2]; on: boolean }
 export type ZoneShape = { id: string; name: string; color: string; pts: Vec2[]; label: string; selected: boolean; suggested?: boolean; on?: boolean; /** Block / Zone / Area: dashed outline, light fill, label at the top. */ macro?: boolean }
@@ -60,6 +62,8 @@ type Props = {
   snap: boolean
   /** Show the tag of each wall stretch (DW01-03…) at its middle. */
   showTags?: boolean
+  /** Callout tags (tagCallout shapes) can be dragged: the new label centre (sheet points), or null to place it automatically again (double-click). */
+  onMoveTag?: (shapeId: string, at: Vec2 | null) => void
   /** White wash over the source drawing (0…0.8), so takeoff colours read true on coloured PDFs. */
   backgroundFade?: number
   /** Select mode: shapes are clickable. */
@@ -108,7 +112,7 @@ type PdfPageProxy = {
 
 /** One PDF page with the takeoff overlay. Coordinates are PDF points (viewport at scale 1). */
 export default function PdfSheet(props: Props) {
-  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, showTags = false, backgroundFade = 0, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
+  const { url, pageNumber, zoom, items, calibration, draft, draftKind, draftColor, crosshair, measure = [], measureDone = false, rectPreview = false, ptPerM = 0, fmt = (v: number) => v.toFixed(2), snap, selectable, selectedId, onSelect, multiSelected = NO_IDS, onMovePoints, showTags = false, onMoveTag, backgroundFade = 0, onSize, onPoint, onFinish, onError, loadingLabel, onVectors, suggestions = [], onToggleSuggestion, regionBox = null, ortho: orthoOn = false, onCursor, onTexts, zones = [], onSelectZone, dimItems = false, onMoveZonePoints, originMark = null, sidePick = null } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLCanvasElement>(null)
@@ -125,6 +129,8 @@ export default function PdfSheet(props: Props) {
   const [drag, setDrag] = useState<{ id: string; index: number; pts: Vec2[] } | null>(null)
   /** The click that ends a drag must not clear the selection. */
   const justDragged = useRef(false)
+  /** Callout label being dragged: shape id, label centre (sheet points), whether it moved. */
+  const [tagDrag, setTagDrag] = useState<{ id: string; at: Vec2; moved: boolean; off: Vec2 } | null>(null)
 
   // Load the document and page.
   useEffect(() => {
@@ -381,7 +387,7 @@ export default function PdfSheet(props: Props) {
           viewBox={`0 0 ${W} ${H}`}
           width={W * zoom}
           height={H * zoom}
-          style={{ position: 'absolute', inset: 0, cursor: crosshair ? 'crosshair' : 'default' }}
+          style={{ position: 'absolute', inset: 0, cursor: tagDrag ? 'grabbing' : crosshair ? 'crosshair' : 'default', ...(tagDrag ? { userSelect: 'none', WebkitUserSelect: 'none' } : {}) }}
           onClick={event => {
             if (justDragged.current) { justDragged.current = false; return }
             // The second click of a double-click (detail > 1) must not add a point or a count.
@@ -390,12 +396,27 @@ export default function PdfSheet(props: Props) {
           }}
           onDoubleClick={event => { if (crosshair) { event.preventDefault(); onFinish() } }}
           onPointerMove={event => {
+            if (tagDrag) {
+              const r = rawPoint(event)
+              setTagDrag(d => {
+                if (!d) return d
+                const p: Vec2 = [r[0] - d.off[0], r[1] - d.off[1]]
+                return { ...d, at: p, moved: d.moved || dist(p, d.at) * zoom > 2 }
+              })
+              return
+            }
             if (!drag) return
             const p = toPoint(event)
             setSnapHit(snapAt(rawPoint(event)))
             setDrag(d => (d ? { ...d, pts: d.pts.map((q, i) => (i === d.index ? p : q)) } : d))
           }}
           onPointerUp={() => {
+            if (tagDrag) {
+              const d = tagDrag
+              setTagDrag(null)
+              if (d.moved) { justDragged.current = true; onMoveTag?.(d.id, d.at) }
+              return
+            }
             if (!drag) return
             const d = drag
             justDragged.current = true
@@ -507,7 +528,7 @@ export default function PdfSheet(props: Props) {
                 const width = real > 0 ? Math.max(real, stroke(selected ? 3 : 1.5)) : stroke(selected ? 7 : 5)
                 return (
                   <g key={key}>
-                    <polyline points={points} fill="none" stroke={color} strokeOpacity={selected ? Math.max(0.85, planOpacity(item, 'screen')) : planOpacity(item, 'screen')} strokeWidth={width} strokeLinejoin="miter" strokeLinecap={real > 0 ? 'square' : 'round'} {...pick} />
+                    <polyline points={points} fill="none" stroke={color} strokeOpacity={selected ? Math.max(0.85, planOpacity(item, 'screen')) : planOpacity(item, 'screen')} strokeWidth={width} strokeLinejoin="miter" strokeLinecap={item.flatEnds ? 'butt' : real > 0 ? 'square' : 'round'} {...pick} />
                     {selectable && shape.id && <polyline points={points} fill="none" stroke="transparent" strokeWidth={Math.max(width, stroke(10))} strokeLinejoin="round" strokeLinecap="round" style={{ cursor: 'pointer', pointerEvents: 'stroke' }} onClick={event => { event.stopPropagation(); onSelect(shape.id!) }} />}
                     {selected && real > 0 && <polyline points={points} fill="none" stroke="#fff" strokeOpacity={0.9} strokeWidth={stroke(1.2)} strokeDasharray={`${stroke(6)} ${stroke(4)}`} style={{ pointerEvents: 'none' }} />}
                   </g>
@@ -574,7 +595,7 @@ export default function PdfSheet(props: Props) {
 
           {/* Tags of everything drawn: middle of each wall stretch, centre of each area, beside each counted point. */}
           {showTags && !dimItems && items.flatMap(item => item.shapes.flatMap((shape, index) => {
-            if (!shape.tags?.length) return []
+            if (!shape.tags?.length || shape.tagCallout) return []
             const pts = drag && shape.id === drag.id ? drag.pts : shape.pts
             const pill = (key: string, cx: number, cy: number, tag: string) => {
               const w = stroke(tag.length * 6.2 + 10)
@@ -605,6 +626,58 @@ export default function PdfSheet(props: Props) {
             const w = tag.length * 6.2 + 10
             return [pill(`tag-${item.key}-${index}`, pts[0][0] + stroke(w / 2 + 8), pts[0][1] - stroke(14), tag)]
           }))}
+
+          {/* Callout tags (planning lines): the label away from the line, with a leader to it. Placed so labels do not
+              overlap (layoutLabels, in screen pixels); a label the user dragged stays where it was put. */}
+          {showTags && !dimItems && (() => {
+            type C = LabelIn & { color: string; tag: string; ax: number; ay: number }
+            const list: C[] = []
+            for (const item of items) for (const shape of item.shapes) {
+              if (!shape.tagCallout || !shape.tags?.length || !shape.id) continue
+              const i = shape.tags.findIndex(Boolean)
+              const a = shape.pts[i], b = shape.pts[i + 1]
+              if (i < 0 || !a || !b) continue
+              const tag = shape.tags[i]
+              const ax = ((a[0] + b[0]) / 2) * zoom, ay = ((a[1] + b[1]) / 2) * zoom
+              const own = tagDrag && tagDrag.id === shape.id ? tagDrag.at : shape.tagAt || null
+              // Fixed height on paper (sheet points): the tag zooms with the drawing, like CAD text.
+              const box = tagBox(tag.length, TASK_TAG_PT)
+              list.push({ id: shape.id, x: ax, y: ay, w: box.w * zoom, h: box.h * zoom, fixed: own ? [own[0] * zoom, own[1] * zoom] : null, color: item.color, tag, ax, ay })
+            }
+            if (!list.length) return null
+            const placed = layoutLabels(list, W * zoom, H * zoom, Math.max(0.3, (tagBox(1, TASK_TAG_PT).h * zoom) / 15))
+            return placed.map((l, n) => {
+              const c = list[n]
+              const cx = l.bx / zoom, cy = l.by / zoom, w = c.w / zoom, h = c.h / zoom
+              const movable = !!onMoveTag
+              return (
+                <g key={`callout-${l.id}`} style={{ pointerEvents: movable ? 'auto' : 'none', userSelect: 'none', WebkitUserSelect: 'none' }}>
+                  <line x1={c.ax / zoom} y1={c.ay / zoom} x2={l.lx / zoom} y2={l.ly / zoom} stroke={c.color} strokeWidth={stroke(1.3)} />
+                  <circle cx={c.ax / zoom} cy={c.ay / zoom} r={stroke(3)} fill={c.color} stroke="#fff" strokeWidth={stroke(1)} />
+                  <rect
+                    x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={h * 0.2} fill="#fff" fillOpacity={0.95} stroke={c.color} strokeWidth={Math.min(stroke(1.4), h * 0.12)}
+                    style={movable ? { cursor: tagDrag?.id === l.id ? 'grabbing' : 'grab' } : undefined}
+                    onPointerDown={movable ? event => {
+                      // A label is grabbed, never text-selected.
+                      event.preventDefault()
+                      window.getSelection()?.removeAllRanges()
+                      event.stopPropagation()
+                      const svg = event.currentTarget.ownerSVGElement as SVGSVGElement | null
+                      svg?.setPointerCapture?.(event.pointerId)
+                      const box = svg?.getBoundingClientRect()
+                      const p: Vec2 = box ? [(event.clientX - box.left) / zoom, (event.clientY - box.top) / zoom] : [cx, cy]
+                      setTagDrag({ id: l.id, at: [cx, cy], moved: false, off: [p[0] - cx, p[1] - cy] })
+                    } : undefined}
+                    onClick={movable ? event => event.stopPropagation() : undefined}
+                    onDoubleClick={movable ? event => { event.stopPropagation(); event.preventDefault(); onMoveTag!(l.id, null) } : undefined}
+                  >
+                    {movable && <title>{c.tag}</title>}
+                  </rect>
+                  <text x={cx} y={cy + TASK_TAG_PT * 0.36} textAnchor="middle" fontSize={TASK_TAG_PT} fontWeight={700} fill="#173441" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}>{c.tag}</text>
+                </g>
+              )
+            })
+          })()}
 
           {/* Door, window and opening tags (D-01, W-01…): beside each opening's badge, on the side the wall's normal points to. */}
           {showTags && !dimItems && ptPerM > 0 && items.filter(item => item.kind === 'linear').flatMap(item => item.shapes.flatMap((shape, index) => {

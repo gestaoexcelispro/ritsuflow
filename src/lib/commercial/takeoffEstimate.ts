@@ -90,6 +90,8 @@ function framingNeeds(item: TakeoffItem, shared: Junction[]): MaterialNeed[][] {
     groups.push([{ mat: g.name, unit: 'un', qty: ps.count }, { mat: g.name, unit: 'm2', qty: ps.count * g.W * g.H }])
   }
   for (const [name, n] of totals.screws) groups.push([{ mat: name, unit: 'un', qty: Math.ceil(n) }])
+  // Anchors and acoustic band (the item alone: ends touching another item's wall count as free here).
+  for (const f of totals.fixings.values()) groups.push([{ mat: f.name, unit: f.unit, qty: f.unit === 'm' ? f.qty : Math.ceil(f.qty - 1e-9) }])
   return groups
 }
 

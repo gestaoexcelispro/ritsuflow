@@ -13,8 +13,9 @@ import { layerQuantities } from '@/lib/takeoff/geometry'
 import { openingRows } from '@/lib/takeoff/printMarkup'
 import { IfcReadError } from '@/lib/takeoff/ifc/readIfc'
 import { buildQuantitiesCsv } from '@/lib/takeoff/csv'
-import { sanitizeFramingDefaults, type FramingDefaults } from '@/lib/takeoff/framing/framing'
-import { recipeMaterials, rowToRecipe, type Recipe, type RecipeRow } from '@/lib/takeoff/recipes'
+import { freeEnds, sanitizeFramingDefaults, type FramingDefaults } from '@/lib/takeoff/framing/framing'
+import { recipeLineQuantities, recipeMaterials, rowToRecipe, type Recipe, type RecipeRow } from '@/lib/takeoff/recipes'
+import { recipeVariables } from '@/lib/takeoff/systemRecipes'
 import { projectItemsInMetres, rowsToItems, type ElementRow, type LayerRow, type SourceRow } from '@/lib/takeoff/rows'
 import { computeOpeningTags, computeSegmentTags, withSegmentTags } from '@/lib/takeoff/segmentTags'
 import { ui } from '../ui'
@@ -25,7 +26,8 @@ import SplitPanel from './SplitPanel'
 import ElementPanel from './ElementPanel'
 import ChecksPanel from './ChecksPanel'
 import RevisionPanel from './RevisionPanel'
-import View3D, { render3DImage, type View3DStorey } from './View3D'
+import View3D, { DEFAULT_VIEW3D, render3DImage, type View3DCamera, type View3DStorey } from './View3D'
+import { elevationsOf, hostWall, sequenceOf, taskInfos, wallCards, type FieldScope, type FieldTaskLine, type WallCard, type WallTypeInfo } from '@/lib/takeoff/fieldSheetData'
 import PdfWorkspace, { type WorkCommand } from './PdfWorkspace'
 import PlanView from './PlanView'
 import ProjectPurchases from './ProjectPurchases'
@@ -41,7 +43,7 @@ import MaterialsCatalog from './MaterialsCatalog'
 import { ZONE_COLUMNS, scaleRatio, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
 import { createFloorsForLevels, createLocationsForZones, loadLocations, placeRootLocations } from '@/lib/takeoff/locationSync'
 import { importLegacyLocationMap, importableOutline, loadLegacyLocationMaps, type LegacyMap } from '@/lib/takeoff/importLocationMap'
-import type { ElementOpening, Vec2 } from '@/lib/takeoff/geometry'
+import type { ElementOpening, TakeoffItem, Vec2 } from '@/lib/takeoff/geometry'
 import ZoningSidebar from './ZoningSidebar'
 import ZoneProperties from './ZoneProperties'
 import { useRitsuScopeLicensed } from '../license'
@@ -59,7 +61,7 @@ import TagsEditor from './TagsEditor'
 import SurfaceTypePicker from './SurfaceTypePicker'
 import type { SurfaceTypeRow } from './SurfaceTypesLibrary'
 import SurfaceTypesLibrary, { surfaceLabelsFrom, useSurfaceLabels } from './SurfaceTypesLibrary'
-import { loadUnderlay, underlayRegionOf, type UnderlaySpec, type UnderlayZone } from './planUnderlay'
+import { loadUnderlay, underlayRegionOf, type LoadedUnderlay, type UnderlaySpec, type UnderlayZone } from './planUnderlay'
 import { sheetToModelOf } from '@/lib/takeoff/origin'
 import { hexToRgb } from '@/lib/takeoff/printMarkup'
 import { CEILING_FAMILY, FAMILIES, FLOOR_FAMILY, surfaceMaterials, type FamilyId } from './surfaceFamilies'
@@ -73,6 +75,10 @@ import { materialRows, scaleGroup } from '@/lib/takeoff/materialList'
 import { itemShareByZone, NONE } from '@/lib/takeoff/locationShare'
 import { LEVEL_COLUMNS, fillLevelHeights, levelGroups, groupLabel, masterOf, matchLevelByName, normalizeLevels, sheetLevel, sheetMultiplier, wallHeightOf, type LevelRow } from '@/lib/takeoff/levels'
 import { IfcEmptyError, importIfcFile } from './importIfc'
+import { bandCentre, frameOf, measureTaskLines, nextTaskTag, planStyleOf, sameFace, takeWallStretch, type PlanStyle, type TaskDrawingRow, type WallRef } from '@/lib/takeoff/taskDrawings'
+import { fingerprint, planColor, tagsOnLongest } from '@/lib/takeoff/fieldSheet'
+import { buildFieldSheetPdf, type FieldSheetRow } from './fieldSheetPdf'
+import { inferStep, planMaterialsOf, sumMaterials, taskMaterials, type PlanMaterial, type TaskMaterialRow } from '@/lib/takeoff/taskMaterials'
 
 type Project = { id: string; project_code: string | null; name: string; country: string | null; country_code: string | null; stage?: string | null }
 
@@ -110,6 +116,46 @@ async function countPdfPages(file: File): Promise<number> {
 }
 
 const ELEMENT_COLUMNS = 'id, project_id, layer_id, source_id, points, height_override_m, z_rel_m, ifc_guid, root_guid, layer_guids, openings, faces'
+
+/** Tarefas: lines of the activity being drawn. */
+const TASK_COLOR = '#E11D48'
+/** Location kinds that group others (not where work is built). */
+const TASK_GROUP_KINDS = new Set(['building', 'floor', 'zone'])
+type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null; takeoff_step?: string | null; plan_style?: PlanStyle | null; plan_materials?: unknown }
+type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null; qr_token: string | null }
+/** Task report (field sheet) settings, chosen in its dialog and kept with each issued revision. */
+type ReportCfg = {
+  kind: 'location' | 'activity'
+  /** location: the zone + margin · custom: an area drawn on a sheet · sheet: the whole sheet. */
+  areaMode: 'location' | 'custom' | 'sheet'
+  marginM: number
+  area: { sourceId: string; box: [number, number, number, number] } | null
+  show: { estimate: boolean; openings: boolean; tags: boolean; table: boolean; detail: boolean; qr: boolean; materials: boolean; materialSummary: boolean; view3d: boolean; tasks: boolean; walls: boolean; elevations: boolean; sequence: boolean; log: boolean; history: boolean }
+  paper: 'A4' | 'A3'
+  /** The 3D picture of page 2: camera, what is in it and how much of the sheet. */
+  view3d: View3DReportCfg
+  title: string
+  responsible: string
+  crew: string
+  start: string
+  end: string
+  notes: string
+}
+type View3DReportCfg = View3DCamera & {
+  /** tasks: the location's task lines + 1.5 m · area: the same area as the plan on page 1. */
+  extent: 'tasks' | 'area'
+  estimate: boolean
+  underlay: boolean
+  zones: boolean
+  tags: boolean
+}
+const VIEW3D_REPORT_DEFAULT: View3DReportCfg = { ...DEFAULT_VIEW3D, extent: 'tasks', estimate: true, underlay: true, zones: true, tags: true }
+const REPORT_DEFAULT: ReportCfg = {
+  kind: 'location', areaMode: 'location', marginM: 1, area: null,
+  show: { estimate: true, openings: true, tags: true, table: true, detail: true, qr: true, materials: true, materialSummary: true, view3d: true, tasks: true, walls: true, elevations: true, sequence: true, log: true, history: true },
+  paper: 'A4', view3d: VIEW3D_REPORT_DEFAULT, title: '', responsible: '', crew: '', start: '', end: '', notes: '',
+}
+type FieldIssueRow = { id: string; location_id: string; kind: 'location' | 'activity'; scope_item_id: string | null; revision: number; fingerprint: string | null; file_path: string | null; issued_by_name: string | null; issued_at: string }
 
 export default function TakeoffWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -171,7 +217,54 @@ export default function TakeoffWorkspacePage() {
   /** Header mode: what the sidebars (or the whole page) show. */
   /** Takeoff, estimating, 3D, reports, share links and IFC need the RitsuScope license; zoning is for everyone. */
   const licensed = useRitsuScopeLicensed()
-  const [section, setSection] = useState<'zoning' | 'takeoff' | 'estimating' | 'settings'>(licensed ? 'takeoff' : 'zoning')
+  const [section, setSection] = useState<'zoning' | 'takeoff' | 'tasks' | 'estimating' | 'settings'>(licensed ? 'takeoff' : 'zoning')
+  // Tarefas: where each scope item is built, per location (location_task_drawings). Opened from
+  // Projects › Locations › Scope allocation with ?task=<scope item>&location=<location>&from=allocation.
+  const [taskScopes, setTaskScopes] = useState<TaskScopeRow[]>([])
+  const [taskLocations, setTaskLocations] = useState<TaskLocationRow[]>([])
+  const [taskRows, setTaskRows] = useState<TaskDrawingRow[]>([])
+  const [taskScopeId, setTaskScopeId] = useState<string | null>(null)
+  const [taskLocationId, setTaskLocationId] = useState<string | null>(null)
+  /** Task line clicked on the drawing: its properties show in the right panel. */
+  const [inspectLineId, setInspectLineId] = useState<string | null>(null)
+  /** Tasks: the locations' colour code under the drawing (plan and 3D). */
+  const [taskZonesOn, setTaskZonesOn] = useState(true)
+  const [taskHeight, setTaskHeight] = useState('')
+  const [taskWalls, setTaskWalls] = useState(true)
+  const [taskFrameTick, setTaskFrameTick] = useState(0)
+  const [tasksLoaded, setTasksLoaded] = useState(false)
+  /** Planning layer (the planner's lines) shown on the sheet; `taskWalls` is the estimate layer. */
+  const [taskPlan, setTaskPlan] = useState(true)
+  const [fieldIssues, setFieldIssues] = useState<FieldIssueRow[]>([])
+  const [fieldBusy, setFieldBusy] = useState<string | null>(null)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportCfg, setReportCfg] = useState<ReportCfg>(REPORT_DEFAULT)
+  /** Rasterised sheet regions for the 3D pictures (the dialog preview redraws often). */
+  const underlayCache = useRef(new Map<string, Promise<LoadedUnderlay | null>>())
+  /** The 3D view last left on screen (Tasks › View › 3D), to copy into the report. */
+  const [liveView3d, setLiveView3d] = useState<View3DCamera | null>(null)
+  /** Report dialog: preview of the 3D picture (object URL) and whether it is being drawn. */
+  const [view3dPreview, setView3dPreview] = useState<{ url: string | null; busy: boolean; empty: boolean }>({ url: null, busy: false, empty: false })
+  // Redraw the dialog's 3D preview a moment after the settings stop changing.
+  useEffect(() => {
+    if (!reportOpen || section !== 'tasks' || !reportCfg.show.view3d) return
+    let alive = true
+    setView3dPreview(p => ({ ...p, busy: true }))
+    const timer = setTimeout(() => {
+      void (async () => {
+        let bytes: Uint8Array | null = null
+        try { bytes = await fieldSheet3d(reportCfg.kind, reportCfg, 800, 410) } catch { bytes = null }
+        if (!alive) return
+        setView3dPreview(prev => {
+          if (prev.url) URL.revokeObjectURL(prev.url)
+          return { url: bytes ? URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/png' })) : null, busy: false, empty: !bytes }
+        })
+      })()
+    }, 350)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [reportOpen, section, reportCfg.kind, reportCfg.areaMode, reportCfg.area, reportCfg.marginM, reportCfg.view3d, reportCfg.show.view3d, taskLocationId, taskRows]) // eslint-disable-line react-hooks/exhaustive-deps
+  /** Drawing the report area on the sheet (the dialog is hidden meanwhile). */
+  const [areaPicking, setAreaPicking] = useState(false)
   /** Kind given to the next zone drawn in Zoning. */
   const [drawKind, setDrawKind] = useState<ZoneKind>('room')
   /** Old Location Map pages not moved into RitsuScope yet. */
@@ -264,6 +357,36 @@ export default function TakeoffWorkspacePage() {
 
   useEffect(() => { load() }, [load])
 
+  const loadTasks = useCallback(async () => {
+    const supabase = createClient()
+    const [sc, lc, td, fi] = await Promise.all([
+      // Planning columns are optional (older databases): fall back to the base columns.
+      supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id, takeoff_step, plan_style, plan_materials').eq('project_id', projectId).eq('item_type', 'item').order('scope_code')
+        .then(async r => (r.error && /plan_style|plan_materials|takeoff_step/.test(r.error.message) ? await supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code') : r)),
+      supabase.from('locations').select('id, name, location_type, parent_id, sequence_number, qr_token').eq('project_id', projectId).order('sequence_number'),
+      supabase.from('location_task_drawings').select('*').eq('project_id', projectId),
+      supabase.from('field_sheet_issues').select('id, location_id, kind, scope_item_id, revision, fingerprint, file_path, issued_by_name, issued_at').eq('project_id', projectId).order('revision', { ascending: false }),
+    ])
+    // Field sheet revisions are optional: without their table the rest still works.
+    setFieldIssues(fi.error ? [] : ((fi.data || []) as FieldIssueRow[]))
+    const failure = sc.error || lc.error || td.error
+    if (failure) setError(t('workspace.error', { message: failure.message }))
+    setTaskScopes((sc.data || []) as TaskScopeRow[])
+    setTaskLocations((lc.data || []) as TaskLocationRow[])
+    setTaskRows((td.data || []) as TaskDrawingRow[])
+    setTasksLoaded(true)
+  }, [projectId, t])
+  useEffect(() => { if (section === 'tasks' && !tasksLoaded) void loadTasks() }, [section, tasksLoaded, loadTasks])
+  // Deep link from Scope allocation: open Tarefas on that activity and location.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const scope = q.get('task')
+    if (!scope) return
+    setSection('tasks')
+    setTaskScopeId(scope)
+    setTaskLocationId(q.get('location'))
+  }, [])
+
   const selectedSource = sources.find(s => s.id === selectedSourceId) || null
   /** Fade of a sheet's own drawing (white wash, 0…0.8), kept in the sheet's metadata. */
   const fadeOf = (src: SourceRow | null | undefined) => Math.max(0, Math.min(0.8, Number((src?.metadata as { background_fade?: number } | undefined)?.background_fade) || 0))
@@ -354,15 +477,16 @@ export default function TakeoffWorkspacePage() {
     return { ...b, items: fillLevelHeights(b.items, page => hOfPage.get(page) ?? null) }
   }, [selectedSource, layers, elements, sources, levels])
   /** Plan underlays for the 3D: each sheet's framed region (never the whole sheet) and its locations, per 3D scope. */
+  // Locations: the most detailed kind drawn on the sheet (rooms over areas over zones over blocks), so colours don't stack.
+  const locationZonesOf = useCallback((sourceId: string) => {
+    const vis = zones.filter(z => z.source_id === sourceId && z.is_visible && z.points.length >= 3)
+    const rank = ['room', 'area', 'zone', 'block']
+    const kind = rank.find(k => vis.some(z => (z.zone_kind || 'room') === k))
+    return vis.filter(z => (z.zone_kind || 'room') === kind)
+  }, [zones])
   const underlay3d = useMemo(() => {
     const toModelOf = sheetToModelOf(sources)
-    // Locations: the most detailed kind drawn on the sheet (rooms over areas over zones over blocks), so colours don't stack.
-    const zonesOf = (sourceId: string) => {
-      const vis = zones.filter(z => z.source_id === sourceId && z.is_visible && z.points.length >= 3)
-      const rank = ['room', 'area', 'zone', 'block']
-      const kind = rank.find(k => vis.some(z => (z.zone_kind || 'room') === k))
-      return vis.filter(z => (z.zone_kind || 'room') === kind)
-    }
+    const zonesOf = locationZonesOf
     const sheet: { underlays: UnderlaySpec[]; zones: UnderlayZone[] } = { underlays: [], zones: [] }
     if (selectedSource?.kind === 'pdf_page') {
       const region = underlayRegionOf(selectedSource)
@@ -381,7 +505,7 @@ export default function TakeoffWorkspacePage() {
       model.zones.push(...zonesOf(src.id).map(z => ({ page: st.page, pts: z.points.map(toModel), color: z.color, name: z.name })))
     }
     return { sheet, model }
-  }, [sources, zones, selectedSource, pdfBuilding])
+  }, [sources, locationZonesOf, selectedSource, pdfBuilding])
   const isIfcModel = selectedSource?.kind === 'ifc_storey'
   const modelData = isIfcModel ? model3d : pdfBuilding ? { items: pdfBuilding.items.filter(it => it.shapes.length > 0), storeys: pdfBuilding.storeys } : model3d
   const canShowModel = isIfcModel
@@ -601,8 +725,36 @@ export default function TakeoffWorkspacePage() {
   })
   const isPdf = selectedSource?.kind === 'pdf_page'
   /** The drawing tool bar gets its own full-width row under the header on PDF sheets. */
-  const lockedSection = !licensed && (section === 'takeoff' || section === 'estimating')
-  const toolbarShown = !lockedSection && (section === 'zoning' || section === 'takeoff') && isPdf && viewMode === 'plan'
+  // ---------- Tarefas ----------
+  const taskScope = taskScopes.find(x => x.id === taskScopeId) || null
+  const taskLocation = taskLocations.find(x => x.id === taskLocationId) || null
+  const taskZone = taskLocationId ? zones.find(z => z.location_id === taskLocationId && Array.isArray(z.points) && z.points.length >= 3) || null : null
+  const taskZoneSheet = taskZone ? sources.find(x => x.id === taskZone.source_id) || null : null
+  // Choosing a location shows its zone's sheet and frames it (room + 1 m).
+  useEffect(() => {
+    if (section !== 'tasks' || !taskZone) return
+    if (taskZone.source_id !== selectedSourceId) setSelectedSourceId(taskZone.source_id)
+    setTaskFrameTick(n => n + 1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, taskZone?.id])
+  /** Walls (and their openings) on this sheet: "take a wall" and the openings deducted from task lines. */
+  const taskWallRefs: WallRef[] = useMemo(() => sourceItems.filter(it => it.kind === 'linear').flatMap(it => it.shapes.map(sh => ({ pts: sh.pts, openings: sh.openings, kind: it.kind, thickness: it.thickness }))), [sourceItems])
+  const taskHeightM = (() => { const v = Number(String(taskHeight).replace(',', '.')); return v > 0 ? v : null })()
+  // Default wall height: the one already used for these lines, else the item's own takeoff item, else the sheet's level.
+  useEffect(() => {
+    if (!taskScopeId || !taskLocationId) return
+    const used = taskRows.find(r => r.scope_item_id === taskScopeId && r.location_id === taskLocationId && r.height_m)?.height_m
+    const own = taskScope?.takeoff_layer_id ? layers.find(l => l.id === taskScope.takeoff_layer_id)?.height_m : null
+    const lv = taskZoneSheet?.level_id ? levels.find(l => l.id === taskZoneSheet.level_id) : null
+    const h = used || (own && Number(own) > 0 ? Number(own) : null) || wallHeightOf(lv ?? null)
+    setTaskHeight(h ? String(h) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskScopeId, taskLocationId, tasksLoaded, taskScope?.takeoff_layer_id])
+  const taskHere = taskRows.filter(r => r.scope_item_id === taskScopeId && r.location_id === taskLocationId)
+  const taskMeasured = measureTaskLines(taskHere.filter(r => r.source_id === selectedSource?.id).map(r => r.points), { ptPerM: Number(selectedSource?.scale_pt_per_m) || 0, heightM: taskHeightM, unit: taskScope?.unit, walls: taskWallRefs })
+
+  const lockedSection = !licensed && (section === 'takeoff' || section === 'tasks' || section === 'estimating')
+  const toolbarShown = !lockedSection && (section === 'zoning' || section === 'takeoff' || section === 'tasks') && isPdf && viewMode === 'plan'
 
   if (loading || !project) {
     return (
@@ -624,6 +776,442 @@ export default function TakeoffWorkspacePage() {
   const currentBranch = selectedSource ? branchOfLevel(selectedSource.level_id, levels) : null
   const levelHidden = currentBranch != null && hiddenBranches.has(currentBranch)
   const shownItems = levelHidden ? [] : hiddenLayerIds.size ? sourceItems.filter(it => !hiddenLayerIds.has(it.key)) : sourceItems
+
+  /** Planning layer colour of a scope item (its place in the scope list). */
+  const styleOfScope = (scopeId: string | null | undefined) => planStyleOf(taskScopes.find(x => x.id === scopeId)?.plan_style)
+  const colorOfScope = (scopeId: string | null | undefined) => styleOfScope(scopeId).color || planColor(Math.max(0, taskScopes.findIndex(x => x.id === scopeId)))
+  /** Estimate layer: the takeoff, faint, without its tags (the planning labels must read). */
+  const estimateLayer = (list: TakeoffItem[]): TakeoffItem[] => list.map(it => ({ ...it, planTransparency: 0.8, shapes: it.shapes.map(sh => ({ ...sh, tags: undefined, openingTags: undefined })) }))
+  /** Planning layer on a sheet: one item per activity, each line labelled "code · quantity unit". */
+  const planningLayer = (sheetId: string, opts: { locationId?: string | null; scopeId?: string | null; emphasize?: string | null; selectable?: { scopeId: string | null; locationId: string | null } }): TakeoffItem[] =>
+    taskScopes.map(sc => {
+      const rows = taskRows.filter(r => r.scope_item_id === sc.id && r.source_id === sheetId && (!opts.locationId || r.location_id === opts.locationId) && (!opts.scopeId || r.scope_item_id === opts.scopeId))
+      if (!rows.length) return null
+      const faded = opts.emphasize && sc.id !== opts.emphasize
+      const st = planStyleOf(sc.plan_style)
+      const k = Number(sources.find(x => x.id === sheetId)?.scale_pt_per_m) || 0
+      return {
+        key: `__plan_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: st.thickness_m, flatEnds: true, planTransparency: faded ? Math.max(0.6, st.transparency) : st.transparency,
+        shapes: rows.map(r => ({ r, pts: bandCentre(r.points, r.side, st.thickness_m, k) })).map(({ r, pts }) => ({
+          id: opts.selectable && r.scope_item_id === opts.selectable.scopeId && r.location_id === opts.selectable.locationId ? `task:${r.id}` : `plan:${r.id}`,
+          page: 1, pts, tags: tagsOnLongest(pts, r.tag || sc.scope_code || ''), // the tag only: quantities go to the report
+          tagCallout: true, tagAt: Array.isArray(r.label_at) && r.label_at.length === 2 ? r.label_at as Vec2 : null,
+        })),
+      }
+    }).filter(Boolean) as TakeoffItem[]
+  const taskShownItems: TakeoffItem[] = (() => {
+    if (section !== 'tasks' || !selectedSource) return shownItems
+    return [
+      ...(taskWalls ? estimateLayer(shownItems) : []),
+      ...(taskPlan ? planningLayer(selectedSource.id, { emphasize: taskScopeId, selectable: { scopeId: taskScopeId, locationId: taskLocationId } }) : []),
+    ]
+  })()
+
+  /** Saves one task line for the chosen activity and location, measured now. */
+  async function saveTaskLine(pts: Vec2[], side: 1 | -1): Promise<string | null> {
+    if (!taskScope || !taskLocationId) { setError(t('task.panel.pick')); return null }
+    if (!selectedSource) return null
+    const k = Number(selectedSource.scale_pt_per_m) || 0
+    const m = measureTaskLines([pts], { ptPerM: k, heightM: taskHeightM, unit: taskScope.unit, walls: taskWallRefs })
+    if (m.measure === 'wallArea' && !taskHeightM) { setError(t('task.needsHeight')); return null }
+    const supabase = createClient()
+    const insert = (tag: string) => supabase.from('location_task_drawings').insert({
+      project_id: projectId, scope_item_id: taskScope.id, location_id: taskLocationId, source_id: selectedSource.id,
+      points: pts, side, height_m: m.measure === 'wallArea' ? taskHeightM : null, quantity: Math.round(m.quantity * 10000) / 10000, unit: taskScope.unit, tag,
+    }).select('id').single()
+    let { data, error: e } = await insert(nextTaskTag(taskScope.scope_code, taskRows.filter(r => r.scope_item_id === taskScope.id).map(r => r.tag)))
+    if (e?.code === '23505') {
+      // Someone else took that tag meanwhile: number again from the database.
+      const { data: used } = await supabase.from('location_task_drawings').select('tag').eq('project_id', projectId).eq('scope_item_id', taskScope.id)
+      ;({ data, error: e } = await insert(nextTaskTag(taskScope.scope_code, (used || []).map(r => (r as { tag: string | null }).tag))))
+    }
+    if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return null }
+    await loadTasks()
+    return data.id as string
+  }
+  /** A task label (callout) dragged on the sheet: its new place, or null to place it automatically again. */
+  async function moveTaskLabel(shapeId: string, at: Vec2 | null) {
+    const id = shapeId.replace(/^(task|plan):/, '')
+    const value = at ? [Math.round(at[0] * 100) / 100, Math.round(at[1] * 100) / 100] as Vec2 : null
+    setTaskRows(prev => prev.map(r => (r.id === id ? { ...r, label_at: value } : r)))
+    const { error: e } = await createClient().from('location_task_drawings').update({ label_at: value }).eq('id', id)
+    // Without the label_at column (migration not run yet) the label still moves on screen, but is not kept.
+    if (e) setError(/label_at/.test(e.message) ? t('task.labelNotSaved') : t('workspace.error', { message: e.message }))
+  }
+  /** "Take wall": the clicked wall's stretch along the location (the side click then places the task line). */
+  function pickTaskWall(p: Vec2): { a: Vec2; b: Vec2; thicknessM: number } | null {
+    if (!selectedSource) return null
+    const k = Number(selectedSource.scale_pt_per_m) || 0
+    // With the location's zone on this sheet, the stretch stops at the room; without it, the whole wall stretch.
+    const room = taskZone && taskZone.source_id === selectedSource.id ? frameOf(taskZone.points as Vec2[], k, 0) : null
+    return takeWallStretch(p, taskWallRefs, room || [-1e9, -1e9, 1e9, 1e9], k)
+  }
+  /** A new wall height re-measures this location's lines. */
+  async function applyTaskHeight() {
+    if (!taskScope || !selectedSource) return
+    const k = Number(selectedSource.scale_pt_per_m) || 0
+    const rows = taskHere.filter(r => r.source_id === selectedSource.id)
+    if (!rows.length || !taskHeightM) return
+    if (rows.every(r => Number(r.height_m) === taskHeightM)) return
+    const supabase = createClient()
+    for (const r of rows) {
+      const m = measureTaskLines([r.points], { ptPerM: k, heightM: taskHeightM, unit: taskScope.unit, walls: taskWallRefs })
+      const { error: e } = await supabase.from('location_task_drawings').update({ height_m: m.measure === 'wallArea' ? taskHeightM : null, quantity: Math.round(m.quantity * 10000) / 10000 }).eq('id', r.id)
+      if (e) { setError(t('workspace.error', { message: e.message })); return }
+    }
+    await loadTasks()
+    setStatus(t('task.panel.heightApplied'))
+  }
+  // ---------- Materials of planned tasks ----------
+  const matLabels = { bars: t('mat.bars'), sheets: t('mat.sheets'), un: t('mat.un'), rolls: t('fixings.rollsUnit'), barLen: (v: number) => `${formatNumber(v, 2)} m` }
+  /**
+   * Materials of one activity's lines in one location (all sheets): each line takes its part of the estimate of the wall
+   * it lies on (layout + material list), plus the activity's extras. The wall is the activity's own takeoff item when the
+   * scope was imported from RitsuScope, else whatever wall the line was drawn on (old or typed scope lines).
+   */
+  function materialsFor(scopeId: string, locationId: string): TaskMaterialRow[] {
+    const sc = taskScopes.find(x => x.id === scopeId)
+    if (!sc) return []
+    const rows = taskRows.filter(r => r.scope_item_id === scopeId && r.location_id === locationId)
+    const rates = planMaterialsOf(sc.plan_materials)
+    const step = inferStep(sc.takeoff_step, sc.scope_name)
+    const out: TaskMaterialRow[][] = []
+    for (const sheetId of [...new Set(rows.map(r => r.source_id))]) {
+      const sheet = sources.find(x => x.id === sheetId)
+      const k = Number(sheet?.scale_pt_per_m) || 0
+      if (!sheet || !(k > 0)) continue
+      const lv = sheetLevel(sheet, new Map<string, LevelRow>(levels.map(l => [l.id, l] as [string, LevelRow])))
+      const h = wallHeightOf(lv?.level)
+      const raw = rowsToItems(layers, rawElements, new Map([[sheetId, 1]]))
+      const sheetItems = (h ? fillLevelHeights(raw, () => h) : raw).filter(it => it.shapes.length > 0)
+      const ends = freeEnds(sheetItems, k)
+      // Lines grouped by the wall they lie on.
+      const groups = new Map<string, { item: TakeoffItem | null; lines: TaskDrawingRow[] }>()
+      for (const r of rows.filter(x => x.source_id === sheetId)) {
+        const host = hostWall(r, sheetItems, k, sc.takeoff_layer_id || null)
+        const key = host?.item.key || '__none'
+        const g = groups.get(key) || { item: host?.item || null, lines: [] }
+        g.lines.push(r)
+        groups.set(key, g)
+      }
+      for (const { item, lines: gl } of groups.values()) {
+        const wt = item ? projectRecipeCtx.wallTypeOf?.(item) : null
+        const insId = wt?.materials?.insulation
+        const ins = insId ? projectRecipeCtx.catalog?.get(insId) : undefined
+        // The wall's estimate: its recipe lines for the whole item; the task takes its stretch's share.
+        const recipeLines = item ? recipeLineQuantities(item, k, recipeOfItem(item), projectRecipeCtx) : []
+        const vars = item && recipeLines.length ? recipeVariables(item, k, wt) : null
+        out.push(taskMaterials({
+          step, item, sheetItems, ptPerM: k, rates, labels: matLabels,
+          recipeLines, itemBase: vars ? { area: vars.area, length: vars.length } : null, ends,
+          lines: gl.map(r => ({ points: r.points, side: r.side, height_m: r.height_m })),
+          insulation: ins ? { name: ins.name, unit: ins.unit, packSize: ins.pack_size, packName: ins.pack_name } : step === 'insulation' && insId ? { name: t('mat.insulation'), unit: 'm²' } : null,
+        }))
+      }
+    }
+    return sumMaterials(out)
+  }
+  const fmtMat = (r: TaskMaterialRow) => ({ whole: `${formatNumber(r.whole, 0)} ${r.wholeUnit}`, exact: `${formatNumber(r.exact, 2)} ${r.unit}` })
+  /** Activity rates: changed live, saved when a field is left. */
+  function setRatesLocal(scopeId: string, list: PlanMaterial[]) { setTaskScopes(prev => prev.map(x => (x.id === scopeId ? { ...x, plan_materials: list } : x))) }
+  async function saveRates(scopeId: string, list: PlanMaterial[]) {
+    setRatesLocal(scopeId, list)
+    const { error: e } = await createClient().from('project_scopes').update({ plan_materials: list }).eq('id', scopeId)
+    if (e) setError(t('workspace.error', { message: e.message }))
+  }
+
+  // ---------- Field sheets (PDF to the field, issued as revisions) ----------
+  type FieldKind = 'location' | 'activity'
+  const fieldLines = (kind: FieldKind) => taskRows.filter(r => r.location_id === taskLocationId && (kind === 'location' || r.scope_item_id === taskScopeId))
+  const latestIssue = (kind: FieldKind) => fieldIssues.find(i => i.location_id === taskLocationId && i.kind === kind && (kind === 'location' || i.scope_item_id === taskScopeId)) || null
+  const fieldState = (kind: FieldKind) => {
+    const last = latestIssue(kind)
+    const lines = fieldLines(kind)
+    return { last, lines, changed: !!last && last.fingerprint !== fingerprint(lines), next: last ? last.revision + 1 : 0 }
+  }
+  async function actorName(): Promise<string> {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return ''
+    const { data: p } = await supabase.from('user_profiles').select('full_name, display_name, email').eq('user_id', user.id).maybeSingle()
+    return p?.full_name || p?.display_name || p?.email || user.email || ''
+  }
+  function saveBlob(blob: Blob, name: string) {
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(href), 60_000)
+  }
+  const fileSafe = (v: string) => v.replace(/[\\/:*?"<>|]+/g, '-').trim()
+  /** Builds the PDF of the chosen location (all activities or just the chosen one) with the report settings, as a preview or as revision `revision`. */
+  /** The sheet of the report and the part of it on page 1 (null = the whole sheet), from the report settings. */
+  function reportArea(cfg: ReportCfg): { sheet: SourceRow; frame: [number, number, number, number] | null; k: number } {
+    if (!taskLocation) throw new Error(t('task.panel.pick'))
+    let sheet: SourceRow | undefined
+    let frame: [number, number, number, number] | null = null
+    if (cfg.areaMode === 'custom') {
+      if (!cfg.area) throw new Error(t('report.area.missing'))
+      sheet = sources.find(x => x.id === cfg.area!.sourceId)
+      frame = cfg.area.box
+    } else if (cfg.areaMode === 'location') {
+      if (!taskZone) throw new Error(t('task.panel.noZone', { location: taskLocation.name }))
+      sheet = sources.find(x => x.id === taskZone.source_id)
+      frame = frameOf(taskZone.points as Vec2[], Number(sheet?.scale_pt_per_m) || 0, Math.max(0, cfg.marginM))
+    } else {
+      sheet = (taskZone && sources.find(x => x.id === taskZone.source_id)) || selectedSource || undefined
+    }
+    if (!sheet || sheet.kind !== 'pdf_page') throw new Error(t('zone.pdfOnly'))
+    const k = Number(sheet.scale_pt_per_m) || 0
+    if (!(k > 0)) throw new Error(t('draw.needScale'))
+    return { sheet, frame, k }
+  }
+  /** Walls of a sheet with their level height. */
+  function tallSheetItems(sheet: SourceRow): TakeoffItem[] {
+    const raw = rowsToItems(layers, rawElements, new Map([[sheet.id, 1]])).filter(it => it.shapes.length > 0)
+    const lv = sheetLevel(sheet, new Map<string, LevelRow>(levels.map(l => [l.id, l] as [string, LevelRow])))
+    const h = wallHeightOf(lv?.level)
+    return h ? fillLevelHeights(raw, () => h) : raw
+  }
+  /** The 3D picture of page 2 with the report's 3D settings (PNG), or null when there is nothing to show. */
+  async function fieldSheet3d(kind: FieldKind, cfg: ReportCfg, width: number, height: number): Promise<Uint8Array | null> {
+    const { sheet, frame, k } = reportArea(cfg)
+    const v = cfg.view3d
+    const lines = fieldLines(kind).filter(r => r.source_id === sheet.id)
+    const box = v.extent === 'area' && frame ? frame : boxAround(lines.flatMap(r => r.points), 1.5 * k) || frame
+    if (!box) return null
+    const scene = task3dScene(sheet.id, k, { rows: lines, estimateItems: v.estimate ? tallSheetItems(sheet) : [], zonesOn: v.zones, box })
+    if (!scene.items.length) return null
+    let under: LoadedUnderlay | null = null
+    if (v.underlay) {
+      const key = `${sheet.id}|${box.map(n => n.toFixed(1)).join(',')}`
+      let job = underlayCache.current.get(key)
+      if (!job) { job = loadUnderlay({ page: 1, filePath: sheet.file_path, pageNumber: sheet.page_number || 1, region: [[box[0], box[1]], [box[2], box[3]]], toModel: p => p }).catch(() => null); underlayCache.current.set(key, job) }
+      under = await job
+    }
+    return render3DImage({ items: scene.items, ptPerM: k, width, height, tags: v.tags, underlay: under, zones: v.zones ? scene.zones : [], grid: false, view: v }).catch(() => null)
+  }
+  async function makeFieldSheet(kind: FieldKind, revision: number | null, issuedBy: string, cfg: ReportCfg) {
+    if (!taskLocation || (kind === 'activity' && !taskScope)) throw new Error(t('task.panel.pick'))
+    const { sheet, frame, k } = reportArea(cfg)
+    const lines = fieldLines(kind)
+    const { data: signed, error: se } = await createClient().storage.from(BUCKET).createSignedUrl(sheet.file_path, 600)
+    if (se || !signed) throw se || new Error('no URL')
+    const sheetItems = rowsToItems(layers, rawElements, new Map([[sheet.id, 1]])).filter(it => it.shapes.length > 0)
+    const estimate = cfg.show.estimate ? estimateLayer(sheetItems).map(it => (cfg.show.openings ? it : { ...it, shapes: it.shapes.map(sh => ({ ...sh, openings: [] })) })) : []
+    const planning = planningLayer(sheet.id, { locationId: taskLocation.id, scopeId: kind === 'activity' ? taskScopeId : null })
+      .map(it => (cfg.show.tags ? it : { ...it, shapes: it.shapes.map(sh => ({ ...sh, tags: undefined })) }))
+    const items = [...estimate, ...planning]
+    const walls: WallRef[] = sheetItems.filter(it => it.kind === 'linear').flatMap(it => it.shapes.map(sh => ({ pts: sh.pts, openings: sh.openings, kind: it.kind })))
+    const scopes = taskScopes.filter(sc => lines.some(r => r.scope_item_id === sc.id))
+    const rows: FieldSheetRow[] = scopes.map(sc => {
+      const mine = lines.filter(r => r.scope_item_id === sc.id)
+      const qty = mine.reduce((a, r) => a + Number(r.quantity || 0), 0)
+      const tags = cfg.show.tags ? mine.map(r => r.tag).filter(Boolean).join(', ') : ''
+      let detail: string | undefined = tags || undefined
+      if (kind === 'activity') {
+        const h = Number(mine.find(r => r.height_m)?.height_m) || null
+        const m = measureTaskLines(mine.map(r => r.points), { ptPerM: k, heightM: h, unit: sc.unit, walls })
+        if (m.measure === 'wallArea') detail = [tags, t('task.panel.breakdown', { length: formatNumber(m.length, 2), height: h ? formatNumber(h, 2) : '—', openings: formatNumber(m.openings, 2) })].filter(Boolean).join(' · ')
+      }
+      return { color: colorOfScope(sc.id), code: sc.scope_code || '', name: sc.scope_name, qty: `${formatNumber(qty, 2)} ${sc.unit || ''}`.trim(), detail }
+    })
+    const matGroups = scopes.map(sc => ({ sc, rows: materialsFor(sc.id, taskLocation.id) })).filter(g => g.rows.length)
+
+    // Pages 2, 3 and 5: the walls of this sheet with their level height (elevations need it).
+    const lv = sheetLevel(sheet, new Map<string, LevelRow>(levels.map(l => [l.id, l] as [string, LevelRow])))
+    const wallH = wallHeightOf(lv?.level)
+    const tallItems = wallH ? fillLevelHeights(sheetItems, () => wallH) : sheetItems
+    const fScopes: FieldScope[] = scopes.map(sc => ({ id: sc.id, code: sc.scope_code || '', name: sc.scope_name, color: colorOfScope(sc.id), step: inferStep(sc.takeoff_step, sc.scope_name), unit: sc.unit || null, itemKey: sc.takeoff_layer_id || null }))
+    const fLines: FieldTaskLine[] = lines.filter(r => r.source_id === sheet!.id).map(r => ({ id: r.id, tag: r.tag || null, scope_item_id: r.scope_item_id, points: r.points, side: r.side, height_m: r.height_m, quantity: r.quantity, unit: r.unit }))
+    const nf = (v: number) => formatNumber(v, 2)
+    const actName = (id: string) => { const sc = scopes.find(x => x.id === id); return sc ? `${sc.scope_code || ''} ${sc.scope_name}`.trim() : '' }
+    const infos = taskInfos(fLines, fScopes, tallItems, k)
+    const placeName = (p: string) => t(`fixings.place.${p}` as TakeoffMessageKey)
+    const cards = cfg.show.walls ? wallCards(fLines, fScopes, tallItems, k, it => (projectRecipeCtx.wallTypeOf?.(it) ?? null) as unknown as WallTypeInfo | null) : []
+    const wallSpec = (c: WallCard): [string, string][] => [
+      ...(c.thicknessMm ? [[t('fs.spec.thickness'), `${c.thicknessMm} mm`] as [string, string]] : []),
+      [t('fs.spec.studs'), `${c.stud} @ ${nf(c.spacingM)} m${c.doubleStuds ? ` · ${t('fs.spec.double')}` : ''}`],
+      [t('fs.spec.tracks'), c.track],
+      [t('fs.spec.faceA'), c.faceA.layers ? `${c.faceA.layers}× ${c.faceA.name}` : '—'],
+      [t('fs.spec.faceB'), c.faceB.layers ? `${c.faceB.layers}× ${c.faceB.name}` : '—'],
+      [t('fs.spec.insulation'), c.insulation || '—'],
+      ...(c.maxHeightM ? [[t('fs.spec.maxHeight'), `${nf(c.maxHeightM)} m`] as [string, string]] : []),
+      ...(c.screwSpacingM != null ? [[t('fs.spec.screws'), t('fs.spec.screwsValue', { ta: nf(c.screwSpacingM), la: String(c.laPerStudEnd ?? 2) })] as [string, string]] : []),
+      ...(c.anchors ? [[t('fs.spec.anchors'), t('fs.spec.anchorsValue', { name: c.anchors.name, spacing: nf(c.anchors.spacingM), edge: nf(c.anchors.edgeM), at: c.anchors.at.map(placeName).join(', ') })] as [string, string]] : []),
+      ...(c.band ? [[t('fs.spec.band'), `${c.band.name} · ${c.band.at.map(placeName).join(', ')}`] as [string, string]] : []),
+    ]
+    const checkOf = (step: string | null) => t((['framing', 'board_a', 'board_b', 'insulation', 'joints_a', 'joints_b'].includes(step || '') ? `fs.check.${step}` : 'fs.check.other') as TakeoffMessageKey)
+    const sequence = cfg.show.sequence ? sequenceOf(fScopes).map(r => (r.kind === 'hold'
+      ? { color: null, title: t('fs.hold.title'), check: t('fs.hold.services'), hold: true }
+      : { color: r.color, title: `${r.code} ${r.name}`.trim(), check: checkOf(r.step) })) : null
+    const history = cfg.show.history ? [
+      ...fieldIssues.filter(i => i.location_id === taskLocation.id).slice().sort((a, b) => a.issued_at.localeCompare(b.issued_at))
+        .map(i => ({ rev: `REV ${i.revision}${i.kind === 'activity' ? ` · ${scopes.find(x => x.id === i.scope_item_id)?.scope_code || taskScopes.find(x => x.id === i.scope_item_id)?.scope_code || ''}` : ''}`, date: new Date(i.issued_at).toLocaleDateString(language), by: i.issued_by_name || '—' })),
+      { rev: revision == null ? t('field.previewShort') : `REV ${revision}${kind === 'activity' ? ` · ${taskScope?.scope_code || ''}` : ''}`, date: new Date().toLocaleDateString(language), by: issuedBy || '—', current: true },
+    ] : null
+    // The location in 3D, with the report's 3D settings.
+    const view3d = cfg.show.view3d ? await fieldSheet3d(kind, cfg, 1600, 820) : null
+    const matSummary = sumMaterials(matGroups.map(g => g.rows))
+    const level = sheet.level_id ? levels.find(l => l.id === sheet!.level_id) : null
+    const date = new Date().toLocaleDateString(language)
+    const fmtDate = (v: string) => (v ? new Date(`${v}T12:00:00`).toLocaleDateString(language) : '')
+    const dates = cfg.start || cfg.end ? `${fmtDate(cfg.start) || '…'} – ${fmtDate(cfg.end) || '…'}` : ''
+    const blob = await buildFieldSheetPdf({
+      url: signed.signedUrl, pageNumber: sheet.page_number || 1, ptPerM: k, frame, items, paper: cfg.paper,
+      zone: { name: taskLocation.name, pts: taskZone && taskZone.source_id === sheet.id ? taskZone.points as Vec2[] : [] },
+      backgroundFade: fadeOf(sheet), rows,
+      qrUrl: taskLocation.qr_token ? `${window.location.origin}/field/scan/${taskLocation.qr_token}` : null,
+      show: { table: cfg.show.table, detail: cfg.show.detail, qr: cfg.show.qr },
+      info: { responsible: cfg.responsible, crew: cfg.crew, dates, notes: cfg.notes },
+      materials: (cfg.show.materials || cfg.show.materialSummary) && matGroups.length ? {
+        groups: cfg.show.materials ? matGroups.map(g => ({ color: colorOfScope(g.sc.id), title: `${g.sc.scope_code || ''} ${g.sc.scope_name}`.trim(), rows: g.rows.map(r => ({ mat: r.mat, ...fmtMat(r) })) })) : [],
+        summary: cfg.show.materialSummary ? matSummary.map(r => ({ mat: r.mat, ...fmtMat(r) })) : null,
+      } : null,
+      view3d,
+      tasks: cfg.show.tasks ? infos.map(r => ({ color: r.color, tag: r.tag, activity: actName(r.scopeId), wall: r.wall || '—', face: r.face || '—', length: nf(r.lengthM), height: r.heightM ? nf(r.heightM) : '—', openings: r.openingsM2 > 0.005 ? nf(r.openingsM2) : '—', qty: `${nf(r.qty)} ${r.unit}`.trim() })) : null,
+      walls: cards.map(c => ({ card: c, spec: wallSpec(c) })),
+      elevations: cfg.show.elevations ? elevationsOf(fLines, fScopes, tallItems, k) : null,
+      sequence,
+      log: cfg.show.log ? infos.map(r => ({ color: r.color, tag: r.tag, activity: actName(r.scopeId) })) : null,
+      history,
+      pages: {
+        view3dTitle: t('fs.page.view3d'),
+        tasksTitle: t('fs.page.tasks'),
+        taskCols: [t('fs.col.tag'), t('fs.col.activity'), t('fs.col.wall'), t('fs.col.face'), t('fs.col.length'), t('fs.col.height'), t('fs.col.openings'), t('fs.col.qty')],
+        wallsTitle: t('fs.page.walls'),
+        faceA: t('fs.faceA'),
+        faceB: t('fs.faceB'),
+        elevationsTitle: t('fs.page.elevations'),
+        elevationsNote: t('fs.elevationsNote'),
+        studs: n => t('fs.studs', { n }),
+        sequenceTitle: t('fs.page.sequence'),
+        seqCols: [t('fs.col.order'), t('fs.col.activity'), t('fs.col.check'), t('fs.col.by'), t('fs.col.date')],
+        logTitle: t('fs.page.log'),
+        logCols: [t('fs.col.tag'), t('fs.col.activity'), t('fs.col.date'), t('fs.col.crew'), t('fs.col.pct'), t('fs.col.notes')],
+        historyTitle: t('fs.page.history'),
+        histCols: [t('fs.col.rev'), t('fs.col.date'), t('fs.col.issuedBy')],
+        pageOf: (n, total) => t('fs.pageOf', { n, total }),
+      },
+      logoUrl: '/ritsu-logo.png',
+      fmt: v => formatNumber(v, 2),
+      text: {
+        kicker: t('field.kicker'),
+        location: cfg.title.trim() || taskLocation.name,
+        path: [cfg.title.trim() ? taskLocation.name : null, project?.name, level?.name, sheet.name].filter(Boolean).join(' · '),
+        scope: kind === 'location' ? t('field.scopeAll') : t('field.scopeOne', { code: taskScope?.scope_code || '' }),
+        revision: revision == null ? t('field.previewShort') : `REV ${revision}`,
+        issued: revision == null ? t('field.previewNote', { date }) : t('field.issuedLine', { date, name: issuedBy || '—' }),
+        responsible: t('report.responsible'),
+        crew: t('report.crew'),
+        dates: t('report.dates'),
+        notes: t('report.notes'),
+        activities: t('field.activities'),
+        qrCaption: t('field.qrCaption'),
+        scale: t(cfg.areaMode === 'location' ? 'field.scaleMargin' : 'field.scaleArea', { margin: formatNumber(cfg.marginM, 2) }),
+        footer: `${project?.name || ''}${project?.project_code ? ` · ${project.project_code}` : ''} · RitsuFlow`,
+        draft: revision == null ? t('field.watermark') : undefined,
+        materialsTitle: t('mat.title', { location: taskLocation.name }),
+        materialsSummary: t('mat.summary'),
+        colMaterial: t('mat.colMaterial'),
+        colTake: t('mat.colTake'),
+        colExact: t('mat.colExact'),
+        materialsNote: t('mat.note'),
+      },
+    })
+    const snapshot = {
+      location: { id: taskLocation.id, name: taskLocation.name },
+      sheet: { id: sheet.id, name: sheet.name },
+      config: cfg,
+      lines: lines.map(r => ({ id: r.id, tag: r.tag || null, scope_item_id: r.scope_item_id, source_id: r.source_id, points: r.points, side: r.side ?? null, height_m: r.height_m, quantity: Number(r.quantity || 0), unit: r.unit })),
+      totals: scopes.map(sc => ({ scope_item_id: sc.id, code: sc.scope_code, name: sc.scope_name, unit: sc.unit, quantity: lines.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0) })),
+      materials: matGroups.map(g => ({ scope_item_id: g.sc.id, rows: g.rows.map(r => ({ key: r.key, mat: r.mat, exact: r.exact, unit: r.unit, whole: r.whole, whole_unit: r.wholeUnit, source: r.source })) })),
+    }
+    return { blob, snapshot, fp: fingerprint(lines), fileName: fileSafe(`${taskLocation.name}${kind === 'activity' ? ` - ${taskScope?.scope_code || ''}` : ''}`) }
+  }
+  /** Shows a PDF in the tab opened by the click (pop-up blockers allow it), or downloads it. */
+  function showPdf(win: Window | null, blob: Blob, name: string) {
+    if (win && !win.closed) { win.location.href = URL.createObjectURL(blob); return }
+    saveBlob(blob, name)
+  }
+  /** Locations that have task lines (the report can be printed for them). */
+  const reportLocations = taskLocations.filter(l => taskRows.some(r => r.location_id === l.id))
+  function openReport(kind?: FieldKind) {
+    // Nothing picked in the panel: start with the first location drawn on this sheet (then any location with lines).
+    let locId = taskLocationId
+    if (!locId || !taskRows.some(r => r.location_id === locId)) {
+      locId = taskRows.find(r => r.source_id === selectedSourceId)?.location_id || reportLocations[0]?.id || null
+      if (!locId) { setError(t('field.nothing')); return }
+      setTaskLocationId(locId)
+    }
+    const zoneHere = zones.some(z => z.location_id === locId)
+    const activity = (kind || reportCfg.kind) === 'activity' && taskScope && taskRows.some(r => r.location_id === locId && r.scope_item_id === taskScope.id)
+    setReportCfg(c => ({ ...c, kind: activity ? 'activity' : 'location', areaMode: c.areaMode === 'location' && !zoneHere ? 'sheet' : c.areaMode }))
+    setReportOpen(true)
+  }
+  async function previewFieldSheet(kind: FieldKind) {
+    const win = window.open('', '_blank')
+    win?.document.write(`<p style="font:14px system-ui;padding:24px;color:#294955">${t('print.preparing')}</p>`)
+    setFieldBusy(`${kind}:preview`); setError('')
+    try { const r = await makeFieldSheet(kind, null, '', reportCfg); showPdf(win, r.blob, `${r.fileName} - ${t('field.previewShort')}.pdf`) }
+    catch (e) { win?.close(); setError(t('workspace.error', { message: (e as Error)?.message || String(e) })) }
+    finally { setFieldBusy(null) }
+  }
+  async function issueFieldSheet(kind: FieldKind) {
+    const st = fieldState(kind)
+    if (!st.lines.length) { setError(t('field.nothing')); return }
+    if (!window.confirm(t('field.confirmIssue', { rev: st.next, location: taskLocation?.name || '' }))) return
+    const win = window.open('', '_blank')
+    win?.document.write(`<p style="font:14px system-ui;padding:24px;color:#294955">${t('print.preparing')}</p>`)
+    setFieldBusy(`${kind}:issue`); setError('')
+    const supabase = createClient()
+    let path: string | null = null
+    try {
+      const name = await actorName()
+      const r = await makeFieldSheet(kind, st.next, name, reportCfg)
+      path = `${projectId}/field-sheets/${taskLocationId}/${kind}-${kind === 'activity' ? taskScopeId : 'all'}-rev${st.next}-${Date.now()}.pdf`
+      const up = await supabase.storage.from(BUCKET).upload(path, r.blob, { contentType: 'application/pdf', upsert: false })
+      if (up.error) throw up.error
+      const { error: ie } = await supabase.from('field_sheet_issues').insert({
+        project_id: projectId, location_id: taskLocationId, kind, scope_item_id: kind === 'activity' ? taskScopeId : null,
+        revision: st.next, snapshot: r.snapshot, fingerprint: r.fp, file_path: path, issued_by_name: name || null,
+      })
+      if (ie) throw ie
+      path = null
+      await loadTasks()
+      showPdf(win, r.blob, `${r.fileName} - Rev ${st.next}.pdf`)
+      setReportOpen(false)
+      setStatus(t('field.issued', { rev: st.next }))
+    } catch (e) {
+      win?.close()
+      if (path) await supabase.storage.from(BUCKET).remove([path])
+      setError(t('workspace.error', { message: (e as Error)?.message || String(e) }))
+    } finally { setFieldBusy(null) }
+  }
+  async function downloadIssue(issue: FieldIssueRow) {
+    if (!issue.file_path) return
+    const { data, error: e } = await createClient().storage.from(BUCKET).createSignedUrl(issue.file_path, 600, { download: `${fileSafe(taskLocation?.name || 'ficha')} - Rev ${issue.revision}.pdf` })
+    if (e || !data) { setError(t('workspace.error', { message: e?.message || '' })); return }
+    window.location.assign(data.signedUrl)
+  }
+
+  /** Planning style of an activity: changed live on screen, saved when the control is released. */
+  function setStyleLocal(scopeId: string, patch: PlanStyle) {
+    setTaskScopes(prev => prev.map(x => (x.id === scopeId ? { ...x, plan_style: { ...(x.plan_style || {}), ...patch } } : x)))
+  }
+  async function commitStyle(scopeId: string, patch: PlanStyle | null) {
+    const sc = taskScopes.find(x => x.id === scopeId)
+    const next: PlanStyle = patch ? { ...(sc?.plan_style || {}), ...patch } : {}
+    setTaskScopes(prev => prev.map(x => (x.id === scopeId ? { ...x, plan_style: next } : x)))
+    const { error: e } = await createClient().from('project_scopes').update({ plan_style: next }).eq('id', scopeId)
+    if (e) setError(t('workspace.error', { message: e.message }))
+  }
+  async function deleteTaskLine(id: string) {
+    if (!window.confirm(t('task.confirmDelete'))) return
+    const { error: e } = await createClient().from('location_task_drawings').delete().eq('id', id)
+    if (e) { setError(t('workspace.error', { message: e.message })); return }
+    await loadTasks()
+    setStatus(t('task.deleted'))
+  }
   const levelShownModel = isIfcModel ? modelData.items : withoutHiddenStoreys(modelData.items, modelData.storeys, hiddenBranches, levels)
   const shownModelItems = hiddenLayerIds.size ? levelShownModel.filter(it => !hiddenLayerIds.has(it.key)) : levelShownModel
   /** Items of the same library type at the same level/height (duplicates that should be one item), by key. */
@@ -675,6 +1263,72 @@ export default function TakeoffWorkspacePage() {
     }
   }
 
+  /**
+   * 3D task scene of a sheet: the task bands (activities sharing a face stacked outwards) with their tags, the estimate
+   * walls see-through, the locations' colours. `box` (sheet points) keeps only what lies in it (field sheet).
+   */
+  function task3dScene(sheetId: string, k: number, opts: { rows: TaskDrawingRow[]; estimateItems: TakeoffItem[]; zonesOn: boolean; box?: [number, number, number, number] | null }) {
+    const rowsHere = opts.rows
+    const scopesHere = taskScopes.filter(sc => rowsHere.some(r => r.scope_item_id === sc.id))
+    const layerOf = new Map<string, number>()
+    const placed: { r: TaskDrawingRow; scope: string }[] = []
+    for (const sc of scopesHere) {
+      for (const r of rowsHere.filter(x => x.scope_item_id === sc.id)) {
+        const under = new Set(placed.filter(p => p.scope !== sc.id && sameFace(p.r, r, k)).map(p => layerOf.get(p.r.id) || 0))
+        let n = 0
+        while (under.has(n)) n++
+        layerOf.set(r.id, n)
+        placed.push({ r, scope: sc.id })
+      }
+    }
+    const planItems: TakeoffItem[] = scopesHere.map(sc => {
+      const st = planStyleOf(sc.plan_style)
+      const T = st.thickness_m
+      return {
+        key: `__plan3d_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: T, height: 2.8,
+        shapes: rowsHere.filter(r => r.scope_item_id === sc.id).map(r => {
+          const pts = bandCentre(r.points, r.side, (2 * (layerOf.get(r.id) || 0) + 1) * T, k)
+          return { id: `plan:${r.id}`, page: 1, pts, h: Number(r.height_m) > 0 ? Number(r.height_m) : 0.3, tags: tagsOnLongest(pts, r.tag || sc.scope_code || '') }
+        }),
+      }
+    })
+    const b = opts.box
+    const inBox = (pts: Vec2[]) => !b || pts.some((p, i) => {
+      const q = pts[i + 1] || p
+      return Math.max(p[0], q[0]) >= b[0] && Math.min(p[0], q[0]) <= b[2] && Math.max(p[1], q[1]) >= b[1] && Math.min(p[1], q[1]) <= b[3]
+    })
+    const estimate = opts.estimateItems
+      .map(it => ({ ...it, transparency: Math.max(0.65, it.transparency || 0), shapes: it.shapes.filter(sh => inBox(sh.pts)).map(sh => ({ ...sh, tags: undefined, openingTags: undefined })) }))
+      .filter(it => it.shapes.length)
+    const zonesHere = opts.zonesOn ? locationZonesOf(sheetId).filter(z => inBox(z.points as Vec2[])) : []
+    return { items: [...estimate, ...planItems], zones: zonesHere.map(z => ({ page: 1, pts: z.points as Vec2[], color: z.color, name: z.name })) as UnderlayZone[] }
+  }
+  /** Box around points (sheet points) grown by `marginPt`. */
+  const boxAround = (pts: Vec2[], marginPt: number): [number, number, number, number] | null => (pts.length
+    ? [Math.min(...pts.map(p => p[0])) - marginPt, Math.min(...pts.map(p => p[1])) - marginPt, Math.max(...pts.map(p => p[0])) + marginPt, Math.max(...pts.map(p => p[1])) + marginPt]
+    : null)
+
+  /** 3D task view of the open sheet: estimate walls (see-through), task bands with tags, plan and locations underneath. */
+  const tasks3d = (() => {
+    const empty = { items: [] as TakeoffItem[], underlays: [] as UnderlaySpec[], zones: [] as UnderlayZone[] }
+    if (section !== 'tasks' || viewMode !== '3d' || !selectedSource || !(ptPerM > 0)) return empty
+    const k = ptPerM
+    const rowsHere = taskRows.filter(r => r.source_id === selectedSource.id)
+    const scene = task3dScene(selectedSource.id, k, { rows: rowsHere, estimateItems: taskWalls ? shownItems : [], zonesOn: taskZonesOn })
+    const zonesHere = taskZonesOn ? locationZonesOf(selectedSource.id) : []
+    // The sheet underneath: its framed region, or the box around what is drawn (+ 2 m).
+    let region = selectedSource.kind === 'pdf_page' ? underlayRegionOf(selectedSource) : null
+    if (!region && selectedSource.kind === 'pdf_page') {
+      const bx = boxAround([...rowsHere.flatMap(r => r.points), ...zonesHere.flatMap(z => z.points as Vec2[]), ...shownItems.flatMap(it => it.shapes.flatMap(sh => sh.pts))], 2 * k)
+      if (bx) region = [[bx[0], bx[1]], [bx[2], bx[3]]]
+    }
+    return {
+      items: scene.items,
+      underlays: region && selectedSource.kind === 'pdf_page' ? [{ page: 1, filePath: selectedSource.file_path, pageNumber: selectedSource.page_number || 1, region, toModel: (p: Vec2) => p }] : [],
+      zones: scene.zones,
+    }
+  })()
+
   const viewer = !selectedSource ? (
     <div style={{ ...ui.viewer, height: '100%' }}>{t('workspace.viewer.select')}</div>
   ) : viewMode === '3d' && ptPerM > 0 ? (
@@ -694,7 +1348,12 @@ export default function TakeoffWorkspacePage() {
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0 }}>
-        {canShowModel && scope3d === 'model' ? (
+        {section === 'tasks' ? (
+          // Task view in 3D: the task layers as coloured bands on the wall faces (stacked when several activities share a
+          // face), each with its tag; the estimate walls see-through; the sheet and the locations' colours underneath.
+          <View3D key={`tasks-${selectedSource.id}`} items={tasks3d.items} ptPerM={ptPerM} selectedId={null} onSelect={() => {}} initialTags onView={setLiveView3d}
+            underlays={tasks3d.underlays} underlayZones={tasks3d.zones} />
+        ) : canShowModel && scope3d === 'model' ? (
           <View3D key={isIfcModel ? 'model' : 'building'} items={shownModelItems} ptPerM={1} storeys={modelData.storeys} selectedId={selectedElementId} onSelect={selectFromModel}
             underlays={isIfcModel ? undefined : underlay3d.model.underlays} underlayZones={isIfcModel ? undefined : underlay3d.model.zones}
             preferPage={modelData.storeys.find(st => st.sourceId === selectedSourceId)?.page} />
@@ -722,20 +1381,20 @@ export default function TakeoffWorkspacePage() {
       footerSlot={toolbarShown ? footerSlot : null}
       statusSlot={toolbarShown ? statusSlot : null}
       backgroundFade={backgroundFade}
-      quickActions={section === 'zoning' ? [] : [
+      quickActions={section === 'zoning' || section === 'tasks' ? [] : [
         { key: 'wall', icon: 'wall', label: t('quick.wall'), title: t('quick.wallHint'), onClick: () => setPickerOpen(true) },
         { key: 'ceiling', icon: 'ceiling', label: t('quick.ceiling'), title: t('quick.ceilingHint'), onClick: () => setSurfacePicker('ceiling') },
         { key: 'floor', icon: 'floor', label: t('quick.floor'), title: t('quick.floorHint'), onClick: () => setSurfacePicker('floor') },
         { key: 'item', icon: 'edit', label: t('quick.item'), title: t('quick.itemHint'), onClick: () => setNewLayerRequest(n => n + 1) },
       ]}
-      exportActions={section === 'zoning' ? [] : [
+      exportActions={section === 'zoning' || section === 'tasks' ? [] : [
         { key: 'csv', icon: 'download', label: 'CSV', title: t('csv.hint'), onClick: exportCsv, disabled: !(ptPerM > 0 && sourceItems.length > 0) },
       ]}
       projectId={projectId}
       source={selectedSource}
       layers={layers}
-      items={shownItems}
-      onChanged={load}
+      items={section === 'tasks' ? taskShownItems : shownItems}
+      onChanged={section === 'tasks' ? loadTasks : load}
       selectedId={selectedElementId}
       onSelect={setSelectedElementId}
       framingDefaults={framingDefaults}
@@ -743,7 +1402,30 @@ export default function TakeoffWorkspacePage() {
       onActiveLayerChange={setActiveLayerId}
       drawRequest={drawRequest}
       newLayerRequest={newLayerRequest}
-      workMode={section === 'zoning' ? 'zoning' : 'takeoff'}
+      workMode={section === 'zoning' ? 'zoning' : section === 'tasks' ? 'tasks' : 'takeoff'}
+      task={section === 'tasks' ? {
+        color: taskScopeId ? colorOfScope(taskScopeId) : TASK_COLOR,
+        zone: taskZone && taskZone.source_id === selectedSource.id ? { id: taskZone.id, name: taskLocation?.name || taskZone.name, pts: taskZone.points as Vec2[] } : null,
+        frame: taskZone && taskZone.source_id === selectedSource.id ? frameOf(taskZone.points as Vec2[], Number(selectedSource.scale_pt_per_m) || 0, 1) : null,
+        frameTick: taskFrameTick,
+        bandM: styleOfScope(taskScopeId).thickness_m,
+        areaPick: areaPicking,
+        onAreaPicked: box => {
+          setAreaPicking(false)
+          if (box && selectedSource) setReportCfg(c => ({ ...c, areaMode: 'custom', area: { sourceId: selectedSource.id, box } }))
+          setReportOpen(true)
+        },
+        area: reportOpen && reportCfg.areaMode === 'custom' && reportCfg.area?.sourceId === selectedSource.id ? reportCfg.area.box : null,
+        onMoveTag: (shapeId, at) => void moveTaskLabel(shapeId, at),
+        estimateOn: taskWalls,
+        onToggleEstimate: () => setTaskWalls(v => !v),
+        onInspect: setInspectLineId,
+        zones: taskZonesOn ? locationZonesOf(selectedSource.id).map(z => ({ id: z.id, name: z.name, color: z.color, pts: z.points as Vec2[] })) : [],
+        zonesOn: taskZonesOn,
+        onToggleZones: () => setTaskZonesOn(v => !v),
+      } : null}
+      onTaskLine={saveTaskLine}
+      onTaskPick={pickTaskWall}
       zones={zones}
       zoneKind={drawKind}
       selectedZoneId={selectedZoneId}
@@ -1020,7 +1702,7 @@ export default function TakeoffWorkspacePage() {
   const country = projectCountry(project)
   const sheetZones = selectedSource ? zones.filter(z => z.source_id === selectedSource.id) : []
   const selectedZone = zones.find(z => z.id === selectedZoneId && z.source_id === selectedSource?.id) || null
-  const canvasMode = section === 'zoning' || section === 'takeoff'
+  const canvasMode = section === 'zoning' || section === 'takeoff' || section === 'tasks'
   const ratio = scaleRatio(ptPerM)
   const sheetOrigin: SheetOrigin | null = selectedSource ? originOf(selectedSource) : null
 
@@ -1355,6 +2037,7 @@ export default function TakeoffWorkspacePage() {
     { key: 'settings', icon: 'settings', label: 'header.settings' },
     { key: 'zoning', icon: 'zoning', label: 'header.zoning' },
     { key: 'takeoff', icon: 'takeoff', label: 'header.takeoff' },
+    { key: 'tasks', icon: 'measure', label: 'header.tasks' },
     { key: 'estimating', icon: 'estimating', label: 'header.estimating' },
   ]
 
@@ -1778,6 +2461,224 @@ export default function TakeoffWorkspacePage() {
     </div>
   )
 
+  // ---------- Tarefas sidebars ----------
+  const fmtQty = (v: number) => formatNumber(v, 2)
+  const taskProduction = taskLocations.filter(l => !TASK_GROUP_KINDS.has(l.location_type)).slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  const drawnOf = (scopeId: string, locationId: string) => taskRows.filter(r => r.scope_item_id === scopeId && r.location_id === locationId).reduce((a, r) => a + Number(r.quantity || 0), 0)
+  const hasZone = (locationId: string) => zones.some(z => z.location_id === locationId && Array.isArray(z.points) && z.points.length >= 3)
+  const tasksLeft = (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid #e5edef' }}>
+        <div style={paneTitle}>{t('task.sidebar.title')}</div>
+        <div style={{ ...ui.small, marginTop: 6, lineHeight: 1.45 }}>{t('task.sidebar.help')}</div>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '6px 8px 14px' }}>
+        {!tasksLoaded ? <div style={ui.muted}>{t('workspace.loading')}</div>
+          : !taskScopes.length ? <div style={{ ...ui.small, padding: 10, lineHeight: 1.5 }}>{t('task.sidebar.noScope')}</div>
+          : taskScopes.map(sc => {
+            const open = sc.id === taskScopeId
+            const total = taskRows.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0)
+            return <div key={sc.id} style={{ marginTop: 4, border: '1px solid ' + (open ? '#9fd6cf' : '#e5edef'), borderRadius: 8, background: open ? '#f2fbfa' : '#fff', overflow: 'hidden' }}>
+              <button type="button" onClick={() => { setTaskScopeId(open ? null : sc.id) }} style={{ display: 'grid', gap: 2, width: '100%', padding: '8px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#173441' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}><i style={{ width: 14, height: 4, borderRadius: 2, background: colorOfScope(sc.id) }} />{sc.scope_code}{sc.unit ? ` · ${sc.unit}` : ''}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>{sc.scope_name}</span>
+                <span style={{ fontSize: 10.5, color: total > 0 ? '#be123c' : '#8aa0a8' }}>{t('task.sidebar.drawnTotal', { value: `${fmtQty(total)} / ${fmtQty(Number(sc.quantity || 0))} ${sc.unit || ''}` })}</span>
+              </button>
+              {open && <div style={{ borderTop: '1px solid #dcefeb', padding: '4px 6px 6px' }}>
+                {!taskProduction.length ? <div style={{ ...ui.small, padding: 6 }}>{t('task.sidebar.noLocations')}</div> : taskProduction.map(loc => {
+                  const on = loc.id === taskLocationId
+                  const zoned = hasZone(loc.id)
+                  const q = drawnOf(sc.id, loc.id)
+                  return <button key={loc.id} type="button" title={zoned ? undefined : t('task.sidebar.noZoneHint')} onClick={() => { setTaskLocationId(loc.id); setTaskFrameTick(n => n + 1) }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', marginTop: 3, padding: '6px 8px', border: '1px solid ' + (on ? '#e11d48' : 'transparent'), borderRadius: 6, background: on ? '#fff1f3' : 'transparent', cursor: 'pointer', color: zoned ? '#294955' : '#6b8089', fontSize: 12, textAlign: 'left' }}>
+                    <span>{loc.name}</span>
+                    <span style={{ fontWeight: 700, color: q > 0 ? '#be123c' : '#9aaeb5', whiteSpace: 'nowrap' }}>{q > 0 ? `${fmtQty(q)} ${sc.unit || ''}` : !zoned ? t('task.sidebar.noZone') : '—'}</span>
+                  </button>
+                })}
+              </div>}
+            </div>
+          })}
+      </div>
+    </div>
+  )
+
+  const backToAllocation = `/projects/${projectId}/locations?tab=allocation${taskScopeId ? `&scope=${taskScopeId}` : ''}${taskScopeId && taskLocationId ? `&drawn=${taskLocationId}` : ''}`
+  const taskOthers = taskScopeId ? taskProduction.filter(l => l.id !== taskLocationId).map(l => ({ l, q: drawnOf(taskScopeId, l.id) })).filter(x => x.q > 0) : []
+  /** Properties of the task line clicked on the drawing. */
+  const inspectCard = (() => {
+    const r = inspectLineId ? taskRows.find(x => x.id === inspectLineId) : null
+    if (!r) return null
+    const sc = taskScopes.find(x => x.id === r.scope_item_id)
+    const loc = taskLocations.find(x => x.id === r.location_id)
+    const sheet = sources.find(x => x.id === r.source_id)
+    const k = Number(sheet?.scale_pt_per_m) || 0
+    const len = k > 0 ? r.points.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - r.points[i][0], p[1] - r.points[i][1]), 0) / k : 0
+    const current = r.scope_item_id === taskScopeId && r.location_id === taskLocationId
+    const row = (label: string, value: string) => <div style={{ display: 'grid', gridTemplateColumns: '92px 1fr', gap: 6, fontSize: 11.5 }}><span style={{ color: '#6b8089' }}>{label}</span><b style={{ color: '#173441', fontWeight: 700 }}>{value}</b></div>
+    const btn = { height: 28, padding: '0 10px', border: '1px solid #cddcdf', borderRadius: 6, background: '#fff', color: '#173441', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' } as const
+    return <div style={{ display: 'grid', gap: 6, padding: '10px', border: `2px solid ${colorOfScope(r.scope_item_id)}`, borderRadius: 8, background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 12, height: 4, borderRadius: 2, background: colorOfScope(r.scope_item_id) }} />
+        <b style={{ flex: 1, fontSize: 13, color: '#173441' }}>{r.tag || t('task.inspect.title')}</b>
+        <button type="button" onClick={() => setInspectLineId(null)} aria-label="×" style={{ border: 0, background: 'transparent', cursor: 'pointer', fontSize: 15, color: '#6b8089' }}>×</button>
+      </div>
+      {row(t('task.inspect.activity'), sc ? `${sc.scope_code || ''} ${sc.scope_name}`.trim() : '—')}
+      {row(t('task.inspect.location'), loc?.name || '—')}
+      {row(t('task.inspect.sheet'), sheet?.name || '—')}
+      {row(t('task.inspect.quantity'), `${formatNumber(Number(r.quantity || 0), 2)} ${r.unit || sc?.unit || ''}`.trim())}
+      {k > 0 && row(t('task.inspect.length'), `${formatNumber(len, 2)} m`)}
+      {r.height_m != null && row(t('task.inspect.height'), `${formatNumber(Number(r.height_m), 2)} m`)}
+      {row(t('task.inspect.label'), r.label_at ? t('task.inspect.labelMoved') : t('task.inspect.labelAuto'))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+        {!current && <button type="button" style={btn} onClick={() => { setTaskScopeId(r.scope_item_id); setTaskLocationId(r.location_id) }}>{t('task.inspect.open')}</button>}
+        {r.label_at && <button type="button" style={btn} onClick={() => void moveTaskLabel(r.id, null)}>{t('task.inspect.resetLabel')}</button>}
+        <button type="button" style={{ ...btn, color: '#a44343', borderColor: '#efcaca' }} onClick={async () => { await deleteTaskLine(r.id); setInspectLineId(null) }}>{t('task.delete')}</button>
+      </div>
+    </div>
+  })()
+  const tasksRight = (
+    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
+      <a href={backToAllocation} style={{ ...ui.backLink, fontSize: 12 }}>← {t('task.panel.back')}</a>
+      {inspectCard}
+      {!taskScope || !taskLocation ? <div style={{ ...ui.small, lineHeight: 1.5 }}>{t('task.panel.pick')}</div> : <>
+        <div>
+          <div style={{ fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}>{taskScope.scope_code} · {t('task.panel.in', { location: taskLocation.name })}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#173441', lineHeight: 1.3, marginTop: 2 }}>{taskScope.scope_name}</div>
+        </div>
+        {!taskZone && <div style={{ ...ui.error, background: '#fff8eb', color: '#8a4b0f' }}>{t('task.panel.noZoneDraw', { location: taskLocation.name })}</div>}
+        {<>
+          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#fff1f3', display: 'grid', gap: 2 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9f1239' }}>{t('task.panel.drawn')}</span>
+            <b style={{ fontSize: 20, color: '#be123c' }}>{fmtQty(taskHere.reduce((a, r) => a + Number(r.quantity || 0), 0))} {taskScope.unit || ''}</b>
+            {taskMeasured.measure === 'wallArea' && taskHere.length > 0 && <span style={{ fontSize: 11, color: '#6b8089' }}>{t('task.panel.breakdown', { length: fmtQty(taskMeasured.length), height: taskHeightM ? fmtQty(taskHeightM) : '—', openings: fmtQty(taskMeasured.openings) })}</span>}
+          </div>
+          {taskMeasured.measure === 'wallArea' && <label style={{ display: 'grid', gap: 4, fontSize: 11, fontWeight: 700, color: '#42636f' }}>{t('task.panel.height')}
+            <input type="number" min="0" step="0.01" value={taskHeight} onChange={e => setTaskHeight(e.target.value)} onBlur={() => void applyTaskHeight()} style={{ height: 32, padding: '0 8px', border: '1px solid ' + (taskHeightM ? '#cddcdf' : '#e5a3a3'), borderRadius: 6, fontSize: 13 }} />
+          </label>}
+          <div style={{ display: 'grid', gap: 6, padding: '8px 10px', border: '1px solid #e5edef', borderRadius: 8 }}>
+            <div style={paneTitle}>{t('task.layers')}</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#42636f', cursor: 'pointer' }}><input type="checkbox" checked={taskWalls} onChange={e => setTaskWalls(e.target.checked)} /><span><b>{t('task.layer.estimate')}</b> · {t('task.layer.estimateHint')}</span></label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#42636f', cursor: 'pointer' }}><input type="checkbox" checked={taskPlan} onChange={e => setTaskPlan(e.target.checked)} /><span><b>{t('task.layer.planning')}</b> · {t('task.layer.planningHint')}</span></label>
+          </div>
+          {(() => {
+            const st = styleOfScope(taskScope.id)
+            const mm = Math.round(st.thickness_m * 1000)
+            const pct = Math.round(st.transparency * 100)
+            const row = { display: 'grid', gridTemplateColumns: '92px 1fr 46px', alignItems: 'center', gap: 8, fontSize: 12, color: '#42636f' } as const
+            return <div style={{ display: 'grid', gap: 7, padding: '8px 10px', border: '1px solid #e5edef', borderRadius: 8 }}>
+              <div style={paneTitle}>{t('task.style.title', { code: taskScope.scope_code || '' })}</div>
+              <label style={row}>{t('task.style.color')}
+                <input type="color" value={colorOfScope(taskScope.id)} onChange={e => setStyleLocal(taskScope.id, { color: e.target.value })} onBlur={e => void commitStyle(taskScope.id, { color: e.currentTarget.value })} style={{ width: 44, height: 26, padding: 0, border: '1px solid #cddcdf', borderRadius: 5, background: '#fff' }} />
+                <span />
+              </label>
+              <div style={{ ...row, gridTemplateColumns: '92px 1fr 78px' }}>{t('task.style.thickness')}
+                <input type="range" min={5} max={500} step={5} value={mm} aria-label={t('task.style.thickness')} onChange={e => setStyleLocal(taskScope.id, { thickness_m: Number(e.target.value) / 1000 })} onPointerUp={e => void commitStyle(taskScope.id, { thickness_m: Number(e.currentTarget.value) / 1000 })} onKeyUp={e => void commitStyle(taskScope.id, { thickness_m: Number(e.currentTarget.value) / 1000 })} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input key={`mm-${taskScope.id}-${mm}`} type="number" min={5} max={500} step={1} defaultValue={mm} aria-label={t('task.style.thicknessMm')}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur() }}
+                    onBlur={e => { const v = Math.round(Number(e.currentTarget.value)); if (Number.isFinite(v) && v > 0 && v !== mm) void commitStyle(taskScope.id, { thickness_m: Math.min(500, Math.max(5, v)) / 1000 }) }}
+                    style={{ width: 50, height: 26, padding: '0 4px', border: '1px solid #cddcdf', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />mm
+                </span>
+              </div>
+              <label style={row}>{t('task.style.transparency')}
+                <input type="range" min={0} max={90} step={5} value={pct} onChange={e => setStyleLocal(taskScope.id, { transparency: Number(e.target.value) / 100 })} onPointerUp={e => void commitStyle(taskScope.id, { transparency: Number(e.currentTarget.value) / 100 })} onKeyUp={e => void commitStyle(taskScope.id, { transparency: Number(e.currentTarget.value) / 100 })} />
+                <b style={{ textAlign: 'right' }}>{pct}%</b>
+              </label>
+              <button type="button" onClick={() => void commitStyle(taskScope.id, null)} style={{ justifySelf: 'start', border: 0, background: 'transparent', padding: 0, color: '#0b7f75', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>{t('task.style.reset')}</button>
+              <span style={{ fontSize: 10.5, color: '#8aa0a8', lineHeight: 1.4 }}>{t('task.style.hint')}</span>
+            </div>
+          })()}
+          {taskZone && <button type="button" onClick={() => { if (taskZone.source_id !== selectedSourceId) setSelectedSourceId(taskZone.source_id); setTaskFrameTick(n => n + 1) }} style={{ alignSelf: 'flex-start', height: 30, padding: '0 12px', border: '1px solid #cddcdf', borderRadius: 7, background: '#fff', color: '#173441', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('task.panel.frame')}</button>}
+          <div>
+            <div style={paneTitle}>{t('task.panel.lines', { count: taskHere.length })}</div>
+            {taskHere.length > 0 && <div style={{ ...ui.small, marginTop: 4, lineHeight: 1.4 }}>{t('task.panel.labelHint')}</div>}
+            {!taskHere.length ? <div style={{ ...ui.small, marginTop: 6, lineHeight: 1.5 }}>{t('task.panel.noLines')}</div> : <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {taskHere.map((r, i) => <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', border: '1px solid #f3d0d7', borderRadius: 6, fontSize: 12 }}>
+                <span style={{ width: 10, height: 3, background: colorOfScope(taskScopeId), borderRadius: 2 }} />
+                <span style={{ flex: 1, color: '#294955', fontWeight: 700 }}>{r.tag || `#${i + 1}`}</span>
+                <b style={{ color: '#be123c' }}>{fmtQty(Number(r.quantity || 0))} {taskScope.unit || ''}</b>
+                <button type="button" onClick={() => void deleteTaskLine(r.id)} title={t('task.delete')} aria-label={t('task.delete')} style={{ border: 0, background: 'transparent', color: '#a44343', cursor: 'pointer', fontSize: 14 }}>×</button>
+              </div>)}
+            </div>}
+          </div>
+          {(() => {
+            const mats = materialsFor(taskScope.id, taskLocation.id)
+            const rates = planMaterialsOf(taskScope.plan_materials)
+            const cell = { height: 26, padding: '0 6px', border: '1px solid #cddcdf', borderRadius: 5, fontSize: 11.5, minWidth: 0, width: '100%', boxSizing: 'border-box' } as const
+            const upd = (i: number, patch: Partial<PlanMaterial>) => setRatesLocal(taskScope.id, rates.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+            const commit = () => void saveRates(taskScope.id, planMaterialsOf(taskScopes.find(x => x.id === taskScope.id)?.plan_materials))
+            return <div style={{ display: 'grid', gap: 7, padding: '8px 10px', border: '1px solid #e5edef', borderRadius: 8 }}>
+              <div style={paneTitle}>{t('mat.panelTitle', { code: taskScope.scope_code || '' })}</div>
+              {!taskHere.length ? <span style={{ ...ui.small, lineHeight: 1.4 }}>{t('mat.drawFirst')}</span>
+                : !mats.length ? <span style={{ ...ui.small, lineHeight: 1.4 }}>{t(taskScope.takeoff_layer_id ? 'mat.noneYet' : 'mat.noLink')}</span>
+                : <div style={{ display: 'grid', gap: 3 }}>
+                  {mats.map(r => { const f = fmtMat(r); return <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, fontSize: 11.5, color: '#294955', padding: '3px 0', borderBottom: '1px solid #f0f4f5' }}>
+                    <span>{r.mat}<em style={{ color: '#8aa0a8', fontStyle: 'normal' }}> · {t(r.source === 'rate' ? 'mat.rate' : r.source === 'recipe' ? 'mat.fromRecipe' : 'mat.fromLayout')}</em></span>
+                    <span style={{ textAlign: 'right' }}><b>{f.whole}</b><br /><span style={{ color: '#8aa0a8', fontSize: 10.5 }}>{f.exact}</span></span>
+                  </div> })}
+                </div>}
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: '#6b8089', textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 4 }}>{t('mat.rates')}</div>
+              <span style={{ fontSize: 10.5, color: '#8aa0a8', lineHeight: 1.4 }}>{t('mat.ratesHint')}</span>
+              {rates.map((r, i) => <div key={i} style={{ display: 'grid', gap: 4, padding: 6, border: '1px solid #eef3f4', borderRadius: 6 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 22px', gap: 4 }}>
+                  <input value={r.name} placeholder={t('mat.rateName')} onChange={e => upd(i, { name: e.target.value })} onBlur={commit} style={cell} />
+                  <button type="button" title={t('mat.removeRate')} onClick={() => void saveRates(taskScope.id, rates.filter((_, j) => j !== i))} style={{ border: 0, background: 'transparent', color: '#a44343', cursor: 'pointer' }}>×</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '60px 48px 10px 62px 42px', gap: 4, alignItems: 'center', fontSize: 11, color: '#6b8089' }}>
+                  <input type="number" min={0} step="any" value={r.coef || ''} placeholder="0" title={t('mat.coef')} onChange={e => upd(i, { coef: Number(e.target.value) })} onBlur={commit} style={cell} />
+                  <input value={r.unit} placeholder="kg" title={t('mat.unit')} onChange={e => upd(i, { unit: e.target.value })} onBlur={commit} style={cell} />
+                  <span>/</span>
+                  <select value={r.per} title={t('mat.per')} onChange={e => { const list = rates.map((x, j) => (j === i ? { ...x, per: e.target.value as PlanMaterial['per'] } : x)); void saveRates(taskScope.id, list) }} style={cell}>
+                    <option value="m2">m²</option><option value="m">m</option><option value="un">{t('mat.perLine')}</option>
+                  </select>
+                  <input type="number" min={0} step="any" value={r.waste || ''} placeholder="%" title={t('mat.waste')} onChange={e => upd(i, { waste: Number(e.target.value) })} onBlur={commit} style={cell} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 4, alignItems: 'center', fontSize: 11, color: '#6b8089' }}>
+                  <input type="number" min={0} step="any" value={r.packSize || ''} placeholder={t('mat.packSize')} title={t('mat.packSize')} onChange={e => upd(i, { packSize: Number(e.target.value) || null })} onBlur={commit} style={cell} />
+                  <input value={r.packName || ''} placeholder={t('mat.packName')} title={t('mat.packName')} onChange={e => upd(i, { packName: e.target.value || null })} onBlur={commit} style={cell} />
+                </div>
+              </div>)}
+              <button type="button" onClick={() => void saveRates(taskScope.id, [...rates, { name: '', unit: '', per: 'm2', coef: 0, waste: 0, packSize: null, packName: null }])} style={{ justifySelf: 'start', border: 0, background: 'transparent', padding: 0, color: '#0b7f75', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>+ {t('mat.addRate')}</button>
+            </div>
+          })()}
+          <div style={{ display: 'grid', gap: 8, padding: '10px', border: '1px solid #cfe9e5', borderRadius: 8, background: '#f7fcfb' }}>
+            <div style={paneTitle}>{t('field.title')}</div>
+            {(['location', 'activity'] as FieldKind[]).map(kind => {
+              const st = fieldState(kind)
+              const busy = fieldBusy?.startsWith(`${kind}:`)
+              return <div key={kind} style={{ display: 'grid', gap: 5, padding: '8px', background: '#fff', border: '1px solid #e5edef', borderRadius: 7 }}>
+                <b style={{ fontSize: 12, color: '#173441' }}>{kind === 'location' ? t('field.kindLocation', { location: taskLocation.name }) : t('field.kindActivity', { code: taskScope.scope_code || '' })}</b>
+                <span style={{ fontSize: 11, color: st.changed ? '#b45309' : '#6b8089' }}>
+                  {!st.last ? t('field.notIssued') : st.changed ? t('field.changedSince', { rev: st.last.revision }) : t('field.upToDate', { rev: st.last.revision, date: new Date(st.last.issued_at).toLocaleDateString(language) })}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" disabled={!!fieldBusy || !st.lines.length} onClick={() => openReport(kind)} style={{ height: 28, padding: '0 10px', border: '1px solid #cddcdf', borderRadius: 6, background: '#fff', color: '#173441', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', opacity: !st.lines.length ? 0.5 : 1 }}>{fieldBusy === `${kind}:preview` ? t('field.working') : t('field.preview')}</button>
+                  <button type="button" disabled={!!fieldBusy || !st.lines.length || (!!st.last && !st.changed)} onClick={() => openReport(kind)} style={{ height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: '#109d91', color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', opacity: (!st.lines.length || (!!st.last && !st.changed)) ? 0.45 : 1 }}>{busy && fieldBusy?.endsWith('issue') ? t('field.working') : t('field.issue', { rev: st.next })}</button>
+                </div>
+              </div>
+            })}
+            {fieldIssues.some(i => i.location_id === taskLocationId) && <div style={{ display: 'grid', gap: 3 }}>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: '#6b8089', textTransform: 'uppercase', letterSpacing: '.05em' }}>{t('field.history')}</span>
+              {fieldIssues.filter(i => i.location_id === taskLocationId).map(i => {
+                const sc = i.scope_item_id ? taskScopes.find(x => x.id === i.scope_item_id) : null
+                return <button key={i.id} type="button" onClick={() => void downloadIssue(i)} title={t('field.download')} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, padding: '4px 6px', border: 0, borderRadius: 5, background: 'transparent', fontSize: 11, color: '#294955', cursor: 'pointer', textAlign: 'left' }}>
+                  <span><b>Rev {i.revision}</b> · {i.kind === 'location' ? t('field.allShort') : sc?.scope_code || '—'}</span>
+                  <span style={{ color: '#6b8089' }}>{new Date(i.issued_at).toLocaleDateString(language)}{i.issued_by_name ? ` · ${i.issued_by_name}` : ''} ↓</span>
+                </button>
+              })}
+            </div>}
+          </div>
+          {taskOthers.length > 0 && <div>
+            <div style={paneTitle}>{t('task.panel.others')}</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 3 }}>
+              {taskOthers.map(({ l, q }) => <button key={l.id} type="button" onClick={() => { setTaskLocationId(l.id); setTaskFrameTick(n => n + 1) }} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', border: 0, borderRadius: 6, background: '#f4f7f8', fontSize: 12, color: '#42636f', cursor: 'pointer' }}><span>{l.name}</span><b>{fmtQty(q)} {taskScope.unit || ''}</b></button>)}
+            </div>
+          </div>}
+        </>}
+      </>}
+    </div>
+  )
+
   const zoningRight = selectedZone ? (
     <ZoneProperties
       key={selectedZone.id}
@@ -1843,9 +2744,16 @@ export default function TakeoffWorkspacePage() {
       <AppBar module="ritsuscope" compact standalone title={project.name} />
       {/* EDITOR TOOLS */}
       <header style={headerBar}>
-        <Link href="/ritsuscope" style={{ display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: '#0b7f75', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }} title={t('workspace.back')}>
-          ← {t('workspace.back')}
-        </Link>
+        {section === 'tasks' ? (
+          // Tarefas: straight back to Projects › Locations › Scope allocation (that activity, re-split with the new drawing).
+          <a href={backToAllocation} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', borderRadius: 8, background: '#109d91', color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }} title={t('task.panel.back')}>
+            ← {t('task.panel.back')}
+          </a>
+        ) : (
+          <Link href="/ritsuscope" style={{ display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: '#0b7f75', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }} title={t('workspace.back')}>
+            ← {t('workspace.back')}
+          </Link>
+        )}
         <span style={vRule} />
         <strong style={{ fontSize: 15, color: '#173441', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260 }}>{project.name}</strong>
         {project.project_code && <small style={codeChip}>{project.project_code}</small>}
@@ -1860,7 +2768,7 @@ export default function TakeoffWorkspacePage() {
             <Link key={m.key} href="/ritsuscope" style={modeBtn(false)}><Icon name={m.icon} size={17} />{t(m.label)}</Link>
           ) : (
             <button key={m.key} type="button" style={modeBtn(section === m.key)} onClick={() => setSection(m.key as typeof section)}>
-              <Icon name={m.icon} size={17} />{t(m.label)}{!licensed && (m.key === 'takeoff' || m.key === 'estimating') ? <span title={t('license.locked')} style={{ fontSize: 11 }}>🔒</span> : null}
+              <Icon name={m.icon} size={17} />{t(m.label)}{!licensed && (m.key === 'takeoff' || m.key === 'tasks' || m.key === 'estimating') ? <span title={t('license.locked')} style={{ fontSize: 11 }}>🔒</span> : null}
             </button>
           ))}
           <span style={vRule} />
@@ -1921,7 +2829,7 @@ export default function TakeoffWorkspacePage() {
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <button type="button" style={{ ...menuBtn(menu === 'print'), border: '1px solid #d6e0e3', opacity: printSheets.length && !printing ? 1 : 0.45 }} disabled={!printSheets.length || printing} title={t('print.title')} onClick={e => { e.stopPropagation(); setMenu(m => (m === 'print' ? null : 'print')) }}>
+          <button type="button" style={{ ...menuBtn(menu === 'print'), border: '1px solid #d6e0e3', opacity: (section === 'tasks' ? taskRows.length > 0 : printSheets.length && !printing) ? 1 : 0.45 }} disabled={section === 'tasks' ? !taskRows.length : !printSheets.length || printing} title={t('print.title')} onClick={e => { e.stopPropagation(); if (section === 'tasks') { setMenu(null); openReport(); return } setMenu(m => (m === 'print' ? null : 'print')) }}>
             <Icon name="print" size={15} />{printing ? t('print.working') : t('print.button')}<Icon name="chevron" size={13} />
           </button>
           {menu === 'print' && (
@@ -1973,7 +2881,7 @@ export default function TakeoffWorkspacePage() {
           >
             <Icon name="chevron" size={14} style={{ transform: `rotate(${rightOpen ? -90 : 90}deg)` }} />
           </button>
-          {leftOpen && <aside style={sidePane}>{section === 'zoning' ? zoningLeft : takeoffLeft}</aside>}
+          {leftOpen && <aside style={sidePane}>{section === 'zoning' ? zoningLeft : section === 'tasks' ? tasksLeft : takeoffLeft}</aside>}
           <main style={{ position: 'relative', minWidth: 0, minHeight: 0, padding: (isPdf && viewMode === 'plan') ? 0 : 10 }}>
             {(error || status) && (
               <div style={{ position: 'absolute', zIndex: 5, right: 12, top: 12, maxWidth: 420, ...(error ? ui.error : { padding: 8, borderRadius: 6, background: '#fff', border: '1px solid #dfe7ea', fontSize: 11, color: '#294955' }) }}>
@@ -1981,9 +2889,9 @@ export default function TakeoffWorkspacePage() {
                 <button type="button" style={{ marginLeft: 8, border: 0, background: 'transparent', cursor: 'pointer' }} onClick={() => { setError(''); setStatus('') }}>×</button>
               </div>
             )}
-            {section === 'zoning' && !isPdf ? <div style={{ ...ui.viewer, height: '100%' }}>{t('zone.pdfOnly')}</div> : viewer}
+            {(section === 'zoning' || section === 'tasks') && !isPdf ? <div style={{ ...ui.viewer, height: '100%' }}>{t('zone.pdfOnly')}</div> : viewer}
           </main>
-          {rightOpen && <aside style={{ ...sidePane, borderRight: 0, borderLeft: '1px solid #dfe7ea' }}>{section === 'zoning' ? zoningRight : takeoffRight}</aside>}
+          {rightOpen && <aside style={{ ...sidePane, borderRight: 0, borderLeft: '1px solid #dfe7ea' }}>{section === 'zoning' ? zoningRight : section === 'tasks' ? tasksRight : takeoffRight}</aside>}
         </div>
       ) : (
         <div style={{ minHeight: 0, overflow: 'auto', padding: 20 }}>
@@ -2054,6 +2962,131 @@ export default function TakeoffWorkspacePage() {
         />
       )}
       {generateOpen && <GenerateLevelsDialog projectId={projectId} levels={levels} onClose={() => setGenerateOpen(false)} onDone={async message => { await load(); setStatus(message) }} />}
+      {reportOpen && !areaPicking && section === 'tasks' && taskLocation && (() => {
+        const cfg = reportCfg
+        const set = (patch: Partial<ReportCfg>) => setReportCfg(c => ({ ...c, ...patch }))
+        const setShow = (key: keyof ReportCfg['show'], v: boolean) => setReportCfg(c => ({ ...c, show: { ...c.show, [key]: v } }))
+        const st = fieldState(cfg.kind)
+        const areaSheet = cfg.area ? sources.find(x => x.id === cfg.area!.sourceId) : null
+        const areaK = Number(areaSheet?.scale_pt_per_m) || 0
+        const areaText = cfg.area && areaK > 0 ? t('report.area.size', { w: formatNumber((cfg.area.box[2] - cfg.area.box[0]) / areaK, 2), h: formatNumber((cfg.area.box[3] - cfg.area.box[1]) / areaK, 2), sheet: areaSheet?.name || '' }) : t('report.area.none')
+        const lbl = { display: 'grid', gap: 4, fontSize: 11, fontWeight: 700, color: '#42636f' } as const
+        const inp = { height: 32, padding: '0 8px', border: '1px solid #cddcdf', borderRadius: 6, fontSize: 13, fontFamily: 'inherit' } as const
+        const check = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#294955', cursor: 'pointer' } as const
+        const radio = (on: boolean) => ({ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', border: '1px solid ' + (on ? '#109d91' : '#e0e8ea'), borderRadius: 8, background: on ? '#f0faf8' : '#fff', cursor: 'pointer', fontSize: 12, color: '#294955' }) as const
+        const sectionTitle = { fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#6b8089', marginTop: 4 } as const
+        const canIssue = st.lines.length > 0 && (!st.last || st.changed)
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(6,38,55,.45)', display: 'grid', placeItems: 'center', padding: 16 }} onMouseDown={e => { if (e.target === e.currentTarget && !fieldBusy) setReportOpen(false) }}>
+            <div role="dialog" aria-modal="true" style={{ width: 'min(760px, 100%)', maxHeight: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 12, boxShadow: '0 24px 70px rgba(6,38,55,.3)', overflow: 'hidden' }}>
+              <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '14px 18px', borderBottom: '1px solid #e5edef' }}>
+                <div><div style={{ fontSize: 17, fontWeight: 800, color: '#173441' }}>{t('report.title')}</div><div style={{ fontSize: 12, color: '#6b8089', marginTop: 2 }}>{t('report.subtitle', { location: taskLocation.name })}</div></div>
+                <button type="button" onClick={() => setReportOpen(false)} aria-label={t('report.cancel')} style={{ border: 0, background: 'transparent', fontSize: 20, color: '#6b8089', cursor: 'pointer' }}>×</button>
+              </header>
+              <div style={{ overflow: 'auto', padding: '14px 18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+                <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+                  <label style={lbl}>{t('report.location')}
+                    <select value={taskLocation.id} onChange={e => { const id = e.target.value; setTaskLocationId(id); const hasZone = zones.some(z => z.location_id === id); setReportCfg(c => ({ ...c, kind: taskScope && taskRows.some(r => r.location_id === id && r.scope_item_id === taskScope.id) ? c.kind : 'location', areaMode: c.areaMode === 'location' && !hasZone ? 'sheet' : c.areaMode })) }} style={inp}>
+                      {reportLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </label>
+                  <div style={sectionTitle}>{t('report.content')}</div>
+                  <label style={radio(cfg.kind === 'location')}><input type="radio" checked={cfg.kind === 'location'} onChange={() => set({ kind: 'location' })} style={{ marginTop: 2 }} /><span><b>{t('field.kindLocation', { location: taskLocation.name })}</b></span></label>
+                  <label style={{ ...radio(cfg.kind === 'activity'), opacity: taskScope ? 1 : 0.5 }}><input type="radio" disabled={!taskScope} checked={cfg.kind === 'activity'} onChange={() => set({ kind: 'activity' })} style={{ marginTop: 2 }} /><span><b>{taskScope ? t('field.kindActivity', { code: taskScope.scope_code || '' }) : t('report.pickActivity')}</b>{taskScope ? <><br /><span style={{ color: '#6b8089' }}>{taskScope.scope_name}</span></> : null}</span></label>
+
+                  <div style={sectionTitle}>{t('report.area')}</div>
+                  <label style={{ ...radio(cfg.areaMode === 'location'), opacity: taskZone ? 1 : 0.5 }}><input type="radio" disabled={!taskZone} checked={cfg.areaMode === 'location'} onChange={() => set({ areaMode: 'location' })} style={{ marginTop: 2 }} />
+                    <span style={{ display: 'grid', gap: 6 }}><b>{t('report.area.location')}</b>{!taskZone ? <span style={{ color: '#8a4b0f' }}>{t('task.panel.noZone', { location: taskLocation.name })}</span> : <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('report.area.margin')}<input type="number" min={0} max={20} step={0.5} value={cfg.marginM} onChange={e => set({ marginM: Math.max(0, Number(e.target.value) || 0) })} style={{ ...inp, width: 70, height: 26 }} /> m</span>}</span>
+                  </label>
+                  <label style={radio(cfg.areaMode === 'custom')}><input type="radio" checked={cfg.areaMode === 'custom'} onChange={() => set({ areaMode: 'custom' })} style={{ marginTop: 2 }} />
+                    <span style={{ display: 'grid', gap: 6 }}><b>{t('report.area.custom')}</b><span style={{ color: '#6b8089' }}>{areaText}</span>
+                      <button type="button" onClick={e => { e.preventDefault(); set({ areaMode: 'custom' }); setAreaPicking(true) }} style={{ justifySelf: 'start', height: 28, padding: '0 10px', border: '1px solid #2563EB', borderRadius: 6, background: '#eff5ff', color: '#1d4ed8', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{cfg.area ? t('report.area.redraw') : t('report.area.draw')}</button>
+                    </span>
+                  </label>
+                  <label style={radio(cfg.areaMode === 'sheet')}><input type="radio" checked={cfg.areaMode === 'sheet'} onChange={() => set({ areaMode: 'sheet' })} style={{ marginTop: 2 }} /><span><b>{t('report.area.sheet')}</b></span></label>
+
+                  <div style={sectionTitle}>{t('report.paper')}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {(['A4', 'A3'] as const).map(p => <label key={p} style={{ ...radio(cfg.paper === p), flex: 1 }}><input type="radio" checked={cfg.paper === p} onChange={() => set({ paper: p })} /><b>{p}</b><span style={{ color: '#6b8089' }}>{t('report.landscape')}</span></label>)}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+                  <div style={sectionTitle}>{t('report.include')}</div>
+                  <div style={{ display: 'grid', gap: 6, padding: '8px 10px', border: '1px solid #e0e8ea', borderRadius: 8 }}>
+                    {([['estimate', 'report.show.estimate'], ['openings', 'report.show.openings'], ['tags', 'report.show.tags'], ['table', 'report.show.table'], ['detail', 'report.show.detail'], ['qr', 'report.show.qr'], ['view3d', 'report.show.view3d'], ['tasks', 'report.show.tasks'], ['walls', 'report.show.walls'], ['elevations', 'report.show.elevations'], ['materials', 'report.show.materials'], ['materialSummary', 'report.show.materialSummary'], ['sequence', 'report.show.sequence'], ['log', 'report.show.log'], ['history', 'report.show.history']] as [keyof ReportCfg['show'], TakeoffMessageKey][]).map(([key, label]) => (
+                      <label key={key} style={{ ...check, opacity: (key === 'openings' && !cfg.show.estimate) || (key === 'detail' && !cfg.show.table) || (key === 'qr' && !taskLocation.qr_token) ? 0.5 : 1 }}>
+                        <input type="checkbox" checked={cfg.show[key]} disabled={(key === 'openings' && !cfg.show.estimate) || (key === 'detail' && !cfg.show.table)} onChange={e => setShow(key, e.target.checked)} />{t(label)}{key === 'qr' && !taskLocation.qr_token ? ` · ${t('report.noQr')}` : ''}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={sectionTitle}>{t('report.header')}</div>
+                  <label style={lbl}>{t('report.customTitle')}<input value={cfg.title} placeholder={taskLocation.name} onChange={e => set({ title: e.target.value })} style={inp} /></label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <label style={lbl}>{t('report.responsible')}<input value={cfg.responsible} onChange={e => set({ responsible: e.target.value })} style={inp} /></label>
+                    <label style={lbl}>{t('report.crew')}<input value={cfg.crew} onChange={e => set({ crew: e.target.value })} style={inp} /></label>
+                    <label style={lbl}>{t('report.start')}<input type="date" value={cfg.start} onChange={e => set({ start: e.target.value })} style={inp} /></label>
+                    <label style={lbl}>{t('report.end')}<input type="date" value={cfg.end} onChange={e => set({ end: e.target.value })} style={inp} /></label>
+                  </div>
+                  <label style={lbl}>{t('report.notes')}<textarea rows={3} value={cfg.notes} onChange={e => set({ notes: e.target.value })} style={{ ...inp, height: 'auto', padding: 8, resize: 'vertical' }} /></label>
+                </div>
+
+                {cfg.show.view3d && (() => {
+                  // The 3D picture of page 2: direction, height of the eye, zoom, how much of the sheet and what is in it.
+                  const v = cfg.view3d
+                  const setV = (patch: Partial<View3DReportCfg>) => setReportCfg(c => ({ ...c, view3d: { ...c.view3d, ...patch } }))
+                  const presets: [TakeoffMessageKey, { azimuth: number; elevation: number }][] = [
+                    ['report.v3d.sw', { azimuth: 329, elevation: 32 }], ['report.v3d.se', { azimuth: 31, elevation: 32 }],
+                    ['report.v3d.ne', { azimuth: 149, elevation: 32 }], ['report.v3d.nw', { azimuth: 211, elevation: 32 }],
+                    ['report.v3d.front', { azimuth: 0, elevation: 12 }], ['report.v3d.top', { azimuth: 0, elevation: 89 }],
+                  ]
+                  const chip = (on: boolean) => ({ height: 28, padding: '0 10px', border: '1px solid ' + (on ? '#109d91' : '#cddcdf'), borderRadius: 6, background: on ? '#f0faf8' : '#fff', color: '#173441', fontSize: 12, fontWeight: 700, cursor: 'pointer' }) as const
+                  const slider = (label: string, value: number, min: number, max: number, step: number, text: string, on: (n: number) => void) => (
+                    <label style={{ display: 'grid', gridTemplateColumns: '92px 1fr 52px', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: '#42636f' }}>{label}<input type="range" min={min} max={max} step={step} value={value} onChange={e => on(Number(e.target.value))} /><span style={{ fontWeight: 600, color: '#294955', textAlign: 'right' }}>{text}</span></label>
+                  )
+                  return (
+                    <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 10, paddingTop: 6, borderTop: '1px solid #e5edef' }}>
+                      <div style={sectionTitle}>{t('report.v3d.title')}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, alignItems: 'start' }}>
+                        <div style={{ position: 'relative', aspectRatio: '1600 / 820', border: '1px solid #e0e8ea', borderRadius: 8, background: '#fff', overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                          {view3dPreview.url && <img src={view3dPreview.url} alt={t('report.v3d.title')} style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: view3dPreview.busy ? 0.55 : 1 }} />}
+                          {(!view3dPreview.url || view3dPreview.busy) && <span style={{ position: 'absolute', fontSize: 12, color: '#6b8089' }}>{view3dPreview.busy ? t('report.v3d.drawing') : view3dPreview.empty ? t('report.v3d.empty') : ''}</span>}
+                        </div>
+                        <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {presets.map(([key, p]) => <button key={key} type="button" onClick={() => setV(p)} style={chip(v.azimuth === p.azimuth && v.elevation === p.elevation)}>{t(key)}</button>)}
+                            <button type="button" disabled={!liveView3d} title={t('report.v3d.fromScreenHint')} onClick={() => liveView3d && setV({ azimuth: liveView3d.azimuth, elevation: liveView3d.elevation })} style={{ ...chip(false), opacity: liveView3d ? 1 : 0.45 }}>{t('report.v3d.fromScreen')}</button>
+                          </div>
+                          {slider(t('report.v3d.azimuth'), v.azimuth, 0, 359, 1, `${v.azimuth}°`, n => setV({ azimuth: n }))}
+                          {slider(t('report.v3d.elevation'), v.elevation, 5, 89, 1, `${v.elevation}°`, n => setV({ elevation: n }))}
+                          {slider(t('report.v3d.zoom'), v.zoom, 0.6, 2.5, 0.05, `${Math.round(v.zoom * 100)}%`, n => setV({ zoom: n }))}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            {(['tasks', 'area'] as const).map(x => <label key={x} style={{ ...radio(v.extent === x), flex: 1, padding: '6px 8px', opacity: x === 'area' && cfg.areaMode === 'sheet' ? 0.5 : 1 }}><input type="radio" disabled={x === 'area' && cfg.areaMode === 'sheet'} checked={v.extent === x} onChange={() => setV({ extent: x })} /><span>{t(x === 'tasks' ? 'report.v3d.extentTasks' : 'report.v3d.extentArea')}</span></label>)}
+                          </div>
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                            {(['estimate', 'underlay', 'zones', 'tags'] as const).map(key => (
+                              <label key={key} style={check}><input type="checkbox" checked={v[key]} onChange={e => setV({ [key]: e.target.checked } as Partial<View3DReportCfg>)} />{t(`report.v3d.${key}` as TakeoffMessageKey)}</label>
+                            ))}
+                          </div>
+                          <button type="button" onClick={() => setV({ ...VIEW3D_REPORT_DEFAULT })} style={{ justifySelf: 'start', border: 0, background: 'transparent', padding: 0, color: '#0b7f75', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('report.v3d.reset')}</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+              <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 18px', borderTop: '1px solid #e5edef', background: '#f7fafb', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11.5, color: st.changed ? '#b45309' : '#6b8089' }}>{!st.lines.length ? t('field.nothing') : !st.last ? t('field.notIssued') : st.changed ? t('field.changedSince', { rev: st.last.revision }) : t('field.upToDate', { rev: st.last.revision, date: new Date(st.last.issued_at).toLocaleDateString(language) })}</span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" onClick={() => setReportOpen(false)} disabled={!!fieldBusy} style={{ height: 34, padding: '0 14px', border: '1px solid #cddcdf', borderRadius: 8, background: '#fff', color: '#173441', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{t('report.cancel')}</button>
+                  <button type="button" onClick={() => void previewFieldSheet(cfg.kind)} disabled={!!fieldBusy || !st.lines.length || (cfg.areaMode === 'custom' && !cfg.area)} style={{ height: 34, padding: '0 14px', border: '1px solid #109d91', borderRadius: 8, background: '#fff', color: '#0b7f75', fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: !st.lines.length ? 0.5 : 1 }}>{fieldBusy?.endsWith('preview') ? t('field.working') : t('report.preview')}</button>
+                  <button type="button" onClick={() => void issueFieldSheet(cfg.kind)} disabled={!!fieldBusy || !canIssue || (cfg.areaMode === 'custom' && !cfg.area)} style={{ height: 34, padding: '0 14px', border: 0, borderRadius: 8, background: '#109d91', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: canIssue ? 1 : 0.45 }}>{fieldBusy?.endsWith('issue') ? t('field.working') : t('field.issue', { rev: st.next })}</button>
+                </div>
+              </footer>
+            </div>
+          </div>
+        )
+      })()}
       {shareOpen && (
         <ShareDialog
           projectId={projectId}

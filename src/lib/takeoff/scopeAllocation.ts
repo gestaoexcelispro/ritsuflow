@@ -5,7 +5,9 @@
 //     and a stretch shared by two rooms (a dividing wall) is split 50/50 — so the location totals
 //     add up to the RitsuScope total, with no double counting;
 //   * an area goes to the location its centre falls in; a count to the location it sits in;
-//   * whatever is outside every production location is reported as "not allocated".
+//   * whatever is outside every production location is reported as "not allocated";
+//   * wall stretches already drawn for a location in the task view ("claimed") are left out of the
+//     automatic split, so a drawn location never gets them twice (reported as `claimed`).
 import type { createClient } from '@/lib/supabase/client'
 import { layerQuantities, polyLen, type TakeoffItem, type Vec2 } from './geometry'
 import { fillLevelHeights, masterOf, wallHeightOf, type LevelRow } from './levels'
@@ -65,15 +67,34 @@ export type AllocationResult = {
   unallocated: number
   /** Sheets left out because they have no scale yet. */
   uncalibratedSheets: string[]
+  /** The part of walls that runs along task lines already drawn (see `claimed` input). */
+  claimed: number
+}
+
+/** A task line already drawn for this scope item (any location): its sheet and polyline. */
+export type ClaimedLine = { source_id: string; points: Vec2[] }
+
+/** How close (m) a wall must run to a drawn task line to count as claimed by it. */
+const CLAIM_M = 0.25
+
+/** Distance from p to segment a→b, measured only alongside it (Infinity past either end). */
+function sideDist(p: Vec2, a: Vec2, b: Vec2): number {
+  const dx = b[0] - a[0], dy = b[1] - a[1]
+  const L2 = dx * dx + dy * dy
+  if (!L2) return Infinity
+  const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2
+  if (t < 0 || t > 1) return Infinity
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
 }
 
 const EDGE_M = 0.2
 
-export function allocateFromTakeoff(data: TakeoffData, input: { layerIds: string[]; unit: string; productionLocationIds: Set<string> }): AllocationResult {
+export function allocateFromTakeoff(data: TakeoffData, input: { layerIds: string[]; unit: string; productionLocationIds: Set<string>; claimed?: ClaimedLine[] }): AllocationResult {
   const byLocation = new Map<string, number>()
   const add = (id: string, v: number) => byLocation.set(id, (byLocation.get(id) || 0) + v)
   let total = 0
   let unallocated = 0
+  let claimedTotal = 0
   const uncalibratedSheets: string[] = []
   const layers = data.layers.filter(l => input.layerIds.includes(l.id))
   const levelById = new Map(data.levels.map(l => [l.id, l] as [string, LevelRow]))
@@ -91,6 +112,9 @@ export function allocateFromTakeoff(data: TakeoffData, input: { layerIds: string
     const edge = EDGE_M * k
     const zonesNear = (p: Vec2) => zones.filter(z => pointInPolygon(p, z.points) || distToBoundary(p, z.points) <= edge)
     const zonesIn = (p: Vec2) => zones.filter(z => pointInPolygon(p, z.points))
+    const claimLines = (input.claimed || []).filter(c => c.source_id === sheet.id && c.points.length >= 2)
+    const claimTol = CLAIM_M * k
+    const isClaimed = (p: Vec2) => claimLines.some(c => { for (let i = 1; i < c.points.length; i++) if (sideDist(p, c.points[i - 1], c.points[i]) <= claimTol) return true; return false })
 
     for (const item of items) {
       const measure = measureFor(input.unit, item.kind)
@@ -105,6 +129,7 @@ export function allocateFromTakeoff(data: TakeoffData, input: { layerIds: string
           const share = new Map<string, number>()
           let walked = 0
           let lost = 0
+          let taken = 0
           for (let i = 1; i < shape.pts.length; i++) {
             const a = shape.pts[i - 1]
             const b = shape.pts[i]
@@ -114,7 +139,9 @@ export function allocateFromTakeoff(data: TakeoffData, input: { layerIds: string
               const t = (s + 0.5) / steps
               const w = len / steps
               walked += w
-              const near = zonesNear([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+              const pt: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+              if (claimLines.length && isClaimed(pt)) { taken += w; continue }
+              const near = zonesNear(pt)
               if (!near.length) { lost += w; continue }
               for (const z of near) share.set(z.location_id!, (share.get(z.location_id!) || 0) + w / near.length)
             }
@@ -122,6 +149,7 @@ export function allocateFromTakeoff(data: TakeoffData, input: { layerIds: string
           if (!(walked > 0)) { unallocated += value; continue }
           for (const [id, w] of share) add(id, value * (w / walked))
           unallocated += value * (lost / walked)
+          claimedTotal += value * (taken / walked)
         } else if (item.kind === 'area') {
           const value = measure === 'length' ? q.per : measure === 'count' ? 1 : q.area
           if (!(value > 0)) continue
@@ -138,5 +166,5 @@ export function allocateFromTakeoff(data: TakeoffData, input: { layerIds: string
       }
     }
   }
-  return { byLocation, total, unallocated, uncalibratedSheets }
+  return { byLocation, total, unallocated, uncalibratedSheets, claimed: claimedTotal }
 }

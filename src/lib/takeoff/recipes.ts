@@ -29,6 +29,54 @@ export type RecipeLine = {
   qty?: string | null
   /** Counted by the framing layout when the item has framing on (studs, tracks, boards, screws): skipped then. */
   layoutCovered?: boolean
+  /** Planning: the activity (task) of the wall that uses this material; unset = guessed from the material (lineStep). */
+  step?: RecipeStep | null
+}
+
+/**
+ * Activities of a wall a material belongs to. 'boards' and 'joints' are shared by both faces
+ * (split between the face A and face B activities); 'none' = not used by any planned task.
+ */
+export type RecipeStep = 'framing' | 'board_a' | 'board_b' | 'boards' | 'insulation' | 'joints_a' | 'joints_b' | 'joints' | 'none'
+export const RECIPE_STEPS: RecipeStep[] = ['framing', 'boards', 'board_a', 'board_b', 'insulation', 'joints', 'joints_a', 'joints_b', 'none']
+
+/** Anchors / fasteners into another system: counted by the layout when the item has fixings set. */
+export const ANCHOR_RX = /bucha|chumbador|anchor|fastener|finca.?pino|tarugo/i
+/** Acoustic band / sealing strip: counted by the layout when the item has fixings set. */
+export const BAND_RX = /banda|acoustic(al)?\s*(band|strip|tape)|sealing\s*strip|fita\s*(de\s*)?veda/i
+
+/** The activity a recipe line belongs to: its own `step`, else guessed from its slot and name. */
+export function lineStep(l: Pick<RecipeLine, 'step' | 'slot' | 'mat'>): RecipeStep {
+  if (l.step && RECIPE_STEPS.includes(l.step)) return l.step
+  if (l.slot === 'stud' || l.slot === 'track') return 'framing'
+  if (l.slot === 'boardA') return 'board_a'
+  if (l.slot === 'boardB') return 'board_b'
+  if (l.slot === 'insulation') return 'insulation'
+  const m = l.mat || ''
+  if (BAND_RX.test(m) || ANCHOR_RX.test(m)) return 'framing'
+  if (/\bLA\b|framing screw|metal.?(a|to).?metal|montante|guia|stud|track|runner|perfil|cantoneira de (a|re)fo/i.test(m)) return 'framing'
+  if (/massa|compound|fita|tape|rejunte|joint|cantoneira|corner bead|bead/i.test(m)) return 'joints'
+  if (/\bTA\b|drywall screw|board screw|cement board screw|chapa|board|placa|cola|adhesive/i.test(m)) return 'boards'
+  if (/(^|[\s(])l[ãa]([\s)]|$)|wool|batt|insula|isola/i.test(m)) return 'insulation'
+  return 'none'
+}
+
+/** Share of a line with this step that a task of `task` step takes (layers per face for boards, faces for joints). */
+export function stepShare(lineSt: RecipeStep, task: string | null, layers: { A: number; B: number }): number {
+  if (!task || lineSt === 'none') return 0
+  if (lineSt === task) return 1
+  const a = Math.max(0, layers.A || 0), b = Math.max(0, layers.B || 0)
+  if (lineSt === 'boards' && (task === 'board_a' || task === 'board_b')) {
+    const tot = a + b
+    if (!tot) return 0.5
+    return (task === 'board_a' ? a : b) / tot
+  }
+  if (lineSt === 'joints' && (task === 'joints_a' || task === 'joints_b')) {
+    const faces = (a > 0 ? 1 : 0) + (b > 0 ? 1 : 0)
+    if (!faces) return 0.5
+    return (task === 'joints_a' ? a : b) > 0 ? 1 / faces : 0
+  }
+  return 0
 }
 
 export type Recipe = {
@@ -80,6 +128,64 @@ export type RecipeContext = {
   catalog?: Map<string, MaterialRow>
 }
 
+/** One recipe line evaluated for one item: product, quantity (waste included) and the activity it belongs to. */
+export type RecipeLineQty = {
+  line: RecipeLine
+  step: RecipeStep
+  materialId: string | null
+  mat: string
+  code: string | null
+  unit: string
+  qty: number
+  packSize: number | null
+  packName: string | null
+}
+
+/**
+ * Every recipe line of one item with its quantity. Each material has one source: lines the framing
+ * layout counts are skipped when framing is on (studs, tracks, boards; screws when the layout counts
+ * screws; anchors and acoustic band when the item has fixings set).
+ */
+export function recipeLineQuantities(item: TakeoffItem, ptPerM: number, recipe: Recipe | null | undefined, ctx: RecipeContext = {}): RecipeLineQty[] {
+  const out: RecipeLineQty[] = []
+  if (!recipe || !item.shapes.length) return out
+  const framed = item.kind === 'linear' && !!item.framing?.on
+  const layoutScrews = framed && item.framing!.screwsFromLayout !== false
+  const layoutFixings = framed && !!item.framing!.fixings
+  const system = recipe.mode === 'system'
+  const wt = system ? ctx.wallTypeOf?.(item) || null : null
+  const vars = system ? recipeVariables(item, ptPerM, wt) : null
+  for (const line of recipe.lines) {
+    let qty: number
+    if (layoutFixings && (ANCHOR_RX.test(line.mat) || BAND_RX.test(line.mat))) continue
+    if (system) {
+      if (framed && line.layoutCovered) continue
+      let f
+      try { f = compileFormula(line.qty || '0') } catch { continue }
+      qty = f.run(vars!) * (1 + (line.waste || 0) / 100)
+    } else {
+      if (framed && FRAMED_MATERIAL_RX.test(line.mat)) continue
+      if (layoutScrews && SCREW_RX.test(line.mat)) continue
+      qty = baseQuantity(item, ptPerM, line.base) * line.coef * (1 + (line.waste || 0) / 100)
+    }
+    if (!(qty > 0)) continue
+    // Product: the wall type's slot (skipped when the wall type has none, e.g. no insulation),
+    // else the line's catalog product, else the typed name.
+    let productId: string | null = line.materialId || null
+    if (system && line.slot && RECIPE_SLOTS.includes(line.slot)) {
+      productId = wt?.materials?.[line.slot] || null
+      if (!productId) continue
+    }
+    const product = productId ? ctx.catalog?.get(productId) : undefined
+    out.push({
+      line, step: lineStep(line), materialId: product?.id ?? null,
+      mat: product?.name || line.mat, code: product?.code ?? line.code ?? null, unit: product?.unit || line.unit, qty,
+      packSize: product?.pack_size ?? line.packSize ?? null, packName: product?.pack_name ?? line.packName ?? null,
+    })
+  }
+  return out
+}
+
 /**
  * Aggregates recipe materials across layers. `recipeOf` returns the recipe linked to each layer.
  * Fixed recipes multiply a base quantity by a coefficient; system recipes evaluate each line's
@@ -94,42 +200,13 @@ export function recipeMaterials(
 ): MaterialRequirement[] {
   const byKey = new Map<string, MaterialRequirement & { packSize: number | null }>()
   for (const item of items) {
-    const recipe = recipeOf(item)
-    if (!recipe || !item.shapes.length) continue
-    const framed = item.kind === 'linear' && !!item.framing?.on
-    const layoutScrews = framed && item.framing!.screwsFromLayout !== false
-    const system = recipe.mode === 'system'
-    const wt = system ? ctx.wallTypeOf?.(item) || null : null
-    const vars = system ? recipeVariables(item, ptPerM, wt) : null
-    for (const line of recipe.lines) {
-      let qty: number
-      if (system) {
-        if (framed && line.layoutCovered) continue
-        let f
-        try { f = compileFormula(line.qty || '0') } catch { continue }
-        qty = f.run(vars!) * (1 + (line.waste || 0) / 100)
-      } else {
-        if (framed && FRAMED_MATERIAL_RX.test(line.mat)) continue
-        if (layoutScrews && SCREW_RX.test(line.mat)) continue
-        qty = baseQuantity(item, ptPerM, line.base) * line.coef * (1 + (line.waste || 0) / 100)
-      }
-      if (!(qty > 0)) continue
-      // Product: the wall type's slot (skipped when the wall type has none, e.g. no insulation),
-      // else the line's catalog product, else the typed name.
-      let productId: string | null = line.materialId || null
-      if (system && line.slot && RECIPE_SLOTS.includes(line.slot)) {
-        productId = wt?.materials?.[line.slot] || null
-        if (!productId) continue
-      }
-      const product = productId ? ctx.catalog?.get(productId) : undefined
-      const mat = product?.name || line.mat
-      const unit = product?.unit || line.unit
-      const key = product ? `id:${product.id}` : `${mat.toLowerCase()}|${unit}`
+    for (const q of recipeLineQuantities(item, ptPerM, recipeOf(item), ctx)) {
+      const key = q.materialId ? `id:${q.materialId}` : `${q.mat.toLowerCase()}|${q.unit}`
       const entry = byKey.get(key) || {
-        materialId: product?.id ?? null, mat, code: product?.code ?? line.code ?? null, unit, qty: 0, packs: null,
-        packName: product?.pack_name ?? line.packName ?? null, packSize: product?.pack_size ?? line.packSize ?? null, from: [],
+        materialId: q.materialId, mat: q.mat, code: q.code, unit: q.unit, qty: 0, packs: null,
+        packName: q.packName, packSize: q.packSize, from: [],
       }
-      entry.qty += qty
+      entry.qty += q.qty
       if (!entry.from.includes(item.name)) entry.from.push(item.name)
       byKey.set(key, entry)
     }
@@ -222,6 +299,8 @@ export type RecipeLineForm = {
   slot?: RecipeSlot | ''
   qty?: string
   layoutCovered?: boolean
+  /** Activity (task) the material belongs to; '' = guessed from the material. */
+  step?: RecipeStep | ''
 }
 
 export function lineToForm(l: RecipeLine, fmt: (v: number) => string): RecipeLineForm {
@@ -240,6 +319,7 @@ export function lineToForm(l: RecipeLine, fmt: (v: number) => string): RecipeLin
     slot: l.slot || '',
     qty: l.qty || '',
     layoutCovered: !!l.layoutCovered,
+    step: l.step || '',
   }
 }
 
@@ -276,6 +356,7 @@ export function formToLines(
       if (!r.mat.trim() || !r.unit.trim() || !(coef > 0)) return { lines: [], invalidRow: i + 1 }
       line = { mat: r.mat.trim(), unit: r.unit.trim(), coef, base: r.base, waste: Number.isFinite(waste) && waste > 0 ? waste : 0 }
     }
+    if (r.step && RECIPE_STEPS.includes(r.step)) line.step = r.step
     if (r.materialId && !r.slot) line.materialId = r.materialId
     if (r.code.trim()) line.code = r.code.trim()
     if (packSize > 0) line.packSize = packSize

@@ -29,6 +29,7 @@ import { findOpenings, placeOpenings, type PlannedOpening } from '@/lib/takeoff/
 import { applyFramingDefaults, defaultFraming, framingLabelsPtBR, type FramingDefaults } from '@/lib/takeoff/framing/framing'
 import { importLabelsEnUS } from '@/lib/takeoff/ifc/importIfcModel'
 import { boxSelect } from '@/lib/takeoff/boxSelect'
+import { TASK_BAND_M, faceFor } from '@/lib/takeoff/taskDrawings'
 
 const BUCKET = 'takeoff-files'
 
@@ -36,7 +37,36 @@ type Mode = 'select' | 'calibrate' | 'draw' | 'measure' | 'detect' | 'origin'
 /** Geometry drawn with the draw tool. */
 type Shape = 'line' | 'rect' | 'polygon' | 'count'
 export type WorkCommand = { name: 'undo' | 'delete' | 'cancel' | 'select' | 'zoomIn' | 'zoomOut' | 'fit'; n: number }
-type Created = { table: 'takeoff_elements' | 'takeoff_zones'; id: string }
+type Created = { table: 'takeoff_elements' | 'takeoff_zones' | 'location_task_drawings'; id: string }
+
+/** Tasks mode: one scope item in one location (lines are measured and saved by the page). */
+export type TaskDrawing = {
+  /** Task lines of this item in this location on this sheet, as shapes `task:<id>` in `items`. */
+  color: string
+  /** Outline of the location's zone, drawn as a reference; null when it is on another sheet. */
+  zone: { id: string; name: string; pts: Vec2[] } | null
+  /** Room + 1 m to frame (sheet points), applied whenever `frameTick` changes or the sheet loads. */
+  frame: [number, number, number, number] | null
+  frameTick: number
+  /** Band width of the chosen activity (m), for the side preview. */
+  bandM?: number
+  /** Task report: picking the area to print (two corners); the box (sheet points) goes to `onAreaPicked`. */
+  areaPick?: boolean
+  onAreaPicked?: (box: [number, number, number, number] | null) => void
+  /** The area chosen for the report, outlined on its sheet. */
+  area?: [number, number, number, number] | null
+  /** A task label (callout) was dragged: shape id (`task:<id>` / `plan:<id>`) and label centre, or null = automatic again. */
+  onMoveTag?: (shapeId: string, at: Vec2 | null) => void
+  /** Estimate layer (the takeoff, faint) shown under the task lines; toggled from the toolbar. */
+  estimateOn?: boolean
+  onToggleEstimate?: () => void
+  /** A task line was clicked (Select): its id, or null when the selection is cleared. */
+  onInspect?: (lineId: string | null) => void
+  /** Locations of the sheet in their colour code, under the drawing; toggled from the toolbar. */
+  zones?: { id: string; name: string; color: string; pts: Vec2[] }[]
+  zonesOn?: boolean
+  onToggleZones?: () => void
+}
 
 type Props = {
   projectId: string
@@ -54,8 +84,13 @@ type Props = {
   drawRequest: number
   /** Incremented by the page to open the new-item form. */
   newLayerRequest: number
-  /** Takeoff (items) or zoning (locations). */
-  workMode: 'takeoff' | 'zoning'
+  /** Takeoff (items), zoning (locations) or tasks (where each scope item is built, per location). */
+  workMode: 'takeoff' | 'zoning' | 'tasks'
+  task?: TaskDrawing | null
+  /** Tasks mode: a finished line, as the face it lies against and its side; returns the saved row id (null on failure). */
+  onTaskLine?: (face: Vec2[], side: 1 | -1) => Promise<string | null>
+  /** Tasks mode, "take a wall": the stretch of the clicked wall along the room and its thickness (null when none). */
+  onTaskPick?: (p: Vec2) => { a: Vec2; b: Vec2; thicknessM: number } | null
   zones: ZoneRow[]
   /** Kind given to zones drawn now (Block, Zone, Area, Room). */
   zoneKind?: ZoneKind
@@ -102,7 +137,7 @@ function dedupe(points: Vec2[]): Vec2[] {
 }
 
 export default function PdfWorkspace(props: Props) {
-  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, backgroundFade = 0, levelLabel = null, quickActions = [], exportActions = [] } = props
+  const { projectId, source, layers, items, onChanged, selectedId, onSelect, framingDefaults, activeLayerId, onActiveLayerChange, drawRequest, newLayerRequest, workMode, zones, zoneKind = 'room', selectedZoneId, onSelectZone, newZoneRequest, detectRoomsRequest, command, onZoomChange, task = null, onTaskLine, onTaskPick, onCursor, openingPick = null, onOpeningPicked, onOpeningPickCancel, toolbarSlot = null, footerSlot = null, statusSlot = null, backgroundFade = 0, levelLabel = null, quickActions = [], exportActions = [] } = props
   const barH = toolbarSlot ? 0 : TOOLBAR_H
   const t = useTakeoffT()
   const { formatNumber, language } = useLanguage()
@@ -202,14 +237,32 @@ export default function PdfWorkspace(props: Props) {
   const scale = source.scale_pt_per_m ? Number(source.scale_pt_per_m) : 0
   const activeLayer = layers.find(l => l.id === activeLayerId) || null
   const zoning = workMode === 'zoning'
+  const tasksMode = workMode === 'tasks'
+  /** Tasks mode: "take a wall" (one click adds the clicked wall's stretch along the room). */
+  const [takeWall, setTakeWall] = useState(false)
+  /** Tasks mode: the selected task line (`task:<id>`). */
+  const [taskSel, setTaskSel] = useState<string | null>(null)
+  // Any task line clicked (this activity and location, or another one): the page shows its properties.
+  const inspect = task?.onInspect
+  useEffect(() => { inspect?.(taskSel ? taskSel.slice(5) : null) }, [taskSel]) // eslint-disable-line react-hooks/exhaustive-deps
+  /** Tasks mode, "take a wall": thickness (m) of the wall picked by the first click (the band starts at its face). */
+  const [taskWallT, setTaskWallT] = useState(0)
+  /** Task report area: the first corner picked. */
+  const [areaPts, setAreaPts] = useState<Vec2[]>([])
+  const areaPicking = tasksMode && !!task?.areaPick
+  useEffect(() => { if (!areaPicking) setAreaPts([]) }, [areaPicking])
+  /** Bumped by every sheet load, so the tasks frame is applied once the page is there. */
+  const [loadTick, setLoadTick] = useState(0)
   const sheetZones = useMemo(() => zones.filter(z => z.source_id === source.id), [zones, source.id])
 
   useEffect(() => { setBoxSel([]) }, [source.id, workMode])
 
   const clearTransient = () => { setDraft([]); setCalPts([]); setMeasurePts([]); setMeasureDone(false); setPickingRegion(false); setOriginPts([]); setOriginForm(null) }
 
-  function chooseTool(next: Mode, nextShape?: Shape) {
+  function chooseTool(next: Mode, nextShape?: Shape, take = false) {
     clearTransient()
+    setTakeWall(take)
+    setTaskSel(null)
     setBoxSel([])
     setOpenSugs(null)
     setAreaTool(null)
@@ -219,7 +272,7 @@ export default function PdfWorkspace(props: Props) {
     if (nextShape) setShape(nextShape)
     setError('')
     if (next !== 'select') { onSelect(null); onSelectZone(null) }
-    if (next === 'draw' && nextShape && !zoning && (!activeLayer || activeLayer.kind !== kindForShape[nextShape])) {
+    if (next === 'draw' && nextShape && !zoning && !tasksMode && (!activeLayer || activeLayer.kind !== kindForShape[nextShape])) {
       const fit = layers.filter(l => l.kind === kindForShape[nextShape])
       if (fit.length === 1) onActiveLayerChange(fit[0].id)
       else if (fit.length === 0) { setNewLayer(v => ({ ...v, kind: kindForShape[nextShape] })); setShowNewLayer(true) }
@@ -531,7 +584,11 @@ export default function PdfWorkspace(props: Props) {
   }
 
   // Switching between takeoff and zoning resets the tool.
-  useEffect(() => { clearTransient(); setMode('select'); setShowNewLayer(false); setRoomSugs(null); setRoomPicking(false); setRoomPickPts([]) }, [workMode])
+  useEffect(() => {
+    clearTransient(); setShowNewLayer(false); setRoomSugs(null); setRoomPicking(false); setRoomPickPts([]); setTaskSel(null)
+    // Tasks start with "take a wall"; the other modes with Select.
+    if (workMode === 'tasks') { setMode('draw'); setShape('line'); setTakeWall(true) } else { setMode('select'); setTakeWall(false) }
+  }, [workMode])
 
   // Signed URL for the private PDF (valid for one hour).
   useEffect(() => {
@@ -562,6 +619,7 @@ export default function PdfWorkspace(props: Props) {
     setRoomPicking(false)
     setRoomPickPts([])
     setRoomRegion(null)
+    setTaskSel(null)
   }, [source.id])
 
   /** Bumped to centre the sheet in view after the next render (Fit, first load). */
@@ -589,6 +647,26 @@ export default function PdfWorkspace(props: Props) {
   }, [centerTick])
 
   useEffect(() => { fit() }, [fit])
+
+  // Tasks: frame the location (its zone + 1 m) when asked and whenever the sheet (re)loads.
+  const [frameReq, setFrameReq] = useState<[number, number, number, number] | null>(null)
+  useEffect(() => {
+    const box = tasksMode ? task?.frame : null
+    const el = containerRef.current
+    if (!box || !el || !pageSize.width) return
+    const fw = Math.max(1, box[2] - box[0]), fh = Math.max(1, box[3] - box[1])
+    setZoom(Math.max(0.1, Math.min(8, Math.min((el.clientWidth - 24) / fw, (el.clientHeight - 24) / fh))))
+    setFrameReq(box)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasksMode, task?.frameTick, loadTick])
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    const wrap = sheetRef.current
+    if (!frameReq || !el || !wrap) return
+    el.scrollLeft = wrap.offsetLeft + frameReq[0] * zoom - (el.clientWidth - (frameReq[2] - frameReq[0]) * zoom) / 2
+    el.scrollTop = wrap.offsetTop + frameReq[1] * zoom - (el.clientHeight - (frameReq[3] - frameReq[1]) * zoom) / 2
+    setFrameReq(null)
+  }, [frameReq, zoom])
   useEffect(() => { onZoomChange?.(zoom) }, [zoom, onZoomChange])
 
   // The mouse wheel zooms around the cursor (trackpad pinch too). Registered natively because
@@ -630,7 +708,7 @@ export default function PdfWorkspace(props: Props) {
 
   /** Thickness of the active wall item in sheet points (0 if unknown). */
   const activeThicknessPts = activeLayer?.kind === 'linear' && Number(activeLayer.thickness_m) > 0 && scale > 0 ? Number(activeLayer.thickness_m) * scale : 0
-  const faceMode = mode === 'draw' && shape === 'line' && !zoning && placement === 'face' && activeThicknessPts > 0
+  const faceMode = mode === 'draw' && shape === 'line' && !zoning && !tasksMode && placement === 'face' && activeThicknessPts > 0
 
   /** Saves a wall drawn by its face: centreline offset to the clicked side, corners joined to neighbours. */
   async function finishFaceWall(a: Vec2, b: Vec2, side: Vec2) {
@@ -690,6 +768,8 @@ export default function PdfWorkspace(props: Props) {
   const finishDraft = useCallback(async (explicit?: Vec2[]) => {
     if (saving) return
     const pts = dedupe(explicit || draft)
+    // Tasks: a line is saved by its third click (the side), like a wall drawn by its face.
+    if (tasksMode) return
     if (zoning) {
       if (pts.length < 3) return
       await createZone(pts)
@@ -711,7 +791,7 @@ export default function PdfWorkspace(props: Props) {
     setDraft([])
     setMessage(t('draw.saved', { layer: activeLayer.name }))
     await onChanged()
-  }, [activeLayer, createZone, draft, onChanged, projectId, saving, source.id, t, zoning])
+  }, [activeLayer, createZone, draft, onChanged, projectId, saving, source.id, t, tasksMode, zoning])
 
   /** Saves a dragged vertex. Walls with openings keep them only if they still fit. */
   async function movePoints(id: string, pts: Vec2[]) {
@@ -738,6 +818,7 @@ export default function PdfWorkspace(props: Props) {
     if (!data || data.length === 0) { setError(t('element.deleteDenied')); return }
     if (selectedId === last.id) onSelect(null)
     if (selectedZoneId === last.id) onSelectZone(null)
+    if (taskSel === `task:${last.id}`) setTaskSel(null)
     setMessage(t('undo.done'))
     await onChanged()
   }
@@ -793,6 +874,19 @@ export default function PdfWorkspace(props: Props) {
   }
 
   async function deleteSelected() {
+    if (tasksMode) {
+      if (!taskSel) return
+      if (!window.confirm(t('task.confirmDelete'))) return
+      const id = taskSel.slice(5)
+      const { data, error: e } = await createClient().from('location_task_drawings').delete().eq('id', id).select('id')
+      if (e) { setError(t('workspace.error', { message: e.message })); return }
+      if (!data || data.length === 0) { setError(t('element.deleteDenied')); return }
+      setCreated(prev => prev.filter(c => c.id !== id))
+      setTaskSel(null)
+      setMessage(t('task.deleted'))
+      await onChanged()
+      return
+    }
     if (!zoning && boxSel.length) { await deleteBoxSelection(); return }
     const table = zoning ? 'takeoff_zones' : 'takeoff_elements'
     const id = zoning ? selectedZoneId : selectedId
@@ -816,6 +910,7 @@ export default function PdfWorkspace(props: Props) {
       const target = event.target as HTMLElement | null
       if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
       if (event.key === 'Escape' && openingPick) { setPickHover(null); onOpeningPickCancel?.(); return }
+      if (event.key === 'Escape' && areaPicking) { setAreaPts([]); task?.onAreaPicked?.(null); return }
       if (event.key === 'Escape') {
         clearTransient(); setBoxSel([]); onSelect(null); onSelectZone(null); setRoomPicking(false); setRoomPickPts([])
         // End the command: drop any drawing / measuring tool and its menus, back to Select.
@@ -823,16 +918,16 @@ export default function PdfWorkspace(props: Props) {
         setArchMenu(null); setStructMenu(null); setMepMenu(null)
       }
       if (event.key === 'Enter' && mode === 'draw' && !faceMode) void finishDraft()
-      if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => prev.slice(0, -1)) }
+      if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => (tasksMode && takeWall ? [] : prev.slice(0, -1))) }
       if (event.key === 'Backspace' && mode === 'measure') { event.preventDefault(); setMeasureDone(false); setMeasurePts(prev => prev.slice(0, -1)) }
-      if (event.key === 'Delete' && mode === 'select' && (zoning ? selectedZoneId : selectedId || boxSel.length)) void deleteSelected()
+      if (event.key === 'Delete' && mode === 'select' && (tasksMode ? taskSel : zoning ? selectedZoneId : selectedId || boxSel.length)) void deleteSelected()
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && draft.length === 0) { event.preventDefault(); void undoLast() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // deleteSelected/undoLast are recreated each render; they read the values listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finishDraft, mode, selectedId, selectedZoneId, draft.length, created, zoning, faceMode, openingPick, boxSel])
+  }, [finishDraft, mode, selectedId, selectedZoneId, draft.length, created, zoning, faceMode, openingPick, boxSel, tasksMode, taskSel])
 
   // Edit / View menu commands from the header.
   useEffect(() => {
@@ -920,7 +1015,39 @@ export default function PdfWorkspace(props: Props) {
       setMeasurePts(prev => [...prev, p])
       return
     }
+    if (areaPicking) {
+      if (!areaPts.length) { setAreaPts([p]); return }
+      const a = areaPts[0]
+      setAreaPts([])
+      task?.onAreaPicked?.([Math.min(a[0], p[0]), Math.min(a[1], p[1]), Math.max(a[0], p[0]), Math.max(a[1], p[1])])
+      return
+    }
     if (!canDraw) return
+    if (tasksMode) {
+      // Third click: the side the task goes (its band lies against the face, like a wall drawn by its face).
+      if (draft.length >= 2) {
+        if (!onTaskLine || saving) return
+        const { face, side } = faceFor(draft[0], draft[1], p, scale, takeWall ? taskWallT : 0)
+        setSaving(true)
+        const id = await onTaskLine([face[0], face[1]], side)
+        setSaving(false)
+        if (!id) return
+        setCreated(prev => [...prev, { table: 'location_task_drawings', id }])
+        setDraft([])
+        setMessage(t('task.saved'))
+        return
+      }
+      // Take wall: the first click picks the wall's stretch along the room.
+      if (takeWall) {
+        const r = onTaskPick?.(p) ?? null
+        if (!r) { setError(t('task.noWall')); return }
+        setTaskWallT(r.thicknessM)
+        setDraft([r.a, r.b])
+        return
+      }
+      setDraft(prev => [...prev, p])
+      return
+    }
     if (shape === 'rect') {
       if (draft.length === 0) { setDraft([p]); return }
       const a = draft[0]
@@ -1031,13 +1158,15 @@ export default function PdfWorkspace(props: Props) {
     setShape(s => (newLayer.kind === 'linear' ? 'line' : newLayer.kind === 'count' ? 'count' : s === 'rect' ? 'rect' : 'polygon'))
   }
 
-  const kindOk = zoning ? shape === 'rect' || shape === 'polygon' : !!activeLayer && activeLayer.kind === kindForShape[shape]
+  const kindOk = tasksMode ? shape === 'line' : zoning ? shape === 'rect' || shape === 'polygon' : !!activeLayer && activeLayer.kind === kindForShape[shape]
   const canDraw = mode === 'draw' && !!scale && kindOk
 
   const hint = useMemo(() => {
+    if (areaPicking) return areaPts.length ? t('report.area.second') : t('report.area.first')
     if (mode === 'calibrate') return scale ? `${t('calibrate.hint')} ${t('calibrate.replace', { scale: formatNumber(scale, 2) })}` : t('calibrate.hint')
     if (mode === 'draw') {
       if (!scale) return t('draw.needScale')
+      if (tasksMode) return draft.length >= 2 ? t('task.hint.side') : takeWall ? t('task.hint.take') : draft.length === 1 ? t('task.hint.second') : t('task.hint.draw')
       if (zoning) return kindOk ? t(shape === 'rect' ? 'zone.hint.rect' : 'zone.hint.polygon') : t('zone.hint.tool')
       if (!activeLayer || !kindOk) return t('draw.pickKind', { kind: t(kindKey[kindForShape[shape]]) })
       if (activeLayer.kind === 'count') return t('draw.hint.count')
@@ -1049,11 +1178,12 @@ export default function PdfWorkspace(props: Props) {
     if (roomPicking) return roomPickPts.length ? t('rooms.pickSecond') : t('rooms.pickFirst')
     if (mode === 'detect') return ''
     if (mode === 'origin') return originPts.length === 0 ? t('origin.hint.point') : originPts.length === 1 ? t('origin.hint.direction') : t('origin.hint.done')
+    if (tasksMode) return taskSel ? t('task.hint.selected') : t('task.hint.select')
     if (zoning) return sheetZones.length ? t('zone.hint.select') : t('zone.hint.empty')
     if (boxSel.length) return t('box.selectedHint')
     // Nothing selected: no banner over the sheet (the help is in the Select button's tooltip).
     return selectedId ? t('move.hint') : ''
-  }, [boxSel.length, mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length])
+  }, [boxSel.length, mode, scale, activeLayer, t, formatNumber, selectedId, zoning, kindOk, shape, sheetZones.length, originPts.length, faceMode, draft.length, placement, activeThicknessPts, roomPicking, roomPickPts.length, tasksMode, takeWall, taskSel, areaPicking, areaPts.length])
 
   const zoneShapes = useMemo(() => [
     // Largest first, so the rooms drawn inside a block or zone stay on top and clickable.
@@ -1069,13 +1199,20 @@ export default function PdfWorkspace(props: Props) {
   const tools: { key: string; group: ToolGroup; icon: string; label: TakeoffMessageKey; title?: string; active: boolean; onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void; disabled?: boolean }[] = [
     { key: 'select', group: 'edit', icon: 'select', label: 'tool.select', title: `${t('tool.select')} (Esc): ${t('pan.hint')} ${t('box.hint')}`, active: isTool('select'), onClick: () => chooseTool('select') },
     { key: 'scale', group: 'ref', icon: 'scale', label: 'tool.scale', active: isTool('calibrate'), onClick: () => chooseTool('calibrate') },
-    { key: 'line', group: 'draw', icon: 'line', label: 'tool.line', active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
-    { key: 'rect', group: 'draw', icon: 'rect', label: 'tool.rect', active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },
-    { key: 'polygon', group: 'draw', icon: 'polygon', label: 'tool.polygon', active: isTool('draw', 'polygon'), onClick: () => chooseTool('draw', 'polygon') },
-    { key: 'count', group: 'draw', icon: 'count', label: 'tool.count', active: isTool('draw', 'count'), onClick: () => chooseTool('draw', 'count'), disabled: zoning },
+    ...(tasksMode ? [
+      { key: 'take', group: 'draw' as ToolGroup, icon: 'wall', label: 'task.tool.take' as TakeoffMessageKey, title: t('task.hint.take'), active: isTool('draw', 'line') && takeWall, onClick: () => chooseTool('draw', 'line', true) },
+      { key: 'line', group: 'draw' as ToolGroup, icon: 'line', label: 'tool.line' as TakeoffMessageKey, title: t('task.hint.draw'), active: isTool('draw', 'line') && !takeWall, onClick: () => chooseTool('draw', 'line') },
+      ...(task?.onToggleZones ? [{ key: 'locations', group: 'draw' as ToolGroup, icon: 'zoning', label: 'task.tool.locations' as TakeoffMessageKey, title: t(task.zonesOn ? 'task.tool.locationsHide' : 'task.tool.locationsShow'), active: !!task.zonesOn, onClick: () => task.onToggleZones!() }] : []),
+      ...(task?.onToggleEstimate ? [{ key: 'estimate', group: 'draw' as ToolGroup, icon: task.estimateOn ? 'eye' : 'eyeOff', label: 'task.tool.estimate' as TakeoffMessageKey, title: t(task.estimateOn ? 'task.tool.estimateHide' : 'task.tool.estimateShow'), active: !!task.estimateOn, onClick: () => task.onToggleEstimate!() }] : []),
+    ] : [
+      { key: 'line', group: 'draw' as ToolGroup, icon: 'line', label: 'tool.line' as TakeoffMessageKey, active: isTool('draw', 'line'), onClick: () => chooseTool('draw', 'line'), disabled: zoning },
+      { key: 'rect', group: 'draw' as ToolGroup, icon: 'rect', label: 'tool.rect' as TakeoffMessageKey, active: isTool('draw', 'rect'), onClick: () => chooseTool('draw', 'rect') },
+      { key: 'polygon', group: 'draw' as ToolGroup, icon: 'polygon', label: 'tool.polygon' as TakeoffMessageKey, active: isTool('draw', 'polygon'), onClick: () => chooseTool('draw', 'polygon') },
+      { key: 'count', group: 'draw' as ToolGroup, icon: 'count', label: 'tool.count' as TakeoffMessageKey, active: isTool('draw', 'count'), onClick: () => chooseTool('draw', 'count'), disabled: zoning },
+    ]),
     { key: 'measure', group: 'ref', icon: 'measure', label: 'tool.measure', active: isTool('measure'), onClick: () => chooseTool('measure') },
     { key: 'origin', group: 'ref', icon: 'origin', label: 'tool.origin', active: isTool('origin'), onClick: () => { chooseTool('origin'); openOriginForm() } },
-    ...(zoning ? [] : [
+    ...(zoning || tasksMode ? [] : [
       {
         key: 'arch', group: 'model' as ToolGroup, icon: 'building', label: 'tool.arch' as TakeoffMessageKey,
         active: !!archMenu || isTool('detect') || !!openSugs || ((areaTool === 'floor' || areaTool === 'ceiling') && mode === 'draw'),
@@ -1119,7 +1256,7 @@ export default function PdfWorkspace(props: Props) {
     { key: 'edit', caption: 'toolbar.group.edit', tools: tools.filter(x => x.group === 'edit') },
     { key: 'ref', caption: 'toolbar.group.ref', tools: tools.filter(x => x.group === 'ref') },
     { key: 'draw', caption: 'toolbar.group.draw', tools: tools.filter(x => x.group === 'draw') },
-    ...(zoning ? [] : [
+    ...(zoning || tasksMode ? [] : [
       { key: 'model', caption: 'toolbar.group.model' as TakeoffMessageKey, tools: tools.filter(x => x.group === 'model') },
       { key: 'services', caption: 'tool.mep' as TakeoffMessageKey, tools: tools.filter(x => x.group === 'services') },
     ]),
@@ -1127,8 +1264,8 @@ export default function PdfWorkspace(props: Props) {
     ...(exportActions.length ? [{ key: 'export', caption: 'toolbar.group.export' as TakeoffMessageKey, tools: [] }] : []),
   ]
 
-  const selectionActive = zoning ? !!selectedZoneId : !!selectedId
-  const canBox = mode === 'select' && !zoning && !openingPick
+  const selectionActive = tasksMode ? !!taskSel : zoning ? !!selectedZoneId : !!selectedId
+  const canBox = mode === 'select' && !zoning && !tasksMode && !openingPick
   const boxSelSet = useMemo(() => new Set(boxSel), [boxSel])
 
   /** Ends a box drag: picks the elements in the box (window or crossing) and selects them. */
@@ -1145,10 +1282,10 @@ export default function PdfWorkspace(props: Props) {
     if (ids.length === 1) { setBoxSel([]); onSelect(ids[0]) }
     else { setBoxSel(ids); onSelect(null) }
   }
-  const draftKind: LayerKind | null = zoning ? 'area' : activeLayer?.kind ?? null
+  const draftKind: LayerKind | null = tasksMode ? 'linear' : zoning ? 'area' : activeLayer?.kind ?? null
   const zoneColor = isMacroKind(zoneKind) ? KIND_COLOR[zoneKind] : LAYER_PALETTE[zones.length % LAYER_PALETTE.length]
 
-  const newLayerForm = showNewLayer && !zoning ? (
+  const newLayerForm = showNewLayer && !zoning && !tasksMode ? (
           <form onSubmit={createLayer} style={{ ...card, pointerEvents: 'auto', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <label style={fieldStyle}>{t('layer.name')}<input autoFocus style={inputStyle} value={newLayer.name} onChange={e => setNewLayer(v => ({ ...v, name: e.target.value }))} /></label>
             <label style={fieldStyle}>{t('layer.kind')}
@@ -1174,7 +1311,7 @@ export default function PdfWorkspace(props: Props) {
   const inFooter = !!statusSlot
   const fSel = inFooter ? { height: 22, maxWidth: 260, border: '1px solid #d6e0e3', borderRadius: 5, fontSize: 11, background: '#fff' } : { height: 28, border: '1px solid #d6e0e3', borderRadius: 6, fontSize: 11 }
   const fBtn = (on: boolean) => inFooter ? { ...smallBtn(on), height: 22, padding: '0 8px', borderRadius: 5 } : smallBtn(on)
-  const layerBar = !zoning && mode === 'draw' ? (
+  const layerBar = !zoning && !tasksMode && mode === 'draw' ? (
     <div style={inFooter ? { display: 'flex', alignItems: 'center', gap: 6, flex: 'none' } : { ...card, pointerEvents: 'auto', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <label style={{ ...ui.small, display: 'flex', alignItems: 'center', gap: 6, ...(inFooter ? { fontSize: 11, color: '#4b6570' } : {}) }}>
         {t('layer.active')}
@@ -1276,25 +1413,26 @@ export default function PdfWorkspace(props: Props) {
               items={items}
               dimItems={zoning}
               calibration={mode === 'origin' ? originPts : calPts}
-              draft={roomPicking ? roomPickPts : mode === 'detect' ? (pickingRegion && regionPts.length === 1 ? regionPts : []) : draft}
-              draftKind={roomPicking || mode === 'detect' ? 'area' : draftKind}
-              draftColor={roomPicking || mode === 'detect' ? '#2563EB' : zoning ? zoneColor : activeLayer?.color || '#109d91'}
-              crosshair={!!openingPick || roomPicking || mode === 'calibrate' || mode === 'origin' || canDraw || (mode === 'measure' && scale > 0) || (mode === 'detect' && pickingRegion)}
+              draft={areaPicking ? areaPts : roomPicking ? roomPickPts : mode === 'detect' ? (pickingRegion && regionPts.length === 1 ? regionPts : []) : draft}
+              draftKind={areaPicking || roomPicking || mode === 'detect' ? 'area' : draftKind}
+              draftColor={areaPicking || roomPicking || mode === 'detect' ? '#2563EB' : tasksMode ? task?.color || '#E11D48' : zoning ? zoneColor : activeLayer?.color || '#109d91'}
+              crosshair={areaPicking || !!openingPick || roomPicking || mode === 'calibrate' || mode === 'origin' || canDraw || (mode === 'measure' && scale > 0) || (mode === 'detect' && pickingRegion)}
               measure={measurePts}
               measureDone={measureDone}
-              rectPreview={roomPicking || (canDraw && shape === 'rect') || (mode === 'detect' && pickingRegion)}
+              rectPreview={areaPicking || roomPicking || (canDraw && shape === 'rect') || (mode === 'detect' && pickingRegion)}
               ptPerM={scale}
               fmt={v => formatNumber(v, 2)}
               selectable={mode === 'select' && !zoning && !openingPick}
-              selectedId={selectedId}
-              onSelect={onSelect}
+              selectedId={tasksMode ? taskSel : selectedId}
+              onSelect={tasksMode ? (id => setTaskSel(id && (id.startsWith('task:') || id.startsWith('plan:')) ? id : null)) : onSelect}
               multiSelected={boxSelSet}
-              onMovePoints={(id, pts) => void movePoints(id, pts)}
+              onMovePoints={tasksMode ? undefined : (id, pts) => void movePoints(id, pts)}
               snap={snapOn}
               showTags={tagsOn && !zoning}
+              onMoveTag={workMode === 'tasks' ? task?.onMoveTag : undefined}
               backgroundFade={backgroundFade}
               ortho={orthoOn}
-              onSize={setPageSize}
+              onSize={size => { setPageSize(size); setLoadTick(n => n + 1) }}
               onPoint={p => void handlePoint(p)}
               onFinish={() => { if (mode === 'measure') setMeasureDone(true); else if (!faceMode) void finishDraft() }}
               onError={msg => setError(t('pdf.error', { message: msg }))}
@@ -1302,7 +1440,11 @@ export default function PdfWorkspace(props: Props) {
               onVectors={setVectors}
               onTexts={setTexts}
               onCursor={p => { onCursor?.(p); if (openingPick) setPickHover(p) }}
-              zones={zoning ? zoneShapes : []}
+              zones={zoning ? zoneShapes : tasksMode ? [
+                // The locations' colour code underneath; the chosen location outlined on top when it has no colour shown.
+                ...(task?.zones || []).map(z => ({ id: z.id, name: z.name, color: z.color, pts: z.pts, label: '', selected: false })),
+                ...(task?.zone && !(task.zones || []).some(z => z.id === task.zone!.id) ? [{ id: task.zone.id, name: task.zone.name, color: '#0EA5E9', pts: task.zone.pts, label: task.zone.name, selected: false }] : []),
+              ] : []}
               onSelectZone={zoning && mode === 'select' ? id => {
                 if (id.startsWith('sug:')) {
                   const rid = id.slice(4)
@@ -1312,8 +1454,10 @@ export default function PdfWorkspace(props: Props) {
               onMoveZonePoints={zoning && mode === 'select' ? (id, pts) => void moveZonePoints(id, pts) : undefined}
               suggestions={openingPick ? (() => { const pv = pickPreview(pickHover); return pv ? [{ id: 'pick', pts: pv, on: true }] : [] })() : mode === 'detect' ? suggestions.map(w => ({ id: w.id, pts: w.pts, on: picked.has(w.id) })) : openSugs ? openSugs.planned.map(o => ({ id: o.key, pts: [o.a, o.b] as [Vec2, Vec2], on: openPicked.has(o.key) })) : []}
               onToggleSuggestion={id => (openSugs && mode !== 'detect' ? setOpenPicked : setPicked)(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })}
-              regionBox={mode === 'detect' && regionPts.length === 2 ? [regionPts[0], regionPts[1]] : zoning && roomSugs && roomRegion && !roomPicking ? roomRegion : null}
-              sidePick={faceMode && draft.length === 2 ? { a: draft[0], b: draft[1], thickness: activeThicknessPts, color: activeLayer?.color || '#109d91' } : null}
+              regionBox={tasksMode && task?.area && !areaPicking ? [[task.area[0], task.area[1]], [task.area[2], task.area[3]]] : mode === 'detect' && regionPts.length === 2 ? [regionPts[0], regionPts[1]] : zoning && roomSugs && roomRegion && !roomPicking ? roomRegion : null}
+              sidePick={faceMode && draft.length === 2 ? { a: draft[0], b: draft[1], thickness: activeThicknessPts, color: activeLayer?.color || '#109d91' }
+                : tasksMode && mode === 'draw' && draft.length === 2 && scale > 0 ? { a: draft[0], b: draft[1], thickness: ((takeWall ? taskWallT / 2 : 0) + (task?.bandM ?? TASK_BAND_M)) * scale, color: task?.color || '#E11D48' }
+                : null}
               originMark={mode === 'origin' && originPts.length
                 ? { x: originPts[0][0], y: originPts[0][1], angleDeg: originPts.length === 2 ? angleFromPoints(originPts[0], originPts[1]) : 0 }
                 : originOf(source) ? { x: originOf(source)!.x, y: originOf(source)!.y, angleDeg: originOf(source)!.angleDeg } : null}
@@ -1560,7 +1704,7 @@ export default function PdfWorkspace(props: Props) {
 
         {mode === 'select' && selectionActive && (
           <div style={{ ...card, pointerEvents: 'auto', flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <button type="button" style={{ ...smallBtn(false), color: '#c94a4a', borderColor: '#efcaca' }} onClick={() => void deleteSelected()}>{t(zoning ? 'zone.delete' : 'element.delete')}</button>
+            <button type="button" style={{ ...smallBtn(false), color: '#c94a4a', borderColor: '#efcaca' }} onClick={() => void deleteSelected()}>{t(tasksMode ? 'task.delete' : zoning ? 'zone.delete' : 'element.delete')}</button>
           </div>
         )}
       </div>

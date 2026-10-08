@@ -35,6 +35,11 @@ export function materialRows(
       if (p.count > 0) rows.push({ mat: `${g.name} · ${fmt(g.W)} × ${fmt(g.H)} m`, kind: 'board', qty: p.count, unit: units.sheets, packs: null, packName: null })
     }
     for (const [name, n] of T.screws) rows.push({ mat: name, kind: 'screws', qty: Math.ceil(n), unit: units.un, packs: null, packName: null })
+    for (const f of T.fixings.values()) {
+      rows.push(f.unit === 'm'
+        ? { mat: f.name, kind: 'screws', qty: f.qty, unit: 'm', packs: f.roll ? Math.ceil(f.qty / f.roll - 1e-9) : null, packName: null }
+        : { mat: f.name, kind: 'screws', qty: Math.ceil(f.qty - 1e-9), unit: units.un, packs: null, packName: null })
+    }
   }
   const add = (list: MaterialRequirement[], kind: MaterialKind) => {
     for (const m of list) {

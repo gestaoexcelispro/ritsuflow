@@ -7,6 +7,7 @@ import { supabase } from '../../../../lib/supabase'
 import { AppShell, Badge, Empty, Icon, Notice, Segments, Stat, Stats, ui } from '../../../fieldop/ui'
 import { useT } from '../../../../lib/i18n/useT'
 import { useLanguage } from '../../../../lib/i18n/LanguageProvider'
+import { applyImport, loadImportSource, planImport } from '../../../../lib/takeoff/scopeImport'
 import styles from './scope.module.css'
 
 const UNITS = ['SF', 'LF', 'EA', 'CY', 'SY', 'TON', 'HR', 'm²', 'm', 'm³', 'kg', 'month', 'LS', 'unit']
@@ -18,6 +19,7 @@ const BLANK = { item_type: 'scope', parent_scope_id: null, scope_code: '', scope
 const ACTIVITY_BLANK = { activity_name: '', wall_side: 'N/A', quantity: '', unit: 'm²', notes: '' }
 const num = (v) => Number(v || 0)
 const source = (v) => (v === 'takeoff' || v === 'ritsucad' ? 'ritsuscope' : v || 'contract')
+const IMPORT_STEPS = ['framing', 'board_a', 'joints_a', 'insulation', 'board_b', 'joints_b']
 
 /** Label + control. Module-level so inputs keep focus while typing. */
 function Field({ label, wide, children }) {
@@ -42,6 +44,8 @@ export default function ScopeRegisterPage() {
   const [activityForm, setActivityForm] = useState(ACTIVITY_BLANK)
   const [saving, setSaving] = useState(false)
   const [dialogError, setDialogError] = useState('')
+  const [importing, setImporting] = useState(null) // { plan } | { loading: true }
+  const [importError, setImportError] = useState('')
 
   const currency = project?.currency_code || 'BRL'
   const cash = (v) => { try { return new Intl.NumberFormat(language, { style: 'currency', currency, maximumFractionDigits: 2 }).format(num(v)) } catch { return num(v).toFixed(2) } }
@@ -72,6 +76,45 @@ export default function ScopeRegisterPage() {
   }
   async function history(a, type, label, description, entityId, metadata = {}) {
     await supabase.from('project_history').insert({ project_id: projectId, action_type: type, action_label: label, description, entity_type: 'scope', entity_id: String(entityId), performed_by: a.user.id, performed_by_name: a.name, metadata })
+  }
+
+  // ---------- Import from RitsuScope ----------
+  async function openImport() {
+    setImportError(''); setImporting({ loading: true })
+    try {
+      const { data, wallTypes } = await loadImportSource(supabase, projectId)
+      if (!data.layers.length) { setImporting({ plan: null }); return }
+      const labels = Object.fromEntries(IMPORT_STEPS.map((k) => [k, t(`scope.import.step.${k}`)]))
+      setImporting({ plan: planImport(data, wallTypes, rows, labels) })
+    } catch (e) { setImportError(e.message); setImporting({ plan: null }) }
+  }
+  /** Lines whose RitsuScope item was deleted (takeoff redrawn): removed with what hangs on them, after confirmation. */
+  async function removeOrphans() {
+    const ids = importing?.plan?.orphans.map((r) => r.id) || []
+    if (!ids.length || saving) return
+    if (!window.confirm(t('scope.import.confirmOrphans', { count: ids.length }))) return
+    setSaving(true); setImportError('')
+    try {
+      const a = await actor()
+      const { error: e } = await supabase.from('project_scopes').delete().in('id', ids)
+      if (e) throw e
+      await history(a, 'scope_orphans_removed', 'Scope lines removed (RitsuScope item deleted)', t('scope.import.orphansHistory', { count: ids.length }), projectId, { ids })
+      // Reopened by the user on the refreshed register (the new import is planned from it).
+      setImporting(null)
+      await load()
+    } catch (e) { setImportError(e.message) } finally { setSaving(false) }
+  }
+  async function runImport() {
+    const plan = importing?.plan
+    if (!plan || saving) return
+    setSaving(true); setImportError('')
+    try {
+      const a = await actor()
+      const { created, updated } = await applyImport(supabase, { projectId, userId: a.user.id, plan, existing: rows })
+      await history(a, 'scope_imported', 'Scope imported from RitsuScope', t('scope.import.historyText', { created, updated }), projectId, { created, updated, layers: plan.scopes.map((x) => x.layerId) })
+      setImporting(null)
+      await load()
+    } catch (e) { setImportError(e.message) } finally { setSaving(false) }
   }
 
   // ---------- Tree ----------
@@ -153,6 +196,7 @@ export default function ScopeRegisterPage() {
       const a = await actor()
       const isItem = draft.item_type === 'item'
       const changes = { parent_scope_id: draft.item_type === 'scope' ? null : draft.parent_scope_id, scope_name: draft.scope_name.trim(), description: draft.description, exclusions: draft.exclusions, quantity: isItem && draft.quantity !== '' && draft.quantity != null ? num(draft.quantity) : null, unit: draft.unit, unit_price: isItem ? num(draft.unit_price) : 0, quantity_source: source(draft.quantity_source), status: draft.status, notes: draft.notes }
+      if (draft.takeoff_layer_id) { delete changes.quantity; delete changes.unit; changes.quantity_source = 'ritsuscope' } // the takeoff owns these
       const { data, error: e } = await supabase.from('project_scopes').update(changes).eq('id', draft.id).select('*').single()
       if (e) throw e
       await history(a, 'scope_updated', 'Scope register item updated', data.scope_name, data.id, { parent_scope_id: data.parent_scope_id, quantity: data.quantity, unit: data.unit, unit_price: data.unit_price, quantity_source: data.quantity_source })
@@ -194,6 +238,7 @@ export default function ScopeRegisterPage() {
           <button type="button" className={ui.btnPrimary} onClick={() => openAdd('scope')}><Icon name="plus" size={16} strokeWidth={2.4} />{t('scope.addScope')}</button>
           <button type="button" className={ui.btn} onClick={() => openAdd('group')} disabled={!counts.scope}><Icon name="plus" size={16} />{t('scope.addGroup')}</button>
           <button type="button" className={ui.btn} onClick={() => openAdd('item')} disabled={!counts.scope && !counts.group}><Icon name="plus" size={16} />{t('scope.addItem')}</button>
+          <button type="button" className={ui.btn} onClick={openImport}><Icon name="grid" size={16} />{t('scope.import.button')}</button>
           <span className={styles.sep} />
           <button type="button" className={`${ui.btnGhost} ${ui.small}`} onClick={() => setCollapsed(new Set())}>{t('scope.expandAll')}</button>
           <button type="button" className={`${ui.btnGhost} ${ui.small}`} onClick={() => setCollapsed(new Set(rows.filter((r) => children[r.id]).map((r) => r.id)))}>{t('scope.collapseAll')}</button>
@@ -203,7 +248,7 @@ export default function ScopeRegisterPage() {
 
         <div className={styles.tableArea}>
           {loading ? <p className={styles.muted}>{t('scope.loading')}</p>
-            : !rows.length ? <Empty title={t('scope.emptyTitle')} text={t('scope.emptyText')} action={<button type="button" className={ui.btnPrimary} onClick={() => openAdd('scope')}>{t('scope.addScope')}</button>} />
+            : !rows.length ? <Empty title={t('scope.emptyTitle')} text={t('scope.emptyText')} action={<div className={styles.emptyActions}><button type="button" className={ui.btnPrimary} onClick={openImport}>{t('scope.import.button')}</button><button type="button" className={ui.btn} onClick={() => openAdd('scope')}>{t('scope.addScope')}</button></div>} />
             : !visible.length ? <p className={styles.muted}>{t('scope.noMatch')}</p>
             : <table className={`${ui.table} ${ui.phoneCards} ${styles.table}`}>
               <thead><tr><th>{t('scope.colId')}</th><th>{t('scope.colDescription')}</th><th>{t('scope.colType')}</th><th>{t('scope.colUnit')}</th><th className={styles.num}>{t('scope.colQuantity')}</th><th className={styles.num}>{t('scope.colUnitPrice')}</th><th className={styles.num}>{t('scope.colTotal')}</th><th>{t('scope.colStatus')}</th><th /></tr></thead>
@@ -216,7 +261,7 @@ export default function ScopeRegisterPage() {
                     <span>{r.scope_name}</span></div></td>
                   <td data-label={t('scope.colType')}><span className={`${styles.type} ${styles[`type_${r.item_type}`] || ''}`}>{typeLabel(r.item_type)}</span></td>
                   <td data-label={t('scope.colUnit')} className={isItem ? '' : styles.dash}>{isItem ? r.unit : '—'}</td>
-                  <td data-label={t('scope.colQuantity')} className={`${styles.num} ${isItem ? '' : styles.dash}`}>{isItem ? qty(r.quantity) : '—'}</td>
+                  <td data-label={t('scope.colQuantity')} className={`${styles.num} ${isItem ? '' : styles.dash}`}>{isItem ? <>{r.takeoff_layer_id && <span className={styles.fromTakeoff} title={t('scope.import.linkedHint')}>RitsuScope</span>}{qty(r.quantity)}</> : '—'}</td>
                   <td data-label={t('scope.colUnitPrice')} className={`${styles.num} ${isItem ? '' : styles.dash}`}>{isItem ? cash(r.unit_price) : '—'}</td>
                   <td data-label={t('scope.colTotal')} className={`${styles.num} ${styles.total}`}>{cash(rollup(r.id))}</td>
                   <td data-label={t('scope.colStatus')}><Badge tone={STATUS_TONE[r.status]}>{t(`scope.status.${STATUSES.includes(r.status) ? r.status : 'defined'}`)}</Badge></td>
@@ -256,6 +301,41 @@ export default function ScopeRegisterPage() {
       </section>
     </div>}
 
+    {importing && <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setImporting(null) }}>
+      <section className={`${styles.dialog} ${styles.importDialog}`} role="dialog" aria-modal="true" aria-labelledby="scope-import-title">
+        <header className={styles.dialogHead}><h2 id="scope-import-title">{t('scope.import.title')}</h2><button type="button" className={styles.close} onClick={() => setImporting(null)} disabled={saving} aria-label={t('scope.close')}><Icon name="close" /></button></header>
+        <div className={styles.dialogBody}>
+          {importing.loading ? <p className={styles.muted}>{t('scope.import.loading')}</p>
+            : !importing.plan ? (!importError && <p className={styles.help}>{t('scope.import.nothing')}</p>)
+            : <>
+              <p className={styles.help}>{t('scope.import.help')}</p>
+              {importing.plan.uncalibratedSheets.length > 0 && <Notice>{t('scope.import.uncalibrated', { sheets: importing.plan.uncalibratedSheets.join(', ') })}</Notice>}
+              {importing.plan.empty.length > 0 && <p className={styles.help}>{t('scope.import.empty', { items: importing.plan.empty.join(' · ') })}</p>}
+              {importing.plan.scopes.length ? <div className={styles.importList}>{importing.plan.scopes.map((s) => <div key={s.layerId} className={styles.importScope}>
+                <div className={styles.importScopeHead}><b>{s.existingCode ? `${s.existingCode} — ` : ''}{s.name}</b><Badge tone={s.action === 'create' ? 'ok' : undefined}>{t(`scope.import.action.${s.action}`)}</Badge></div>
+                <table className={styles.importTable}><tbody>{s.items.map((i) => <tr key={i.step} className={i.action === 'same' ? styles.importSame : ''}>
+                  <td>{i.name}</td>
+                  <td className={styles.num}>{i.action === 'update' && <s>{qty(i.previousQuantity)}</s>} {qty(i.quantity)} {i.unit}</td>
+                  <td className={styles.importAction}>{t(`scope.import.action.${i.action}`)}</td>
+                </tr>)}</tbody></table>
+              </div>)}</div> : <p className={styles.help}>{t('scope.import.nothing')}</p>}
+              {importing.plan.stale.length > 0 && <p className={styles.help}>{t('scope.import.stale', { items: importing.plan.stale.map((r) => `${r.scope_code} ${r.scope_name}`).join(' · ') })}</p>}
+              {importing.plan.orphans.length > 0 && <div className={styles.orphans}>
+                <p>{t('scope.import.orphans', { count: importing.plan.orphans.filter((r) => r.item_type === 'item').length })}</p>
+                <small>{importing.plan.orphans.filter((r) => r.item_type !== 'item').map((r) => `${r.scope_code} ${r.scope_name}`).join(' · ')}</small>
+                <button type="button" className={`${ui.btnDanger} ${ui.small}`} disabled={saving} onClick={removeOrphans}>{t('scope.import.removeOrphans', { count: importing.plan.orphans.length })}</button>
+              </div>}
+              <p className={styles.help}>{t('scope.import.pricesHint')}</p>
+            </>}
+          {importError && <Notice>{importError}</Notice>}
+        </div>
+        <footer className={styles.dialogFoot}>
+          <button type="button" className={ui.btn} onClick={() => setImporting(null)} disabled={saving}>{t('scope.cancel')}</button>
+          <button type="button" className={ui.btnPrimary} onClick={runImport} disabled={saving || !importing.plan || !(importing.plan.counts.create + importing.plan.counts.update)}>{saving ? t('scope.import.running') : t('scope.import.confirm', { create: importing.plan?.counts.create || 0, update: importing.plan?.counts.update || 0 })}</button>
+        </footer>
+      </section>
+    </div>}
+
     {draft && <div className={`${styles.overlay} ${styles.overlayRight}`} onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setDraft(null) }}>
       <section className={styles.drawer} role="dialog" aria-modal="true" aria-labelledby="scope-edit-title">
         <header className={styles.drawerHead}>
@@ -269,9 +349,10 @@ export default function ScopeRegisterPage() {
             {draft.item_type !== 'scope' && <Field wide label={t(`scope.parent.${draft.item_type}`)}><select value={draft.parent_scope_id || ''} onChange={(e) => patch({ parent_scope_id: e.target.value || null })}>{parentOptions(draft.item_type, draft.id).map((p) => <option key={p.id} value={p.id}>{p.scope_code} — {p.scope_name}</option>)}</select></Field>}
             <Field wide label={t('scope.colDescription')}><input value={draft.scope_name || ''} onChange={(e) => patch({ scope_name: e.target.value })} /></Field>
             {draft.item_type === 'item' && <>
-              <Field label={t('scope.colUnit')}><select value={draft.unit || 'm²'} onChange={(e) => patch({ unit: e.target.value })}>{[...new Set([...UNITS, draft.unit || 'm²'])].map((u) => <option key={u}>{u}</option>)}</select></Field>
-              <Field label={t('scope.quantitySource')}><select value={source(draft.quantity_source)} onChange={(e) => patch({ quantity_source: e.target.value })}>{SOURCES.map((s) => <option key={s} value={s}>{t(`scope.source.${s}`)}</option>)}</select></Field>
-              <Field label={t('scope.contractQuantity')}><input type="number" min="0" step="any" value={draft.quantity ?? ''} onChange={(e) => patch({ quantity: e.target.value })} /></Field>
+              <Field label={t('scope.colUnit')}><select value={draft.unit || 'm²'} disabled={!!draft.takeoff_layer_id} onChange={(e) => patch({ unit: e.target.value })}>{[...new Set([...UNITS, draft.unit || 'm²'])].map((u) => <option key={u}>{u}</option>)}</select></Field>
+              <Field label={t('scope.quantitySource')}><select value={source(draft.quantity_source)} disabled={!!draft.takeoff_layer_id} onChange={(e) => patch({ quantity_source: e.target.value })}>{SOURCES.map((s) => <option key={s} value={s}>{t(`scope.source.${s}`)}</option>)}</select></Field>
+              <Field label={t('scope.contractQuantity')}><input type="number" min="0" step="any" value={draft.quantity ?? ''} readOnly={!!draft.takeoff_layer_id} disabled={!!draft.takeoff_layer_id} onChange={(e) => patch({ quantity: e.target.value })} /></Field>
+              {draft.takeoff_layer_id && <p className={`${styles.help} ${styles.wide}`}>{t('scope.import.linkedHint')}</p>}
               <Field label={t('scope.unitPriceIn', { currency })}><input type="number" min="0" step="any" value={draft.unit_price ?? ''} onChange={(e) => patch({ unit_price: e.target.value })} /></Field>
             </>}
             <div className={`${styles.totalBox} ${styles.wide}`}><span>{t('scope.colTotal')}{draft.item_type !== 'item' && <small>{t('scope.rollupHint')}</small>}</span><b>{cash(draftTotal)}</b></div>

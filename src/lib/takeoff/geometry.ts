@@ -35,6 +35,10 @@ export type TakeoffShape = {
   tags?: string[]
   /** Tag of each opening (door / window / void), aligned with `openings`. */
   openingTags?: string[]
+  /** Tag drawn as a callout: the label away from the line, with a leader line to it (planning lines). */
+  tagCallout?: boolean
+  /** Callout label centre (sheet points), moved by the user; unset = placed automatically. */
+  tagAt?: Vec2 | null
 }
 
 export type LayerKind = 'linear' | 'area' | 'count'
@@ -69,6 +73,27 @@ export type FramingConfig = {
   laPerStudEnd?: number
   taName?: string
   laName?: string
+  /** Double studs (MD): every regular stud is a pair, back to back (from the wall type). */
+  doubleStuds?: boolean
+  /** Fixing to other systems (slab, ceiling, existing walls): anchors and acoustic band from the layout. Unset = not counted by the layout. */
+  fixings?: FixingsConfig | null
+}
+
+/** Where the framing touches another construction system. */
+export type ContactPlaces = { floor: boolean; ceiling: boolean; walls: boolean }
+
+export type FixingsConfig = {
+  /** Anchor spacing along the track (m). */
+  anchorSpacing: number
+  /** Largest distance from a track end to its first anchor (m). */
+  anchorEdge: number
+  anchorAt: ContactPlaces
+  anchorName: string
+  /** Acoustic band under / against the profiles touching another system. */
+  bandAt: ContactPlaces
+  bandName: string
+  /** Metres per roll (whole quantity); null = sold by the metre. */
+  bandRoll?: number | null
 }
 
 export type TakeoffItem = {
@@ -97,6 +122,8 @@ export type TakeoffItem = {
   mep?: string
   /** Concrete structure / foundation type (see struct.ts). */
   struct?: string
+  /** Lines that must stop exactly at their end points (task bands): flat ends instead of square / round. */
+  flatEnds?: boolean
   /** Section depth of a point element (column, footing), metres; width is `width`. */
   depth?: number
   layers?: string[]
