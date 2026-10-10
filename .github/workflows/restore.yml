@@ -1,0 +1,72 @@
+# R8 · Restore a nightly backup into a database — by hand only.
+# Safe by default: it restores into SUPABASE_RESTORE_DB_URL, which should point at a NEW, EMPTY
+# Supabase project (never production). Check the restored copy there first; to put production back,
+# change the secret to production deliberately, or point the app at the restored project.
+# Steps: Actions › Restore database backup › Run workflow › paste the backup run id and type RESTORE.
+name: Restore database backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: 'Run id of the "Nightly database backup" run (number at the end of its URL)'
+        required: true
+      confirm:
+        description: 'Type RESTORE to confirm'
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET_DB_URL: ${{ secrets.SUPABASE_RESTORE_DB_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Check inputs
+        run: |
+          if [ "$CONFIRM" != "RESTORE" ]; then echo "::error::Type RESTORE to confirm."; exit 1; fi
+          if [ -z "$TARGET_DB_URL" ]; then
+            echo "::error::Add the repository secret SUPABASE_RESTORE_DB_URL (a new, empty Supabase project)."
+            exit 1
+          fi
+          if [ -z "$BACKUP_PASSPHRASE" ]; then echo "::error::BACKUP_PASSPHRASE is missing."; exit 1; fi
+
+      - name: Download the backup
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.backup_run_id }}
+          github-token: ${{ github.token }}
+          path: artifact
+
+      - name: Install psql 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Decrypt and unpack
+        run: |
+          file=$(find artifact -name 'ritsuflow-db.tar.gz.gpg' | head -1)
+          test -n "$file" || { echo "::error::No ritsuflow-db.tar.gz.gpg in that run's artifact"; exit 1; }
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            -o ritsuflow-db.tar.gz -d "$file"
+          mkdir -p restore && tar -xzf ritsuflow-db.tar.gz -C restore && rm ritsuflow-db.tar.gz
+          ls -l restore
+
+      - name: Restore (one transaction; stops at the first error)
+        run: |
+          dir=restore
+          psql --single-transaction --variable ON_ERROR_STOP=1 \
+            --file "$dir/roles.sql" \
+            --file "$dir/schema.sql" \
+            --command 'SET session_replication_role = replica' \
+            --file "$dir/data.sql" \
+            --dbname "$TARGET_DB_URL"

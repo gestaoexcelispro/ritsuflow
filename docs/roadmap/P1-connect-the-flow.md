@@ -61,4 +61,6 @@ Use a test company and one small project (2 rooms sharing one wall, one exterior
 ## 3. R8 · Production reset and backups
 
 - On 10 Oct 2026 at 17:40 production held **0 projects**. *Waiting for Eduardo's answer: was this reset on purpose?*
-- Before the trial: check **Supabase › Database › Backups** for the plan's daily backups and decide whether to turn on point-in-time recovery; write the restore steps here once tested on a branch.
+- The Supabase project is on the **free plan: no automatic backups**. Decision (10 Oct): **option C** before the
+  trial — a nightly, encrypted backup through GitHub Actions, kept 30 days, with a manual restore workflow.
+  See [database backup and restore](../runbooks/database-backup-and-restore.md).
