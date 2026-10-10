@@ -22,18 +22,40 @@ type Props = {
   carrierPicks: number
   saving: boolean
   onSave: (v: { workPackageId: string | null; rule: AllocationRule | null; deps: StepDep[] | null }) => void
+  /** Registers a new package in the company library (and selects it for this project); returns its id. */
+  onCreatePackage: (code: string, description: string) => Promise<string>
   onPickCarriers: () => void
   onClearCarriers: () => void
   onClose: () => void
 }
 
-export default function TaskSettingsDialog({ scope, scopes, workPackages, deps, carrierPicks, saving, onSave, onPickCarriers, onClearCarriers, onClose }: Props) {
+export default function TaskSettingsDialog({ scope, scopes, workPackages, deps, carrierPicks, saving, onSave, onCreatePackage, onPickCarriers, onClearCarriers, onClose }: Props) {
   const t = useTakeoffT()
   const defaults = useMemo(() => defaultPredecessors(scope, scopes), [scope, scopes])
   const [wp, setWp] = useState(scope.organization_work_package_id || '')
   const [rule, setRule] = useState<AllocationRule | ''>(scope.allocation_rule || '')
   const [list, setList] = useState<StepDep[]>(deps.length ? deps : defaults)
   const [add, setAdd] = useState('')
+  // "+ New work package": the company library may not have the package yet.
+  const suggestion = suggestPackage(scope.takeoff_step, workPackages)
+  const [creating, setCreating] = useState<{ code: string; description: string; error: string; busy: boolean } | null>(null)
+  const openCreate = () => setCreating({ code: suggestion?.code || '', description: suggestion ? t(`taskSettings.wpSuggest.${suggestion.key}` as const) : '', error: '', busy: false })
+  async function createPackage() {
+    if (!creating) return
+    const code = creating.code.trim().toUpperCase()
+    const description = creating.description.trim()
+    if (!/^[A-Z]{3}$/.test(code)) { setCreating({ ...creating, error: t('taskSettings.wpNewErrCode') }); return }
+    if (!description) { setCreating({ ...creating, error: t('taskSettings.wpNewErrDescription') }); return }
+    if (workPackages.some(w => w.code.toUpperCase() === code)) { setCreating({ ...creating, error: t('taskSettings.wpNewErrDuplicate', { code }) }); return }
+    setCreating({ ...creating, busy: true, error: '' })
+    try {
+      const id = await onCreatePackage(code, description)
+      setWp(id)
+      setCreating(null)
+    } catch (e) {
+      setCreating({ ...creating, busy: false, error: e instanceof Error ? e.message : String((e as { message?: string })?.message || e) })
+    }
+  }
   const isWall = !!scope.takeoff_step && scope.takeoff_step !== 'measure' && scope.takeoff_step !== 'scope'
   const ruleDefault = defaultRuleFor(scope.takeoff_step)
   const nameOf = (id: string) => { const s = scopes.find(x => x.id === id); return s ? `${s.scope_code} · ${s.scope_name}` : '—' }
@@ -58,10 +80,22 @@ export default function TaskSettingsDialog({ scope, scopes, workPackages, deps, 
 
         <section style={box}>
           <div style={head}>{t('taskSettings.wp')}</div>
-          <select style={input} value={wp} onChange={e => setWp(e.target.value)}>
+          <select style={input} value={creating ? NEW : wp} onChange={e => { if (e.target.value === NEW) openCreate(); else { setCreating(null); setWp(e.target.value) } }}>
             <option value="">{t('taskSettings.wpNone')}</option>
             {packages.map(w => <option key={w.organization_work_package_id} value={w.organization_work_package_id}>{w.code}{w.description ? ` – ${w.description}` : ''}{w.selected_for_project === false ? ` (${t('taskSettings.wpNotInProject')})` : ''}</option>)}
+            <option value={NEW}>{t('taskSettings.wpNew')}</option>
           </select>
+          {creating && (
+            <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0,1fr) auto', gap: 6, alignItems: 'center' }}>
+              <input style={{ ...input, textTransform: 'uppercase', fontWeight: 700 }} maxLength={3} placeholder="ABC" value={creating.code} aria-label={t('taskSettings.wpNewCode')} title={t('taskSettings.wpNewCode')}
+                onChange={e => setCreating({ ...creating, code: e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase(), error: '' })} />
+              <input style={input} placeholder={t('taskSettings.wpNewDescription')} value={creating.description} aria-label={t('taskSettings.wpNewDescription')}
+                onChange={e => setCreating({ ...creating, description: e.target.value, error: '' })} onKeyDown={e => { if (e.key === 'Enter') void createPackage() }} />
+              <button type="button" style={{ ...ui.button, height: 30, opacity: creating.busy ? 0.6 : 1 }} disabled={creating.busy} onClick={() => void createPackage()}>{t('taskSettings.wpNewCreate')}</button>
+              {creating.error && <span style={{ gridColumn: '1 / -1', fontSize: 11, color: '#b91c1c' }}>{creating.error}</span>}
+              <span style={{ ...ui.small, gridColumn: '1 / -1' }}>{t('taskSettings.wpNewHint')}</span>
+            </div>
+          )}
           <span style={ui.small}>{t('taskSettings.wpHint')}</span>
         </section>
 
@@ -121,6 +155,18 @@ export default function TaskSettingsDialog({ scope, scopes, workPackages, deps, 
       </div>
     </div>
   )
+}
+
+const NEW = '__new__'
+
+/** A starting code and name for the step's package, when the library has no package with that code yet. */
+function suggestPackage(step: string | null | undefined, packages: WorkPackageOption[]): { code: string; key: 'framing' | 'board' | 'joints' | 'insulation' } | null {
+  const pick = step === 'framing' ? { code: 'FRM', key: 'framing' as const }
+    : step === 'board_a' || step === 'board_b' ? { code: 'BRD', key: 'board' as const }
+      : step === 'joints_a' || step === 'joints_b' ? { code: 'JNT', key: 'joints' as const }
+        : step === 'insulation' ? { code: 'ISO', key: 'insulation' as const } : null
+  if (!pick) return null
+  return packages.some(w => w.code.toUpperCase() === pick.code) ? { ...pick, code: '' } : pick
 }
 
 const backdrop = { position: 'fixed', inset: 0, background: 'rgba(15, 35, 45, .35)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 } as const

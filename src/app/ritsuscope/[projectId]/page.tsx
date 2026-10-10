@@ -2529,6 +2529,12 @@ export default function TakeoffWorkspacePage() {
     try {
       const { error: e1 } = await supabase.from('project_scopes').update({ organization_work_package_id: v.workPackageId, allocation_rule: v.rule }).eq('id', scopeId)
       if (e1) throw e1
+      // A library package not yet used in this project joins the project (Master plan / Lookahead lists).
+      const chosen = v.workPackageId ? workPackages.find(w => w.organization_work_package_id === v.workPackageId) : null
+      if (chosen && chosen.selected_for_project === false) {
+        const { error: eSel } = await supabase.rpc('set_project_work_package_selected', { target_project_id: projectId, target_organization_work_package_id: chosen.organization_work_package_id, target_selected: true })
+        if (eSel) throw eSel
+      }
       const { error: e2 } = await supabase.from('project_scope_dependencies').delete().eq('scope_item_id', scopeId)
       if (e2) throw e2
       if (v.deps && v.deps.length) {
@@ -2542,6 +2548,24 @@ export default function TakeoffWorkspacePage() {
       setError(/allocation_rule|organization_work_package_id|project_scope_dependencies/.test(errorMessage(err)) ? t('taskSettings.needsMigration') : t('workspace.error', { message: errorMessage(err) }))
     }
     setSettingsSaving(false)
+  }
+  /** "+ New work package" in the ⚙ popup: registers it in the company library and adds it to this project. */
+  async function createWorkPackage(code: string, description: string): Promise<string> {
+    const supabase = createClient()
+    const { data: proj, error: e0 } = await supabase.from('projects').select('organization_id').eq('id', projectId).maybeSingle()
+    if (e0) throw e0
+    const orgId = (proj as { organization_id?: string } | null)?.organization_id
+    if (!orgId) throw new Error(t('taskSettings.wpNewNoOrg'))
+    const { data, error: e1 } = await supabase.rpc('register_organization_work_package', { target_organization_id: orgId, target_code: code, target_description: description })
+    if (e1) throw e1
+    const id = (Array.isArray(data) ? data[0] : data)?.id as string | undefined
+    if (!id) throw new Error(t('taskSettings.wpNewErrCode'))
+    const { error: e2 } = await supabase.rpc('set_project_work_package_selected', { target_project_id: projectId, target_organization_work_package_id: id, target_selected: true })
+    if (e2) throw e2
+    const { data: options } = await supabase.rpc('get_project_work_package_options', { target_project_id: projectId })
+    setWorkPackages((options || []) as WorkPackageOption[])
+    setStatus(t('taskSettings.wpNewDone', { code }))
+    return id
   }
   /** Carrier picking: the clicked wall is carried by the selected location. */
   async function pickCarrier(elementId: string) {
@@ -3227,6 +3251,7 @@ export default function TakeoffWorkspacePage() {
             carrierPicks={carrierPicksOf(sc.takeoff_layer_id)}
             saving={settingsSaving}
             onSave={v => void saveTaskSettings(sc.id, v)}
+            onCreatePackage={createWorkPackage}
             onPickCarriers={() => { setSettingsScopeId(null); setTaskScopeId(sc.id); setTaskWalls(true); setCarrierPick(true) }}
             onClearCarriers={() => void clearCarriers(sc.takeoff_layer_id)}
             onClose={() => setSettingsScopeId(null)}
