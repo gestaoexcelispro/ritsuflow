@@ -4,14 +4,15 @@ import { useCallback } from 'react'
 import { useLanguage } from './LanguageProvider'
 import takeoffPtBR, { type TakeoffMessageKey } from './messages/takeoff.pt-BR'
 import takeoffEnUS from './messages/takeoff.en-US'
+import takeoffEs from './messages/takeoff.es'
 import { translate } from './translate'
 import type { AppLanguage } from './settings'
 
-// RitsuScope is not translated to Spanish yet; Spanish users see it in English.
+// RitsuScope is only partly translated to Spanish; missing Spanish keys show in English.
 const takeoffMessages: Record<AppLanguage, Record<TakeoffMessageKey, string>> = {
   'pt-BR': takeoffPtBR,
   'en-US': takeoffEnUS,
-  es: takeoffEnUS,
+  es: takeoffEs,
 }
 
 /** Translator for the Takeoff module: t('list.title'), t('workspace.uploading', { name }). */

@@ -18,6 +18,9 @@ import { recipeLineQuantities, recipeMaterials, rowToRecipe, type Recipe, type R
 import { recipeVariables } from '@/lib/takeoff/systemRecipes'
 import { projectItemsInMetres, rowsToItems, type ElementRow, type LayerRow, type SourceRow } from '@/lib/takeoff/rows'
 import { computeOpeningTags, computeSegmentTags, withSegmentTags } from '@/lib/takeoff/segmentTags'
+import { allocateScopeStep, exteriorLocationOf, flowRankOf, type AllocationRule, type TakeoffData } from '@/lib/takeoff/scopeAllocation'
+import { defaultPredecessors, type DepLink, type StepDep } from '@/lib/takeoff/stepPredecessors'
+import TaskSettingsDialog, { type WorkPackageOption } from './TaskSettingsDialog'
 import { ui } from '../ui'
 import FramingPanel from './FramingPanel'
 import ElevationView from './ElevationView'
@@ -121,8 +124,10 @@ const ELEMENT_COLUMNS = 'id, project_id, layer_id, source_id, points, height_ove
 const TASK_COLOR = '#E11D48'
 /** Location kinds that group others (not where work is built). */
 const TASK_GROUP_KINDS = new Set(['building', 'floor', 'zone'])
-type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null; takeoff_step?: string | null; plan_style?: PlanStyle | null; plan_materials?: unknown }
-type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null; qr_token: string | null }
+type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null; takeoff_step?: string | null; plan_style?: PlanStyle | null; plan_materials?: unknown; organization_work_package_id?: string | null; allocation_rule?: AllocationRule | null }
+type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null; qr_token: string | null; environment_type?: string | null }
+/** Planner's predecessor of a scope line (project_scope_dependencies). */
+type TaskDepRow = { id: string; scope_item_id: string; predecessor_scope_item_id: string; link: DepLink; lag_days: number }
 /** Task report (field sheet) settings, chosen in its dialog and kept with each issued revision. */
 type ReportCfg = {
   kind: 'location' | 'activity'
@@ -223,6 +228,14 @@ export default function TakeoffWorkspacePage() {
   const [taskScopes, setTaskScopes] = useState<TaskScopeRow[]>([])
   const [taskLocations, setTaskLocations] = useState<TaskLocationRow[]>([])
   const [taskRows, setTaskRows] = useState<TaskDrawingRow[]>([])
+  /** Activity settings (⚙): predecessors, carriers of dividing walls, the company work packages. */
+  const [taskDeps, setTaskDeps] = useState<TaskDepRow[]>([])
+  const [taskCarriers, setTaskCarriers] = useState<{ element_id: string; location_id: string }[]>([])
+  const [workPackages, setWorkPackages] = useState<WorkPackageOption[]>([])
+  const [settingsScopeId, setSettingsScopeId] = useState<string | null>(null)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  /** Picking carriers: a click on a wall makes the selected location carry it. */
+  const [carrierPick, setCarrierPick] = useState(false)
   const [taskScopeId, setTaskScopeId] = useState<string | null>(null)
   const [taskLocationId, setTaskLocationId] = useState<string | null>(null)
   /** Task line clicked on the drawing: its properties show in the right panel. */
@@ -289,6 +302,14 @@ export default function TakeoffWorkspacePage() {
   /** An opening configured in the wall's properties, waiting for a click on the plan to place it. */
   const [openingPick, setOpeningPick] = useState<{ elementId: string; opening: Omit<ElementOpening, 'off' | 'guid'> } | null>(null)
   useEffect(() => { setOpeningPick(null) }, [selectedElementId, selectedSourceId])
+  // Carrier picking (⚙ of a Tasks activity): ends with Esc or when leaving Tasks.
+  useEffect(() => { if (section !== 'tasks') setCarrierPick(false) }, [section])
+  useEffect(() => {
+    if (!carrierPick) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCarrierPick(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [carrierPick])
   const [menu, setMenu] = useState<'edit' | 'view' | 'sheet' | 'print' | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
@@ -359,19 +380,28 @@ export default function TakeoffWorkspacePage() {
 
   const loadTasks = useCallback(async () => {
     const supabase = createClient()
-    const [sc, lc, td, fi] = await Promise.all([
-      // Planning columns are optional (older databases): fall back to the base columns.
-      supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id, takeoff_step, plan_style, plan_materials').eq('project_id', projectId).eq('item_type', 'item').order('scope_code')
-        .then(async r => (r.error && /plan_style|plan_materials|takeoff_step/.test(r.error.message) ? await supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code') : r)),
-      supabase.from('locations').select('id, name, location_type, parent_id, sequence_number, qr_token').eq('project_id', projectId).order('sequence_number'),
+    const scopeQuery = (cols: string) => supabase.from('project_scopes').select(cols).eq('project_id', projectId).eq('item_type', 'item').order('scope_code')
+    const [sc, lc, td, fi, dp, cr, wp] = await Promise.all([
+      // Planning columns are optional (older databases): fall back step by step to the base columns.
+      scopeQuery('id, scope_code, scope_name, unit, quantity, takeoff_layer_id, takeoff_step, plan_style, plan_materials, organization_work_package_id, allocation_rule')
+        .then(async r => (r.error && /organization_work_package_id|allocation_rule/.test(r.error.message) ? await scopeQuery('id, scope_code, scope_name, unit, quantity, takeoff_layer_id, takeoff_step, plan_style, plan_materials') : r))
+        .then(async r => (r.error && /plan_style|plan_materials|takeoff_step/.test(r.error.message) ? await scopeQuery('id, scope_code, scope_name, unit, quantity, takeoff_layer_id') : r)),
+      supabase.from('locations').select('id, name, location_type, parent_id, sequence_number, qr_token, environment_type').eq('project_id', projectId).order('sequence_number'),
       supabase.from('location_task_drawings').select('*').eq('project_id', projectId),
       supabase.from('field_sheet_issues').select('id, location_id, kind, scope_item_id, revision, fingerprint, file_path, issued_by_name, issued_at').eq('project_id', projectId).order('revision', { ascending: false }),
+      // Optional (migration 20261010_001) and the company catalogue (PreCon).
+      supabase.from('project_scope_dependencies').select('id, scope_item_id, predecessor_scope_item_id, link, lag_days').eq('project_id', projectId),
+      supabase.from('project_wall_carriers').select('element_id, location_id').eq('project_id', projectId),
+      supabase.rpc('get_project_work_package_options', { target_project_id: projectId }),
     ])
+    setTaskDeps(dp.error ? [] : ((dp.data || []) as TaskDepRow[]))
+    setTaskCarriers(cr.error ? [] : ((cr.data || []) as { element_id: string; location_id: string }[]))
+    setWorkPackages(wp.error ? [] : ((wp.data || []) as WorkPackageOption[]))
     // Field sheet revisions are optional: without their table the rest still works.
     setFieldIssues(fi.error ? [] : ((fi.data || []) as FieldIssueRow[]))
     const failure = sc.error || lc.error || td.error
     if (failure) setError(t('workspace.error', { message: failure.message }))
-    setTaskScopes((sc.data || []) as TaskScopeRow[])
+    setTaskScopes((sc.data || []) as unknown as TaskScopeRow[])
     setTaskLocations((lc.data || []) as TaskLocationRow[])
     setTaskRows((td.data || []) as TaskDrawingRow[])
     setTasksLoaded(true)
@@ -1396,7 +1426,7 @@ export default function TakeoffWorkspacePage() {
       items={section === 'tasks' ? taskShownItems : shownItems}
       onChanged={section === 'tasks' ? loadTasks : load}
       selectedId={selectedElementId}
-      onSelect={setSelectedElementId}
+      onSelect={id => { if (section === 'tasks' && carrierPick && id && !id.startsWith('task:') && !id.startsWith('plan:')) { void pickCarrier(id); return } setSelectedElementId(id) }}
       framingDefaults={framingDefaults}
       activeLayerId={activeLayerId}
       onActiveLayerChange={setActiveLayerId}
@@ -2463,9 +2493,73 @@ export default function TakeoffWorkspacePage() {
 
   // ---------- Tarefas sidebars ----------
   const fmtQty = (v: number) => formatNumber(v, 2)
-  const taskProduction = taskLocations.filter(l => !TASK_GROUP_KINDS.has(l.location_type)).slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  const taskProduction = taskLocations.filter(l => !TASK_GROUP_KINDS.has(l.location_type))
+    // Flow order (the order the crews walk through the locations), then name.
+    .slice().sort((a, b) => (a.sequence_number ?? Infinity) - (b.sequence_number ?? Infinity) || a.name.localeCompare(b.name, undefined, { numeric: true }))
   const drawnOf = (scopeId: string, locationId: string) => taskRows.filter(r => r.scope_item_id === scopeId && r.location_id === locationId).reduce((a, r) => a + Number(r.quantity || 0), 0)
   const hasZone = (locationId: string) => zones.some(z => z.location_id === locationId && Array.isArray(z.points) && z.points.length >= 3)
+  // ---------- Activity settings (⚙): work package, allocation rule, carriers, predecessors ----------
+  /** Where the open activity's work is done, location by location (same engine as Scope › Allocation). */
+  const taskAuto = useMemo(() => {
+    const sc = taskScopes.find(x => x.id === taskScopeId)
+    if (section !== 'tasks' || !sc?.takeoff_layer_id) return null
+    const data: TakeoffData = {
+      layers, elements: rawElements, sources: sources.filter(x => x.kind === 'pdf_page'), levels, zones: zones.filter(z => z.location_id),
+      wallTypes: wallTypes.map(w => ({ id: w.id, boards: w.boards })), carriers: taskCarriers,
+    }
+    const production = new Set<string>(taskLocations.filter(l => !TASK_GROUP_KINDS.has(l.location_type)).map(l => l.id))
+    return allocateScopeStep(data, {
+      layerIds: [sc.takeoff_layer_id], unit: sc.unit || 'm²', step: sc.takeoff_step, rule: sc.allocation_rule, productionLocationIds: production,
+      flowRank: flowRankOf(taskLocations), exteriorLocationOf: key => exteriorLocationOf(key, taskLocations, levels),
+    })
+  }, [section, taskScopeId, taskScopes, layers, rawElements, sources, levels, zones, wallTypes, taskCarriers, taskLocations])
+  /** Predecessors of a line: the planner's, else the default wall sequence. */
+  const depsOf = (scopeId: string): StepDep[] => {
+    const own = taskDeps.filter(d => d.scope_item_id === scopeId)
+    if (own.length) return own.map(d => ({ predecessorId: d.predecessor_scope_item_id, link: d.link, lagDays: Number(d.lag_days) || 0 }))
+    const sc = taskScopes.find(x => x.id === scopeId)
+    return sc ? defaultPredecessors(sc, taskScopes) : []
+  }
+  /** Walls of an activity's RitsuScope item whose carrier was picked by hand. */
+  const carrierPicksOf = (layerId: string | null) => (layerId ? taskCarriers.filter(c => rawElements.some(e => e.id === c.element_id && e.layer_id === layerId)).length : 0)
+  async function saveTaskSettings(scopeId: string, v: { workPackageId: string | null; rule: AllocationRule | null; deps: StepDep[] | null }) {
+    setSettingsSaving(true)
+    const supabase = createClient()
+    try {
+      const { error: e1 } = await supabase.from('project_scopes').update({ organization_work_package_id: v.workPackageId, allocation_rule: v.rule }).eq('id', scopeId)
+      if (e1) throw e1
+      const { error: e2 } = await supabase.from('project_scope_dependencies').delete().eq('scope_item_id', scopeId)
+      if (e2) throw e2
+      if (v.deps && v.deps.length) {
+        const { error: e3 } = await supabase.from('project_scope_dependencies').insert(v.deps.map(d => ({ project_id: projectId, scope_item_id: scopeId, predecessor_scope_item_id: d.predecessorId, link: d.link, lag_days: d.lagDays })))
+        if (e3) throw e3
+      }
+      setSettingsScopeId(null)
+      setStatus(t('taskSettings.saved'))
+      await loadTasks()
+    } catch (err) {
+      setError(/allocation_rule|organization_work_package_id|project_scope_dependencies/.test(errorMessage(err)) ? t('taskSettings.needsMigration') : t('workspace.error', { message: errorMessage(err) }))
+    }
+    setSettingsSaving(false)
+  }
+  /** Carrier picking: the clicked wall is carried by the selected location. */
+  async function pickCarrier(elementId: string) {
+    const el = rawElements.find(e => e.id === elementId)
+    const layer = el ? layers.find(l => l.id === el.layer_id) : null
+    if (!el || layer?.kind !== 'linear') return
+    if (!taskLocationId) { setError(t('task.panel.pick')); return }
+    const { error: e } = await createClient().from('project_wall_carriers').upsert({ project_id: projectId, element_id: elementId, location_id: taskLocationId }, { onConflict: 'element_id' })
+    if (e) { setError(/project_wall_carriers/.test(e.message) ? t('taskSettings.needsMigration') : t('workspace.error', { message: e.message })); return }
+    setTaskCarriers(prev => [...prev.filter(c => c.element_id !== elementId), { element_id: elementId, location_id: taskLocationId }])
+    setStatus(t('taskSettings.carrierSet', { wall: layer?.name || '', location: taskLocations.find(l => l.id === taskLocationId)?.name || '' }))
+  }
+  async function clearCarriers(layerId: string | null) {
+    const ids = taskCarriers.filter(c => rawElements.some(e => e.id === c.element_id && e.layer_id === layerId)).map(c => c.element_id)
+    if (!ids.length) return
+    const { error: e } = await createClient().from('project_wall_carriers').delete().in('element_id', ids)
+    if (e) { setError(t('workspace.error', { message: e.message })); return }
+    setTaskCarriers(prev => prev.filter(c => !ids.includes(c.element_id)))
+  }
   const tasksLeft = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid #e5edef' }}>
@@ -2478,26 +2572,50 @@ export default function TakeoffWorkspacePage() {
           : taskScopes.map(sc => {
             const open = sc.id === taskScopeId
             const total = taskRows.filter(r => r.scope_item_id === sc.id).reduce((a, r) => a + Number(r.quantity || 0), 0)
+            const wpCode = sc.organization_work_package_id ? workPackages.find(w => w.organization_work_package_id === sc.organization_work_package_id)?.code : null
             return <div key={sc.id} style={{ marginTop: 4, border: '1px solid ' + (open ? '#9fd6cf' : '#e5edef'), borderRadius: 8, background: open ? '#f2fbfa' : '#fff', overflow: 'hidden' }}>
-              <button type="button" onClick={() => { setTaskScopeId(open ? null : sc.id) }} style={{ display: 'grid', gap: 2, width: '100%', padding: '8px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#173441' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+              <button type="button" onClick={() => { setTaskScopeId(open ? null : sc.id) }} style={{ display: 'grid', gap: 2, flex: 1, minWidth: 0, padding: '8px 10px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', color: '#173441' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}><i style={{ width: 14, height: 4, borderRadius: 2, background: colorOfScope(sc.id) }} />{sc.scope_code}{sc.unit ? ` · ${sc.unit}` : ''}</span>
                 <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>{sc.scope_name}</span>
                 <span style={{ fontSize: 10.5, color: total > 0 ? '#be123c' : '#8aa0a8' }}>{t('task.sidebar.drawnTotal', { value: `${fmtQty(total)} / ${fmtQty(Number(sc.quantity || 0))} ${sc.unit || ''}` })}</span>
+                {wpCode && <span style={{ fontSize: 10, fontWeight: 800, color: '#0d7f77' }}>{t('taskSettings.wpShort', { code: wpCode })}</span>}
               </button>
+              <button type="button" title={t('taskSettings.title')} aria-label={t('taskSettings.title')} onClick={() => setSettingsScopeId(sc.id)}
+                style={{ flex: 'none', width: 28, height: 28, margin: '6px 6px 0 0', border: '1px solid #d3dfe2', borderRadius: 7, background: '#fff', color: '#294955', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="settings" size={14} />
+              </button>
+              </div>
               {open && <div style={{ borderTop: '1px solid #dcefeb', padding: '4px 6px 6px' }}>
                 {!taskProduction.length ? <div style={{ ...ui.small, padding: 6 }}>{t('task.sidebar.noLocations')}</div> : taskProduction.map(loc => {
                   const on = loc.id === taskLocationId
                   const zoned = hasZone(loc.id)
                   const q = drawnOf(sc.id, loc.id)
+                  // Where nothing is drawn yet: the automatic split by the activity's rule (face / carrier / position).
+                  const auto = q > 0 ? 0 : taskAuto?.byLocation.get(loc.id) || 0
                   return <button key={loc.id} type="button" title={zoned ? undefined : t('task.sidebar.noZoneHint')} onClick={() => { setTaskLocationId(loc.id); setTaskFrameTick(n => n + 1) }}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', marginTop: 3, padding: '6px 8px', border: '1px solid ' + (on ? '#e11d48' : 'transparent'), borderRadius: 6, background: on ? '#fff1f3' : 'transparent', cursor: 'pointer', color: zoned ? '#294955' : '#6b8089', fontSize: 12, textAlign: 'left' }}>
                     <span>{loc.name}</span>
-                    <span style={{ fontWeight: 700, color: q > 0 ? '#be123c' : '#9aaeb5', whiteSpace: 'nowrap' }}>{q > 0 ? `${fmtQty(q)} ${sc.unit || ''}` : !zoned ? t('task.sidebar.noZone') : '—'}</span>
+                    <span title={auto > 0 ? t('taskSettings.autoHint') : undefined} style={{ fontWeight: 700, color: q > 0 ? '#be123c' : auto > 0 ? '#0d7f77' : '#9aaeb5', whiteSpace: 'nowrap' }}>{q > 0 ? `${fmtQty(q)} ${sc.unit || ''}` : auto > 0 ? t('taskSettings.auto', { value: `${fmtQty(auto)} ${sc.unit || ''}` }) : !zoned ? t('task.sidebar.noZone') : '—'}</span>
                   </button>
                 })}
+                {(() => {
+                  const ds = depsOf(sc.id)
+                  if (!ds.length) return null
+                  return <div style={{ marginTop: 6, padding: '6px 8px', borderTop: '1px dashed #dcefeb', fontSize: 10.5, color: '#536d78', lineHeight: 1.5 }}>
+                    <b>{t('taskSettings.after')}</b>{' '}
+                    {ds.map(d => { const p = taskScopes.find(x => x.id === d.predecessorId); return p ? `${p.scope_code} ${p.scope_name}${d.link === 'carrier_location' ? ` (${t('taskSettings.link.carrier_location')})` : ''}${d.lagDays ? ` +${d.lagDays}d` : ''}` : null }).filter(Boolean).join(' · ')}
+                  </div>
+                })()}
               </div>}
             </div>
           })}
+        {carrierPick && (
+          <div style={{ position: 'sticky', bottom: 0, marginTop: 8, padding: 10, border: '1px solid #f3d19c', borderRadius: 8, background: '#fffaf0', fontSize: 11, color: '#8a5a12', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span>{taskLocationId ? t('taskSettings.pickingHint', { location: taskLocations.find(l => l.id === taskLocationId)?.name || '' }) : t('task.panel.pick')}</span>
+            <button type="button" style={{ ...ui.button, height: 28, fontSize: 11 }} onClick={() => setCarrierPick(false)}>{t('taskSettings.pickDone')}</button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -3095,6 +3213,25 @@ export default function TakeoffWorkspacePage() {
           onClose={() => setShareOpen(false)}
         />
       )}
+      {settingsScopeId && (() => {
+        const sc = taskScopes.find(x => x.id === settingsScopeId)
+        if (!sc) return null
+        const asSettings = (x: TaskScopeRow) => ({ ...x, scope_code: x.scope_code || '' })
+        return (
+          <TaskSettingsDialog
+            scope={asSettings(sc)}
+            scopes={taskScopes.map(asSettings)}
+            workPackages={workPackages}
+            deps={taskDeps.filter(d => d.scope_item_id === sc.id).map(d => ({ predecessorId: d.predecessor_scope_item_id, link: d.link, lagDays: Number(d.lag_days) || 0 }))}
+            carrierPicks={carrierPicksOf(sc.takeoff_layer_id)}
+            saving={settingsSaving}
+            onSave={v => void saveTaskSettings(sc.id, v)}
+            onPickCarriers={() => { setSettingsScopeId(null); setTaskScopeId(sc.id); setTaskWalls(true); setCarrierPick(true) }}
+            onClearCarriers={() => void clearCarriers(sc.takeoff_layer_id)}
+            onClose={() => setSettingsScopeId(null)}
+          />
+        )
+      })()}
       {assignFor && (
         <WallTypePicker
           projectId={projectId}

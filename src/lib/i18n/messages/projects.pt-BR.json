@@ -614,5 +614,16 @@
   "scope.import.orphans": "{count} itens vieram de itens do RitsuScope que foram excluídos (levantamento redesenhado). Eles não seguem mais o desenho:",
   "scope.import.removeOrphans": "Remover as {count} linhas órfãs",
   "scope.import.confirmOrphans": "Remover {count} linhas do registro? As atividades do FieldOp, as quantidades por local e os desenhos de tarefas delas são removidos junto. Não dá para desfazer.",
-  "scope.import.orphansHistory": "{count} linhas removidas: o item do RitsuScope foi excluído"
+  "scope.import.orphansHistory": "{count} linhas removidas: o item do RitsuScope foi excluído",
+  "loc.rule.label": "Divisão",
+  "loc.rule.hint": "Como esta linha é distribuída pelas localizações (definido no RitsuScope › Tarefas ⚙).",
+  "loc.rule.face": "face → seu ambiente",
+  "loc.rule.carrier": "parede inteira → ambiente responsável",
+  "loc.rule.position": "pela posição",
+  "loc.rule.manual": "manual",
+  "loc.exterior.name": "Exterior – {level}",
+  "loc.exterior.noLevel": "sem nível",
+  "loc.exterior.pending": "{value} estão em faces externas ainda sem localização Exterior.",
+  "loc.exterior.create": "Criar localizações Exterior",
+  "loc.exterior.created": "{count} localização(ões) Exterior criada(s). Preencha do RitsuScope de novo para incluí-las."
 }

@@ -27,13 +27,21 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
     supabase.from('takeoff_sources').select('id, name, scale_pt_per_m, level_id').eq('project_id', projectId).eq('kind', 'pdf_page'),
     supabase.from('takeoff_levels').select('id, name, elevation_m, location_id').eq('project_id', projectId),
     // Allocation starts from the contracted scope: every measurable scope item, before or after FieldOp.
-    supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, notes, takeoff_layer_id').eq('project_id', projectId).eq('item_type', 'item').order('scope_code', { ascending: true }),
+    supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, notes, takeoff_layer_id, takeoff_step, allocation_rule').eq('project_id', projectId).eq('item_type', 'item').order('scope_code', { ascending: true }),
     // Task view: lines drawn in RitsuScope for a scope item in a location (their quantity replaces the automatic split there).
     supabase.from('location_task_drawings').select('id, scope_item_id, location_id, source_id, points, quantity').eq('project_id', projectId),
   ])
 
   const project = projectResult.data
   if (!project) redirect('/projects')
+  // Before migration 20261010_001 (allocation_rule) the scope lines are read without it.
+  let scopeRows = scopeResult.data || []
+  let scopeError = scopeResult.error
+  if (scopeError) {
+    const retry = await supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, notes, takeoff_layer_id, takeoff_step').eq('project_id', projectId).eq('item_type', 'item').order('scope_code', { ascending: true })
+    scopeRows = retry.data || []
+    scopeError = retry.error
+  }
 
   // One allocation line per scope item. The quantities by location hang on the item's FieldOp activity
   // record; until it exists the line is 'pending' and the record is created (inactive) on first save,
@@ -43,7 +51,7 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
     const rows = activities.filter((a) => a.source === 'scope' && a.scope_item_id === scopeId)
     return rows.find((a) => a.is_active) || rows[0] || null
   }
-  const fromScope = (scopeResult.data || []).map((scope) => {
+  const fromScope = scopeRows.map((scope) => {
     const activity = activityFor(scope.id)
     return {
       id: activity?.id || `scope:${scope.id}`,
@@ -61,6 +69,9 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
       notes: scope.notes || null,
       // Scope lines imported from RitsuScope know their takeoff item: it feeds this line automatically.
       takeoff_layer_id: scope.takeoff_layer_id || null,
+      // Which wall step the line is (framing, board_a…) and the planner's allocation rule (Tasks ⚙).
+      takeoff_step: scope.takeoff_step || null,
+      allocation_rule: scope.allocation_rule || null,
     }
   })
   // Activities created only in FieldOp (not from the scope) still need their locations.
@@ -70,7 +81,7 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
   }))
   const scopeItems = [...fromScope, ...manual].map((item, index) => ({ ...item, sequence_number: index + 1 }))
 
-  const loadError = projectResult.error || locationsResult.error || activitiesResult.error || allocationsResult.error || scopeResult.error
+  const loadError = projectResult.error || locationsResult.error || activitiesResult.error || allocationsResult.error || scopeError
   const locations = locationsResult.data || []
   // RitsuScope data is optional here: without it the page works as before.
   const spatial = buildRitsuScopeSpatial({ zones: zonesResult.data || [], sources: sheetsResult.data || [], levels: levelsResult.data || [] })
