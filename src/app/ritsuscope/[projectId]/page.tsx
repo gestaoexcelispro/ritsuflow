@@ -30,6 +30,7 @@ import ElementPanel from './ElementPanel'
 import ChecksPanel from './ChecksPanel'
 import RevisionPanel from './RevisionPanel'
 import View3D, { DEFAULT_VIEW3D, render3DImage, type View3DCamera, type View3DStorey } from './View3D'
+import WallContactsEditor from './WallContactsEditor'
 import { elevationsOf, hostWall, sequenceOf, taskInfos, wallCardOf, wallCards, type FieldScope, type FieldTaskLine, type WallCard, type WallTypeInfo } from '@/lib/takeoff/fieldSheetData'
 import PdfWorkspace, { type WorkCommand } from './PdfWorkspace'
 import PlanView from './PlanView'
@@ -1724,6 +1725,7 @@ export default function TakeoffWorkspacePage() {
         item={selection.item}
         shape={selection.shape}
         ptPerM={ptPerM}
+        autoEnds={ptPerM > 0 ? freeEnds(sourceItems, ptPerM).get(selection.shape) || null : null}
         onSaved={async message => { await load(); setStatus(message) }}
       />
       <SplitPanel
@@ -2779,6 +2781,16 @@ export default function TakeoffWorkspacePage() {
         {row(t('fs.spec.insulation'), card.insulation || '—')}
         {q && row(t('task.layer3d.area'), `${nf2(q.wall)} m²`)}
         {row(t('task.layer3d.carrier'), `${nameOf(carrier)}${picked && picked === carrier ? ` · ${t('task.layer3d.picked')}` : ''}`)}
+        {(() => {
+          const el = rawElements.find(e => e.id === taskPick3d.elementId)
+          if (!el || !item.framing?.on) return null
+          const sheetItems = shownItems.filter(it => it.kind === 'linear')
+          const autoEnds = k > 0 ? freeEnds(sheetItems, k).get(sheetItems.flatMap(it => it.shapes).find(sh => sh.id === el.id)!) || null : null
+          return <div style={{ marginTop: 4, paddingTop: 8, borderTop: '1px dashed #e5edef' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#536d78', marginBottom: 6 }}>{t('contacts.title')}</div>
+            <WallContactsEditor compact element={el} autoEnds={autoEnds} onSaved={async message => { await load(); setStatus(message) }} />
+          </div>
+        })()}
       </>}
       {face && b && <>
         {row(t('task.layer3d.board'), b.name)}

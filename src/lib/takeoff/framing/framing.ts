@@ -13,6 +13,7 @@ import {
   type TakeoffItem,
   type TakeoffShape,
   type Vec2,
+  type WallContacts,
 } from '../geometry'
 
 export type FramingLabels = {
@@ -93,7 +94,14 @@ export function anchorsAlong(len: number, spacing: number, edge: number): number
 /** Which ends of a wall stop against another system (no framed wall there). */
 export type FreeEnds = { start: boolean; end: boolean }
 
-export type FixingCount = { anchors: number; bandM: number }
+/** screws: top track screwed into a drywall ceiling's framing (LA screws, at the anchor spacing). */
+export type FixingCount = { anchors: number; bandM: number; screws: number }
+
+/** Effective free ends of a wall: the user's contacts win over the automatic detection. */
+export function endsWithContacts(auto: FreeEnds, contacts?: WallContacts | null): FreeEnds {
+  const one = (c: WallContacts['start'], a: boolean) => (c === 'system' ? true : c === 'drywall' || c === 'none' ? false : a)
+  return { start: one(contacts?.start, auto.start), end: one(contacts?.end, auto.end) }
+}
 
 /**
  * Anchors and acoustic band of one wall (or of the stretch [s0, s1] of it, metres along the wall).
@@ -101,16 +109,21 @@ export type FixingCount = { anchors: number; bandM: number }
  * A stretch takes its share of each track's anchors (by length), so cutting a wall in tasks
  * does not add end anchors.
  */
-export function fixingsForWall(lay: WallLayout, fx: FixingsConfig, ends: FreeEnds, range?: [number, number]): FixingCount {
+export function fixingsForWall(lay: WallLayout, fx: FixingsConfig, autoEnds: FreeEnds, range?: [number, number], contacts?: WallContacts | null): FixingCount {
   const [s0, s1] = range || [-Infinity, Infinity]
-  let anchors = 0, bandM = 0
+  const ends = endsWithContacts(autoEnds, contacts)
+  let anchors = 0, bandM = 0, screws = 0
   for (const tr of lay.tracks) {
     const place = tr.kind === 'guia inferior' ? 'floor' : 'ceiling'
+    // What this track meets (per wall): nothing → no fixing; a drywall ceiling → screws instead of anchors.
+    const meets = place === 'floor' ? contacts?.floor || 'slab' : contacts?.top || 'slab'
+    if (meets === 'none') continue
     const len = tr.x1 - tr.x0
     if (!(len > 0.005)) continue
     const inside = Math.max(0, Math.min(tr.x1, s1) - Math.max(tr.x0, s0))
     if (!(inside > 0)) continue
-    if (fx.anchorAt[place]) anchors += anchorsAlong(len, fx.anchorSpacing, fx.anchorEdge) * (inside / len)
+    const n = anchorsAlong(len, fx.anchorSpacing, fx.anchorEdge) * (inside / len)
+    if (fx.anchorAt[place]) { if (meets === 'drywall_ceiling') screws += n; else anchors += n }
     if (fx.bandAt[place]) bandM += inside
   }
   const endAt = (x: number) => x >= s0 - 1e-6 && x <= s1 + 1e-6
@@ -119,7 +132,7 @@ export function fixingsForWall(lay: WallLayout, fx: FixingsConfig, ends: FreeEnd
     if (fx.anchorAt.walls) anchors += anchorsAlong(lay.H, fx.anchorSpacing, fx.anchorEdge)
     if (fx.bandAt.walls) bandM += lay.H
   }
-  return { anchors, bandM }
+  return { anchors, bandM, screws }
 }
 
 /** Free ends of every framed wall: ends that do not touch another framed wall (they stop against another system). */
@@ -596,9 +609,10 @@ export function framingTotals(items: TakeoffItem[], ptPerM: number) {
       addProfile(F.trackName, lay.trackLen)
       const fx = fixingsOf(F.fixings)
       if (fx) {
-        const c = fixingsForWall(lay, fx, ends.get(sh) || { start: false, end: false })
+        const c = fixingsForWall(lay, fx, ends.get(sh) || { start: false, end: false }, undefined, sh.contacts)
         addFixing(fx.anchorName, 'un', c.anchors)
         addFixing(fx.bandName, 'm', c.bandM, fx.bandRoll ?? null)
+        addScrews(F.laName || framingLabelsPtBR.laScrew!, Math.ceil(c.screws - 1e-9))
       }
       for (const f of ['A', 'B'] as const) {
         // One-sided walls (furring, shaft): no boards on that face, so no empty "0 sheets" group either.

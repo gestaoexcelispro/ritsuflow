@@ -11,6 +11,8 @@ import { addOpening, OPENING_PRESETS, validateOpening, type OpeningError } from 
 import type { ElementRow } from '@/lib/takeoff/rows'
 import { ui } from '../ui'
 import TagsEditor from './TagsEditor'
+import WallContactsEditor from './WallContactsEditor'
+import type { FreeEnds } from '@/lib/takeoff/framing/framing'
 
 type Props = {
   element: ElementRow
@@ -21,6 +23,8 @@ type Props = {
   /** Place the opening configured below by clicking on the plan (PDF sheets). */
   onPickOnPlan?: (opening: Omit<ElementOpening, 'off' | 'guid'>) => void
   picking?: boolean
+  /** Detected free ends of this wall (for the contacts' "Automatic" option). */
+  autoEnds?: FreeEnds | null
 }
 
 const BOARD_SUGGESTIONS = ['Chapa ST 12,5 mm', 'Chapa RU 12,5 mm', 'Chapa RF 12,5 mm', 'ST board 12.5 mm', 'RU board 12.5 mm', 'RF board 12.5 mm']
@@ -38,7 +42,7 @@ const errorKey: Record<OpeningError, TakeoffMessageKey> = {
 }
 
 /** Per-wall settings: own height, Face A / Face B boards and openings. */
-export default function ElementPanel({ element, item, shape, ptPerM, onSaved, onPickOnPlan, picking = false }: Props) {
+export default function ElementPanel({ element, item, shape, ptPerM, onSaved, onPickOnPlan, picking = false, autoEnds = null }: Props) {
   const t = useTakeoffT()
   const { formatNumber } = useLanguage()
   const n = (v: number) => formatNumber(v, 2)
@@ -192,6 +196,8 @@ export default function ElementPanel({ element, item, shape, ptPerM, onSaved, on
           </div>
         </form>
       )}
+
+      {framed && <WallContactsEditor element={element} autoEnds={autoEnds} onSaved={onSaved} />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong style={{ fontSize: 12, color: '#173441' }}>{t('opening.title')}</strong>
