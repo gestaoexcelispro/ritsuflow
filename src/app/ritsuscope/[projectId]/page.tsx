@@ -124,6 +124,8 @@ const ELEMENT_COLUMNS = 'id, project_id, layer_id, source_id, points, height_ove
 const TASK_COLOR = '#E11D48'
 /** Location kinds that group others (not where work is built). */
 const TASK_GROUP_KINDS = new Set(['building', 'floor', 'zone'])
+/** Gap between task layers when the Tasks 3D view is exploded (m). */
+const TASK_EXPLODE_M = 0.35
 type TaskScopeRow = { id: string; scope_code: string | null; scope_name: string; unit: string | null; quantity: number | null; takeoff_layer_id: string | null; takeoff_step?: string | null; plan_style?: PlanStyle | null; plan_materials?: unknown; organization_work_package_id?: string | null; allocation_rule?: AllocationRule | null }
 type TaskLocationRow = { id: string; name: string; location_type: string; parent_id: string | null; sequence_number: number | null; qr_token: string | null; environment_type?: string | null }
 /** Planner's predecessor of a scope line (project_scope_dependencies). */
@@ -153,8 +155,10 @@ type View3DReportCfg = View3DCamera & {
   underlay: boolean
   zones: boolean
   tags: boolean
+  /** Task layers pulled apart (as the Explode button of the Tasks 3D view). */
+  explode?: boolean
 }
-const VIEW3D_REPORT_DEFAULT: View3DReportCfg = { ...DEFAULT_VIEW3D, extent: 'tasks', estimate: true, underlay: true, zones: true, tags: true }
+const VIEW3D_REPORT_DEFAULT: View3DReportCfg = { ...DEFAULT_VIEW3D, extent: 'tasks', estimate: true, underlay: true, zones: true, tags: true, explode: false }
 const REPORT_DEFAULT: ReportCfg = {
   kind: 'location', areaMode: 'location', marginM: 1, area: null,
   show: { estimate: true, openings: true, tags: true, table: true, detail: true, qr: true, materials: true, materialSummary: true, view3d: true, tasks: true, walls: true, elevations: true, sequence: true, log: true, history: true },
@@ -236,6 +240,8 @@ export default function TakeoffWorkspacePage() {
   const [settingsSaving, setSettingsSaving] = useState(false)
   /** Picking carriers: a click on a wall makes the selected location carry it. */
   const [carrierPick, setCarrierPick] = useState(false)
+  /** Tasks 3D: task bands pulled apart (framing, boards, joints…). */
+  const [taskExplode, setTaskExplode] = useState(false)
   const [taskScopeId, setTaskScopeId] = useState<string | null>(null)
   const [taskLocationId, setTaskLocationId] = useState<string | null>(null)
   /** Task line clicked on the drawing: its properties show in the right panel. */
@@ -1024,7 +1030,7 @@ export default function TakeoffWorkspacePage() {
     const lines = fieldLines(kind).filter(r => r.source_id === sheet.id)
     const box = v.extent === 'area' && frame ? frame : boxAround(lines.flatMap(r => r.points), 1.5 * k) || frame
     if (!box) return null
-    const scene = task3dScene(sheet.id, k, { rows: lines, estimateItems: v.estimate ? tallSheetItems(sheet) : [], zonesOn: v.zones, box })
+    const scene = task3dScene(sheet.id, k, { rows: lines, estimateItems: v.estimate ? tallSheetItems(sheet) : [], zonesOn: v.zones, box, explodeM: v.explode ? TASK_EXPLODE_M : 0 })
     if (!scene.items.length) return null
     let under: LoadedUnderlay | null = null
     if (v.underlay) {
@@ -1342,7 +1348,7 @@ export default function TakeoffWorkspacePage() {
    * 3D task scene of a sheet: the task bands (activities sharing a face stacked outwards) with their tags, the estimate
    * walls see-through, the locations' colours. `box` (sheet points) keeps only what lies in it (field sheet).
    */
-  function task3dScene(sheetId: string, k: number, opts: { rows: TaskDrawingRow[]; estimateItems: TakeoffItem[]; zonesOn: boolean; box?: [number, number, number, number] | null }) {
+  function task3dScene(sheetId: string, k: number, opts: { rows: TaskDrawingRow[]; estimateItems: TakeoffItem[]; zonesOn: boolean; box?: [number, number, number, number] | null; explodeM?: number }) {
     const rowsHere = opts.rows
     const scopesHere = taskScopes.filter(sc => rowsHere.some(r => r.scope_item_id === sc.id))
     const layerOf = new Map<string, number>()
@@ -1362,7 +1368,9 @@ export default function TakeoffWorkspacePage() {
       return {
         key: `__plan3d_${sc.id}`, kind: 'linear' as const, name: sc.scope_name, system: '', color: colorOfScope(sc.id), thickness: T, height: 2.8,
         shapes: rowsHere.filter(r => r.scope_item_id === sc.id).map(r => {
-          const pts = bandCentre(r.points, r.side, (2 * (layerOf.get(r.id) || 0) + 1) * T, k)
+          // Exploded: each layer on a face (framing, board, joints…) pulled one gap further from the wall.
+          const n = layerOf.get(r.id) || 0
+          const pts = bandCentre(r.points, r.side, (2 * n + 1) * T + 2 * n * (opts.explodeM || 0), k)
           return { id: `plan:${r.id}`, page: 1, pts, h: Number(r.height_m) > 0 ? Number(r.height_m) : 0.3, tags: tagsOnLongest(pts, r.tag || sc.scope_code || '') }
         }),
       }
@@ -1389,7 +1397,7 @@ export default function TakeoffWorkspacePage() {
     if (section !== 'tasks' || viewMode !== '3d' || !selectedSource || !(ptPerM > 0)) return empty
     const k = ptPerM
     const rowsHere = taskRows.filter(r => r.source_id === selectedSource.id)
-    const scene = task3dScene(selectedSource.id, k, { rows: rowsHere, estimateItems: taskWalls ? shownItems : [], zonesOn: taskZonesOn })
+    const scene = task3dScene(selectedSource.id, k, { rows: rowsHere, estimateItems: taskWalls ? shownItems : [], zonesOn: taskZonesOn, explodeM: taskExplode ? TASK_EXPLODE_M : 0 })
     const zonesHere = taskZonesOn ? locationZonesOf(selectedSource.id) : []
     // The sheet underneath: its framed region, or the box around what is drawn (+ 2 m).
     let region = selectedSource.kind === 'pdf_page' ? underlayRegionOf(selectedSource) : null
@@ -1427,7 +1435,7 @@ export default function TakeoffWorkspacePage() {
           // Task view in 3D: the task layers as coloured bands on the wall faces (stacked when several activities share a
           // face), each with its tag; the estimate walls see-through; the sheet and the locations' colours underneath.
           <View3D key={`tasks-${selectedSource.id}`} items={tasks3d.items} ptPerM={ptPerM} selectedId={null} onSelect={() => {}} initialTags onView={setLiveView3d}
-            underlays={tasks3d.underlays} underlayZones={tasks3d.zones} />
+            underlays={tasks3d.underlays} underlayZones={tasks3d.zones} explodeControl={{ on: taskExplode, onToggle: () => setTaskExplode(v => !v) }} />
         ) : canShowModel && scope3d === 'model' ? (
           <View3D key={isIfcModel ? 'model' : 'building'} items={shownModelItems} ptPerM={1} storeys={modelData.storeys} selectedId={selectedElementId} onSelect={selectFromModel}
             underlays={isIfcModel ? undefined : underlay3d.model.underlays} underlayZones={isIfcModel ? undefined : underlay3d.model.zones}
@@ -3237,8 +3245,8 @@ export default function TakeoffWorkspacePage() {
                             {(['tasks', 'area'] as const).map(x => <label key={x} style={{ ...radio(v.extent === x), flex: 1, padding: '6px 8px', opacity: x === 'area' && cfg.areaMode === 'sheet' ? 0.5 : 1 }}><input type="radio" disabled={x === 'area' && cfg.areaMode === 'sheet'} checked={v.extent === x} onChange={() => setV({ extent: x })} /><span>{t(x === 'tasks' ? 'report.v3d.extentTasks' : 'report.v3d.extentArea')}</span></label>)}
                           </div>
                           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                            {(['estimate', 'underlay', 'zones', 'tags'] as const).map(key => (
-                              <label key={key} style={check}><input type="checkbox" checked={v[key]} onChange={e => setV({ [key]: e.target.checked } as Partial<View3DReportCfg>)} />{t(`report.v3d.${key}` as TakeoffMessageKey)}</label>
+                            {(['estimate', 'underlay', 'zones', 'tags', 'explode'] as const).map(key => (
+                              <label key={key} style={check}><input type="checkbox" checked={!!v[key]} onChange={e => setV({ [key]: e.target.checked } as Partial<View3DReportCfg>)} />{t(`report.v3d.${key}` as TakeoffMessageKey)}</label>
                             ))}
                           </div>
                           <button type="button" onClick={() => setV({ ...VIEW3D_REPORT_DEFAULT })} style={{ justifySelf: 'start', border: 0, background: 'transparent', padding: 0, color: '#0b7f75', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{t('report.v3d.reset')}</button>
