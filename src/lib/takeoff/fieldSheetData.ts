@@ -150,6 +150,35 @@ export type WallCard = {
   band: { at: string[]; name: string } | null
 }
 
+/** What a crew needs to know about one wall item (its wall type, framing, boards, fixings). */
+export function wallCardOf(it: TakeoffItem, wt: WallTypeInfo | null): WallCard {
+  const F = it.framing
+  const board = (side: 'A' | 'B') => {
+    const b = wt?.boards?.find(x => x.side === side)
+    return {
+      name: b?.product || (side === 'A' ? F?.boardA : F?.boardB) || '—',
+      layers: b ? Number(b.count) || 0 : Number(side === 'A' ? F?.layersA ?? 1 : F?.layersB ?? 1),
+      thkMm: Math.round(((b?.thickness_m ?? 0.0125) || 0.0125) * 10000) / 10,
+    }
+  }
+  const coreMatch = F?.studName?.match(/(\d{2,3})\s*mm/)
+  const fx = fixingsOf(F?.fixings)
+  const places = (p: { floor: boolean; ceiling: boolean; walls: boolean }) => (['floor', 'ceiling', 'walls'] as const).filter(k => p[k])
+  return {
+    key: it.key, name: it.name, color: it.color,
+    thicknessMm: it.thickness ? Math.round(it.thickness * 1000) : wt?.thickness_m ? Math.round(Number(wt.thickness_m) * 1000) : null,
+    coreMm: coreMatch ? Number(coreMatch[1]) : Math.max(48, Math.round(((it.thickness || 0.095) - 0.025) * 1000)),
+    stud: F?.studName || '—', track: F?.trackName || '—', spacingM: F?.spacing || 0,
+    doubleStuds: !!wt?.framing?.doubleStuds, maxHeightM: wt?.framing?.maxHeightM ?? null,
+    faceA: board('A'), faceB: board('B'),
+    insulation: wt?.framing?.insulation || null,
+    screwSpacingM: F?.on && F.screwsFromLayout !== false ? F.screwSpacing ?? 0.25 : null,
+    laPerStudEnd: F?.on && F.screwsFromLayout !== false ? F.laPerStudEnd ?? 2 : null,
+    anchors: fx && places(fx.anchorAt).length ? { spacingM: fx.anchorSpacing, edgeM: fx.anchorEdge, at: places(fx.anchorAt), name: fx.anchorName } : null,
+    band: fx && places(fx.bandAt).length ? { at: places(fx.bandAt), name: fx.bandName } : null,
+  }
+}
+
 /** Cards of the wall types the location's lines lie on (one per item). */
 export function wallCards(lines: FieldTaskLine[], scopes: FieldScope[], items: TakeoffItem[], ptPerM: number, wallTypeOf: (item: TakeoffItem) => WallTypeInfo | null | undefined): WallCard[] {
   const seen = new Map<string, WallCard>()
@@ -158,32 +187,7 @@ export function wallCards(lines: FieldTaskLine[], scopes: FieldScope[], items: T
     const host = sc ? hostWall(r, items, ptPerM, sc.itemKey) : null
     const it = host?.item
     if (!it || seen.has(it.key)) continue
-    const F = it.framing
-    const wt = wallTypeOf(it) || null
-    const board = (side: 'A' | 'B') => {
-      const b = wt?.boards?.find(x => x.side === side)
-      return {
-        name: b?.product || (side === 'A' ? F?.boardA : F?.boardB) || '—',
-        layers: b ? Number(b.count) || 0 : Number(side === 'A' ? F?.layersA ?? 1 : F?.layersB ?? 1),
-        thkMm: Math.round(((b?.thickness_m ?? 0.0125) || 0.0125) * 10000) / 10,
-      }
-    }
-    const coreMatch = F?.studName?.match(/(\d{2,3})\s*mm/)
-    const fx = fixingsOf(F?.fixings)
-    const places = (p: { floor: boolean; ceiling: boolean; walls: boolean }) => (['floor', 'ceiling', 'walls'] as const).filter(k => p[k])
-    seen.set(it.key, {
-      key: it.key, name: it.name, color: it.color,
-      thicknessMm: it.thickness ? Math.round(it.thickness * 1000) : wt?.thickness_m ? Math.round(Number(wt.thickness_m) * 1000) : null,
-      coreMm: coreMatch ? Number(coreMatch[1]) : Math.max(48, Math.round(((it.thickness || 0.095) - 0.025) * 1000)),
-      stud: F?.studName || '—', track: F?.trackName || '—', spacingM: F?.spacing || 0,
-      doubleStuds: !!wt?.framing?.doubleStuds, maxHeightM: wt?.framing?.maxHeightM ?? null,
-      faceA: board('A'), faceB: board('B'),
-      insulation: wt?.framing?.insulation || null,
-      screwSpacingM: F?.on && F.screwsFromLayout !== false ? F.screwSpacing ?? 0.25 : null,
-      laPerStudEnd: F?.on && F.screwsFromLayout !== false ? F.laPerStudEnd ?? 2 : null,
-      anchors: fx && places(fx.anchorAt).length ? { spacingM: fx.anchorSpacing, edgeM: fx.anchorEdge, at: places(fx.anchorAt), name: fx.anchorName } : null,
-      band: fx && places(fx.bandAt).length ? { at: places(fx.bandAt), name: fx.bandName } : null,
-    })
+    seen.set(it.key, wallCardOf(it, wallTypeOf(it) || null))
   }
   return [...seen.values()]
 }
