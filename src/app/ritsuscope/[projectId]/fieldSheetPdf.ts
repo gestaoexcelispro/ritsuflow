@@ -26,7 +26,7 @@ export type FieldPagesText = {
   elevationsNote: string
   studs: (n: number) => string
   sequenceTitle: string
-  seqCols: [string, string, string, string, string]
+  seqCols: [string, string, string, string, string, string]
   logTitle: string
   logCols: [string, string, string, string, string, string]
   historyTitle: string
@@ -59,7 +59,8 @@ export type FieldSheetInput = {
   walls?: { card: WallCard; spec: [string, string][] }[] | null
   elevations?: FieldElevation[] | null
   /** Page 5: order of work with hold points, the production log and the revision history. */
-  sequence?: { color: string | null; title: string; check: string; hold?: boolean }[] | null
+  /** after = the predecessors of the step (work package · scope line, and where: this room or the carrier room). */
+  sequence?: { color: string | null; title: string; after?: string; check: string; hold?: boolean }[] | null
   log?: { color: string; tag: string; activity: string }[] | null
   history?: { rev: string; date: string; by: string; current?: boolean }[] | null
   pages?: FieldPagesText
@@ -78,10 +79,6 @@ export type FieldSheetInput = {
     scope: string // "Todas as atividades" / "Atividade 1.1"
     revision: string // "REV 0"
     issued: string // "Emitida em 08/10/2026 por Eduardo"
-    responsible?: string // "Responsável"
-    crew?: string // "Equipe"
-    dates?: string // "Prazo"
-    notes?: string // "Observações"
     responsible?: string // "Responsável"
     crew?: string // "Equipe"
     dates?: string // "Prazo"
@@ -541,10 +538,10 @@ export async function buildFieldSheetPdf(input: FieldSheetInput): Promise<Blob> 
     if (input.sequence?.length) {
       const c = PT.seqCols
       let n = 0
-      drawTable(f, [{ label: c[0], w: 0.05 }, { label: c[1], w: 0.33 }, { label: c[2], w: 0.36 }, { label: c[3], w: 0.15 }, { label: c[4], w: 0.11 }],
+      drawTable(f, [{ label: c[0], w: 0.04 }, { label: c[1], w: 0.28 }, { label: c[2], w: 0.2 }, { label: c[3], w: 0.27 }, { label: c[4], w: 0.12 }, { label: c[5], w: 0.09 }],
         input.sequence.map(r => (r.hold
-          ? { cells: ['', r.title, r.check, '', ''], fill: [1, 0.95, 0.8] as [number, number, number], bold: true }
-          : { cells: [String(++n), r.title, r.check, '', ''], color: null })), { rowH: 18 })
+          ? { cells: ['', r.title, '', r.check, '', ''], fill: [1, 0.95, 0.8] as [number, number, number], bold: true }
+          : { cells: [String(++n), r.title, r.after || '—', r.check, '', ''], color: null })), { rowH: 18 })
     }
     if (input.log?.length) {
       f.need(60)
