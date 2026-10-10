@@ -31,6 +31,8 @@ export type TakeoffShape = {
   faceA?: string
   faceB?: string
   flipFaces?: boolean
+  /** What the wall touches at each end, the top and the floor (per wall; see WallContacts). */
+  contacts?: WallContacts
   /** Tag of each straight stretch (pts[i] → pts[i+1]), e.g. "DW01-03". */
   tags?: string[]
   /** Tag of each opening (door / window / void), aligned with `openings`. */
@@ -81,6 +83,19 @@ export type FramingConfig = {
 
 /** Where the framing touches another construction system. */
 export type ContactPlaces = { floor: boolean; ceiling: boolean; walls: boolean }
+
+/**
+ * What one wall touches, set by the user per wall (missing / 'auto' = detected):
+ *   end   'system'  another construction system (masonry, concrete…) → anchors + acoustic band
+ *         'drywall' another drywall / LSF wall (junction studs only) → no fixing
+ *         'none'    nothing (free-standing end) → no fixing
+ *   top   'slab' → anchors + band · 'drywall_ceiling' → screws into the ceiling framing + band · 'none' → nothing
+ *   floor 'slab' → anchors + band · 'none' → nothing
+ */
+export type EndContact = 'auto' | 'system' | 'drywall' | 'none'
+export type TopContact = 'slab' | 'drywall_ceiling' | 'none'
+export type FloorContact = 'slab' | 'none'
+export type WallContacts = { start?: EndContact; end?: EndContact; top?: TopContact; floor?: FloorContact }
 
 export type FixingsConfig = {
   /** Anchor spacing along the track (m). */

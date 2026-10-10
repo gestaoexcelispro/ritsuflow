@@ -175,9 +175,10 @@ export function taskMaterials(input: TaskMaterialsInput): TaskMaterialRow[] {
         }
         // Anchors and acoustic band where this stretch meets the slab, the ceiling or an existing wall.
         if (fx) {
-          const c = fixingsForWall(lay, fx, input.ends?.get(host.shape) || { start: false, end: false }, [host.s0, host.s1])
+          const c = fixingsForWall(lay, fx, input.ends?.get(host.shape) || { start: false, end: false }, [host.s0, host.s1], host.shape.contacts)
           anchors += c.anchors
           bandM += c.bandM
+          la += c.screws
         }
       } else if (boardFace) {
         // The face the line lies on is the face this activity boards.

@@ -77,7 +77,10 @@ type Props = {
   items: TakeoffItem[]
   ptPerM: number
   selectedId: string | null
-  onSelect: (elementId: string | null) => void
+  /** part: the construction layer clicked ('framing', 'board:A:0'…), when Construction layers is on. */
+  onSelect: (elementId: string | null, part?: string | null) => void
+  /** Construction layer of the selected element to highlight (from onSelect's part). */
+  selectedPart?: string | null
   /** When given, shapes are stacked by storey elevation and each storey can be shown or hidden. */
   storeys?: View3DStorey[]
   /** Plan underlays per storey (sheet region framed for room detection) and the locations on them. */
@@ -89,6 +92,11 @@ type Props = {
   initialTags?: boolean
   /** Called when the user stops orbiting: the view on screen (for the field sheet's 3D picture). */
   onView?: (view: View3DCamera) => void
+  /**
+   * Explode handled by the page (task view): the page pulls its own layers apart (each task band away
+   * from the wall), so the button works even without construction layers.
+   */
+  explodeControl?: { on: boolean; onToggle: () => void }
 }
 
 type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; group: any; raf: number }
@@ -96,7 +104,7 @@ type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; grou
 const NO_UNDERLAYS: UnderlaySpec[] = []
 const NO_ZONES: UnderlayZone[] = []
 
-export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage, initialTags = false, onView }: Props) {
+export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage, initialTags = false, onView, explodeControl, selectedPart = null }: Props) {
   const t = useTakeoffT()
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<Scene | null>(null)
@@ -107,7 +115,8 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
   onViewRef.current = onView
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [layered, setLayered] = useState(true)
-  const [explode, setExplode] = useState(false)
+  const [explodeOwn, setExplode] = useState(false)
+  const explode = explodeControl ? explodeControl.on : explodeOwn
   /** Construction layers: which board sides are drawn (none = framing only). */
   const [boards, setBoards] = useState<BoardSides>('both')
   /** Tag of each wall stretch floating above it (off by default: busy on big models). */
@@ -218,7 +227,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
           const r = renderer.domElement.getBoundingClientRect()
           ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), cam)
           const hit = ray.intersectObjects(group.children, false).find((h: any) => h.object.userData?.id)
-          onSelectRef.current(hit ? hit.object.userData.id : null)
+          onSelectRef.current(hit ? hit.object.userData.id : null, hit ? hit.object.userData.part ?? null : null)
         })
 
         const loop = () => {
@@ -283,9 +292,9 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
   useEffect(() => {
     const s = sceneRef.current
     if (!s || status !== 'ready' || !ptPerM) return
-    anchorsRef.current = build(s, visibleItems, ptPerM, { selectedId, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn, openings: openingsOn, grid: gridOn, underlay, zones: underlay ? underlayZones.filter(z => z.page === underlay.page) : [] })
+    anchorsRef.current = build(s, visibleItems, ptPerM, { selectedId, selectedPart, layered, explode: explode ? 0.6 : 0, isolate, elevationOf, center: items, boards, tags: tagsOn, openings: openingsOn, grid: gridOn, underlay, zones: underlay ? underlayZones.filter(z => z.page === underlay.page) : [] })
     if (!fittedRef.current) { fit(s, items, ptPerM, elevationOf); fittedRef.current = true }
-  }, [items, visibleItems, ptPerM, selectedId, layered, explode, isolate, status, elevationOf, boards, tagsOn, openingsOn, gridOn, underlay, underlayZones])
+  }, [items, visibleItems, ptPerM, selectedId, selectedPart, layered, explode, isolate, status, elevationOf, boards, tagsOn, openingsOn, gridOn, underlay, underlayZones])
 
 
   const toggle = (active: boolean) => ({
@@ -301,7 +310,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', minHeight: 0, minWidth: 0 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', minWidth: 0 }}>
         <button type="button" style={toggle(layered)} onClick={() => setLayered(v => !v)}>{t('view3d.layers')}</button>
-        <button type="button" style={toggle(explode)} disabled={!layered} onClick={() => setExplode(v => !v)}>{t('view3d.explode')}</button>
+        <button type="button" style={toggle(explode)} disabled={!explodeControl && !layered} onClick={() => (explodeControl ? explodeControl.onToggle() : setExplode(v => !v))}>{t('view3d.explode')}</button>
         <span title={t('view3d.boardsHint')} style={{ display: 'flex', alignItems: 'center', gap: 0, opacity: layered ? 1 : 0.45 }}>
           <span style={{ fontSize: 10, fontWeight: 800, color: '#536d78', marginRight: 6 }}>{t('view3d.boards')}</span>
           {BOARD_SIDES.map((v, i) => (
@@ -413,6 +422,8 @@ type BuildOptions = {
   /** Ground grid (default on). */
   grid?: boolean
   layered: boolean
+  /** Construction layer of the selected element to highlight ('framing', 'board:A:0'…). */
+  selectedPart?: string | null
   explode: number
   isolate: boolean
   /** Elevation of each page (storey) in metres; 0 when not stacked. */
@@ -445,7 +456,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
       if (!show(sh)) continue
       const selected = !!sh.id && sh.id === o.selectedId
       if (it.kind === 'linear' && o.layered && it.framing?.on) {
-        addLayered(s, it, sh, M, k, segs, selected, o.explode, junctions, o.elevationOf(sh.page), o.boards || 'both')
+        addLayered(s, it, sh, M, k, segs, selected, o.explode, junctions, o.elevationOf(sh.page), o.boards || 'both', selected ? o.selectedPart || null : null)
       } else if (it.kind === 'linear') {
         const th = it.thickness || 0.1
         const h = shapeHeight(it, sh) || 2.8
@@ -672,7 +683,7 @@ function build(s: Scene, items: TakeoffItem[], k: number, o: BuildOptions): TagA
 }
 
 /** Framing + Face A + Face B as separate solids, optionally pulled apart (exploded). */
-function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) => Vec2, k: number, segs: { a: Vec2; b: Vec2; t: number; ang: number }[], selected: boolean, ex: number, junctions: Junction[], baseElevation = 0, boards: BoardSides = 'both') {
+function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) => Vec2, k: number, segs: { a: Vec2; b: Vec2; t: number; ang: number }[], selected: boolean, ex: number, junctions: Junction[], baseElevation = 0, boards: BoardSides = 'both', selPart: string | null = null) {
   const { THREE, group: g } = s
   const F = it.framing!
   const lay = layoutWall(it, sh, k)
@@ -702,17 +713,19 @@ function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) =>
     return mats[key]
   }
   const edge = new THREE.LineBasicMaterial({ color: selected ? 0xe11d48 : 0x334155, transparent: true, opacity: selected ? 0.9 : 0.55 })
-  const put = (x0: number, x1: number, y0: number, y1: number, nOff: number, depth: number, m: any, edges: boolean) => {
+  // The clicked construction layer glows (each solid knows its layer: 'framing' or 'board:<face>:<n>').
+  const glow = new THREE.MeshStandardMaterial({ color: 0xfb7185, emissive: new THREE.Color(0xe11d48), emissiveIntensity: 0.55, roughness: 0.6 })
+  const put = (x0: number, x1: number, y0: number, y1: number, nOff: number, depth: number, m: any, edges: boolean, part = 'framing') => {
     const sg = segAt((x0 + x1) / 2)
     const len = x1 - x0
     if (len < 1e-3 || y1 - y0 < 1e-3) return
     const geo = new THREE.BoxGeometry(len, y1 - y0, depth)
-    const mesh = new THREE.Mesh(geo, m)
+    const mesh = new THREE.Mesh(geo, selPart && selPart === part ? glow : m)
     const c = (x0 + x1) / 2 - sg.s0
     const n = [-sg.u[1], sg.u[0]]
     mesh.position.set(sg.a[0] + sg.u[0] * c + n[0] * nOff, z0 + (y0 + y1) / 2, sg.a[1] + sg.u[1] * c + n[1] * nOff)
     mesh.rotation.y = -sg.ang
-    mesh.userData = { id: sh.id }
+    mesh.userData = { id: sh.id, part }
     g.add(mesh)
     if (edges) {
       const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edge)
@@ -757,7 +770,7 @@ function addLayered(s: Scene, it: TakeoffItem, sh: TakeoffShape, M: (p: Vec2) =>
         }
         rs = nx
       }
-      rs.forEach((r, i) => put(r.x0 + 0.002, r.x1 - 0.002, r.y0 + 0.002, r.y1 - 0.002, sgn * (core / 2 + tb / 2 + ly * tb + ex), tb, m, i === 0 && rs.length === 1))
+      rs.forEach((r, i) => put(r.x0 + 0.002, r.x1 - 0.002, r.y0 + 0.002, r.y1 - 0.002, sgn * (core / 2 + tb / 2 + ly * tb + ex), tb, m, i === 0 && rs.length === 1, `board:${f}:${ly}`))
     }
   }
 }
