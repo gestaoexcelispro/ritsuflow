@@ -180,3 +180,24 @@ test('double studs (MD) double the regular studs and their framing screws, not t
   assert.equal(b.ta, a.ta, 'boards are screwed once')
   assert.ok(b.la > a.la, 'each twin is fixed in the tracks')
 })
+
+test('per-wall contacts override the automatic free ends and set what the top and floor meet', async () => {
+  const { defaultFixings, fixingsForWall, endsWithContacts, layoutWall: lw } = await import('../src/lib/takeoff/framing/framing.ts')
+  const fx = defaultFixings()
+  const lay = lw(wall, wall.shapes[0], K)
+  const free = { start: true, end: true }
+  const base = fixingsForWall(lay, fx, free)
+  // Both ends against a drywall wall: no end anchors, no end band (2 × 2.8 m less band).
+  const dry = fixingsForWall(lay, fx, free, undefined, { start: 'drywall', end: 'none' })
+  assert.ok(Math.abs(base.bandM - dry.bandM - 2 * 2.8) < 1e-6)
+  assert.ok(base.anchors - dry.anchors === 12, 'two end studs of 2.8 m carry 6 anchors each')
+  // An end the detection missed: 'system' forces the fixing.
+  assert.deepEqual(endsWithContacts({ start: false, end: false }, { start: 'system' }), { start: true, end: false })
+  // Drywall ceiling: the top track's fixings become screws, band stays.
+  const dc = fixingsForWall(lay, fx, { start: false, end: false }, undefined, { top: 'drywall_ceiling' })
+  const slab = fixingsForWall(lay, fx, { start: false, end: false })
+  assert.ok(dc.screws > 0 && Math.abs(dc.anchors + dc.screws - slab.anchors) < 1e-6 && Math.abs(dc.bandM - slab.bandM) < 1e-6)
+  // Wall stopping below the ceiling: nothing at the top.
+  const open = fixingsForWall(lay, fx, { start: false, end: false }, undefined, { top: 'none' })
+  assert.ok(open.screws === 0 && open.anchors < slab.anchors && open.bandM < slab.bandM)
+})
