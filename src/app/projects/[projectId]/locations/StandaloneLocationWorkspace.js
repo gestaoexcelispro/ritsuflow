@@ -11,7 +11,7 @@ import { useLanguage } from '../../../../lib/i18n/LanguageProvider'
 import LocationQrCard from './LocationQrCard'
 import { isQrEligibleLocation } from './locationQr'
 import styles from './standalone-location-workspace.module.css'
-import { allocateFromTakeoff, loadTakeoffData } from '../../../../lib/takeoff/scopeAllocation'
+import { allocateScopeStep, defaultRuleFor, EXTERIOR, exteriorLocationOf, flowRankOf, loadTakeoffData } from '../../../../lib/takeoff/scopeAllocation'
 import { drawnTotals } from '../../../../lib/takeoff/taskDrawings'
 
 const TYPES = ['building', 'floor', 'zone', 'area', 'room', 'custom']
@@ -115,11 +115,38 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
   const drawnOf = (service, locationId) => (service?.source_scope_item_id ? drawnBy.get(`${service.source_scope_item_id}:${locationId}`) : undefined)
   const drawnLocations = (service) => new Set(locations.filter((loc) => drawnOf(service, loc.id) !== undefined).map((loc) => loc.id))
   const claimedOf = (service) => (service?.source_scope_item_id ? taskDrawings.filter((d) => d.scope_item_id === service.source_scope_item_id).map((d) => ({ source_id: d.source_id, points: d.points })) : [])
+  // Each wall step goes where its work is done (framing → the carrier room, faces → the room they look
+  // into, outside faces → the level's Exterior); areas and counts by position. See allocateScopeStep.
+  const flowRank = useMemo(() => flowRankOf(locations), [locations])
   function splitFor(service) {
     const { all } = feedOf(service)
     if (!takeoff || !all.length) return null
     const drawn = drawnLocations(service)
-    return allocateFromTakeoff(takeoff, { layerIds: all.map((l) => l.id), unit: service.unit, productionLocationIds: new Set([...productionIds].filter((id) => !drawn.has(id))), claimed: claimedOf(service) })
+    return allocateScopeStep(takeoff, {
+      layerIds: all.map((l) => l.id), unit: service.unit, step: service.takeoff_step, rule: service.allocation_rule,
+      productionLocationIds: new Set([...productionIds].filter((id) => !drawn.has(id))), claimed: claimedOf(service), flowRank,
+      exteriorLocationOf: (key) => exteriorLocationOf(key, locations, takeoff.levels),
+    })
+  }
+  /** Outside faces with no Exterior location yet (one per level): their quantity, to offer creating them. */
+  const exteriorPending = (r) => [...(r?.byLocation || new Map())].filter(([key, v]) => String(key).startsWith(EXTERIOR) && v > 0)
+  async function createExteriorLocations(keys) {
+    setAllocationSaving(true); setError('')
+    try {
+      let seq = nextSequence()
+      const made = []
+      for (const key of keys) {
+        const level = (takeoff?.levels || []).find((l) => l.id === key.slice(EXTERIOR.length))
+        const payload = { project_id: projectId, parent_id: level?.location_id || null, name: t('loc.exterior.name', { level: level?.name || t('loc.exterior.noLevel') }), location_type: 'area', environment_type: 'exterior', sequence_number: seq++, created_by: userId }
+        const { data, error: e } = await supabase.from('locations').insert(payload).select('id, project_id, parent_id, name, location_type, environment_type, sequence_number, qr_token, created_at, updated_at').single()
+        if (e) throw e
+        made.push(data)
+      }
+      setLocations((current) => [...current, ...made])
+      setAllocationMessage(t('loc.exterior.created', { count: made.length }))
+      router.refresh()
+    } catch (e) { setError(e?.message || t('loc.errSave')) }
+    setAllocationSaving(false)
   }
   /** Drawn quantity where a location is drawn, otherwise the automatic split (or blank). */
   function plannedFor(service, r) {
@@ -369,6 +396,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     return <div className={styles.ritsuBox}>
       <div className={styles.ritsuHead}>
         <strong>{t('loc.ritsu.quantitiesTitle')}</strong>
+        <span className={styles.muted} title={t('loc.rule.hint')}>{t('loc.rule.label')}: {t(`loc.rule.${selectedService.allocation_rule || defaultRuleFor(selectedService.takeoff_step)}`)}</span>
         <button type="button" className={`${ui.btn} ${ui.small}`} onClick={() => { setLinkDraft(new Set(manual.map((l) => l.id))); setLinkOpen((v) => !v) }}>{linkOpen ? t('loc.ritsu.close') : t('loc.ritsu.chooseItems')}</button>
         <button type="button" className={`${ui.btnPrimary} ${ui.small}`} disabled={!linked.length} onClick={fill}>{t('loc.ritsu.fill')}</button>
       </div>
@@ -493,7 +521,15 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
           {roots.length ? roots.map((item) => renderAllocationNode(item, 0)) : <p className={styles.muted}>{t('loc.alloc.noLocations')}</p>}
         </div>
         <div className={styles.allocationFoot}>
-          <span className={allocationMessage ? (overAllocated ? styles.bad : styles.ok) : styles.muted}>{allocationMessage || t('loc.alloc.hint')}</span>
+          <span className={allocationMessage ? (overAllocated ? styles.bad : styles.ok) : styles.muted}>
+            {allocationMessage || t('loc.alloc.hint')}
+            {selectedService && (() => {
+              const pending = exteriorPending(splitFor(selectedService))
+              if (!pending.length) return null
+              const sum = pending.reduce((a, [, v]) => a + v, 0)
+              return <> {t('loc.exterior.pending', { value: `${qty(sum)} ${selectedService.unit || ''}`.trim() })} <button type="button" className={ui.btn} disabled={allocationSaving} onClick={() => createExteriorLocations(pending.map(([k]) => k))}>{t('loc.exterior.create')}</button></>
+            })()}
+          </span>
           <div><button type="button" className={ui.btn} disabled={allocationSaving} onClick={clearSelectedAllocation}>{t('loc.alloc.clear')}</button><button type="button" className={ui.btnPrimary} disabled={allocationSaving || overAllocated} onClick={saveAllocation}>{allocationSaving ? t('loc.saving') : t('loc.alloc.save')}</button></div>
         </div>
       </> : <div className={styles.emptyDetail}><strong>{t('loc.alloc.selectTitle')}</strong><p>{t('loc.alloc.selectText')}</p></div>}</div>

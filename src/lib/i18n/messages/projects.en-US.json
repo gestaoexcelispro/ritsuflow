@@ -614,5 +614,16 @@
   "scope.import.orphans": "{count} items came from RitsuScope items that were deleted (takeoff redrawn). They no longer follow the drawing:",
   "scope.import.removeOrphans": "Remove the {count} orphaned lines",
   "scope.import.confirmOrphans": "Remove {count} lines from the register? Their FieldOp activities, location quantities and task drawings are removed with them. This cannot be undone.",
-  "scope.import.orphansHistory": "{count} lines removed: their RitsuScope item was deleted"
+  "scope.import.orphansHistory": "{count} lines removed: their RitsuScope item was deleted",
+  "loc.rule.label": "Split",
+  "loc.rule.hint": "How this line is spread over the locations (set in RitsuScope › Tasks ⚙).",
+  "loc.rule.face": "face → its room",
+  "loc.rule.carrier": "whole wall → carrier room",
+  "loc.rule.position": "by position",
+  "loc.rule.manual": "manual",
+  "loc.exterior.name": "Exterior – {level}",
+  "loc.exterior.noLevel": "no level",
+  "loc.exterior.pending": "{value} are on outside faces with no Exterior location yet.",
+  "loc.exterior.create": "Create Exterior locations",
+  "loc.exterior.created": "{count} Exterior location(s) created. Fill from RitsuScope again to include them."
 }
