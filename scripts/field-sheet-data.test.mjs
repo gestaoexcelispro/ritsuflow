@@ -54,8 +54,9 @@ test('the wall card carries profiles, boards, screws, anchors and band', () => {
   assert.equal(c.faceB.name, 'RU 12,5 mm')
   assert.equal(c.faceA.thkMm, 12.5)
   assert.equal(c.insulation, 'lã de vidro 50 mm')
-  assert.deepEqual(c.anchors.at, ['floor', 'ceiling'])
-  assert.deepEqual(c.band.at, ['floor'])
+  // Fixed rule: anchors and band wherever the framing meets another system.
+  assert.deepEqual(c.anchors.at, ['floor', 'ceiling', 'walls'])
+  assert.deepEqual(c.band.at, ['floor', 'ceiling', 'walls'])
 })
 
 test('order of work: build-up order with the services hold point before the second face', () => {

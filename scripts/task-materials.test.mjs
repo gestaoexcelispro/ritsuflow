@@ -87,9 +87,10 @@ test('anchors along a track: first and last at most 10 cm from the ends, at most
   assert.equal(anchorsAlong(0, 0.6, 0.1), 0)
 })
 
-test('the framing task carries anchors and acoustic band where the wall meets the slab (and walls when chosen)', async () => {
+test('the framing task carries anchors and acoustic band at floor, ceiling and free ends (always)', async () => {
   const { defaultFixings, freeEnds } = await import('../src/lib/takeoff/framing/framing.ts')
-  const fx = { ...defaultFixings(), bandAt: { floor: true, ceiling: false, walls: true } }
+  // Stored ticks are ignored: the rule is floor + ceiling + free ends for anchors and band.
+  const fx = { ...defaultFixings(), bandAt: { floor: true, ceiling: false, walls: false }, anchorAt: { floor: true, ceiling: false, walls: false } }
   const w = { ...wall, framing: { ...framing, fixings: fx } }
   const ends = freeEnds([w], K)
   assert.deepEqual(ends.get(w.shapes[0]), { start: true, end: true }, 'a lone wall stops against other systems at both ends')
@@ -97,11 +98,11 @@ test('the framing task carries anchors and acoustic band where the wall meets th
   const anchors = rows.find(r => r.mat === fx.anchorName)
   const band = rows.find(r => r.mat === fx.bandName)
   assert.ok(anchors && band)
-  // Bottom track 0…6.6 m (door at 6.6…7.4): 5/6.6 of its anchors; top track 0…10 m: half; start wall end: 2.8 m of stud.
+  // Bottom track 0…6.6 m (door at 6.6…7.4): 5/6.6 of its anchors; top track 0…10 m: half; start wall end: 2.8 m of stud (6 anchors).
   const exp = (n, len, part) => Math.ceil((len - 0.2) / 0.6 - 1e-9) + 1 === n ? n * part / len : NaN
-  const expected = exp(12, 6.6, 5) + exp(18, 10, 5)
+  const expected = exp(12, 6.6, 5) + exp(18, 10, 5) + 6
   assert.ok(Math.abs(anchors.exact - expected) < 1e-6, `anchors ${anchors.exact} vs ${expected}`)
-  assert.ok(Math.abs(band.exact - (5 + 2.8)) < 1e-6, `band = 5 m under the floor track + 2.8 m at the free end, got ${band.exact}`)
+  assert.ok(Math.abs(band.exact - (5 + 5 + 2.8)) < 1e-6, `band = 5 m floor + 5 m ceiling + 2.8 m at the free end, got ${band.exact}`)
   // No fixings set: nothing counted (old walls keep their estimate).
   assert.ok(!taskMaterials({ step: 'framing', item: wall, sheetItems: [wall], lines: [above], ptPerM: K, rates: [], labels }).some(r => r.mat === fx.anchorName))
   // Boards do not carry fixings.
