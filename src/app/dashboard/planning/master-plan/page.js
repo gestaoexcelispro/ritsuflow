@@ -225,6 +225,7 @@ export default function MasterPlanPage() {
     () => new Proxy({}, { get: (_, key) => translate(`masterPlan.${String(key)}`) }),
     [translate]
   );
+  const tv = (key, vars) => translate(`masterPlan.${key}`, vars);
   const dialogs = usePageDialogs();
 
   const [projects, setProjects] = useState([]);
@@ -1160,560 +1161,120 @@ export default function MasterPlanPage() {
     // calendar expansion and the save operation.
 
     // ----------------------------------------------------
-    // 1. CLEAR PREVIOUS NORMALIZED NETWORK
-    // ----------------------------------------------------
-    const {
-      error: dependencyDeleteError
-    } = await supabase
-      .from(
-        'master_plan_package_dependencies'
-      )
-      .delete()
-      .eq(
-        'scenario_id',
-        scenarioId
-      )
-      .eq(
-        'project_id',
-        selectedProjectId
-      );
-
-    if (dependencyDeleteError) {
-      console.error(
-        'Master Plan - delete normalized dependencies:',
-        dependencyDeleteError
-      );
-
-      return {
-        ok: false,
-        error: dependencyDeleteError
-      };
-    }
-
-    const {
-      error: deleteError
-    } = await supabase
-      .from(
-        'master_plan_packages'
-      )
-      .delete()
-      .eq(
-        'scenario_id',
-        scenarioId
-      )
-      .eq(
-        'project_id',
-        selectedProjectId
-      );
-
-    if (deleteError) {
-      console.error(
-        'Master Plan - delete normalized packages:',
-        deleteError
-      );
-
-      return {
-        ok: false,
-        error: deleteError
-      };
-    }
-
-    if (packages.length === 0) {
-      return {
-        ok: true,
-        insertedCount: 0,
-        dependencyCount: 0
-      };
-    }
-
-    // ----------------------------------------------------
-    // 2. LOOKUP MAPS
+    // R3 · ONE DATABASE CALL SAVES THE WHOLE SCENARIO
+    //
+    // save_master_plan_packages updates each package in
+    // place (matched by its screen key, pkg.id), inserts new
+    // ones, deletes removed ones and rebuilds the dependency
+    // network in a single transaction. Package ids survive a
+    // save, so Lookahead items, constraints, weekly items and
+    // production activities keep their links.
     // ----------------------------------------------------
     const rowById = new Map();
 
     sections.forEach((section) => {
       (section.rows || []).forEach((row) => {
-        rowById.set(
-          row.id,
-          row
-        );
+        rowById.set(row.id, row);
       });
     });
 
-    const packageByUiId =
-      new Map(
-        packages.map(
-          (pkg) => [
-            pkg.id,
-            pkg
-          ]
-        )
-      );
-
-    const dbIdByUiId =
-      new Map();
-
-    const inserted =
-      new Set();
-
-    const visiting =
-      new Set();
-
-    // ----------------------------------------------------
-    // 3. INSERT PACKAGES IN DEPENDENCY ORDER
-    //
-    // This preserves the existing DB constraint:
-    //
-    // predecessor start rule
-    //     => predecessor_package_id must already exist.
-    //
-    // We still preserve EVERY logical predecessor separately
-    // in master_plan_package_dependencies afterward.
-    // ----------------------------------------------------
-    const insertPackage = async (
-      pkg,
-      sequenceNumber
-    ) => {
-      if (!pkg?.id) {
-        throw new Error(
-          'Master Plan package is missing its UI identifier.'
-        );
-      }
-
-      if (
-        inserted.has(
-          pkg.id
-        )
-      ) {
-        return dbIdByUiId.get(
-          pkg.id
-        );
-      }
-
-      if (
-        visiting.has(
-          pkg.id
-        )
-      ) {
-        throw new Error(
-          `Circular dependency detected for package ${pkg.id}.`
-        );
-      }
-
-      visiting.add(
-        pkg.id
-      );
-
-      const dependencies =
-        getPackageDependencies(
-          pkg
-        );
-
-      // Compatibility controlling predecessor.
-      // The full network is stored later in the dependency table.
-      const controllingDependency =
-        dependencies.find(
-          (dependency) =>
-            dependency.predecessorId ===
-            pkg.predecessorId
-        ) ||
-        dependencies[0] ||
-        null;
-
-      let controllingPredecessorDbId =
-        null;
-
-      if (
-        controllingDependency
-          ?.predecessorId
-      ) {
-        const predecessor =
-          packageByUiId.get(
-            controllingDependency
-              .predecessorId
-          );
-
-        if (!predecessor) {
-          throw new Error(
-            `Predecessor ${controllingDependency.predecessorId} was not found in this scenario.`
-          );
-        }
-
-        const predecessorIndex =
-          packages.findIndex(
-            (item) =>
-              item.id ===
-              predecessor.id
-          );
-
-        controllingPredecessorDbId =
-          await insertPackage(
-            predecessor,
-            predecessorIndex >= 0
-              ? predecessorIndex
-              : 0
-          );
-      }
-
-      const row =
-        rowById.get(
-          pkg.rowId
-        ) || null;
-
-      const service =
-        workPackageCatalog[
-          pkg.activity
-        ] || null;
-
-      const hasPredecessor =
-        Boolean(
-          controllingPredecessorDbId
-        );
-
-      const fallbackStartDate =
-        pkg.startDate ||
-        dataInicio ||
-        null;
-
-      const persistedSchedule =
-        immutableSnapshot.get(
-          pkg.id
-        ) ||
-        null;
-
-      const scheduledStartDate =
-        persistedSchedule
-          ?.scheduledStartDate ||
-        null;
-
-      const scheduledFinishDate =
-        persistedSchedule
-          ?.scheduledFinishDate ||
-        null;
-
-      if (
-        !scheduledStartDate ||
-        !scheduledFinishDate
-      ) {
-        console.warn(
-          'Master Plan - immutable schedule snapshot missing dates:',
-          {
-            packageId:
-              pkg.id,
-            packageCode:
-              pkg.activity,
-            rowId:
-              pkg.rowId
-          }
-        );
-      }
-
-      const persistedSequenceGroupId =
-        persistedSchedule
-          ?.sequenceGroupId ||
-        null;
-
-      const payload = {
-        scenario_id:
-          scenarioId,
-
-        project_id:
-          selectedProjectId,
-
-        location_id:
-          pkg.locationId ||
-          row?.locationId ||
-          null,
-
-        project_service_id:
-          pkg.projectServiceId ||
-          service?.projectServiceId ||
-          null,
-
-        row_key:
-          pkg.rowId ||
-          null,
-
-        package_code:
-          String(
-            pkg.activity ||
-            ''
-          )
-            .trim()
-            .toUpperCase()
-            .slice(
-              0,
-              3
-            ) ||
-          null,
-
-        location_name:
-          row?.description ||
-          null,
-
-        location_path:
-          pkg.locationPath ||
-          row?.locationPath ||
-          row?.description ||
-          null,
-
-        service_name:
-          service?.labelEn ||
-          pkg.activity ||
-          null,
-
-        service_code:
-          service?.sourceServiceCode ||
-          pkg.activity ||
-          null,
-
-        unit:
-          service?.unit ||
-          null,
-
-        start_rule:
-          hasPredecessor
-            ? 'predecessor'
-            : 'date',
-
-        planned_start_date:
-          hasPredecessor
-            ? null
-            : fallbackStartDate,
-
-        predecessor_package_id:
-          controllingPredecessorDbId,
-
-        duration_working_days:
-          Math.max(
-            1,
-            Number(
-              pkg.duration ||
-              1
-            )
-          ),
-
-        lag_working_days:
-          Math.max(
-            0,
-            Number(
-              controllingDependency
-                ?.lagWorkingDays ||
-              pkg.lagWorkingDays ||
-              0
-            )
-          ),
-
-        manual_delay_working_days:
-          Math.max(
-            0,
-            Number(
-              pkg.manualDelayWorkingDays ||
-              0
-            )
-          ),
-
-        scheduled_start_date:
-          scheduledStartDate,
-
-        scheduled_finish_date:
-          scheduledFinishDate,
-
-        sequence_group_id:
-          persistedSequenceGroupId,
-
-        sequence_number:
-          Math.max(
-            0,
-            Number(
-              sequenceNumber ||
-              0
-            )
-          )
-      };
-
-      const {
-        data: insertedPackage,
-        error: insertError
-      } = await supabase
-        .from(
-          'master_plan_packages'
-        )
-        .insert(
-          payload
-        )
-        .select(`
-          id,
-          scheduled_start_date,
-          scheduled_finish_date,
-          sequence_group_id
-        `)
-        .single();
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      if (
-        scheduledStartDate &&
-        insertedPackage
-          ?.scheduled_start_date !==
-          scheduledStartDate
-      ) {
-        throw new Error(
-          `Master Plan schedule persistence mismatch for ${pkg.activity}: expected start ${scheduledStartDate}, stored ${insertedPackage?.scheduled_start_date || 'NULL'}.`
-        );
-      }
-
-      if (
-        scheduledFinishDate &&
-        insertedPackage
-          ?.scheduled_finish_date !==
-          scheduledFinishDate
-      ) {
-        throw new Error(
-          `Master Plan schedule persistence mismatch for ${pkg.activity}: expected finish ${scheduledFinishDate}, stored ${insertedPackage?.scheduled_finish_date || 'NULL'}.`
-        );
-      }
-
-      dbIdByUiId.set(
-        pkg.id,
-        insertedPackage.id
-      );
-
-      inserted.add(
-        pkg.id
-      );
-
-      visiting.delete(
-        pkg.id
-      );
-
-      return insertedPackage.id;
-    };
+    const packageUiIds = new Set(packages.map((pkg) => pkg.id));
+    const packageRows = [];
+    const dependencyRows = [];
 
     try {
-      for (
-        let index = 0;
-        index < packages.length;
-        index += 1
-      ) {
-        await insertPackage(
-          packages[index],
-          index
-        );
-      }
-    } catch (error) {
-      console.error(
-        'Master Plan - normalized package insertion:',
-        error
-      );
+      packages.forEach((pkg, index) => {
+        if (!pkg?.id) {
+          throw new Error('Master Plan package is missing its UI identifier.');
+        }
 
-      return {
-        ok: false,
-        error
-      };
-    }
+        const dependencies = getPackageDependencies(pkg);
 
-    // ----------------------------------------------------
-    // 4. INSERT FULL MULTI-PREDECESSOR NETWORK
-    // ----------------------------------------------------
-    const dependencyRows =
-      [];
+        // Compatibility controlling predecessor; the full
+        // network goes to the dependency table.
+        const controllingDependency =
+          dependencies.find((dependency) => dependency.predecessorId === pkg.predecessorId) ||
+          dependencies[0] ||
+          null;
 
-    packages.forEach((pkg) => {
-      const packageDbId =
-        dbIdByUiId.get(
-          pkg.id
-        );
+        if (controllingDependency?.predecessorId && !packageUiIds.has(controllingDependency.predecessorId)) {
+          throw new Error(`Predecessor ${controllingDependency.predecessorId} was not found in this scenario.`);
+        }
 
-      if (!packageDbId) {
-        return;
-      }
+        const row = rowById.get(pkg.rowId) || null;
+        const service = workPackageCatalog[pkg.activity] || null;
+        const persistedSchedule = immutableSnapshot.get(pkg.id) || null;
+        const scheduledStartDate = persistedSchedule?.scheduledStartDate || null;
+        const scheduledFinishDate = persistedSchedule?.scheduledFinishDate || null;
 
-      getPackageDependencies(
-        pkg
-      ).forEach(
-        (dependency) => {
-          const predecessorDbId =
-            dbIdByUiId.get(
-              dependency
-                .predecessorId
-            );
+        if (!scheduledStartDate || !scheduledFinishDate) {
+          console.warn('Master Plan - immutable schedule snapshot missing dates:', {
+            packageId: pkg.id,
+            packageCode: pkg.activity,
+            rowId: pkg.rowId
+          });
+        }
 
-          if (
-            !predecessorDbId
-          ) {
+        packageRows.push({
+          ui_key: pkg.id,
+          predecessor_ui_key: controllingDependency?.predecessorId || null,
+          location_id: pkg.locationId || row?.locationId || null,
+          project_service_id: pkg.projectServiceId || service?.projectServiceId || null,
+          row_key: pkg.rowId || null,
+          package_code: String(pkg.activity || '').trim().toUpperCase().slice(0, 3) || null,
+          location_name: row?.description || null,
+          location_path: pkg.locationPath || row?.locationPath || row?.description || null,
+          service_name: service?.labelEn || pkg.activity || null,
+          service_code: service?.sourceServiceCode || pkg.activity || null,
+          unit: service?.unit || null,
+          planned_start_date: pkg.startDate || dataInicio || null,
+          duration_working_days: Math.max(1, Number(pkg.duration || 1)),
+          lag_working_days: Math.max(0, Number(controllingDependency?.lagWorkingDays || pkg.lagWorkingDays || 0)),
+          manual_delay_working_days: Math.max(0, Number(pkg.manualDelayWorkingDays || 0)),
+          scheduled_start_date: scheduledStartDate,
+          scheduled_finish_date: scheduledFinishDate,
+          sequence_group_id: persistedSchedule?.sequenceGroupId || null,
+          sequence_number: index
+        });
+
+        dependencies.forEach((dependency) => {
+          if (!dependency?.predecessorId || !packageUiIds.has(dependency.predecessorId)) {
             return;
           }
 
           dependencyRows.push({
-            scenario_id:
-              scenarioId,
-
-            project_id:
-              selectedProjectId,
-
-            package_id:
-              packageDbId,
-
-            predecessor_package_id:
-              predecessorDbId,
-
-            dependency_type:
-              dependency.type ||
-              'external',
-
-            lag_working_days:
-              Math.max(
-                0,
-                Number(
-                  dependency
-                    .lagWorkingDays ||
-                  0
-                )
-              )
+            ui_key: pkg.id,
+            predecessor_ui_key: dependency.predecessorId,
+            dependency_type: dependency.type || 'external',
+            lag_working_days: Math.max(0, Number(dependency.lagWorkingDays || 0))
           });
-        }
-      );
+        });
+      });
+    } catch (error) {
+      console.error('Master Plan - prepare packages:', error);
+
+      return { ok: false, error };
+    }
+
+    const { data: saved, error: saveError } = await supabase.rpc('save_master_plan_packages', {
+      target_scenario_id: scenarioId,
+      target_packages: packageRows,
+      target_dependencies: dependencyRows
     });
 
-    if (
-      dependencyRows.length > 0
-    ) {
-      const {
-        error:
-          dependencyInsertError
-      } = await supabase
-        .from(
-          'master_plan_package_dependencies'
-        )
-        .insert(
-          dependencyRows
-        );
+    if (saveError) {
+      console.error('Master Plan - save packages:', saveError);
 
-      if (
-        dependencyInsertError
-      ) {
-        console.error(
-          'Master Plan - insert dependency network:',
-          dependencyInsertError
-        );
-
-        return {
-          ok: false,
-          error:
-            dependencyInsertError
-        };
-      }
+      return { ok: false, error: saveError };
     }
+
+    const summary = (saved || [])[0] || {};
 
     return {
       ok: true,
-      insertedCount:
-        inserted.size,
-      dependencyCount:
-        dependencyRows.length
+      insertedCount: Number(summary.inserted_count || 0) + Number(summary.updated_count || 0),
+      dependencyCount: dependencyRows.length,
+      removedLookaheadItems: Number(summary.removed_lookahead_items || 0)
     };
   };
 
@@ -3226,6 +2787,11 @@ ${
           packageSync.error?.message ||
           ''
         }`, 'bad');
+      return;
+    }
+
+    if (packageSync.removedLookaheadItems > 0) {
+      dialogs.notify(tv('removedLookaheadItems', { count: packageSync.removedLookaheadItems }), 'warn');
       return;
     }
 

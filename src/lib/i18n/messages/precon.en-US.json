@@ -42,6 +42,7 @@
   "masterPlan.promptDuplicate": "Name for the copy",
   "masterPlan.scenarioSaved": "Scenario saved. You can switch scenarios at the top of the page.",
   "masterPlan.scenarioUpdated": "Scenario updated.",
+  "masterPlan.removedLookaheadItems": "Scenario updated. {count} Lookahead items pointed at packages you removed and were taken out of the Lookahead.",
   "masterPlan.scenarioSaveError": "The scenario could not be saved.",
   "masterPlan.scenarioLoadError": "The master plan could not be loaded.",
   "masterPlan.packageSyncError": "The scenario was saved, but its work packages could not be synchronized.",

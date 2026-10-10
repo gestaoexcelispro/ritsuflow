@@ -42,6 +42,7 @@
   "masterPlan.promptDuplicate": "Nome da cópia",
   "masterPlan.scenarioSaved": "Cenário salvo. Você pode trocar de cenário no topo da página.",
   "masterPlan.scenarioUpdated": "Cenário atualizado.",
+  "masterPlan.removedLookaheadItems": "Cenário atualizado. {count} itens do Lookahead apontavam para pacotes que você removeu e foram retirados do Lookahead.",
   "masterPlan.scenarioSaveError": "Não foi possível salvar o cenário.",
   "masterPlan.scenarioLoadError": "Não foi possível carregar o plano mestre.",
   "masterPlan.packageSyncError": "O cenário foi salvo, mas não foi possível sincronizar os pacotes de trabalho.",

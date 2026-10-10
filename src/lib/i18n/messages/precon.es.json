@@ -42,6 +42,7 @@
   "masterPlan.promptDuplicate": "Nombre de la copia",
   "masterPlan.scenarioSaved": "Escenario guardado. Puedes cambiar de escenario en la parte superior de la página.",
   "masterPlan.scenarioUpdated": "Escenario actualizado.",
+  "masterPlan.removedLookaheadItems": "Escenario actualizado. {count} ítems del Lookahead apuntaban a paquetes que eliminó y se quitaron del Lookahead.",
   "masterPlan.scenarioSaveError": "No se pudo guardar el escenario.",
   "masterPlan.scenarioLoadError": "No se pudo cargar el plan maestro.",
   "masterPlan.packageSyncError": "El escenario se guardó, pero no se pudieron sincronizar sus paquetes de trabajo.",
