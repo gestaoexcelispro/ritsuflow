@@ -4,7 +4,7 @@
 import { IFC_SHEET_PT_PER_M, type IfcImport } from './ifc/importIfcModel'
 import { ceilingSpecOf } from './ceilingTypes'
 import { floorSpecOf } from './floorTypes'
-import type { ElementOpening, FramingConfig, LayerKind, TakeoffItem, TakeoffShape, Vec2 } from './geometry'
+import type { ElementOpening, FramingConfig, LayerKind, TakeoffItem, TakeoffShape, Vec2, WallContacts } from './geometry'
 
 /** Placeholder GlobalId for elements the IFC has outside any storey. */
 export const NO_STOREY_GUID = '__no_storey__'
@@ -61,7 +61,7 @@ export type ElementRow = {
   root_guid: string | null
   layer_guids: string[]
   openings: ElementOpening[]
-  faces: { faceA?: string; faceB?: string; flip?: boolean; exploded?: boolean }
+  faces: { faceA?: string; faceB?: string; flip?: boolean; exploded?: boolean; contacts?: WallContacts }
   /** Tags renamed by the user, one per segment (null/missing = automatic). Column added by migration 20261006_008. */
   segment_tags?: (string | null)[] | null
   created_at?: string
@@ -169,6 +169,7 @@ export function rowsToItems(layers: LayerRow[], elements: ElementRow[], pageOfSo
         faceA: e.faces?.faceA,
         faceB: e.faces?.faceB,
         flipFaces: e.faces?.flip,
+        contacts: e.faces?.contacts,
     tags: e.tag_labels,
         openingTags: e.opening_tags,
       }))
