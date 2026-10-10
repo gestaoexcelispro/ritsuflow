@@ -81,6 +81,11 @@ export type AllocationResult = {
   uncalibratedSheets: string[]
   /** The part of walls that runs along task lines already drawn (see `claimed` input). */
   claimed: number
+  /**
+   * Wall steps only: for each room (or Exterior) on the non-carrier side of a wall, the rooms that carry
+   * those walls (where the framing and Side A are done). Feeds the "carrier room" predecessors.
+   */
+  carrierOf?: Map<string, Set<string>>
 }
 
 /** A task line already drawn for this scope item (any location): its sheet and polyline. */
@@ -252,6 +257,8 @@ export function allocateScopeStep(data: TakeoffData, input: StepInput): Allocati
   const out: AllocationResult = others.length
     ? allocateFromTakeoff(data, { ...base, layerIds: others })
     : { byLocation: new Map(), total: 0, unallocated: 0, uncalibratedSheets: [], claimed: 0 }
+  const carrierOf = new Map<string, Set<string>>()
+  out.carrierOf = carrierOf
   const add = (id: string, v: number) => { const key = id.startsWith(EXTERIOR) ? input.exteriorLocationOf?.(id) || id : id; out.byLocation.set(key, (out.byLocation.get(key) || 0) + v) }
   const walls = data.layers.filter(l => input.layerIds.includes(l.id) && l.kind === 'linear')
   const levelById = new Map(data.levels.map(l => [l.id, l] as [string, LevelRow]))
@@ -315,6 +322,7 @@ export function allocateScopeStep(data: TakeoffData, input: StepInput): Allocati
             if (zA && zB) carrier = override && (override === zA || override === zB) ? override : (rankOf(zA) < rankOf(zB) || (rankOf(zA) === rankOf(zB) && zA <= zB) ? zA : zB)
             else carrier = (zA || zB)!
             const other = carrier === faceA ? faceB : faceA
+            if (other !== carrier) { const key = other.startsWith(EXTERIOR) ? input.exteriorLocationOf?.(other) || other : other; const set = carrierOf.get(key) || new Set<string>(); set.add(carrier); carrierOf.set(key, set) }
             let loc: string
             if (rule === 'carrier' || step === 'framing') loc = carrier
             else if (step === 'insulation') loc = other

@@ -15,6 +15,8 @@ import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
 import { Dialog, usePageDialogs } from '../../../fieldop/ui/dialogs';
 import { Empty, Icon, Notice, Segments, ui } from '../../../fieldop/ui';
 import styles from '../../precon.module.css';
+import { useLocationPlan } from '../useLocationPlan';
+import { predecessorAuto } from './predecessorAuto';
 
 
 // ============================================================
@@ -441,6 +443,9 @@ export default function LookaheadPage() {
     selectedProjectId,
     setSelectedProjectId,
   ] = useState('');
+
+  // Koskela "Predecessor" auto-check from RitsuScope Tasks (locations × work packages, Weekly progress).
+  const locationPlan = useLocationPlan(selectedProjectId);
 
 
   const [
@@ -5992,6 +5997,28 @@ export default function LookaheadPage() {
                                     </select>
 
                                   )}
+
+                                  {column.key === 'predecessor' && (() => {
+                                    const auto = predecessorAuto(locationPlan, row);
+                                    if (!auto) return null;
+                                    const canApply = !governed && !saving && auto.allReady && status !== 'clear';
+                                    return (
+                                      <button
+                                        type="button"
+                                        disabled={!canApply}
+                                        title={auto.allReady
+                                          ? (canApply ? tv('autoPred.applyHint', { ready: auto.ready, total: auto.total }) : tv('autoPred.readyHint', { ready: auto.ready, total: auto.total }))
+                                          : tv('autoPred.blockedHint', { list: auto.blocked.map((b) => tv('autoPred.blockedItem', { location: b.location, waits: b.waits.map((w) => tv('autoPred.waitItem', { code: w.code, location: w.location, done: w.done })).join(', ') })).join('\n') })}
+                                        onClick={() => { if (canApply) handleGroupedReadinessChange(row, column.key, 'clear'); }}
+                                        style={{ display: 'block', width: '100%', marginTop: 3, padding: '1px 4px', border: 0, borderRadius: 4, fontSize: '9px', fontWeight: 800, textAlign: 'center',
+                                          background: auto.allReady ? '#dcfce7' : auto.ready ? '#fef3c7' : '#fee2e2',
+                                          color: auto.allReady ? '#166534' : auto.ready ? '#92400e' : '#991b1b',
+                                          cursor: canApply ? 'pointer' : 'help' }}
+                                      >
+                                        {tv('autoPred.chip', { ready: auto.ready, total: auto.total })}
+                                      </button>
+                                    );
+                                  })()}
 
                                 </td>
 

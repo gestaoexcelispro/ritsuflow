@@ -15,6 +15,8 @@ import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
 import { usePageDialogs } from '../../../fieldop/ui/dialogs';
 import { Empty, Icon, Stat, ui } from '../../../fieldop/ui';
 import pc from '../../precon.module.css';
+import { useLocationPlan } from '../useLocationPlan';
+import LocationRowsPanel from './LocationRowsPanel';
 
 
 // ============================================================
@@ -463,6 +465,9 @@ export default function WeeklyPlanningPage() {
     selectedProjectId,
     setSelectedProjectId,
   ] = useState('');
+
+  // RitsuScope Tasks by location (quantities per location × work package, predecessors).
+  const locationPlan = useLocationPlan(selectedProjectId);
 
   const [
     weekStartDate,
@@ -1334,6 +1339,58 @@ export default function WeeklyPlanningPage() {
         setActionLoading(false);
       }
     };
+
+  // ==========================================================
+  // ADD ONE ROW PER LOCATION × WORK PACKAGE (from RitsuScope Tasks)
+  // ==========================================================
+
+  const addLocationRows = async (rows) => {
+    if (!weeklyPlan || !rows.length) return;
+    if (!isDraft) { setErrorMessage(t.errNotDraft); return; }
+    if (!selectedWorkPackage) { setErrorMessage(t.errSelectPackage); return; }
+    if (!selectedPackageReady) { setErrorMessage(tr('errNotReady', { code: selectedWorkPackage.package_code })); return; }
+    clearMessages();
+    setActionLoading(true);
+    try {
+      const maxSequence = items.reduce((max, item) => Math.max(max, item.sequence_number || 0), 0);
+      const description = activityForm.activityDescription.trim()
+        || [selectedWorkPackage.package_code, selectedWorkPackage.package_description].filter(Boolean).join(' – ');
+      const { error } = await supabase.from('weekly_plan_items').insert(rows.map((row, index) => ({
+        weekly_plan_id: weeklyPlan.id,
+        organization_id: weeklyPlan.organization_id,
+        project_id: weeklyPlan.project_id,
+        lookahead_sheet_row_id: selectedWorkPackage.sheet_row_id,
+        source_type: 'manual',
+        package_code: selectedWorkPackage.package_code,
+        activity_description: description,
+        location_id: row.locationId,
+        organization_work_package_id: row.wpId,
+        location_name: row.locationName,
+        location_path: row.locationPath || row.locationName,
+        planned_start_date: weekStartDate,
+        planned_finish_date: weekEndDate,
+        responsible_party: activityForm.responsibleParty.trim() || null,
+        planned_quantity: row.quantity,
+        unit: row.unit,
+        notes: activityForm.notes.trim() || null,
+        sequence_number: maxSequence + 1 + index,
+        is_unplanned_work: false,
+        commitment_status: 'draft',
+        execution_result: 'pending',
+      })));
+      if (error) throw error;
+      setActivityForm(EMPTY_ACTIVITY_FORM);
+      setShowActivityPanel(false);
+      setMessage(tr('loc.added', { count: rows.length }));
+      await loadWeeklyPlan();
+      await locationPlan.reload();
+    } catch (error) {
+      if (/location_id|organization_work_package_id/.test(error?.message || '')) setErrorMessage(tr('loc.needsMigration'));
+      else showError(error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   // ==========================================================
   // UPDATE DRAFT ITEM
@@ -4171,6 +4228,17 @@ export default function WeeklyPlanningPage() {
                           )}
                         </select>
                       </FormField>
+
+                      <LocationRowsPanel
+                        locationPlan={locationPlan}
+                        packageCode={selectedWorkPackage?.package_code || ''}
+                        existingItems={items}
+                        disabled={!isDraft || !selectedPackageReady}
+                        busy={actionLoading}
+                        numberFormat={I18N.numberFormat}
+                        tr={(key, vars) => tr(key, vars)}
+                        onAdd={addLocationRows}
+                      />
 
                       <FormField label={t.colLocation}>
                         <input
