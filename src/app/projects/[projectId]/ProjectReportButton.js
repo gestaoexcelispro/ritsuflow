@@ -3,20 +3,35 @@
 import { useState } from 'react'
 import { pdf, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer'
 import { supabase } from '../../../lib/supabase'
+import { useT } from '../../../lib/i18n/useT'
+import { useLanguage } from '../../../lib/i18n/LanguageProvider'
+import { ui } from '../../fieldop/ui'
 
 const num=v=>Number(v||0)
-const money=(v,c='USD')=>{if(v===null||v===undefined||v==='')return '—';try{return new Intl.NumberFormat('en-US',{style:'currency',currency:c,maximumFractionDigits:2}).format(num(v))}catch{return String(v)}}
-const qty=v=>v===null||v===undefined||v===''?'—':num(v).toLocaleString('en-US',{maximumFractionDigits:2})
-const date=v=>{if(!v)return'—';const d=new Date(`${String(v).slice(0,10)}T12:00:00`);return Number.isNaN(d.getTime())?String(v):new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric'}).format(d)}
 const titleCase=v=>String(v||'—').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())
 const profileLabel=p=>p?.full_name?.trim()||p?.display_name?.trim()||p?.email?.trim()||''
-const generatedAt=v=>new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(v)
-const billing={progress_percent_complete:'Progress / Percent Complete',milestone:'Milestone Based',unit_price:'Unit Price',time_materials:'Time & Materials',fixed_schedule:'Fixed Payment Schedule',other:'Other / Custom'}
-const cycle={weekly:'Weekly',biweekly:'Biweekly',monthly:'Monthly',milestone:'By Milestone',custom:'Custom'}
-const roles={manager:'Project Manager',superintendent:'Superintendent',project_engineer:'Project Engineer',planner:'Planner',field_engineer:'Field Engineer',foreman:'Foreman',viewer:'Viewer',field:'Field / Site'}
-const roleLabel=v=>roles[v]||titleCase(v)
+
+/** Translation + number/date formatting for the PDF, in the user's language. */
+function makeFormat(t,language,numberFormat=language){
+ const tr=(key,fallback,vars)=>{const out=t(key,vars);return out===key?fallback:out}
+ return{
+  t,language,
+  money:(v,c='USD')=>{if(v===null||v===undefined||v==='')return '—';try{return new Intl.NumberFormat(numberFormat,{style:'currency',currency:c,maximumFractionDigits:2}).format(num(v))}catch{return String(v)}},
+  qty:v=>v===null||v===undefined||v===''?'—':new Intl.NumberFormat(numberFormat,{maximumFractionDigits:2}).format(num(v)),
+  date:v=>{if(!v)return'—';const d=new Date(`${String(v).slice(0,10)}T12:00:00`);return Number.isNaN(d.getTime())?String(v):new Intl.DateTimeFormat(language,{month:'short',day:'numeric',year:'numeric'}).format(d)},
+  stamp:v=>new Intl.DateTimeFormat(language,{dateStyle:'medium',timeStyle:'short'}).format(v),
+  status:v=>tr(`status.${v||'planning'}`,titleCase(v)),
+  billing:v=>v?tr(`billing.${v}`,titleCase(v)):'—',
+  cycle:v=>v?tr(`cycle.${v}`,titleCase(v)):'—',
+  role:v=>tr(`team.role.${v}`,titleCase(v)),
+  type:v=>tr(`scope.type.${v}`,titleCase(v)),
+  scopeStatus:v=>tr(`scope.status.${v||'defined'}`,titleCase(v||'defined')),
+ }
+}
 
 export default function ProjectReportButton({project}){
+ const t=useT('projects')
+ const{language,numberFormat}=useLanguage()
  const[busy,setBusy]=useState(false)
  async function generate(){
   if(!project||busy)return
@@ -33,39 +48,43 @@ export default function ProjectReportButton({project}){
    const byId=Object.fromEntries(profiles.map(p=>[p.user_id,p])),team=members.map(m=>({...m,profile:byId[m.user_id]||null}))
    const imageUrl=project.project_image_path?supabase.storage.from('project-images').getPublicUrl(project.project_image_path).data.publicUrl:null
    const logoUrl=`${window.location.origin}/logo.png`,generated=new Date()
-   const blob=await pdf(<ProjectReport project={project} team={team} scopes={scopeRows||[]} imageUrl={imageUrl} logoUrl={logoUrl} generated={generated}/>).toBlob()
-   const{data:{user},error:userError}=await supabase.auth.getUser();if(userError||!user)throw userError||new Error('Unable to identify the user generating the report.')
+   const f=makeFormat(t,language,numberFormat)
+   const blob=await pdf(<ProjectReport f={f} project={project} team={team} scopes={scopeRows||[]} imageUrl={imageUrl} logoUrl={logoUrl} generated={generated}/>).toBlob()
+   const{data:{user},error:userError}=await supabase.auth.getUser();if(userError||!user)throw userError||new Error(t('report.errUser'))
    const{data:actor}=await supabase.from('user_profiles').select('full_name,display_name,email').eq('user_id',user.id).maybeSingle()
-   const fileName=`${project.project_id||'Project'}_Project_Report.pdf`
+   const fileName=`${t('report.fileName',{id:project.project_id||t('report.project')})}.pdf`
    const{error:historyError}=await supabase.from('project_history').insert({project_id:project.id,action_type:'report_generated',action_label:'Project report generated',description:fileName,entity_type:'report',entity_id:project.project_id||project.id,performed_by:user.id,performed_by_name:profileLabel(actor)||user.email||'RitsuFlow User',metadata:{report_type:'Project Report',file_name:fileName,generated_at:generated.toISOString(),scope_items:(scopeRows||[]).length}});if(historyError)throw historyError
    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=fileName;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)
-  }catch(e){console.error(e);window.alert(`Unable to generate report: ${e?.message||e}`)}finally{setBusy(false)}
+  }catch(e){console.error(e);window.alert(t('report.errGenerate',{message:e?.message||e}))}finally{setBusy(false)}
  }
- return <button type="button" onClick={generate} disabled={busy} style={{...button,...(busy?disabled:{})}}>{busy?'Generating...':'▤ Generate Report'}</button>
+ return <button type="button" className={ui.btn} onClick={generate} disabled={busy}>{busy?t('report.generating'):t('report.generate')}</button>
 }
 
 function scopeModel(rows){const children={};rows.forEach(r=>{const k=r.parent_scope_id||'root';(children[k]||(children[k]=[])).push(r)});const rollup=(id,seen=new Set())=>{if(seen.has(id))return 0;seen.add(id);const kids=children[id]||[];if(kids.length)return kids.reduce((s,k)=>s+rollup(k.id,new Set(seen)),0);const r=rows.find(x=>x.id===id);return num(r?.quantity)*num(r?.unit_price)};const depth=r=>{let d=0,p=r.parent_scope_id,g=0;while(p&&g++<12){d++;p=rows.find(x=>x.id===p)?.parent_scope_id}return d};const flat=[];const walk=k=>(children[k]||[]).forEach(r=>{flat.push({...r,_depth:depth(r),_total:rollup(r.id)});walk(r.id)});walk('root');return{flat,allocated:(children.root||[]).reduce((s,r)=>s+rollup(r.id),0)}}
 
-function ReportHeader({logoUrl,title,generated}){return <><View style={s.topbar}><View style={s.brandBlock}><Image src={logoUrl} style={s.logo}/><Text style={s.tagline}>BUILD SMARTER. DELIVER TOGETHER.</Text></View><View style={s.reportHead}><Text style={s.reportTitle}>{title}</Text><Text style={s.generated}>Generated on {generatedAt(generated)}</Text><Text style={s.motto}>PEOPLE   |   PROCESS   |   PROGRESS</Text></View></View><View style={s.rule}/></>}
-function Footer({p}){return <View style={s.footer} fixed><Text>{p.project_id||'Project'}  |  {p.name||'Untitled Project'}</Text><Text render={({pageNumber,totalPages})=>`Page ${pageNumber} of ${totalPages}`}/></View>}
+function ReportHeader({f,logoUrl,title,generated}){return <><View style={s.topbar}><View style={s.brandBlock}><Image src={logoUrl} style={s.logo}/><Text style={s.tagline}>BUILD SMARTER. DELIVER TOGETHER.</Text></View><View style={s.reportHead}><Text style={s.reportTitle}>{title}</Text><Text style={s.generated}>{f.t('report.generatedOn',{date:f.stamp(generated)})}</Text><Text style={s.motto}>PEOPLE   |   PROCESS   |   PROGRESS</Text></View></View><View style={s.rule}/></>}
+function Footer({f,p}){return <View style={s.footer} fixed><Text>{p.project_id||f.t('report.project')}  |  {p.name||f.t('report.untitled')}</Text><Text render={({pageNumber,totalPages})=>f.t('report.page',{page:pageNumber,total:totalPages})}/></View>}
 
-function ProjectReport({project:p,team,scopes,imageUrl,logoUrl,generated}){
- const currency=p.currency_code||'USD',manager=team.find(m=>m.role==='manager'),managerName=manager?profileLabel(manager.profile)||'Profile unavailable':'—',criteria=String(p.success_criteria||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean),address1=[p.address_line,p.address_number].filter(Boolean).join(', '),address2=[p.city,p.state_region,p.postal_code].filter(Boolean).join(', '),model=scopeModel(scopes),unallocated=num(p.contract_value)-model.allocated
- return <Document title={`${p.project_id||''} ${p.name||'Project'} Report`} author="RitsuFlow">
-  <Page size="LETTER" style={s.page}>
-   <ReportHeader logoUrl={logoUrl} title="Project Report" generated={generated}/>
-   <View style={s.hero}><View style={s.heroLeft}><Text style={s.projectId}>{p.project_id||'PROJECT'}</Text><Text style={s.projectName}>{p.name||'Untitled Project'}</Text><Text style={s.projectSub}>{p.client_name||'Shared project record'}</Text><Card n="1." title="PROJECT INFORMATION"><Row l="Project Name" v={p.name}/><Row l="Project ID" v={p.project_id}/><Row l="Client" v={p.client_name}/><Row l="Status" v={titleCase(p.status)}/><Row l="Start Date" v={date(p.planned_start_date)}/><Row l="Target Completion" v={date(p.planned_finish_date)}/><Row l="Project Manager" v={managerName}/><Row l="Contract Number" v={p.contract_number}/></Card></View><View style={s.heroRight}><Text style={s.status}>{String(p.status||'Planning').toUpperCase()}</Text>{imageUrl?<Image src={imageUrl} style={s.projectImage}/>:<View style={s.imagePlaceholder}><Text>PROJECT IMAGE</Text></View>}<View style={s.location}><Text style={s.locationTitle}>PROJECT LOCATION</Text><Text style={s.addressStrong}>{address1||'Address not defined'}</Text><Text>{address2}</Text><Text>{p.country_code||''}</Text></View></View></View>
-   <View style={s.twoCol}><Card n="2." title="CONTRACT & BILLING" half><Row l="Contract Value" v={money(p.contract_value,currency)}/><Row l="Material Value" v={p.material_included?money(p.material_value,currency):'Not included'}/><Row l="Billing Method" v={billing[p.billing_method]||titleCase(p.billing_method)}/><Row l="Billing Cycle" v={cycle[p.billing_cycle]||titleCase(p.billing_cycle)}/><Row l="Payment Terms" v={p.payment_terms_days!=null?`Net ${p.payment_terms_days}`:'—'}/><Row l="Retainage" v={p.has_retainage?`${p.retainage_percent??'—'}%`:'No'}/></Card><Card n="3." title="SCHEDULE" half><Row l="Start Date" v={date(p.planned_start_date)}/><Row l="Target Completion" v={date(p.planned_finish_date)}/><Row l="Duration" v={p.contractual_term_days?`${p.contractual_term_days} days`:'—'}/><Row l="Current Status" v={titleCase(p.status)}/><Row l="Billing Cycle" v={cycle[p.billing_cycle]||titleCase(p.billing_cycle)}/></Card></View>
-   <View style={s.twoCol}><Card n="4." title="SUCCESS CRITERIA" half>{criteria.length?criteria.slice(0,5).map((x,i)=><Text key={i} style={s.bullet}>●  {x}</Text>):<Text style={s.empty}>Success criteria not defined.</Text>}</Card><Card n="5." title="PROJECT TEAM" half>{team.length?team.slice(0,5).map((m,i)=><View key={m.user_id||i} style={s.member}><Text style={s.memberName}>{profileLabel(m.profile)||'Profile unavailable'}</Text><Text>{m.profile?.job_title?`${m.profile.job_title} · `:''}{roleLabel(m.role)}</Text></View>):<Text style={s.empty}>No project team members assigned.</Text>}</Card></View>
-   <View style={s.scopeSummary}><Text style={s.scopeSummaryTitle}>6. SCOPE MANAGEMENT</Text><View style={s.summaryRow}><Summary l="Contract Value" v={money(p.contract_value,currency)}/><Summary l="Scope Allocated" v={money(model.allocated,currency)}/><Summary l={unallocated<0?'Overallocated':'Unallocated'} v={money(Math.abs(unallocated),currency)}/><Summary l="Scope Records" v={String(scopes.length)}/></View><Text style={s.scopeHint}>The complete Contracted Scope Register continues on the following page.</Text></View>
-   <Footer p={p}/>
+function ProjectReport({f,project:p,team,scopes,imageUrl,logoUrl,generated}){
+ const{t,money,qty,date}=f
+ const currency=p.currency_code||'USD',manager=team.find(m=>m.role==='manager'),managerName=manager?profileLabel(manager.profile)||t('team.noProfile'):'—',criteria=String(p.success_criteria||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean),address1=[p.address_line,p.address_number].filter(Boolean).join(', '),address2=[p.city,p.state_region,p.postal_code].filter(Boolean).join(', '),model=scopeModel(scopes),unallocated=num(p.contract_value)-model.allocated
+ const size=f.language==='en-US'?'LETTER':'A4'
+ const country=p.country_code?(t(`country.${p.country_code}`)===`country.${p.country_code}`?p.country_code:t(`country.${p.country_code}`)):''
+ return <Document title={`${p.project_id||''} ${p.name||t('report.project')} — ${t('report.title')}`} author="RitsuFlow" language={f.language}>
+  <Page size={size} style={s.page}>
+   <ReportHeader f={f} logoUrl={logoUrl} title={t('report.title')} generated={generated}/>
+   <View style={s.hero}><View style={s.heroLeft}><Text style={s.projectId}>{p.project_id||t('report.project').toUpperCase()}</Text><Text style={s.projectName}>{p.name||t('report.untitled')}</Text><Text style={s.projectSub}>{p.client_name||t('report.sharedRecord')}</Text><Card n="1." title={t('report.secInfo')}><Row l={t('form.name')} v={p.name}/><Row l={t('field.projectId')} v={p.project_id}/><Row l={t('field.client')} v={p.client_name}/><Row l={t('field.status')} v={f.status(p.status)}/><Row l={t('field.plannedStart')} v={date(p.planned_start_date)}/><Row l={t('field.plannedFinish')} v={date(p.planned_finish_date)}/><Row l={t('report.manager')} v={managerName}/><Row l={t('field.contractNumber')} v={p.contract_number}/></Card></View><View style={s.heroRight}><Text style={s.status}>{f.status(p.status).toUpperCase()}</Text>{imageUrl?<Image src={imageUrl} style={s.projectImage}/>:<View style={s.imagePlaceholder}><Text>{t('image.title').toUpperCase()}</Text></View>}<View style={s.location}><Text style={s.locationTitle}>{t('report.location')}</Text><Text style={s.addressStrong}>{address1||t('report.noAddress')}</Text><Text>{address2}</Text><Text>{country}</Text></View></View></View>
+   <View style={s.twoCol}><Card n="2." title={t('report.secContract')} half><Row l={t('field.contractValue')} v={money(p.contract_value,currency)}/><Row l={t('field.materialValue')} v={p.material_included?money(p.material_value,currency):t('detail.notIncluded')}/><Row l={t('form.billingMethod')} v={f.billing(p.billing_method)}/><Row l={t('form.billingCycle')} v={f.cycle(p.billing_cycle)}/><Row l={t('report.paymentTerms')} v={p.payment_terms_days!=null?t('form.net',{days:p.payment_terms_days}):'—'}/><Row l={t('field.retainage')} v={p.has_retainage?`${p.retainage_percent??'—'}%`:t('detail.no')}/></Card><Card n="3." title={t('report.secSchedule')} half><Row l={t('field.plannedStart')} v={date(p.planned_start_date)}/><Row l={t('field.plannedFinish')} v={date(p.planned_finish_date)}/><Row l={t('field.term')} v={p.contractual_term_days?t('detail.days',{count:p.contractual_term_days}):'—'}/><Row l={t('field.status')} v={f.status(p.status)}/><Row l={t('form.billingCycle')} v={f.cycle(p.billing_cycle)}/></Card></View>
+   <View style={s.twoCol}><Card n="4." title={t('report.secSuccess')} half>{criteria.length?criteria.slice(0,5).map((x,i)=><Text key={i} style={s.bullet}>•  {x}</Text>):<Text style={s.empty}>{t('detail.successEmpty')}</Text>}</Card><Card n="5." title={t('report.secTeam')} half>{team.length?team.slice(0,5).map((m,i)=><View key={m.user_id||i} style={s.member}><Text style={s.memberName}>{profileLabel(m.profile)||t('team.noProfile')}</Text><Text>{m.profile?.job_title?`${m.profile.job_title} · `:''}{f.role(m.role)}</Text></View>):<Text style={s.empty}>{t('team.empty')}</Text>}</Card></View>
+   <View style={s.scopeSummary}><Text style={s.scopeSummaryTitle}>6. {t('report.secScope')}</Text><View style={s.summaryRow}><Summary l={t('scope.statContract')} v={money(p.contract_value,currency)}/><Summary l={t('scope.statAllocated')} v={money(model.allocated,currency)}/><Summary l={unallocated<0?t('scope.statOver'):t('scope.statRemaining')} v={money(Math.abs(unallocated),currency)}/><Summary l={t('scope.statItems')} v={String(scopes.length)}/></View><Text style={s.scopeHint}>{t('report.scopeNext')}</Text></View>
+   <Footer f={f} p={p}/>
   </Page>
-  <Page size="LETTER" style={s.page}>
-   <ReportHeader logoUrl={logoUrl} title="Contracted Scope Register" generated={generated}/>
-   <View style={s.scopeProject}><View><Text style={s.scopeProjectId}>{p.project_id||'PROJECT'} · {p.name||'Untitled Project'}</Text><Text style={s.scopeProjectSub}>Current contracted scope structure from Scope Management</Text></View><View style={s.scopeTotals}><Text>Allocated: {money(model.allocated,currency)}</Text><Text>Contract: {money(p.contract_value,currency)}</Text></View></View>
-   <View style={s.table}><View style={s.th} fixed><Cell w="8%" t="ID"/><Cell w="32%" t="Description"/><Cell w="9%" t="Type"/><Cell w="7%" t="Unit"/><Cell w="9%" t="Qty" right/><Cell w="12%" t="Unit Price" right/><Cell w="14%" t="Total Price" right/><Cell w="9%" t="Status"/></View>{model.flat.length?model.flat.map(r=><View key={r.id} style={[s.tr,r.item_type==='scope'?s.scopeRow:r.item_type==='group'?s.groupRow:null]} wrap={false}><Cell w="8%" t={r.scope_code||'—'} bold={r.item_type!=='item'}/><View style={[s.cell,{width:'32%',paddingLeft:5+(r._depth*10)}]}><Text style={r.item_type!=='item'?s.bold:null}>{r.scope_name||'—'}</Text></View><Cell w="9%" t={titleCase(r.item_type)} bold={r.item_type==='scope'}/><Cell w="7%" t={r.item_type==='item'?(r.unit||'—'):'—'}/><Cell w="9%" t={r.item_type==='item'?qty(r.quantity):'—'} right/><Cell w="12%" t={r.item_type==='item'?money(r.unit_price,currency):'—'} right/><Cell w="14%" t={money(r._total,currency)} right bold/><Cell w="9%" t={titleCase(r.status||'defined')}/></View>):<View style={s.noScope}><Text>No contracted scope has been registered for this project.</Text></View>}</View>
-   <View style={s.scopeBottom}><View><Text style={s.scopeBottomLabel}>CONTRACT VALUE</Text><Text style={s.scopeBottomValue}>{money(p.contract_value,currency)}</Text></View><View><Text style={s.scopeBottomLabel}>SCOPE ALLOCATED VALUE</Text><Text style={s.scopeBottomValue}>{money(model.allocated,currency)}</Text></View><View><Text style={s.scopeBottomLabel}>{unallocated<0?'OVERALLOCATED VALUE':'UNALLOCATED VALUE'}</Text><Text style={s.scopeBottomValue}>{money(Math.abs(unallocated),currency)}</Text></View></View>
-   <Footer p={p}/>
+  <Page size={size} style={s.page}>
+   <ReportHeader f={f} logoUrl={logoUrl} title={t('report.scopeTitle')} generated={generated}/>
+   <View style={s.scopeProject}><View><Text style={s.scopeProjectId}>{p.project_id||t('report.project').toUpperCase()} · {p.name||t('report.untitled')}</Text><Text style={s.scopeProjectSub}>{t('report.scopeSub')}</Text></View><View style={s.scopeTotals}><Text>{t('report.allocated',{value:money(model.allocated,currency)})}</Text><Text>{t('report.contract',{value:money(p.contract_value,currency)})}</Text></View></View>
+   <View style={s.table}><View style={s.th} fixed><Cell w="8%" t={t('scope.colId')}/><Cell w="32%" t={t('scope.colDescription')}/><Cell w="9%" t={t('scope.colType')}/><Cell w="7%" t={t('scope.colUnit')}/><Cell w="9%" t={t('scope.colQuantity')} right/><Cell w="12%" t={t('scope.colUnitPrice')} right/><Cell w="14%" t={t('scope.colTotal')} right/><Cell w="9%" t={t('scope.colStatus')}/></View>{model.flat.length?model.flat.map(r=><View key={r.id} style={[s.tr,r.item_type==='scope'?s.scopeRow:r.item_type==='group'?s.groupRow:null]} wrap={false}><Cell w="8%" t={r.scope_code||'—'} bold={r.item_type!=='item'}/><View style={[s.cell,{width:'32%',paddingLeft:5+(r._depth*10)}]}><Text style={r.item_type!=='item'?s.bold:null}>{r.scope_name||'—'}</Text></View><Cell w="9%" t={f.type(r.item_type)} bold={r.item_type==='scope'}/><Cell w="7%" t={r.item_type==='item'?(r.unit||'—'):'—'}/><Cell w="9%" t={r.item_type==='item'?qty(r.quantity):'—'} right/><Cell w="12%" t={r.item_type==='item'?money(r.unit_price,currency):'—'} right/><Cell w="14%" t={money(r._total,currency)} right bold/><Cell w="9%" t={f.scopeStatus(r.status)}/></View>):<View style={s.noScope}><Text>{t('report.noScope')}</Text></View>}</View>
+   <View style={s.scopeBottom}><View><Text style={s.scopeBottomLabel}>{t('scope.statContract').toUpperCase()}</Text><Text style={s.scopeBottomValue}>{money(p.contract_value,currency)}</Text></View><View><Text style={s.scopeBottomLabel}>{t('scope.statAllocated').toUpperCase()}</Text><Text style={s.scopeBottomValue}>{money(model.allocated,currency)}</Text></View><View><Text style={s.scopeBottomLabel}>{(unallocated<0?t('scope.statOver'):t('scope.statRemaining')).toUpperCase()}</Text><Text style={s.scopeBottomValue}>{money(Math.abs(unallocated),currency)}</Text></View></View>
+   <Footer f={f} p={p}/>
   </Page>
  </Document>
 }

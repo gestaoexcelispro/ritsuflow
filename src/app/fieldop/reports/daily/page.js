@@ -1,36 +1,79 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { createClient } from '../../../../lib/supabase/client'
-import styles from './daily-reports.module.css'
+import { useT } from '../../../../lib/i18n/useT'
+import { useLanguage } from '../../../../lib/i18n/LanguageProvider'
+import { FieldOpShell, Panel, Stats, Stat, Badge, Empty, Segments, Icon, ui, reportTone } from '../../ui'
 
-export default function FieldOpDailyReportsPage(){
- const supabase=useMemo(()=>createClient(),[])
- const [reports,setReports]=useState([])
- const [loading,setLoading]=useState(true)
+const localDateKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const FILTERS = ['all', 'draft', 'submitted', 'reviewed', 'approved']
 
- useEffect(()=>{let alive=true;async function load(){setLoading(true);const {data,error}=await supabase.from('daily_reports').select('id,report_number,report_date,status,created_at,projects(id,code,name)').order('report_date',{ascending:false}).limit(100);if(!alive)return;if(error){console.error('FieldOp Daily Reports:',error);setReports([])}else setReports(data||[]);setLoading(false)}load();return()=>{alive=false}},[supabase])
+export default function FieldOpDailyReportsPage() {
+  const supabase = useMemo(() => createClient(), [])
+  const t = useT('fieldopReports')
+  const { language } = useLanguage()
+  const [reports, setReports] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+  const [projectId, setProjectId] = useState('all')
 
- const today=new Date().toISOString().slice(0,10)
- const todayCount=reports.filter(r=>r.report_date===today).length
- const drafts=reports.filter(r=>r.status==='draft').length
- const submitted=reports.filter(r=>['submitted','reviewed'].includes(r.status)).length
- const approved=reports.filter(r=>r.status==='approved').length
+  useEffect(() => {
+    let alive = true
+    async function load() {
+      setLoading(true)
+      const { data, error } = await supabase.from('daily_reports').select('id,report_number,report_date,status,created_at,projects(id,code,name)').order('report_date', { ascending: false }).limit(200)
+      if (!alive) return
+      if (error) { console.error('FieldOp Daily Reports:', error); setReports([]) } else setReports(data || [])
+      setLoading(false)
+    }
+    load()
+    return () => { alive = false }
+  }, [supabase])
 
- return <main className={styles.page}>
-  <header className={styles.header}>
-   <Image className={styles.logo} src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority/>
-   <div className={styles.headerTitle}><span className={styles.eyebrow}>FIELDOP · REPORTS</span><h1>Daily Reports</h1></div>
-   <div className={styles.headerActions}><Link className={styles.headerButton} href="/fieldop">← FieldOp</Link><Link className={styles.primaryButton} href="/fieldop/reports/daily/new">+ New Daily Report</Link></div>
-  </header>
-  <div className={styles.content}>
-   <section className={styles.hero}><div><h2>Daily Reports</h2><p>Capture field reality and connect execution to production control.</p></div><Link className={styles.primaryButton} href="/fieldop/reports/daily/new">+ Create Daily Report</Link></section>
-   <section className={styles.cards}><div className={styles.card}><span>Today</span><strong>{todayCount}</strong></div><div className={styles.card}><span>Draft</span><strong>{drafts}</strong></div><div className={styles.card}><span>In Review</span><strong>{submitted}</strong></div><div className={styles.card}><span>Approved</span><strong>{approved}</strong></div></section>
-   <section className={styles.panel}><div className={styles.panelHead}><h3>Report History</h3><span>{reports.length} reports</span></div>
-    {loading?<div className={styles.empty}>Loading Daily Reports...</div>:reports.length===0?<div className={styles.empty}><strong>No Daily Reports yet.</strong><p>Create the first field record from FieldOp.</p></div>:<table className={styles.table}><thead><tr><th>Report</th><th>Project</th><th>Date</th><th>Status</th><th>Created</th></tr></thead><tbody>{reports.map(r=><tr key={r.id}><td><Link className={styles.reportLink} href={`/fieldop/reports/daily/${r.id}`}>DR-{String(r.report_number||0).padStart(4,'0')}</Link></td><td>{r.projects?.code?`${r.projects.code} · `:''}{r.projects?.name||'Project'}</td><td>{r.report_date}</td><td><span className={styles.badge}>{r.status||'draft'}</span></td><td>{r.created_at?new Date(r.created_at).toLocaleString():'—'}</td></tr>)}</tbody></table>}
-   </section>
-  </div>
- </main>
+  const dateFormat = useMemo(() => new Intl.DateTimeFormat(language, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), [language])
+  const reportDate = (value) => (value ? dateFormat.format(new Date(`${value}T12:00:00`)) : '—')
+
+  // "Today" is the local date, not UTC (after 21:00 in Brazil UTC is already tomorrow).
+  const today = localDateKey()
+  const projects = useMemo(() => [...new Map(reports.filter((r) => r.projects).map((r) => [r.projects.id, r.projects])).values()], [reports])
+  const inProject = projectId === 'all' ? reports : reports.filter((r) => r.projects?.id === projectId)
+  const shown = filter === 'all' ? inProject : inProject.filter((r) => r.status === filter)
+  const count = (status) => inProject.filter((r) => r.status === status).length
+  const awaiting = count('submitted') + count('reviewed')
+  const newHref = projectId === 'all' ? '/fieldop/reports/daily/new' : `/fieldop/reports/daily/new?projectId=${projectId}`
+
+  return <FieldOpShell active="reports" action={<Link className={ui.btnPrimary} href={newHref}><Icon name="plus" size={18} />{t('list.newReport')}</Link>}>
+    <Stats>
+      <Stat label={t('list.cardToday')} value={inProject.filter((r) => r.report_date === today).length} />
+      <Stat label={t('list.cardDraft')} value={count('draft')} />
+      <Stat label={t('list.cardReview')} value={awaiting} tone={awaiting ? 'warn' : undefined} />
+      <Stat label={t('list.cardApproved')} value={count('approved')} tone="ok" />
+    </Stats>
+
+    <Panel body={false} title={t('list.history')} text={t('list.count', { count: shown.length })}
+      actions={projects.length > 1 && <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ minWidth: 220 }} aria-label={t('list.colProject')}>
+        <option value="all">{t('list.allProjects')}</option>
+        {projects.map((p) => <option key={p.id} value={p.id}>{[p.code, p.name].filter(Boolean).join(' · ')}</option>)}
+      </select>}>
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--fo-line-soft)', overflowX: 'auto' }}>
+        <Segments value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ value: f, label: f === 'all' ? t('list.filterAll') : t(`status.${f}`) }))} />
+      </div>
+      {loading
+        ? <Empty title={t('list.loading')} />
+        : shown.length === 0
+          ? <Empty title={reports.length ? t('list.emptyFiltered') : t('list.emptyTitle')} text={reports.length ? null : t('list.emptyText')}
+            action={!reports.length && <Link className={ui.btnPrimary} href={newHref}>{t('list.create')}</Link>} />
+          : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards}`}>
+            <thead><tr><th>{t('list.colReport')}</th><th>{t('list.colDate')}</th><th>{t('list.colProject')}</th><th>{t('list.colStatus')}</th></tr></thead>
+            <tbody>{shown.map((r) => <tr key={r.id}>
+              <td data-label=""><span><Link className={ui.rowLink} href={`/fieldop/reports/daily/${r.id}`}>DR-{String(r.report_number || 0).padStart(4, '0')}</Link>{r.report_date === today && <span className={ui.sub}>{t('list.todayTag')}</span>}</span></td>
+              <td data-label={t('list.colDate')}>{reportDate(r.report_date)}</td>
+              <td data-label={t('list.colProject')}><span>{r.projects?.name || '—'}{r.projects?.code && <span className={ui.sub}>{r.projects.code}</span>}</span></td>
+              <td data-label={t('list.colStatus')}><Badge tone={reportTone(r.status)}>{t(`status.${r.status || 'draft'}`)}</Badge></td>
+            </tr>)}</tbody>
+          </table></div>}
+    </Panel>
+  </FieldOpShell>
 }

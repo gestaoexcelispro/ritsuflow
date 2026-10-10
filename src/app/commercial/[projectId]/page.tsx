@@ -1,0 +1,211 @@
+'use client'
+
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
+import { useT } from '@/lib/i18n/useT'
+import { BID_COLUMNS, ESTIMATE_SUMMARY_COLUMNS, PROJECT_TYPES, statusPatch, type BidRow, type BidStatus, type EstimateSummary, type OutcomeReason, type ProjectType } from '@/lib/commercial/bids'
+import { formatDate, formatMoney } from '@/lib/commercial/format'
+import { useCommercialAccess } from '../license'
+import { statusStyle, ui } from '../ui'
+import EstimateTab from './EstimateTab'
+import ProposalTab from './ProposalTab'
+import ConvertDialog from './ConvertDialog'
+import AbcTab from './AbcTab'
+import OutcomeDialog from './OutcomeDialog'
+import ActualsTab from './ActualsTab'
+
+type Tab = 'estimate' | 'takeoff' | 'proposal' | 'abc' | 'revisions' | 'actuals'
+type Counts = { sheets: number; items: number; elements: number }
+
+/** One bid: its status, the takeoff in RitsuScope, the estimate, the proposal and the revisions. */
+export default function BidWorkspace() {
+  const t = useT('commercial')
+  const { language, numberFormat } = useLanguage()
+  const { licensed, organizationId } = useCommercialAccess()
+  // Licensed and allowed to manage this bid (role, project membership or Commercial editor switch).
+  const [canManage, setCanManage] = useState<boolean | null>(null)
+  const { projectId } = useParams<{ projectId: string }>()
+  const [bid, setBid] = useState<BidRow | null>(null)
+  const [estimates, setEstimates] = useState<EstimateSummary[]>([])
+  const [counts, setCounts] = useState<Counts>({ sheets: 0, items: 0, elements: 0 })
+  const [tab, setTab] = useState<Tab>('estimate')
+  // A converted project opens on Estimate vs. actual (once, so a later reload keeps the user's tab).
+  const tabChosen = useRef(false)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [converting, setConverting] = useState(false)
+  const [deciding, setDeciding] = useState<'won' | 'lost' | 'no_bid' | null>(null)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    const supabase = createClient()
+    const count = (table: string) => supabase.from(table).select('id', { count: 'exact', head: true }).eq('project_id', projectId)
+    const [b, e, s, l, el] = await Promise.all([
+      supabase.from('commercial_bids').select(BID_COLUMNS).eq('project_id', projectId).maybeSingle(),
+      supabase.from('commercial_estimates').select(ESTIMATE_SUMMARY_COLUMNS).eq('project_id', projectId).order('revision', { ascending: false }),
+      count('takeoff_sources'), count('takeoff_layers'), count('takeoff_elements'),
+    ])
+    setLoading(false)
+    if (b.error || e.error) { setError(t('error.load', { message: (b.error || e.error)!.message })); return }
+    const row = (b.data as unknown as BidRow) || null
+    setBid(row)
+    if (!tabChosen.current && row) {
+      tabChosen.current = true
+      if (row.projects?.stage === 'contract') setTab('actuals')
+    }
+    setEstimates((e.data || []) as EstimateSummary[])
+    setCounts({ sheets: s.count || 0, items: l.count || 0, elements: el.count || 0 })
+  }, [projectId, t])
+
+  useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    let active = true
+    createClient().rpc('commercial_permissions', { p_organization_id: organizationId, p_project_id: projectId }).then(({ data, error: e }) => {
+      if (!active) return
+      // Before the permissions function exists, the license decides (as before).
+      setCanManage(e ? null : (data as { manage_bid?: boolean } | null)?.manage_bid === true)
+    })
+    return () => { active = false }
+  }, [organizationId, projectId])
+
+  async function setProjectType(value: ProjectType | '') {
+    if (!bid) return
+    setBusy(true); setError('')
+    const { error: e } = await createClient().from('commercial_bids').update({ project_type: value || null }).eq('project_id', bid.project_id)
+    setBusy(false)
+    if (e) { setError(t('error.save', { message: e.message })); return }
+    void load()
+  }
+
+  async function setStatus(status: BidStatus, note: string | null = null, reason: OutcomeReason | null = null) {
+    if (!bid) return
+    // Won, lost and declined ask for a note (and, except won, a reason) first.
+    if ((status === 'won' || status === 'lost' || status === 'no_bid') && deciding !== status) { setDeciding(status); return }
+    setBusy(true); setError('')
+    const { error: e } = await createClient().from('commercial_bids').update(statusPatch(status, note, reason)).eq('project_id', bid.project_id)
+    setBusy(false)
+    setDeciding(null)
+    if (e) { setError(t('error.save', { message: e.message })); return }
+    void load()
+  }
+
+  if (loading) return <section style={ui.page}><div style={ui.muted}>{t('loading')}</div></section>
+  if (!bid) return (
+    <section style={ui.page}>
+      {error ? <div role="alert" style={ui.error}>{error}</div> : <div style={ui.empty}>{t('bid.notFound')}</div>}
+      <Link href="/commercial" style={{ ...ui.buttonGhost, display: 'inline-flex', alignItems: 'center', alignSelf: 'flex-start', textDecoration: 'none' }}>← {t('bid.back')}</Link>
+    </section>
+  )
+
+  const p = bid.projects
+  const manage = licensed && canManage !== false
+  const latest = estimates[0] || null
+  const converted = p?.stage === 'contract'
+  const actions: { status: BidStatus; label: string; primary?: boolean }[] =
+    converted ? [] :
+    bid.status === 'draft' ? [{ status: 'submitted', label: t('bid.markSubmitted'), primary: true }, { status: 'no_bid', label: t('bid.markNoBid') }] :
+    bid.status === 'submitted' ? [{ status: 'won', label: t('bid.markWon'), primary: true }, { status: 'lost', label: t('bid.markLost') }, { status: 'draft', label: t('bid.reopen') }] :
+    [{ status: 'draft', label: t('bid.reopen') }]
+
+  const tabs: Tab[] = converted ? ['actuals', 'estimate', 'takeoff', 'proposal', 'abc', 'revisions'] : ['estimate', 'takeoff', 'proposal', 'abc', 'revisions']
+
+  return (
+    <>
+      <div style={{ background: '#fff', borderBottom: '1px solid #dfe7ea' }}>
+        <div style={{ padding: '16px 32px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Link href="/commercial" style={{ fontSize: 13, fontWeight: 700, color: '#0b7f75', textDecoration: 'none' }}>← {t('bid.back')}</Link>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: '1 1 360px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={statusStyle[bid.status]}>{t(`status.${bid.status}`)}</span>
+                {converted && <span style={ui.chipTeal}>{t('bids.converted')}</span>}
+                <span style={ui.small}>{bid.bid_number}{bid.due_at ? ` · ${t('bid.due', { date: formatDate(bid.due_at, language) })}` : ''}</span>
+                {manage && !converted ? (
+                  <select aria-label={t('field.projectType')} value={bid.project_type || ''} disabled={busy} onChange={e => void setProjectType(e.target.value as ProjectType | '')}
+                    style={{ ...ui.input, height: 28, padding: '0 8px', fontSize: 12, width: 'auto' }}>
+                    <option value="">{t('projectType.none')}</option>
+                    {PROJECT_TYPES.map(k => <option key={k} value={k}>{t(`projectType.${k}`)}</option>)}
+                  </select>
+                ) : bid.project_type && <span style={ui.chip}>{t(`projectType.${bid.project_type}`)}</span>}
+              </div>
+              <h1 style={{ ...ui.title, fontSize: 22 }}>{p?.name}</h1>
+              <span style={ui.small}>{[p?.client_name, p?.country_code, p?.currency_code].filter(Boolean).join(' · ')}</span>
+              {(bid.outcome_reason || bid.outcome_note) && <span style={ui.small}>{[bid.outcome_reason ? t(`reason.${bid.outcome_reason}`) : '', bid.outcome_note || ''].filter(Boolean).join(' · ')}</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+              {latest && <span style={{ fontSize: 13, color: '#294955' }}>{t('bid.latestPrice')} <strong style={{ fontSize: 18, color: '#075a53' }}>{formatMoney(latest.price_total, latest.currency_code, numberFormat)}</strong></span>}
+              {manage && (actions.length > 0 || (bid.status === 'won' && !converted)) && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {bid.status === 'won' && !converted && <button type="button" disabled={busy} onClick={() => setConverting(true)} style={ui.button}>{t('convert.open')}</button>}
+                  {actions.map(a => (
+                    <button key={a.status} type="button" disabled={busy} onClick={() => setStatus(a.status)} style={a.primary ? ui.button : ui.buttonGhost}>{a.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {error && <div role="alert" style={ui.error}>{error}</div>}
+          <nav role="tablist" aria-label={t('bid.sections')} style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {tabs.map(k => (
+              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} style={{
+                padding: '10px 14px', border: 0, background: 'transparent', cursor: 'pointer', fontSize: 13,
+                fontWeight: tab === k ? 800 : 500, color: tab === k ? '#173441' : '#3f5862', borderBottom: `3px solid ${tab === k ? '#0b7f75' : 'transparent'}`,
+              }}>{t(`bid.tab.${k}`)}</button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      <section style={ui.page}>
+        {tab === 'takeoff' && (
+          <div style={{ ...ui.card, padding: 18, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16 }}>
+            <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <strong style={{ fontSize: 15, color: '#173441' }}>{t('takeoff.title')}</strong>
+              <span style={ui.small}>{t('takeoff.counts', { sheets: counts.sheets, items: counts.items, elements: counts.elements })}</span>
+              <span style={ui.small}>{t('takeoff.hint')}</span>
+            </div>
+            <Link href={`/ritsuscope/${projectId}`} style={{ ...ui.button, display: 'inline-flex', alignItems: 'center', textDecoration: 'none', height: 44 }}>{t('takeoff.open')}</Link>
+          </div>
+        )}
+
+        {tab === 'estimate' && <EstimateTab projectId={projectId} country={p?.country_code || 'BR'} editable={manage && !converted} onChanged={() => void load()} />}
+        {tab === 'actuals' && <ActualsTab projectId={projectId} editable={manage} />}
+        {tab === 'abc' && <AbcTab projectId={projectId} bidNumber={bid.bid_number} />}
+        {tab === 'proposal' && <ProposalTab bid={bid} editable={manage && !converted} />}
+
+        {tab === 'revisions' && (
+          estimates.length === 0 ? <div style={ui.empty}>{t('revisions.empty')}</div> : (
+            <div style={ui.tableWrap}>
+              <table style={ui.table}>
+                <thead>
+                  <tr>
+                    <th style={ui.th}>{t('revisions.col.revision')}</th>
+                    <th style={ui.th}>{t('revisions.col.status')}</th>
+                    <th style={{ ...ui.th, ...ui.num }}>{t('revisions.col.direct')}</th>
+                    <th style={{ ...ui.th, ...ui.num }}>{t('revisions.col.price')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {estimates.map(r => (
+                    <tr key={r.id}>
+                      <td style={ui.td}><strong>{r.name}</strong>{r.is_baseline && <span style={{ ...ui.chipTeal, marginLeft: 8 }}>{t('revisions.baseline')}</span>}</td>
+                      <td style={ui.td}><span style={r.status === 'issued' ? ui.chipTeal : ui.chip}>{t(`revisions.status.${r.status}`)}</span></td>
+                      <td style={{ ...ui.td, ...ui.num }}>{formatMoney(r.direct_total, r.currency_code, numberFormat)}</td>
+                      <td style={{ ...ui.td, ...ui.num }}>{formatMoney(r.price_total, r.currency_code, numberFormat)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+      </section>
+      {deciding && <OutcomeDialog status={deciding} initialNote={bid.outcome_note} initialReason={bid.outcome_reason} busy={busy} onCancel={() => setDeciding(null)} onConfirm={(note, reason) => void setStatus(deciding, note, reason)} />}
+      {converting && <ConvertDialog bid={bid} estimates={estimates} counts={counts} onClose={() => setConverting(false)} />}
+    </>
+  )
+}

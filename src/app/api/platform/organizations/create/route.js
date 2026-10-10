@@ -300,7 +300,7 @@ export async function POST(
       normalizedSeatLimit < 1
     ) {
       return jsonError(
-        'Seat limit must be at least 1.'
+        'Active project limit must be at least 1.'
       )
     }
 
@@ -345,13 +345,14 @@ export async function POST(
     }
 
 
+    // R5 · workspace licences (organization_workspace_entitlements)
     const allowedModules =
       new Set([
-        'project_setup',
-        'planning',
-        'daily_reports',
-        'workforce',
-        'production_control',
+        'projects',
+        'precon',
+        'fieldop',
+        'ritsuscope',
+        'commercial',
       ])
 
 
@@ -368,7 +369,17 @@ export async function POST(
       invalidModule
     ) {
       return jsonError(
-        'One or more selected modules are invalid.'
+        'One or more selected workspaces are invalid.'
+      )
+    }
+
+
+    if (
+      !normalizedModules.includes('projects') &&
+      !normalizedModules.includes('commercial')
+    ) {
+      return jsonError(
+        'A company needs Projects, Commercial, or both.'
       )
     }
 
@@ -516,7 +527,7 @@ export async function POST(
         provisioningError,
     } =
       await supabase.rpc(
-        'provision_platform_organization',
+        'provision_platform_company',
         {
           target_name:
             normalizedName,
@@ -527,22 +538,23 @@ export async function POST(
           target_primary_admin_user_id:
             createdAuthUserId,
 
-          target_plan_code:
-            planCode,
+          target_plan_name:
+            planCode.charAt(0).toUpperCase() + planCode.slice(1),
 
-          target_seat_limit:
+          // The form's limit is the company's active project limit.
+          target_active_project_limit:
             normalizedSeatLimit,
 
-          target_license_status:
+          target_commercial_status:
             licenseStatus,
 
-          target_starts_at:
+          target_contract_start:
             startsAt,
 
-          target_expires_at:
+          target_renewal_end_date:
             normalizedExpiration,
 
-          target_module_keys:
+          target_workspaces:
             normalizedModules,
         }
       )

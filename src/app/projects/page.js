@@ -1,86 +1,102 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Image from 'next/image'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
-import styles from './projects.module.css'
+import { useT } from '../../lib/i18n/useT'
+import { useLanguage } from '../../lib/i18n/LanguageProvider'
+import { AppShell, Panel, Stats, Stat, Badge, Empty, Notice, ui } from '../fieldop/ui'
 
-export default function ProjectsPage(){
- const [projects,setProjects]=useState([])
- const [loading,setLoading]=useState(true)
- const [error,setError]=useState('')
+const STATUSES = ['planning', 'active', 'on_hold', 'completed', 'archived']
+const TONE = { active: 'ok', planning: 'info', on_hold: 'warn' }
 
- useEffect(()=>{
-  let active=true
-  async function loadProjects(){
-   setLoading(true)
-   const {data,error}=await supabase.from('projects').select('*').order('created_at',{ascending:true})
-   if(!active)return
-   if(error){setError(error.message);setProjects([])}else{setError('');setProjects(data||[])}
-   setLoading(false)
+export default function ProjectsPage() {
+  const t = useT('projects')
+  const { language } = useLanguage()
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [client, setClient] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      const { data, error: loadError } = await supabase.from('projects').select('*').eq('stage', 'contract').order('created_at', { ascending: true })
+      if (!active) return
+      if (loadError) { setError(loadError.message); setProjects([]) } else { setError(''); setProjects(data || []) }
+      setLoading(false)
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
+  const dateFormat = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'medium' }), [language])
+  const date = (value) => {
+    if (!value) return '—'
+    const d = new Date(`${String(value).slice(0, 10)}T12:00:00`)
+    return Number.isNaN(d.getTime()) ? '—' : dateFormat.format(d)
   }
-  loadProjects()
-  return()=>{active=false}
- },[])
+  const money = (value, currency) => {
+    try { return new Intl.NumberFormat(language, { style: 'currency', currency: currency || 'BRL', maximumFractionDigits: 0 }).format(Number(value || 0)) }
+    catch { return `${currency || ''} ${Number(value || 0).toFixed(0)}` }
+  }
+  const statusOf = (p) => (STATUSES.includes(p.status) ? p.status : 'planning')
+  const clientOf = (p) => p.client_name || p.client || ''
 
- function money(value){return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value||0))}
- function date(value){if(!value)return'—';const d=new Date(`${String(value).slice(0,10)}T12:00:00`);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR')}
+  const clients = useMemo(() => [...new Set(projects.map(clientOf).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [projects])
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return projects.filter((p) => {
+      if (status && statusOf(p) !== status) return false
+      if (client && clientOf(p) !== client) return false
+      if (!q) return true
+      return [p.project_id, p.name, p.code, clientOf(p), p.city, p.state_region].filter(Boolean).join(' ').toLowerCase().includes(q)
+    })
+  }, [projects, search, status, client])
+  const count = (s) => projects.filter((p) => statusOf(p) === s).length
 
- return <main className={styles.shell}>
-  <header className={styles.topbar}>
-   <Link href="/workspaces" className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={160} height={58} priority/></Link>
-   <div className={styles.titleBlock}><div className={styles.pageTitle}>Projects</div><span>Manage your construction projects and central information.</span></div>
-   <div className={styles.search}>⌕ <span>Search projects, clients, or locations...</span><kbd>Ctrl K</kbd></div>
-   <div className={styles.headerActions}>
-    <Link href="/workspaces" className={styles.returnButton}>← Return to Workspaces</Link>
-    <Link href="/precon" className={styles.preconButton}>▣ Go to PreCon</Link>
-    <Link href="/fieldop" className={styles.fieldopButton}>⌂ Go to FieldOp</Link>
-   </div>
-   <div className={styles.user}><button className={styles.alert}>♧<em>3</em></button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div>
-  </header>
-
-  <nav className={styles.workspaceNav} aria-label="Project workspace navigation">
-   <Link href="/workspaces">⌂ Overview</Link>
-   <Link href="/projects" className={styles.navActive}>▣ Projects</Link>
-   <Link href="/project-setup">⚙ Project Setup</Link>
-   <Link href="/location-structure">⌖ Location Structure</Link>
-   <span className={styles.navDivider}/>
-   <Link href="/reports">▤ Reports</Link>
-   <Link href="/projects/new" className={styles.newProject}>＋ New Project</Link>
-  </nav>
-
-  <div className={styles.content}>
-   <section className={styles.projectsPanel}>
-    <div className={styles.panelHead}>
-     <div><h2>All Projects</h2><p>Centralize and manage your project information, access scope, documents, team and key details.</p></div>
-     <div className={styles.filters}><span>⌕ Search projects...</span><button>All Statuses⌄</button><button>All Clients⌄</button></div>
-    </div>
-    <div className={styles.tableWrap}>
-     <table><thead><tr><th>Project ID</th><th>Project</th><th>Client</th><th>Location</th><th>Phase</th><th>Start Date</th><th>End Date</th><th>Contract Value</th><th>Status</th><th>Last Update</th><th>Actions</th></tr></thead>
-      <tbody>
-       {loading&&<tr><td colSpan="11" className={styles.message}>Loading projects...</td></tr>}
-       {!loading&&error&&<tr><td colSpan="11" className={styles.message}>Unable to load projects: {error}</td></tr>}
-       {!loading&&!error&&projects.length===0&&<tr><td colSpan="11" className={styles.message}><b>No projects registered yet.</b><span>Create your first project using + New Project.</span></td></tr>}
-       {!loading&&!error&&projects.map(p=>{
-        const location=[p.city,p.state_region].filter(Boolean).join(', ')||'—'
-        const status=p.status||'Planning'
-        const updated=p.updated_at?new Date(p.updated_at).toLocaleDateString('pt-BR'):'—'
-        const phase=p.phase||p.status||'Planning'
-        return <tr key={p.id}>
-         <td><b>{p.project_id||'—'}</b></td>
-         <td><div className={styles.projectName}><i>{(p.name||'P').charAt(0).toUpperCase()}</i><span><b>{p.name||'Untitled Project'}</b><small>{p.code||'—'}</small></span></div></td>
-         <td>{p.client||p.client_name||'—'}</td><td>⌖ {location}</td><td><span className={styles.phase}>{phase}</span></td>
-         <td>{date(p.planned_start_date||p.start_date)}</td><td>{date(p.planned_end_date||p.end_date)}</td><td>{money(p.contract_value)}</td>
-         <td><span className={String(status).toLowerCase().includes('hold')?styles.attention:styles.ok}>{status}</span></td>
-         <td>{updated}</td><td><div className={styles.rowActions}><Link className={styles.openProject} href={`/projects/${p.id}`}>◉ Open Project</Link><Link className={styles.scopeProject} href={`/projects/${p.id}/scope`}>▤ Scope Management</Link></div></td>
-        </tr>
-       })}
-      </tbody>
-     </table>
-    </div>
-    <footer className={styles.tableFooter}><span>Showing {projects.length} of {projects.length} {projects.length===1?'project':'projects'}</span><span>‹　<b>1</b>　›</span></footer>
-   </section>
-  </div>
- </main>
+  return <AppShell module="projects" active="all">
+    <Stats>
+      <Stat label={t('list.statTotal')} value={projects.length} />
+      <Stat label={t('status.active')} value={count('active')} tone="ok" />
+      <Stat label={t('status.planning')} value={count('planning')} />
+      <Stat label={t('status.on_hold')} value={count('on_hold')} tone={count('on_hold') ? 'warn' : undefined} />
+    </Stats>
+    <Notice>{error && t('list.error', { error })}</Notice>
+    <Panel body={false} title={t('list.showing', { shown: shown.length, total: projects.length })}
+      actions={<>
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('list.search')} aria-label={t('list.search')} style={{ width: 240 }} />
+        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label={t('list.colStatus')} style={{ width: 170 }}>
+          <option value="">{t('list.allStatuses')}</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
+        </select>
+        {clients.length > 1 && <select value={client} onChange={(e) => setClient(e.target.value)} aria-label={t('list.colClient')} style={{ width: 190 }}>
+          <option value="">{t('list.allClients')}</option>
+          {clients.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>}
+      </>}>
+      {loading ? <Empty title={t('list.loading')} />
+        : projects.length === 0 ? <Empty title={t('list.emptyTitle')} text={t('list.emptyText')} action={<Link className={ui.btnPrimary} href="/projects/new">{t('list.newProject')}</Link>} />
+          : shown.length === 0 ? <Empty title={t('list.noMatch')} />
+            : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards}`}>
+              <thead><tr><th>{t('list.colProject')}</th><th>{t('list.colClient')}</th><th>{t('list.colLocation')}</th><th>{t('list.colDates')}</th><th>{t('list.colValue')}</th><th>{t('list.colStatus')}</th><th>{t('list.colUpdated')}</th><th /></tr></thead>
+              <tbody>{shown.map((p) => <tr key={p.id}>
+                <td data-label=""><span><Link className={ui.rowLink} href={`/projects/${p.id}`}>{p.name || t('list.untitled')}</Link><span className={ui.sub}>{[p.project_id, p.code].filter(Boolean).join(' · ') || '—'}</span></span></td>
+                <td data-label={t('list.colClient')}>{clientOf(p) || '—'}</td>
+                <td data-label={t('list.colLocation')}>{[p.city, p.state_region].filter(Boolean).join(', ') || '—'}</td>
+                <td data-label={t('list.colDates')} style={{ whiteSpace: 'nowrap' }}>{date(p.planned_start_date || p.start_date)} → {date(p.planned_finish_date || p.planned_end_date || p.end_date)}</td>
+                <td data-label={t('list.colValue')} style={{ whiteSpace: 'nowrap' }}>{money(p.contract_value, p.currency_code)}</td>
+                <td data-label={t('list.colStatus')}><Badge tone={TONE[statusOf(p)]}>{t(`status.${statusOf(p)}`)}</Badge></td>
+                <td data-label={t('list.colUpdated')}>{p.updated_at ? date(p.updated_at) : '—'}</td>
+                <td data-label="" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  <Link className={`${ui.btn} ${ui.small}`} href={`/projects/${p.id}`}>{t('list.open')}</Link>{' '}
+                  <Link className={`${ui.btn} ${ui.small}`} href={`/projects/${p.id}/scope`}>{t('list.scope')}</Link>
+                </td>
+              </tr>)}</tbody>
+            </table></div>}
+    </Panel>
+  </AppShell>
 }

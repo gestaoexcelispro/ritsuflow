@@ -6,8 +6,11 @@ import { createClient } from '../../../lib/supabase/client'
 import { locationBreadcrumb, locationQrPath } from './locationQr'
 import LocationPrintCard from './LocationPrintCard'
 import styles from './location-qr-card.module.css'
+import { ui } from '../../../fieldop/ui'
+import { useT } from '../../../../lib/i18n/useT'
 
 export default function LocationQrCard({ location, locationMap, projectName, projectCode }) {
+  const t = useT('projects')
   const supabase = useMemo(() => createClient(), [])
   const [showPrintCard, setShowPrintCard] = useState(false)
   const [printMap, setPrintMap] = useState(null)
@@ -23,6 +26,37 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
       setPrintMapError('')
       setPrintMap(null)
       try {
+        // RitsuScope first: the latest outline drawn for this location, its sheet and the sheet's A4 print area.
+        const { data: zoneRow } = await supabase
+          .from('takeoff_zones')
+          .select('id,points,color,source_id')
+          .eq('location_id', location.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (zoneRow?.source_id) {
+          const { data: sheet } = await supabase
+            .from('takeoff_sources')
+            .select('id,file_path,page_number,scale_pt_per_m,metadata')
+            .eq('id', zoneRow.source_id)
+            .maybeSingle()
+          if (sheet?.file_path) {
+            const { data: signedSheet, error: sheetError } = await supabase.storage.from('takeoff-files').createSignedUrl(sheet.file_path, 300)
+            if (sheetError || !signedSheet?.signedUrl) throw sheetError || new Error(t('loc.qr.errSheet'))
+            if (!cancelled) setPrintMap({
+              geometry: { points: zoneRow.points || [], display: { color: zoneRow.color || '#008F84', fill_opacity: 0.35 } },
+              coordinateSpace: 'pt',
+              ptPerM: Number(sheet.scale_pt_per_m) || 0,
+              printView: sheet.metadata?.print_view || null,
+              scaleCalibration: null,
+              pageNumber: sheet.page_number || 1,
+              signedUrl: signedSheet.signedUrl,
+            })
+            return
+          }
+        }
+
+        // Older projects: the Location Map outline.
         const { data: geometryRow, error: geometryError } = await supabase
           .from('project_drawing_location_geometries')
           .select('id,geometry,page_number,document_id,drawing_map_id')
@@ -35,7 +69,7 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
 
         const { data: drawingMap, error: drawingMapError } = await supabase
           .from('project_drawing_maps')
-          .select('id,print_view')
+          .select('id,print_view,scale_calibration')
           .eq('id', geometryRow.drawing_map_id)
           .maybeSingle()
         if (drawingMapError) throw drawingMapError
@@ -51,17 +85,18 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
         const { data: signed, error: signedError } = await supabase.storage
           .from('project-documents')
           .createSignedUrl(documentRow.storage_path, 300)
-        if (signedError || !signed?.signedUrl) throw signedError || new Error('Unable to access the mapped drawing.')
+        if (signedError || !signed?.signedUrl) throw signedError || new Error(t('loc.qr.errDrawing'))
 
         if (!cancelled) setPrintMap({
           geometry: geometryRow.geometry,
           printView: drawingMap?.print_view || null,
+          scaleCalibration: drawingMap?.scale_calibration || null,
           pageNumber: geometryRow.page_number || 1,
           document: documentRow,
           signedUrl: signed.signedUrl,
         })
       } catch (error) {
-        if (!cancelled) setPrintMapError(error?.message || 'Unable to load the mapped location drawing.')
+        if (!cancelled) setPrintMapError(error?.message || t('loc.qr.errMap'))
       } finally {
         if (!cancelled) setPrintMapLoading(false)
       }
@@ -96,27 +131,27 @@ export default function LocationQrCard({ location, locationMap, projectName, pro
       <section className={styles.card}>
         <div className={styles.heading}>
           <div>
-            <span>FIELDOP LOCATION QR</span>
-            <strong>Physical location identity</strong>
+            <small>{t('loc.qr.title')}</small>
+            <strong>{t('loc.qr.identity')}</strong>
           </div>
-          <span className={styles.status}>Active</span>
+          <span className={styles.status}>{t('loc.qr.active')}</span>
         </div>
 
         <div className={styles.content}>
           <div className={styles.qrWrap}>
-            <QRCodeSVG id={`location-qr-${location.id}`} value={scanUrl} size={176} level="M" marginSize={2} />
+            <QRCodeSVG id={`location-qr-${location.id}`} value={scanUrl} size={160} level="M" marginSize={2} />
           </div>
           <div className={styles.identity}>
-            <small>{projectCode || 'PROJECT'}</small>
+            <small>{projectCode || t('loc.qr.project')}</small>
             <h3>{location.name}</h3>
             <p>{breadcrumb}</p>
-            <span>Scan to open FieldOp at this location.</span>
+            <span>{t('loc.qr.scanHint')}</span>
           </div>
         </div>
 
         <div className={styles.actions}>
-          <button type="button" onClick={() => setShowPrintCard(true)}>Print Location Card</button>
-          <button type="button" onClick={downloadQr}>Download SVG</button>
+          <button type="button" className={ui.btnPrimary} onClick={() => setShowPrintCard(true)}>{t('loc.qr.print')}</button>
+          <button type="button" className={ui.btn} onClick={downloadQr}>{t('loc.qr.download')}</button>
         </div>
       </section>
 

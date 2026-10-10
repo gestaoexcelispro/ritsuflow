@@ -1,9 +1,10 @@
-import Image from 'next/image'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import { createClient } from '../../../../lib/supabase/server'
 import StandaloneLocationWorkspace from './StandaloneLocationWorkspace'
+import { buildRitsuScopeSpatial } from './ritsuscopeSpatial'
+import { AppShell } from '../../../fieldop/ui'
+import ContinueToPrecon from '../../ContinueToPrecon'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,94 +17,92 @@ export default async function LocationBreakdownPage({ params, searchParams }) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [projectResult, locationsResult, activitiesResult, allocationsResult] = await Promise.all([
+  const [projectResult, locationsResult, activitiesResult, allocationsResult, zonesResult, sheetsResult, levelsResult, scopeResult, tasksResult] = await Promise.all([
     supabase.from('projects').select('id, project_id, code, name').eq('id', projectId).maybeSingle(),
     supabase.from('locations').select('id, project_id, parent_id, name, location_type, environment_type, sequence_number, qr_token, created_at, updated_at').eq('project_id', projectId).order('sequence_number', { ascending: true }),
-    supabase.from('fieldop_project_activities').select('id, project_id, source, scope_item_id, activity_name, unit, quantity, notes, is_active, created_at, scope_item:project_scopes(id, scope_code, scope_name, item_type, unit, quantity, notes)').eq('project_id', projectId).eq('is_active', true).order('created_at', { ascending: true }),
+    supabase.from('fieldop_project_activities').select('id, project_id, source, scope_item_id, activity_name, unit, quantity, notes, is_active, created_at, scope_item:project_scopes(id, scope_code, scope_name, item_type, unit, quantity, notes, takeoff_layer_id)').eq('project_id', projectId).order('created_at', { ascending: true }),
     supabase.from('location_service_quantities').select('id, project_id, location_id, service_id, quantity, source_scope_item_id, created_at, updated_at').eq('project_id', projectId),
+    // RitsuScope: the outlines drawn for each location, their sheets (scale, level) and the levels linked as floors.
+    supabase.from('takeoff_zones').select('id, name, location_id, points, source_id, zone_kind').eq('project_id', projectId).not('location_id', 'is', null),
+    supabase.from('takeoff_sources').select('id, name, scale_pt_per_m, level_id').eq('project_id', projectId).eq('kind', 'pdf_page'),
+    supabase.from('takeoff_levels').select('id, name, elevation_m, location_id').eq('project_id', projectId),
+    // Allocation starts from the contracted scope: every measurable scope item, before or after FieldOp.
+    supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, notes, takeoff_layer_id, takeoff_step, allocation_rule').eq('project_id', projectId).eq('item_type', 'item').order('scope_code', { ascending: true }),
+    // Task view: lines drawn in RitsuScope for a scope item in a location (their quantity replaces the automatic split there).
+    supabase.from('location_task_drawings').select('id, scope_item_id, location_id, source_id, points, quantity').eq('project_id', projectId),
   ])
 
   const project = projectResult.data
   if (!project) redirect('/projects')
+  // Before migration 20261010_001 (allocation_rule) the scope lines are read without it.
+  let scopeRows = scopeResult.data || []
+  let scopeError = scopeResult.error
+  if (scopeError) {
+    const retry = await supabase.from('project_scopes').select('id, scope_code, scope_name, unit, quantity, notes, takeoff_layer_id, takeoff_step').eq('project_id', projectId).eq('item_type', 'item').order('scope_code', { ascending: true })
+    scopeRows = retry.data || []
+    scopeError = retry.error
+  }
 
-  const scopeItems = (activitiesResult.data || []).map((activity, index) => {
-    const scope = activity.scope_item || null
-    const fromProjectScope = activity.source === 'scope'
+  // One allocation line per scope item. The quantities by location hang on the item's FieldOp activity
+  // record; until it exists the line is 'pending' and the record is created (inactive) on first save,
+  // so FieldOp only shows the item once it is activated in FieldOp's project setup.
+  const activities = activitiesResult.data || []
+  const activityFor = (scopeId) => {
+    const rows = activities.filter((a) => a.source === 'scope' && a.scope_item_id === scopeId)
+    return rows.find((a) => a.is_active) || rows[0] || null
+  }
+  const fromScope = scopeRows.map((scope) => {
+    const activity = activityFor(scope.id)
     return {
-      id: activity.id,
+      id: activity?.id || `scope:${scope.id}`,
+      pending: !activity,
+      in_fieldop: activity?.is_active === true,
       project_id: projectId,
-      project_work_package_id: activity.scope_item_id || null,
-      service_code: fromProjectScope ? (scope?.scope_code || '') : '',
-      service_name: fromProjectScope ? (scope?.scope_name || activity.activity_name || '') : (activity.activity_name || ''),
-      unit: fromProjectScope ? (scope?.unit || activity.unit || '') : (activity.unit || ''),
-      scope_quantity: fromProjectScope ? (scope?.quantity ?? activity.quantity) : activity.quantity,
-      sequence_number: index + 1,
-      is_active: activity.is_active !== false,
-      source_scope_item_id: activity.scope_item_id || null,
-      scope_name: fromProjectScope ? (scope?.scope_name || '') : '',
-      source: activity.source,
-      notes: activity.notes || null,
+      service_code: scope.scope_code || '',
+      service_name: scope.scope_name || '',
+      unit: scope.unit || '',
+      scope_quantity: scope.quantity,
+      is_active: true,
+      source_scope_item_id: scope.id,
+      scope_name: scope.scope_name || '',
+      source: 'scope',
+      notes: scope.notes || null,
+      // Scope lines imported from RitsuScope know their takeoff item: it feeds this line automatically.
+      takeoff_layer_id: scope.takeoff_layer_id || null,
+      // Which wall step the line is (framing, board_a…) and the planner's allocation rule (Tasks ⚙).
+      takeoff_step: scope.takeoff_step || null,
+      allocation_rule: scope.allocation_rule || null,
     }
   })
+  // Activities created only in FieldOp (not from the scope) still need their locations.
+  const manual = activities.filter((a) => a.source !== 'scope' && a.is_active !== false).map((a) => ({
+    id: a.id, pending: false, in_fieldop: true, project_id: projectId, service_code: '', service_name: a.activity_name || '', unit: a.unit || '',
+    scope_quantity: a.quantity, is_active: true, source_scope_item_id: null, scope_name: '', source: a.source, notes: a.notes || null, takeoff_layer_id: null,
+  }))
+  const scopeItems = [...fromScope, ...manual].map((item, index) => ({ ...item, sequence_number: index + 1 }))
 
-  const loadError = projectResult.error || locationsResult.error || activitiesResult.error || allocationsResult.error
+  const loadError = projectResult.error || locationsResult.error || activitiesResult.error || allocationsResult.error || scopeError
   const locations = locationsResult.data || []
+  // RitsuScope data is optional here: without it the page works as before.
+  const spatial = buildRitsuScopeSpatial({ zones: zonesResult.data || [], sources: sheetsResult.data || [], levels: levelsResult.data || [] })
 
   return (
-    <main style={shell}>
-      <header style={header}>
-        <Link href="/workspaces" style={brand}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority /></Link>
-        <div style={titleBlock}>
-          <div style={subtitle}>{project.project_id || project.code || 'Project'} · {project.name}</div>
-          <div style={title}>Location Breakdown</div>
-        </div>
-        <div style={headerActions}>
-          <Link href={`/projects/${projectId}`} style={recordButton}>← Project Record</Link>
-          <Link href={`/projects/${projectId}/scope`} style={scopeButton}>Scope Management</Link>
-          <Link href={`/planning/pre-planning?projectId=${projectId}`} style={preconButton}>Continue to PreCon →</Link>
-        </div>
-      </header>
-
-      <section style={body}>
-        {loadError ? <div style={errorBox}>Some Location Breakdown data could not be loaded: {loadError.message}</div> : null}
-        <nav style={viewTabs} aria-label="Location workspace views">
-          <Link href={`/projects/${projectId}/locations`} style={activeTab}>☷ Location Breakdown</Link>
-          <Link href={`/projects/${projectId}/location-map`} style={viewTab}>⌑ Location Map</Link>
-        </nav>
-        <div id="lbs-workspace" style={workspace}>
-          <StandaloneLocationWorkspace
-            projectId={project.id}
-            projectName={project.name}
-            projectCode={project.project_id || project.code || ''}
-            userId={user.id}
-            initialLocations={locations}
-            scopeItems={scopeItems}
-            allocations={allocationsResult.data || []}
-          />
-        </div>
-        <style>{`
-          html, body { height: 100%; overflow: hidden !important; }
-          #lbs-workspace { overscroll-behavior: contain; }
-        `}</style>
-      </section>
-    </main>
+    <AppShell module="projects" active="locations" projectId={projectId} bare action={<ContinueToPrecon projectId={projectId} />}>
+      <StandaloneLocationWorkspace
+        projectId={project.id}
+        projectName={project.name}
+        projectCode={project.project_id || project.code || ''}
+        userId={user.id}
+        initialLocations={locations}
+        scopeItems={scopeItems}
+        allocations={allocationsResult.data || []}
+        spatial={spatial}
+        taskDrawings={tasksResult.error ? [] : tasksResult.data || []}
+        initialTab={query?.tab === 'allocation' ? 'allocation' : 'locations'}
+        initialScopeItemId={typeof query?.scope === 'string' ? query.scope : ''}
+        returnedFromDraw={typeof query?.drawn === 'string' ? query.drawn : ''}
+        loadError={loadError?.message || ''}
+      />
+    </AppShell>
   )
 }
-
-const shell={height:'100vh',overflow:'hidden',background:'#f4f8fa',color:'#082f43',fontFamily:'Arial,sans-serif',display:'flex',flexDirection:'column'}
-const header={height:78,flex:'0 0 78px',boxSizing:'border-box',background:'#063247',display:'flex',alignItems:'center',padding:'0 28px',gap:18,color:'#fff',zIndex:1000}
-const brand={width:210,height:78,boxSizing:'border-box',display:'flex',alignItems:'center',paddingRight:20,marginRight:0,borderRight:'1px solid rgba(255,255,255,.18)'}
-const titleBlock={minWidth:0,flex:1}
-const title={fontSize:24,fontWeight:850,lineHeight:1.05,marginTop:4}
-const subtitle={fontSize:11,opacity:.82}
-const headerActions={display:'flex',alignItems:'center',gap:9}
-const baseButton={height:44,boxSizing:'border-box',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:9,padding:'0 16px',fontWeight:800,fontSize:12,textDecoration:'none',whiteSpace:'nowrap'}
-const recordButton={...baseButton,color:'#fff',border:'1px solid rgba(255,255,255,.28)'}
-const scopeButton={...baseButton,color:'#fff',border:'1px solid #4d92dd',background:'#1b5f9f'}
-const preconButton={...baseButton,color:'#fff',border:'1px solid #2f86ee',background:'#2f86ee'}
-const body={width:'100%',maxWidth:1800,margin:'0 auto',padding:'12px 24px 22px',boxSizing:'border-box',flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}
-const viewTabs={height:42,flex:'0 0 42px',display:'flex',alignItems:'stretch',gap:4,marginBottom:8,borderBottom:'1px solid #ccdbe2'}
-const viewTab={display:'flex',alignItems:'center',padding:'0 16px',color:'#56727f',fontSize:12,fontWeight:800,textDecoration:'none',borderBottom:'3px solid transparent'}
-const activeTab={...viewTab,color:'#087f82',borderBottom:'3px solid #0aa3a0',background:'#eef9f8'}
-const workspace={flex:1,minHeight:0,overflow:'hidden'}
-const errorBox={marginBottom:12,padding:'10px 12px',border:'1px solid #efb0b0',background:'#fff3f3',color:'#a61b1b',borderRadius:7,fontWeight:700,fontSize:12,flex:'0 0 auto'}

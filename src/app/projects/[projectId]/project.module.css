@@ -1,0 +1,24 @@
+/* Project page. Colors, type and spacing come from the RitsuFlow design tokens on the app shell. */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.main { display: grid; gap: 16px; min-width: 0; }
+.side { display: grid; gap: 16px; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.row { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--fo-line-soft); font-size: 15px; }
+.row:last-child { border-bottom: 0; }
+.row span { color: var(--fo-muted); }
+.row strong { font-weight: 600; text-align: right; }
+.pre { margin: 0; white-space: pre-wrap; }
+.muted { color: var(--fo-muted); }
+.tabBar { padding: 14px 20px; border-bottom: 1px solid var(--fo-line-soft); }
+.notes { padding: 16px 20px 20px; display: grid; gap: 14px; }
+.composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.noteList { list-style: none; margin: 0; padding: 0; display: grid; }
+.noteList li { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--fo-line-soft); }
+.noteMeta { color: var(--fo-muted); font-size: 14px; margin-bottom: 4px; }
+.noteMeta strong { color: var(--fo-ink); }
+.legacy { padding: 16px 20px 20px; }
+.image { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--fo-radius-sm); display: block; }
+.placeholder { aspect-ratio: 4 / 3; border: 2px dashed var(--fo-line); border-radius: var(--fo-radius-sm); display: grid; place-content: center; text-align: center; gap: 4px; color: var(--fo-muted); }
+.map { width: 100%; aspect-ratio: 4 / 3; border: 0; border-radius: var(--fo-radius-sm); display: block; }
+@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } .side { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) { .cards, .side { grid-template-columns: 1fr; } .composer { grid-template-columns: 1fr; } }

@@ -1,7 +1,8 @@
 import './globals.css'
-import { LanguageProvider } from '../contexts/LanguageContext'
+import { LanguageProvider } from '@/lib/i18n/LanguageProvider'
 
 export const metadata = {
+  metadataBase: new URL('https://ritsuflow.com'),
   title: {
     default: 'RitsuFlow',
     template: '%s | RitsuFlow',
@@ -22,7 +23,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en-US">
       <body>
         <LanguageProvider>{children}</LanguageProvider>
       </body>

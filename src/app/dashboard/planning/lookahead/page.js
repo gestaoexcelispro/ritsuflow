@@ -4,10 +4,19 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
 import { supabase } from '../../../../lib/supabase';
+import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
+import { useT } from '../../../../lib/i18n/useT';
+import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
+import { Dialog, usePageDialogs } from '../../../fieldop/ui/dialogs';
+import { Empty, Icon, Notice, Segments, ui } from '../../../fieldop/ui';
+import styles from '../../precon.module.css';
+import { useLocationPlan } from '../useLocationPlan';
+import { predecessorAuto } from './predecessorAuto';
 
 
 // ============================================================
@@ -47,14 +56,15 @@ const DAY_WIDTH = 38;
 const KOSKELA_WIDTH = 128;
 
 
+// Labels: lookahead.koskela.<key> in messages/precon.<language>.json.
 const KOSKELA_COLUMNS = [
-  { key: 'projects_information', label: 'Projects / Information' },
-  { key: 'materials', label: 'Materials' },
-  { key: 'labor', label: 'Labor' },
-  { key: 'equipment', label: 'Equipment' },
-  { key: 'space', label: 'Space' },
-  { key: 'predecessor', label: 'Predecessor' },
-  { key: 'external_conditions', label: 'External Conditions' },
+  { key: 'projects_information' },
+  { key: 'materials' },
+  { key: 'labor' },
+  { key: 'equipment' },
+  { key: 'space' },
+  { key: 'predecessor' },
+  { key: 'external_conditions' },
 ];
 
 
@@ -120,14 +130,15 @@ function addDays(
 
 
 function formatShortDate(
-  date
+  date,
+  locale = 'en-US'
 ) {
   if (!date) {
     return '';
   }
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    locale,
     {
       month: '2-digit',
       day: '2-digit',
@@ -136,19 +147,40 @@ function formatShortDate(
 }
 
 
+function formatLongDate(
+  isoDate,
+  locale = 'en-US'
+) {
+  const date = parseDate(isoDate);
+  if (!date) {
+    return isoDate || '';
+  }
+
+  return new Intl.DateTimeFormat(
+    locale,
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }
+  ).format(date);
+}
+
+
 function getDayLabel(
-  date
+  date,
+  locale = 'en-US'
 ) {
   if (!date) {
     return '';
   }
 
   return new Intl.DateTimeFormat(
-    'en-US',
+    locale,
     {
       weekday: 'short',
     }
-  ).format(date);
+  ).format(date).replace('.', '');
 }
 
 
@@ -386,6 +418,20 @@ function readinessStyle(
 // ============================================================
 
 export default function LookaheadPage() {
+  // Texts: lookahead.* in messages/precon.<language>.json. `t` is stable (callbacks keep working)
+  // and always reads the current language.
+  const translate = useT('precon');
+  const { language } = useLanguage();
+  const translateRef = useRef(translate);
+  translateRef.current = translate;
+  const t = useMemo(
+    () => new Proxy({}, { get: (_, key) => translateRef.current(`lookahead.${String(key)}`) }),
+    []
+  );
+  const tv = useCallback((key, vars) => translateRef.current(`lookahead.${key}`, vars), []);
+  const koskelaLabel = useCallback((key) => translateRef.current(`lookahead.koskela.${key}`), []);
+  const dialogs = usePageDialogs();
+  const [showHolidays, setShowHolidays] = useState(false);
 
   const [
     projects,
@@ -397,6 +443,9 @@ export default function LookaheadPage() {
     selectedProjectId,
     setSelectedProjectId,
   ] = useState('');
+
+  // Koskela "Predecessor" auto-check from RitsuScope Tasks (locations × work packages, Weekly progress).
+  const locationPlan = useLocationPlan(selectedProjectId);
 
 
   const [
@@ -602,6 +651,9 @@ export default function LookaheadPage() {
     setSavingLookahead,
   ] = useState(false);
 
+  // R2: creating a plan from the frozen Master plan baseline.
+  const [creatingPlan, setCreatingPlan] = useState(false);
+
 
   // ==========================================================
   // SELECTED PLAN
@@ -692,17 +744,8 @@ export default function LookaheadPage() {
           );
 
 
-          const params =
-            new URLSearchParams(
-              window.location
-                .search
-            );
-
-
           const projectId =
-            params.get(
-              'projectId'
-            );
+            readPreconProjectId();
 
 
           if (
@@ -730,7 +773,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'Projects could not be loaded.'
+            t.errProjects
           );
 
         }
@@ -860,7 +903,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'Lookahead plans could not be loaded.'
+            t.errPlans
           );
 
         }
@@ -958,7 +1001,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'Master Plan reference data could not be loaded.'
+            t.errMasterPlan
           );
 
         }
@@ -1017,7 +1060,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'The company Work Package Library could not be loaded.'
+            t.errLibrary
           );
         }
       },
@@ -1590,7 +1633,7 @@ export default function LookaheadPage() {
 
           setErrorMessage(
             error.message ||
-            'The Lookahead workspace could not be loaded.'
+            t.errWorkspace
           );
 
         } finally {
@@ -1729,7 +1772,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'Start of Week 1 is required.'
+          t.errWeekStart
         );
 
         return;
@@ -1751,7 +1794,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'Horizon must be at least 1 week.'
+          t.errHorizon
         );
 
         return;
@@ -1982,6 +2025,31 @@ export default function LookaheadPage() {
         );
 
 
+        // ----------------------------------------------------
+        // 4. PULL BASELINE PACKAGES THAT NOW FALL IN THE WINDOW
+        //    (never duplicates or resets existing items)
+        // ----------------------------------------------------
+
+        const {
+          data: refreshed,
+          error: refreshError,
+        } = await supabase.rpc(
+          'refresh_lookahead_from_baseline',
+          { target_lookahead_plan_id: selectedPlanId }
+        );
+
+        if (refreshError) {
+          throw refreshError;
+        }
+
+        const addedItems = Number(refreshed?.[0]?.added_items || 0);
+
+        if (addedItems > 0) {
+          dialogs.notify(tv('refreshedNotice', { items: addedItems }));
+          await loadWorkspace(selectedPlanId, { silent: true });
+        }
+
+
       } catch (error) {
 
         console.error(
@@ -1992,7 +2060,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Lookahead could not be saved.'
+          t.errSave
         );
 
       } finally {
@@ -2004,6 +2072,63 @@ export default function LookaheadPage() {
       }
 
     };
+
+
+  // ==========================================================
+  // R2 · CREATE A LOOKAHEAD FROM THE FROZEN BASELINE
+  // One database call: creates the active plan, closes the
+  // previous active one, pulls the packages in the window and
+  // adds their package rows.
+  // ==========================================================
+
+  const createLookaheadFromBaseline = async () => {
+    if (!selectedProjectId || creatingPlan) {
+      return;
+    }
+
+    // Default window: Monday of the current week.
+    let start = parseDate(windowStart);
+    if (!start) {
+      const today = new Date();
+      const weekday = (today.getDay() + 6) % 7;
+      start = addDays(new Date(today.getFullYear(), today.getMonth(), today.getDate()), -weekday);
+    }
+    const startIso = toIsoDate(start);
+    const weeks = Number.isInteger(Number(horizonWeeks)) && Number(horizonWeeks) >= 1 ? Number(horizonWeeks) : 6;
+
+    if (plans.length > 0) {
+      const confirmed = await dialogs.confirm(tv('confirmNewPlan', { start: startIso, weeks }));
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setCreatingPlan(true);
+    setErrorMessage('');
+
+    try {
+      const { data, error } = await supabase.rpc('create_lookahead_plan_from_baseline', {
+        target_project_id: selectedProjectId,
+        target_window_start: startIso,
+        target_horizon_weeks: weeks,
+        target_name: null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const result = data?.[0] || {};
+      dialogs.notify(tv('createdNotice', { items: Number(result.added_items || 0), rows: Number(result.added_rows || 0) }));
+      await loadPlans(selectedProjectId);
+    } catch (error) {
+      console.error('Create Lookahead:', error);
+      const message = String(error?.message || '');
+      setErrorMessage(message.includes('NO_BASELINE') ? t.errNoBaseline : message || t.errCreate);
+    } finally {
+      setCreatingPlan(false);
+    }
+  };
 
 
   // ==========================================================
@@ -2019,6 +2144,10 @@ export default function LookaheadPage() {
     (
       projectId
     ) => {
+
+      rememberPreconProjectId(
+        projectId
+      );
 
       setSelectedPlanId(
         ''
@@ -2220,7 +2349,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Work Package could not be assigned to this Lookahead row.'
+          t.errAssignPackage
         );
 
       } finally {
@@ -2262,7 +2391,7 @@ export default function LookaheadPage() {
               date,
 
               holiday.description ||
-              'Holiday'
+              t.holiday
             );
 
           }
@@ -2913,7 +3042,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The row description could not be saved.'
+          t.errDescription
         );
 
       } finally {
@@ -3001,7 +3130,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The row could not be inserted.'
+          t.errInsertRow
         );
 
       } finally {
@@ -3114,7 +3243,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'Line ID must be a valid row number.'
+          t.errLineId
         );
 
         return;
@@ -3130,7 +3259,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'Duration must be at least 1 working day.'
+          t.errDuration
         );
 
         return;
@@ -3204,7 +3333,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Lookahead package could not be inserted.'
+          t.errInsertPackage
         );
 
       } finally {
@@ -3237,8 +3366,9 @@ export default function LookaheadPage() {
       }
 
       const confirmed =
-        window.confirm(
-          'Delete this user-created Lookahead row? Its grouped Koskela assessments will also be removed.'
+        await dialogs.confirm(
+          t.confirmDeleteRow,
+          { danger: true }
         );
 
       if (!confirmed) {
@@ -3279,7 +3409,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The user-created Lookahead row could not be deleted.'
+          t.errDeleteRow
         );
 
       } finally {
@@ -3441,7 +3571,7 @@ export default function LookaheadPage() {
 
               package_color:
                 selectedPackage?.color ||
-                '#64748b',
+                'var(--fo-muted)',
             },
           })
         );
@@ -3456,7 +3586,7 @@ export default function LookaheadPage() {
 
         setErrorMessage(
           error.message ||
-          'The Lookahead timeline cell could not be saved.'
+          t.errCell
         );
 
       } finally {
@@ -3548,7 +3678,7 @@ export default function LookaheadPage() {
       ) {
 
         setErrorMessage(
-          'This Koskela criterion is managed by Constraint Management and cannot be changed directly from the Matrix.'
+          t.errManagedCriterion
         );
 
         return;
@@ -3562,24 +3692,22 @@ export default function LookaheadPage() {
       ) {
 
         const categoryLabel =
-          KOSKELA_COLUMNS.find(
+          KOSKELA_COLUMNS.some(
             (column) =>
               column.key ===
               category
-          )?.label || category;
+          )
+            ? koskelaLabel(category)
+            : category;
 
 
         const packageLabel =
           row.package_code ||
-          'this Work Package';
+          t.thisPackage;
 
 
-        const confirmed = window.confirm(
-          `${packageLabel} · ${categoryLabel} will be marked No.
-
-A Constraint Log record will be created and this criterion will be managed through Constraint Management until it is cleared.
-
-Continue?`
+        const confirmed = await dialogs.confirm(
+          tv('confirmConstraint', { package: packageLabel, category: categoryLabel })
         );
 
 
@@ -3805,10 +3933,11 @@ Continue?`
 
 
             setErrorMessage(
-              `The Koskela assessment was saved, but the Constraint Log could not be synchronized. ${
-                constraintSyncError.message ||
-                'Please try again.'
-              }`
+              tv('errSyncConstraint', {
+                message:
+                  constraintSyncError.message ||
+                  t.tryAgain,
+              })
             );
 
 
@@ -3879,7 +4008,7 @@ Continue?`
 
         setErrorMessage(
           error.message ||
-          'The Koskela assessment could not be saved.'
+          t.errAssessment
         );
 
       } finally {
@@ -3959,626 +4088,108 @@ Continue?`
   // RENDER
   // ==========================================================
 
+  const cx = (...names) => names.filter(Boolean).join(' ');
+
   return (
-    <div
-      style={{
-        padding:
-          '18px 20px 40px',
-
-        minHeight:
-          '100%',
-
-        background:
-          '#f8fafc',
-
-        color:
-          '#0f172a',
-      }}
-    >
+    <div>
 
       {/* ====================================================
-          TITLE
+          TOOLBAR
       ===================================================== */}
 
-      <div
-        style={{
-          marginBottom:
-            '18px',
-        }}
-      >
-
-        <h1
-          style={{
-            margin:
-              0,
-
-            fontSize:
-              '22px',
-
-            fontWeight:
-              800,
-          }}
-        >
-          LOOKAHEAD (MEDIUM TERM) &amp; KOSKELA MATRIX
-        </h1>
-
-      </div>
-
-
-      {/* ====================================================
-          CONTROLS
-      ===================================================== */}
-
-      <div
-        style={{
-          display:
-            'flex',
-
-          alignItems:
-            'flex-end',
-
-          gap:
-            '12px',
-
-          flexWrap:
-            'wrap',
-
-          marginBottom:
-            '14px',
-        }}
-      >
-
-        <div
-          style={{
-            minWidth:
-              '250px',
-          }}
-        >
-
-          <label
-            style={
-              labelStyle
-            }
-          >
-            Project
-          </label>
-
-
-          <select
-
-            value={
-              selectedProjectId
-            }
-
-            onChange={(
-              event
-            ) =>
-              handleProjectChange(
-                event.target.value
-              )
-            }
-
-            style={
-              selectStyle
-            }
-          >
-
-            <option value="">
-              -- Select a Project --
-            </option>
-
-
-            {projects.map(
-              (
-                project
-              ) => (
-
-                <option
-                  key={
-                    project.id
-                  }
-
-                  value={
-                    project.id
-                  }
-                >
-
-                  {project.code
-                    ? `${project.code} - `
-                    : ''}
-
-                  {project.name}
-
+      <div className={styles.toolbar} style={{ marginBottom: 12 }}>
+        <div className={styles.group}>
+          <label className={styles.control}>
+            <span>{t.project}</span>
+            <select className={styles.projectSelect} value={selectedProjectId} onChange={(event) => handleProjectChange(event.target.value)}>
+              <option value="">{t.selectProject}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.code ? `${project.code} – ` : ''}{project.name}
                 </option>
-
-              )
-            )}
-
-          </select>
-
-        </div>
-
-
-        <div
-          style={{
-            minWidth:
-              '280px',
-          }}
-        >
-
-          <label
-            style={
-              labelStyle
-            }
-          >
-            Scenario / Version (Lookahead)
+              ))}
+            </select>
           </label>
-
-
-          <select
-
-            value={
-              selectedPlanId
-            }
-
-            disabled={
-              !selectedProjectId
-            }
-
-            onChange={(
-              event
-            ) =>
-              handlePlanChange(
-                event.target
-                  .value
-              )
-            }
-
-            style={
-              selectStyle
-            }
-          >
-
-            <option value="">
-              -- Select --
-            </option>
-
-
-            {plans.map(
-              (
-                plan
-              ) => (
-
-                <option
-                  key={
-                    plan.id
-                  }
-
-                  value={
-                    plan.id
-                  }
-                >
-
-                  {plan.name}
-
-                  {plan.status ===
-                  'active'
-                    ? ' · Active'
-                    : ''}
-
+          <label className={styles.control}>
+            <span>{t.planLabel}</span>
+            <select className={styles.scenarioSelect} value={selectedPlanId} disabled={!selectedProjectId} onChange={(event) => handlePlanChange(event.target.value)}>
+              <option value="">{t.select}</option>
+              {plans.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name}{plan.status === 'active' ? t.activeSuffix : ''}
                 </option>
-
-              )
-            )}
-
-          </select>
-
-        </div>
-
-
-        <button
-
-          type="button"
-
-          disabled={
-            !selectedPlanId ||
-            savingLookahead
-          }
-
-          onClick={
-            saveLookahead
-          }
-
-          style={
-            selectedPlanId &&
-            !savingLookahead
-              ? secondaryButtonStyle
-              : disabledButtonStyle
-          }
-        >
-          {savingLookahead
-            ? ' Saving...'
-            : ' Save'}
-        </button>
-
-
-        <button
-
-          type="button"
-
-          disabled={
-            !selectedPlanId ||
-            insertingPackage
-          }
-
-          onClick={
-            openInsertPackageModal
-          }
-
-          style={
-            selectedPlanId &&
-            !insertingPackage
-              ? primaryButtonStyle
-              : disabledButtonStyle
-          }
-        >
-          Insert Package
-        </button>
-
-
-        <button
-          type="button"
-          disabled
-          style={
-            disabledButtonStyle
-          }
-        >
-          Undo
-        </button>
-
-
-        <button
-
-          type="button"
-
-          onClick={() => {
-
-            if (
-              masterPlanHolidays.length ===
-              0
-            ) {
-
-              alert(
-                'No holidays are registered in the originating Master Plan.'
-              );
-
-              return;
-
-            }
-
-
-            const message =
-              masterPlanHolidays
-                .map(
-                  (
-                    holiday
-                  ) =>
-                    `${holiday.date} · ${
-                      holiday.description ||
-                      'Holiday'
-                    }`
-                )
-                .join(
-                  '\n'
-                );
-
-
-            alert(
-              `Master Plan Holidays\n\n${message}`
-            );
-
-          }}
-
-          style={
-            masterPlanHolidays.length >
-            0
-              ? holidayButtonStyle
-              : secondaryButtonStyle
-          }
-        >
-
-           Holidays
-
-          {masterPlanHolidays.length >
-          0
-            ? ` (${masterPlanHolidays.length})`
-            : ''}
-
-        </button>
-
-
-        <button
-
-          type="button"
-
-          onClick={() =>
-            setShowWeekends(
-              (
-                current
-              ) =>
-                !current
-            )
-          }
-
-          style={
-            secondaryButtonStyle
-          }
-        >
-
-          {showWeekends
-            ? 'Hide Weekends'
-            : 'Show Weekends'}
-
-        </button>
-
-
-        <div>
-
-          <label
-            style={
-              labelStyle
-            }
-          >
-            Start of Week 1
+              ))}
+            </select>
           </label>
-
-
-          <input
-
-            type="date"
-
-            value={
-              windowStart
-            }
-
-            onChange={(
-              event
-            ) =>
-              setWindowStart(
-                event.target
-                  .value
-              )
-            }
-
-            style={
-              inputStyle
-            }
-          />
-
+          <button type="button" className={ui.btn} disabled={!selectedPlanId || savingLookahead} onClick={saveLookahead}>
+            {savingLookahead ? t.saving : t.save}
+          </button>
+          <button type="button" className={ui.btnGhost} disabled={!selectedProjectId || creatingPlan} onClick={createLookaheadFromBaseline}>
+            {creatingPlan ? t.creatingPlan : t.newFromBaseline}
+          </button>
         </div>
 
-
-        <div>
-
-          <label
-            style={
-              labelStyle
-            }
-          >
-            Horizon
+        <div className={styles.group}>
+          <label className={styles.control}>
+            <span>{t.weekStart}</span>
+            <input type="date" value={windowStart} onChange={(event) => setWindowStart(event.target.value)} />
           </label>
-
-
-          <select
-
-            value={
-              horizonWeeks
-            }
-
-            onChange={(
-              event
-            ) =>
-              setHorizonWeeks(
-                Number(
-                  event.target
-                    .value
-                )
-              )
-            }
-
-            style={
-              inputStyle
-            }
-          >
-
-            {[
-              2,
-              3,
-              4,
-              5,
-              6,
-              8,
-              10,
-              12,
-            ].map(
-              (
-                weeks
-              ) => (
-
-                <option
-                  key={
-                    weeks
-                  }
-
-                  value={
-                    weeks
-                  }
-                >
-
-                  {weeks} Weeks
-
-                </option>
-
-              )
-            )}
-
-          </select>
-
+          <label className={styles.control}>
+            <span>{t.horizon}</span>
+            <select value={horizonWeeks} onChange={(event) => setHorizonWeeks(Number(event.target.value))}>
+              {[2, 3, 4, 5, 6, 8, 10, 12].map((weeks) => (
+                <option key={weeks} value={weeks}>{weeks} {t.weeks}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
-      </div>
-
-
-      {/* ====================================================
-          ERROR
-      ===================================================== */}
-
-      {errorMessage && (
-
-        <div
-          style={{
-            marginBottom:
-              '12px',
-
-            padding:
-              '10px 12px',
-
-            border:
-              '1px solid #fecaca',
-
-            borderRadius:
-              '6px',
-
-            background:
-              '#fef2f2',
-
-            color:
-              '#b91c1c',
-
-            fontSize:
-              '12px',
-          }}
-        >
-          {errorMessage}
-        </div>
-
-      )}
-
-
-      {/* ====================================================
-          TABS
-      ===================================================== */}
-
-      <div
-        style={{
-          display:
-            'flex',
-
-          gap:
-            '4px',
-
-          marginTop:
-            '8px',
-        }}
-      >
-
-        <button
-
-          type="button"
-
-          onClick={() =>
-            setActiveTab(
-              'sheet'
-            )
-          }
-
-          style={
-            activeTab ===
-            'sheet'
-              ? activeTabStyle
-              : tabStyle
-          }
-        >
-           Lookahead &amp; Koskela Sheet
-        </button>
-
-
-        <button
-
-          type="button"
-
-          onClick={() =>
-            setActiveTab(
-              'locations'
-            )
-          }
-
-          style={
-            activeTab ===
-            'locations'
-              ? activeTabStyle
-              : tabStyle
-          }
-        >
-          📍 Location Sequence
-        </button>
-
-
-        <button
-
-          type="button"
-
-          onClick={() =>
-            setActiveTab(
-              'constraints'
-            )
-          }
-
-          style={
-            activeTab ===
-            'constraints'
-              ? activeTabStyle
-              : tabStyle
-          }
-        >
-          Constraints Details
-        </button>
-
-      </div>
-
-
-      {!selectedProjectId && (
-
-        <div
-          style={
-            emptyStyle
-          }
-        >
-
-          <strong>
-            No Project Selected
-          </strong>
-
-
-          <div
-            style={{
-              marginTop:
-                '6px',
-
-              color:
-                '#64748b',
-
-              fontSize:
-                '12px',
+        <div className={cx(styles.group, styles.push)}>
+          <button type="button" className={ui.btnGhost} onClick={() => setShowWeekends((current) => !current)}>
+            {showWeekends ? t.hideWeekends : t.showWeekends}
+          </button>
+          <button
+            type="button"
+            className={ui.btnGhost}
+            onClick={() => {
+              if (masterPlanHolidays.length === 0) {
+                dialogs.notify(t.noHolidays, 'warn');
+                return;
+              }
+              setShowHolidays(true);
             }}
           >
-            Select a project to open the Lookahead.
-          </div>
-
+            {t.holidays}{masterPlanHolidays.length > 0 ? ` (${masterPlanHolidays.length})` : ''}
+          </button>
+          <button type="button" className={ui.btnPrimary} disabled={!selectedPlanId || insertingPackage} onClick={openInsertPackageModal}>
+            <Icon name="plus" size={18} />{t.insertPackage}
+          </button>
         </div>
+      </div>
 
+      {errorMessage && (
+        <div style={{ marginBottom: 12 }}>
+          <Notice>{errorMessage}</Notice>
+        </div>
       )}
 
+      {selectedProjectId && (
+        <div style={{ marginBottom: 12 }}>
+          <Segments
+            items={[
+              { value: 'sheet', label: t.tabSheet },
+              { value: 'locations', label: t.tabLocations },
+              { value: 'constraints', label: t.tabConstraints },
+            ]}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
+        </div>
+      )}
+
+      {!selectedProjectId && (
+        <Empty title={t.noProject} text={t.noProjectText} />
+      )}
 
       {/* ====================================================
           LOOKAHEAD SHEET
@@ -4590,36 +4201,15 @@ Continue?`
           'sheet' && (
 
           <div
-            style={{
-              overflowX:
-                'auto',
-
-              overflowY:
-                'visible',
-
-              border:
-                '1px solid #cbd5e1',
-
-              background:
-                '#fff',
-            }}
+            className={styles.sheet}
           >
 
             {loading ? (
 
               <div
-                style={{
-                  padding:
-                    '40px',
-
-                  textAlign:
-                    'center',
-
-                  color:
-                    '#64748b',
-                }}
+                className={styles.loadingBox}
               >
-                Loading Lookahead...
+                {t.loading}
               </div>
 
             ) : (
@@ -4642,11 +4232,7 @@ Continue?`
                   width:
                     '100%',
 
-                  tableLayout:
-                    'fixed',
-
-                  fontSize:
-                    '10px',
+                  tableLayout: 'fixed', fontSize: '12px',
                 }}
               >
 
@@ -4684,7 +4270,7 @@ Continue?`
                           ID_WIDTH,
                       }}
                     >
-                      ID
+                      {t.colId}
                     </th>
 
 
@@ -4702,7 +4288,7 @@ Continue?`
                           PACKAGE_WIDTH,
                       }}
                     >
-                      PACKAGE
+                      {t.colPackage}
                     </th>
 
 
@@ -4720,7 +4306,7 @@ Continue?`
                           DESCRIPTION_WIDTH,
                       }}
                     >
-                      DESCRIPTION
+                      {t.colDescription}
                     </th>
 
 
@@ -4743,11 +4329,11 @@ Continue?`
                             ...headerCellStyle,
 
                             background:
-                              '#e2e8f0',
+                              'var(--fo-line-soft)',
                           }}
                         >
 
-                          WEEK{' '}
+                          {t.colWeek}{' '}
                           {
                             week.weekNumber
                           }
@@ -4767,7 +4353,7 @@ Continue?`
                         ...headerCellStyle,
 
                         background:
-                          '#f1f5f9',
+                          'var(--fo-sunken)',
 
                         fontSize:
                           '10px',
@@ -4776,7 +4362,7 @@ Continue?`
                           '0.02em',
                       }}
                     >
-                      KOSKELA FLOW MATRIX
+                      {t.koskelaMatrix}
                     </th>
 
                   </tr>
@@ -4803,22 +4389,23 @@ Continue?`
 
                             background:
                               day.isHoliday
-                                ? '#fee2e2'
+                                ? 'var(--fo-bad-wash)'
                                 : day.isWeekend
-                                  ? '#e2e8f0'
-                                  : '#f8fafc',
+                                  ? 'var(--fo-line-soft)'
+                                  : 'var(--fo-sunken)',
 
                             color:
                               day.isHoliday
-                                ? '#991b1b'
-                                : '#334155',
+                                ? 'var(--fo-bad)'
+                                : 'var(--fo-ink)',
                           }}
                         >
 
                           {day.isHoliday
-                            ? 'HOL'
+                            ? t.holAbbr
                             : getDayLabel(
-                                day.date
+                                day.date,
+                                language
                               )}
 
                         </th>
@@ -4876,7 +4463,7 @@ Continue?`
                           }}
                         >
 
-                          {column.label}
+                          {koskelaLabel(column.key)}
 
                         </th>
 
@@ -4909,18 +4496,19 @@ Continue?`
                               day.isHoliday
                                 ? '#fecaca'
                                 : day.isWeekend
-                                  ? '#e2e8f0'
+                                  ? 'var(--fo-line-soft)'
                                   : '#ffffff',
 
                             color:
                               day.isHoliday
-                                ? '#991b1b'
-                                : '#334155',
+                                ? 'var(--fo-bad)'
+                                : 'var(--fo-ink)',
                           }}
                         >
 
                           {formatShortDate(
-                            day.date
+                            day.date,
+                            language
                           )}
 
                         </th>
@@ -5035,7 +4623,7 @@ Continue?`
                                   'transparent',
 
                                 color:
-                                  '#64748b',
+                                  'var(--fo-muted)',
 
                                 fontSize:
                                   '17px',
@@ -5044,7 +4632,7 @@ Continue?`
                                   'pointer',
                               }}
 
-                              title="Row actions"
+                              title={t.rowActions}
                             >
                               ⋮
                             </button>
@@ -5074,7 +4662,7 @@ Continue?`
                                     '4px',
 
                                   border:
-                                    '1px solid #cbd5e1',
+                                    '1px solid var(--fo-line)',
 
                                   borderRadius:
                                     '6px',
@@ -5105,7 +4693,7 @@ Continue?`
                                     menuButtonStyle
                                   }
                                 >
-                                  Insert Row Above
+                                  {t.insertAbove}
                                 </button>
 
 
@@ -5127,7 +4715,7 @@ Continue?`
                                     menuButtonStyle
                                   }
                                 >
-                                  Insert Row Below
+                                  {t.insertBelow}
                                 </button>
 
                                 {row.row_type ===
@@ -5149,13 +4737,13 @@ Continue?`
                                     style={{
                                       ...menuButtonStyle,
                                       color: '#b91c1c',
-                                      borderTop: '1px solid #e2e8f0',
+                                      borderTop: '1px solid var(--fo-line-soft)',
                                     }}
                                   >
                                     {deletingRowId ===
                                     row.id
-                                      ? 'Deleting...'
-                                      : 'Delete Row'}
+                                      ? t.deleting
+                                      : t.deleteRow}
                                   </button>
                                 )}
 
@@ -5229,8 +4817,8 @@ Continue?`
 
                                   title={
                                     code
-                                      ? `Selected Work Package: ${code}`
-                                      : 'Select Work Package'
+                                      ? tv('selectedPackage', { code })
+                                      : t.selectWorkPackage
                                   }
 
                                   style={{
@@ -5244,7 +4832,7 @@ Continue?`
                                       '0 6px',
 
                                     border:
-                                      '1px solid #cbd5e1',
+                                      '1px solid var(--fo-line)',
 
                                     borderRadius:
                                       '4px',
@@ -5257,7 +4845,7 @@ Continue?`
                                     color:
                                       code
                                         ? textColor
-                                        : '#475569',
+                                        : 'var(--fo-muted)',
 
                                     fontSize:
                                       '10px',
@@ -5275,7 +4863,7 @@ Continue?`
                                         : 'pointer',
                                   }}
                                 >
-                                  {code || 'Select...'}
+                                  {code || t.select}
                                 </button>
 
 
@@ -5306,7 +4894,7 @@ Continue?`
                                         'auto',
 
                                       border:
-                                        '1px solid #cbd5e1',
+                                        '1px solid var(--fo-line)',
 
                                       borderRadius:
                                         '6px',
@@ -5326,7 +4914,7 @@ Continue?`
 
                                         const optionColor =
                                           workPackage.color ||
-                                          '#64748b';
+                                          'var(--fo-muted)';
 
 
                                         const optionTextColor =
@@ -5384,7 +4972,7 @@ Continue?`
                                                 '#ffffff',
 
                                               color:
-                                                '#0f172a',
+                                                'var(--fo-ink)',
 
                                               textAlign:
                                                 'left',
@@ -5437,7 +5025,7 @@ Continue?`
                                                   1,
 
                                                 color:
-                                                  '#334155',
+                                                  'var(--fo-ink)',
 
                                                 fontSize:
                                                   '10px',
@@ -5469,7 +5057,7 @@ Continue?`
                                             '12px',
 
                                           color:
-                                            '#64748b',
+                                            'var(--fo-muted)',
 
                                           fontSize:
                                             '10px',
@@ -5478,7 +5066,7 @@ Continue?`
                                             'center',
                                         }}
                                       >
-                                        No active Work Packages are registered.
+                                        {t.noWorkPackages}
                                       </div>
 
                                     )}
@@ -5529,7 +5117,7 @@ Continue?`
                               <span
                                 style={{
                                   color:
-                                    '#94a3b8',
+                                    'var(--fo-muted)',
 
                                   fontWeight:
                                     700,
@@ -5577,8 +5165,8 @@ Continue?`
                               placeholder={
                                 row.row_type ===
                                 'manual'
-                                  ? 'Enter Lookahead description...'
-                                  : 'Description'
+                                  ? t.descriptionPlaceholder
+                                  : t.colDescription
                               }
 
                               onChange={(
@@ -5650,11 +5238,11 @@ Continue?`
                                 background:
                                   savingDescriptionId ===
                                   row.id
-                                    ? '#f8fafc'
+                                    ? 'var(--fo-sunken)'
                                     : '#ffffff',
 
                                 color:
-                                  '#1e293b',
+                                  'var(--fo-ink)',
 
                                 fontSize:
                                   '10px',
@@ -5680,7 +5268,7 @@ Continue?`
                                     '6px',
 
                                   color:
-                                    '#94a3b8',
+                                    'var(--fo-muted)',
 
                                   fontSize:
                                     '8px',
@@ -5688,7 +5276,7 @@ Continue?`
                               >
 
                                 {occurrences.length}{' '}
-                                package occurrence
+                                {t.packageOccurrence}
 
                                 {occurrences.length ===
                                 1
@@ -5756,7 +5344,7 @@ Continue?`
                                 const cellColor =
                                   selectedPackage?.color ||
                                   manualCell?.package_color ||
-                                  '#64748b';
+                                  'var(--fo-muted)';
 
 
                                 const cellTextColor =
@@ -5778,21 +5366,21 @@ Continue?`
 
                                     <td
                                       key={`${row.id}-${day.iso}`}
-                                      title="Weekend - non-working day"
+                                      title={t.weekendHint}
                                       style={{
                                         ...bodyCellStyle,
                                         width: DAY_WIDTH,
                                         minWidth: DAY_WIDTH,
                                         height: '34px',
                                         padding: 0,
-                                        background: '#f1f5f9',
-                                        color: '#94a3b8',
+                                        background: 'var(--fo-sunken)',
+                                        color: 'var(--fo-muted)',
                                         fontSize: '9px',
                                         fontWeight: 800,
                                         textAlign: 'center',
                                       }}
                                     >
-                                      OFF
+                                      {t.offAbbr}
                                     </td>
 
                                   );
@@ -5839,17 +5427,17 @@ Continue?`
                                         cellCode
                                           ? cellColor
                                           : day.isHoliday
-                                            ? '#fee2e2'
+                                            ? 'var(--fo-bad-wash)'
                                             : day.isWeekend
-                                              ? '#f1f5f9'
+                                              ? 'var(--fo-sunken)'
                                               : '#ffffff',
 
                                       color:
                                         cellCode
                                           ? cellTextColor
                                           : day.isHoliday
-                                            ? '#991b1b'
-                                            : '#64748b',
+                                            ? 'var(--fo-bad)'
+                                            : 'var(--fo-muted)',
 
                                       boxShadow:
                                         day.isHoliday
@@ -5860,7 +5448,7 @@ Continue?`
 
                                     {day.isHoliday &&
                                     !cellCode ? (
-                                      'HOL'
+                                      t.holAbbr
                                     ) : (
                                       <>
 
@@ -5914,7 +5502,7 @@ Continue?`
                                             color:
                                               cellCode
                                                 ? cellTextColor
-                                                : '#64748b',
+                                                : 'var(--fo-muted)',
 
                                             fontSize:
                                               cellCode
@@ -5964,7 +5552,7 @@ Continue?`
                                                 'auto',
 
                                               border:
-                                                '1px solid #cbd5e1',
+                                                '1px solid var(--fo-line)',
 
                                               borderRadius:
                                                 '6px',
@@ -6004,7 +5592,7 @@ Continue?`
                                                     0,
 
                                                   borderBottom:
-                                                    '1px solid #e2e8f0',
+                                                    '1px solid var(--fo-line-soft)',
 
                                                   background:
                                                     '#fff7ed',
@@ -6025,7 +5613,7 @@ Continue?`
                                                     'pointer',
                                                 }}
                                               >
-                                                Clear cell
+                                                {t.clearCell}
                                               </button>
 
                                             )}
@@ -6038,7 +5626,7 @@ Continue?`
 
                                                 const optionColor =
                                                   workPackage.color ||
-                                                  '#64748b';
+                                                  'var(--fo-muted)';
 
 
                                                 const optionTextColor =
@@ -6090,7 +5678,7 @@ Continue?`
                                                         '#ffffff',
 
                                                       color:
-                                                        '#0f172a',
+                                                        'var(--fo-ink)',
 
                                                       textAlign:
                                                         'left',
@@ -6143,7 +5731,7 @@ Continue?`
                                                           1,
 
                                                         color:
-                                                          '#334155',
+                                                          'var(--fo-ink)',
 
                                                         fontSize:
                                                           '10px',
@@ -6265,17 +5853,17 @@ Continue?`
                                       active
                                         ? color
                                         : day.isHoliday
-                                          ? '#fee2e2'
+                                          ? 'var(--fo-bad-wash)'
                                           : day.isWeekend
-                                            ? '#f1f5f9'
+                                            ? 'var(--fo-sunken)'
                                             : '#ffffff',
 
                                     color:
                                       active
                                         ? textColor
                                         : day.isHoliday
-                                          ? '#991b1b'
-                                          : '#94a3b8',
+                                          ? 'var(--fo-bad)'
+                                          : 'var(--fo-muted)',
 
                                     fontWeight:
                                       active
@@ -6292,7 +5880,7 @@ Continue?`
                                   {active
                                     ? code
                                     : day.isHoliday
-                                      ? 'HOL'
+                                      ? t.holAbbr
                                       : ''}
 
                                 </td>
@@ -6381,14 +5969,14 @@ Continue?`
                                       title={
                                         assessment?.readiness_source ===
                                         'constraint_cleared'
-                                          ? `Ready after Constraint Log verification · ${linkedConstraint.status}. Click to open the Constraint Log.`
-                                          : `Managed in Constraint Log · ${linkedConstraint.status}. Click to open the Constraint Log.`
+                                          ? tv('readyAfterHint', { status: linkedConstraint.status })
+                                          : tv('managedHint', { status: linkedConstraint.status })
                                       }
 
                                       onClick={() => {
 
                                         window.location.href =
-                                          `/dashboard/projects/constraints?projectId=${selectedProjectId}&constraintId=${linkedConstraint.id}`;
+                                          `/dashboard/planning/constraints?projectId=${selectedProjectId}&constraintId=${linkedConstraint.id}`;
 
                                       }}
 
@@ -6428,10 +6016,10 @@ Continue?`
                                       }}
                                     >
                                       {status === 'constrained'
-                                        ? 'No 🔒'
+                                        ? t.noLocked
                                         : status === 'clear'
-                                          ? 'Yes 🔒'
-                                          : 'Managed 🔒'}
+                                          ? t.yesLocked
+                                          : t.managedLocked}
                                     </button>
 
                                   ) : (
@@ -6451,7 +6039,7 @@ Continue?`
                                         )
                                       }
 
-                                      title="Selecting No creates a governed Constraint Log record."
+                                      title={t.noCreatesConstraint}
 
                                       style={{
                                         width:
@@ -6491,12 +6079,34 @@ Continue?`
                                       }}
                                     >
                                       <option value="not_assessed">—</option>
-                                      <option value="clear">Yes</option>
-                                      <option value="constrained">No</option>
+                                      <option value="clear">{t.yes}</option>
+                                      <option value="constrained">{t.no}</option>
                                       <option value="not_applicable">N/A</option>
                                     </select>
 
                                   )}
+
+                                  {column.key === 'predecessor' && (() => {
+                                    const auto = predecessorAuto(locationPlan, row);
+                                    if (!auto) return null;
+                                    const canApply = !governed && !saving && auto.allReady && status !== 'clear';
+                                    return (
+                                      <button
+                                        type="button"
+                                        disabled={!canApply}
+                                        title={auto.allReady
+                                          ? (canApply ? tv('autoPred.applyHint', { ready: auto.ready, total: auto.total }) : tv('autoPred.readyHint', { ready: auto.ready, total: auto.total }))
+                                          : tv('autoPred.blockedHint', { list: auto.blocked.map((b) => tv('autoPred.blockedItem', { location: b.location, waits: b.waits.map((w) => (w.readyOn ? tv('autoPred.waitLagItem', { code: w.code, location: w.location, date: w.readyOn }) : tv('autoPred.waitItem', { code: w.code, location: w.location, done: w.done }))).join(', ') })).join('\n') })}
+                                        onClick={() => { if (canApply) handleGroupedReadinessChange(row, column.key, 'clear'); }}
+                                        style={{ display: 'block', width: '100%', marginTop: 3, padding: '1px 4px', border: 0, borderRadius: 4, fontSize: '9px', fontWeight: 800, textAlign: 'center',
+                                          background: auto.allReady ? '#dcfce7' : auto.ready ? '#fef3c7' : '#fee2e2',
+                                          color: auto.allReady ? '#166534' : auto.ready ? '#92400e' : '#991b1b',
+                                          cursor: canApply ? 'pointer' : 'help' }}
+                                      >
+                                        {tv('autoPred.chip', { ready: auto.ready, total: auto.total })}
+                                      </button>
+                                    );
+                                  })()}
 
                                 </td>
 
@@ -6538,7 +6148,7 @@ Continue?`
                   '10px 12px',
 
                 borderTop:
-                  '1px solid #cbd5e1',
+                  '1px solid var(--fo-line)',
 
                 fontSize:
                   '9px',
@@ -6546,40 +6156,40 @@ Continue?`
             >
 
               <strong>
-                LEGEND:
+                {t.legend}
               </strong>
 
               <span>
-                🟢 Yes - Ready Directly
+                {t.legendReady}
               </span>
 
               <span>
-                🔵 Yes - Ready After Constraint Cleared
+                {t.legendReadyAfter}
               </span>
 
               <span>
-                🔴 No - Active Constraint
+                {t.legendConstraint}
               </span>
 
               <span>
-                🔒 Managed in Constraint Log
+                {t.legendManaged}
               </span>
 
               <span>
-                Not Assessed
+                {t.legendNotAssessed}
               </span>
 
               <span>
-                🟥 HOL - Master Plan Holiday
+                {t.legendHoliday}
               </span>
 
               <span>
-                Each row = one Work Package
+                {t.legendRow}
               </span>
 
 
               <span>
-                Manual row timeline ▼ = select Work Package
+                {t.legendManual}
               </span>
 
             </div>
@@ -6599,36 +6209,15 @@ Continue?`
           'locations' && (
 
           <div
-            style={{
-              overflowX:
-                'auto',
-
-              overflowY:
-                'visible',
-
-              border:
-                '1px solid #cbd5e1',
-
-              background:
-                '#fff',
-            }}
+            className={styles.sheet}
           >
 
             {loading ? (
 
               <div
-                style={{
-                  padding:
-                    '40px',
-
-                  textAlign:
-                    'center',
-
-                  color:
-                    '#64748b',
-                }}
+                className={styles.loadingBox}
               >
-                Loading Location Sequence...
+                {t.loadingLocations}
               </div>
 
             ) : (
@@ -6644,11 +6233,7 @@ Continue?`
                   borderCollapse:
                     'collapse',
 
-                  tableLayout:
-                    'fixed',
-
-                  fontSize:
-                    '10px',
+                  tableLayout: 'fixed', fontSize: '12px',
                 }}
               >
 
@@ -6671,7 +6256,7 @@ Continue?`
                           '54px',
                       }}
                     >
-                      ID
+                      {t.colId}
                     </th>
 
 
@@ -6696,7 +6281,7 @@ Continue?`
                           '14px',
                       }}
                     >
-                      LOCATION
+                      {t.colLocation}
                     </th>
 
 
@@ -6727,7 +6312,7 @@ Continue?`
                               900,
                           }}
                         >
-                          WEEK {week.weekNumber}
+                          {t.colWeek} {week.weekNumber}
                         </th>
 
                       )
@@ -6759,20 +6344,20 @@ Continue?`
 
                             background:
                               day.isHoliday
-                                ? '#fee2e2'
+                                ? 'var(--fo-bad-wash)'
                                 : day.isWeekend
-                                  ? '#eef2f7'
-                                  : '#f8fafc',
+                                  ? 'var(--fo-sunken)'
+                                  : 'var(--fo-sunken)',
 
                             color:
                               day.isHoliday
-                                ? '#991b1b'
-                                : '#334155',
+                                ? 'var(--fo-bad)'
+                                : 'var(--fo-ink)',
                           }}
                         >
                           {day.isHoliday
-                            ? 'HOL'
-                            : day.weekdayShort}
+                            ? t.holAbbr
+                            : getDayLabel(day.date, language)}
                         </th>
 
                       )
@@ -6804,21 +6389,21 @@ Continue?`
 
                             background:
                               day.isHoliday
-                                ? '#fee2e2'
+                                ? 'var(--fo-bad-wash)'
                                 : day.isWeekend
-                                  ? '#eef2f7'
+                                  ? 'var(--fo-sunken)'
                                   : '#ffffff',
 
                             color:
                               day.isHoliday
-                                ? '#991b1b'
-                                : '#0f172a',
+                                ? 'var(--fo-bad)'
+                                : 'var(--fo-ink)',
 
                             fontSize:
                               '9px',
                           }}
                         >
-                          {day.label}
+                          {formatShortDate(day.date, language)}
                         </th>
 
                       )
@@ -6847,16 +6432,16 @@ Continue?`
                             '40px 20px',
 
                           color:
-                            '#64748b',
+                            'var(--fo-muted)',
 
                           textAlign:
                             'center',
 
                           borderBottom:
-                            '1px solid #e2e8f0',
+                            '1px solid var(--fo-line-soft)',
                         }}
                       >
-                        No Master Plan locations are available in this Lookahead window.
+                        {t.noLocations}
                       </td>
 
                     </tr>
@@ -6921,7 +6506,7 @@ Continue?`
                             <div
                               style={{
                                 color:
-                                  '#0f172a',
+                                  'var(--fo-ink)',
 
                                 fontSize:
                                   '11px',
@@ -6944,7 +6529,7 @@ Continue?`
                                     '3px',
 
                                   color:
-                                    '#94a3b8',
+                                    'var(--fo-muted)',
 
                                   fontSize:
                                     '9px',
@@ -7023,7 +6608,7 @@ Continue?`
                                   ? getTextColor(
                                       color
                                     )
-                                  : '#64748b';
+                                  : 'var(--fo-muted)';
 
 
                               const tooltip =
@@ -7079,17 +6664,17 @@ Continue?`
                                       code
                                         ? color
                                         : day.isHoliday
-                                          ? '#fee2e2'
+                                          ? 'var(--fo-bad-wash)'
                                           : day.isWeekend
-                                            ? '#eef2f7'
+                                            ? 'var(--fo-sunken)'
                                             : '#ffffff',
 
                                     color:
                                       code
                                         ? textColor
                                         : day.isHoliday
-                                          ? '#991b1b'
-                                          : '#94a3b8',
+                                          ? 'var(--fo-bad)'
+                                          : 'var(--fo-muted)',
 
                                     fontSize:
                                       '10px',
@@ -7108,9 +6693,9 @@ Continue?`
                                   {code
                                     ? code
                                     : day.isHoliday
-                                      ? 'HOL'
+                                      ? t.holAbbr
                                       : day.isWeekend
-                                        ? 'OFF'
+                                        ? t.offAbbr
                                         : ''}
                                 </td>
 
@@ -7151,37 +6736,37 @@ Continue?`
                   '10px 12px',
 
                 borderTop:
-                  '1px solid #cbd5e1',
+                  '1px solid var(--fo-line)',
 
                 color:
-                  '#475569',
+                  'var(--fo-muted)',
 
                 fontSize:
                   '9px',
               }}
             >
               <strong>
-                LOCATION VIEW:
+                {t.locationView}
               </strong>
 
               <span>
-                Each row = one Master Plan location
+                {t.locationRow}
               </span>
 
               <span>
-                Cell = Work Package planned at that location/day
+                {t.locationCell}
               </span>
 
               <span>
-                OFF = Weekend
+                {t.locationOff}
               </span>
 
               <span>
-                HOL = Master Plan Holiday
+                {t.locationHol}
               </span>
 
               <span>
-                Lookahead-only manual activities without a location are not shown here
+                {t.locationManualHidden}
               </span>
             </div>
 
@@ -7200,31 +6785,13 @@ Continue?`
           'constraints' && (
 
           <div
-            style={{
-              border:
-                '1px solid #cbd5e1',
-
-              background:
-                '#fff',
-            }}
+            className={styles.sheet}
           >
 
             <div
-              style={{
-                padding:
-                  '12px 14px',
-
-                borderBottom:
-                  '1px solid #e2e8f0',
-
-                fontWeight:
-                  800,
-
-                fontSize:
-                  '12px',
-              }}
+              className={styles.sheetTitle}
             >
-              CONSTRAINTS DETAILS
+              {t.constraintsTitle}
             </div>
 
 
@@ -7240,13 +6807,13 @@ Continue?`
                     'center',
 
                   color:
-                    '#64748b',
+                    'var(--fo-muted)',
 
                   fontSize:
                     '12px',
                 }}
               >
-                🎉 No active constraints at the moment.
+                {t.noConstraints}
               </div>
 
             ) : (
@@ -7269,23 +6836,23 @@ Continue?`
                   <tr>
 
                     <th style={headerCellStyle}>
-                      PACKAGE
+                      {t.colPackage}
                     </th>
 
                     <th style={headerCellStyle}>
-                      DESCRIPTION
+                      {t.colDescription}
                     </th>
 
                     <th style={headerCellStyle}>
-                      CONSTRAINT
+                      {t.colConstraint}
                     </th>
 
                     <th style={headerCellStyle}>
-                      STATUS
+                      {t.colStatus}
                     </th>
 
                     <th style={headerCellStyle}>
-                      SOURCE
+                      {t.colSource}
                     </th>
 
                   </tr>
@@ -7329,12 +6896,12 @@ Continue?`
 
 
                         <td style={bodyCellStyle}>
-                          {column.label}
+                          {koskelaLabel(column.key)}
                         </td>
 
 
                         <td style={bodyCellStyle}>
-                          Active
+                          {t.active}
                         </td>
 
 
@@ -7342,8 +6909,8 @@ Continue?`
 
                           {row.row_type ===
                           'manual'
-                            ? 'Lookahead'
-                            : 'Master Plan'}
+                            ? t.sourceLookahead
+                            : t.sourceMasterPlan}
 
                         </td>
 
@@ -7364,574 +6931,119 @@ Continue?`
 
 
       {/* ====================================================
-          INSERT PACKAGE MODAL
+          INSERT PACKAGE (lookahead only)
       ===================================================== */}
 
       {showInsertPackageModal && (
-
-        <div
-          style={{
-            position:
-              'fixed',
-
-            inset:
-              0,
-
-            zIndex:
-              6000,
-
-            display:
-              'flex',
-
-            alignItems:
-              'center',
-
-            justifyContent:
-              'center',
-
-            padding:
-              '20px',
-
-            background:
-              'rgba(6,27,47,0.58)',
-          }}
+        <Dialog
+          as="form"
+          onSubmit={submitInsertPackage}
+          title={t.insertPackage}
+          text={t.insertHelp}
+          onClose={() => { if (!insertingPackage) setShowInsertPackageModal(false); }}
+          footer={(
+            <>
+              <button type="button" className={ui.btn} disabled={insertingPackage} onClick={() => setShowInsertPackageModal(false)}>
+                {t.cancel}
+              </button>
+              <button
+                type="submit"
+                className={ui.btnPrimary}
+                disabled={insertingPackage || !insertPackageWorkPackageId || !insertPackageLineId || !insertPackageStartDate || Number(insertPackageDuration) < 1}
+              >
+                {insertingPackage ? t.inserting : t.insertPackage}
+              </button>
+            </>
+          )}
         >
-
-          <div
-            style={{
-              width:
-                'min(520px, 96vw)',
-
-              borderRadius:
-                '10px',
-
-              background:
-                '#ffffff',
-
-              boxShadow:
-                '0 24px 70px rgba(15,23,42,0.30)',
-
-              overflow:
-                'hidden',
-            }}
-          >
-
-            <div
-              style={{
-                padding:
-                  '18px 20px',
-
-                borderBottom:
-                  '1px solid #e2e8f0',
-              }}
-            >
-
-              <div
-                style={{
-                  color:
-                    '#2563eb',
-
-                  fontSize:
-                    '10px',
-
-                  fontWeight:
-                    900,
-
-                  letterSpacing:
-                    '0.08em',
-
-                  textTransform:
-                    'uppercase',
-                }}
-              >
-                LOOKAHEAD-ONLY ACTIVITY
-              </div>
-
-
-              <h2
-                style={{
-                  margin:
-                    '5px 0 0',
-
-                  color:
-                    '#0f172a',
-
-                  fontSize:
-                    '18px',
-
-                  fontWeight:
-                    900,
-                }}
-              >
-                Insert Package
-              </h2>
-
-
-              <p
-                style={{
-                  margin:
-                    '7px 0 0',
-
-                  color:
-                    '#64748b',
-
-                  fontSize:
-                    '11px',
-
-                  lineHeight:
-                    1.5,
-                }}
-              >
-                Add an activity directly to the Lookahead without
-                changing the Master Plan.
-              </p>
-
-            </div>
-
-
-            <form
-              onSubmit={
-                submitInsertPackage
-              }
-
-              style={{
-                padding:
-                  '20px',
-              }}
-            >
-
-              {/* WORK PACKAGE */}
-
-              <div
-                style={{
-                  marginBottom:
-                    '15px',
-                }}
-              >
-
-                <label
-                  style={
-                    modalFieldLabelStyle
-                  }
-                >
-                  Work Package
-                </label>
-
-
-                <select
-                  value={
-                    insertPackageWorkPackageId
-                  }
-
-                  required
-
-                  onChange={(
-                    event
-                  ) =>
-                    setInsertPackageWorkPackageId(
-                      event.target.value
-                    )
-                  }
-
-                  style={
-                    modalFieldInputStyle
-                  }
-                >
-
-                  <option value="">
-                    -- Select Work Package --
-                  </option>
-
-
-                  {organizationWorkPackages.map(
-                    (
-                      workPackage
-                    ) => (
-
-                      <option
-                        key={
-                          workPackage.id
-                        }
-
-                        value={
-                          workPackage.id
-                        }
-                      >
-                        {workPackage.code} · {workPackage.description}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </div>
-
-
-              {/* LINE ID */}
-
-              <div
-                style={{
-                  marginBottom:
-                    '15px',
-                }}
-              >
-
-                <label
-                  style={
-                    modalFieldLabelStyle
-                  }
-                >
-                  Line ID
-                </label>
-
-
-                <select
-                  value={
-                    insertPackageLineId
-                  }
-
-                  required
-
-                  onChange={(
-                    event
-                  ) =>
-                    setInsertPackageLineId(
-                      event.target.value
-                    )
-                  }
-
-                  style={
-                    modalFieldInputStyle
-                  }
-                >
-
-                  {Array.from(
-                    {
-                      length:
-                        sheetRows.length + 1,
-                    },
-                    (
-                      _,
-                      index
-                    ) =>
-                      index + 1
-                  ).map(
-                    (
-                      lineId
-                    ) => (
-
-                      <option
-                        key={
-                          lineId
-                        }
-
-                        value={
-                          lineId
-                        }
-                      >
-                        Line {lineId}
-                        {lineId ===
-                        sheetRows.length + 1
-                          ? ' · Bottom'
-                          : ''}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-
-                <div
-                  style={{
-                    marginTop:
-                      '5px',
-
-                    color:
-                      '#94a3b8',
-
-                    fontSize:
-                      '9px',
-                  }}
-                >
-                  Existing rows at this position and below will move down.
-                </div>
-
-              </div>
-
-
-              {/* START + DURATION */}
-
-              <div
-                style={{
-                  display:
-                    'grid',
-
-                  gridTemplateColumns:
-                    '1fr 1fr',
-
-                  gap:
-                    '12px',
-
-                  marginBottom:
-                    '18px',
-                }}
-              >
-
-                <div>
-
-                  <label
-                    style={
-                      modalFieldLabelStyle
-                    }
-                  >
-                    Start Date
-                  </label>
-
-
-                  <input
-                    type="date"
-
-                    value={
-                      insertPackageStartDate
-                    }
-
-                    min={
-                      selectedPlan?.window_start_date ||
-                      windowStart ||
-                      undefined
-                    }
-
-                    max={
-                      selectedPlan?.window_finish_date ||
-                      undefined
-                    }
-
-                    required
-
-                    onChange={(
-                      event
-                    ) =>
-                      setInsertPackageStartDate(
-                        event.target.value
-                      )
-                    }
-
-                    style={
-                      modalFieldInputStyle
-                    }
-                  />
-
-                </div>
-
-
-                <div>
-
-                  <label
-                    style={
-                      modalFieldLabelStyle
-                    }
-                  >
-                    Duration
-                  </label>
-
-
-                  <div
-                    style={{
-                      display:
-                        'flex',
-
-                      alignItems:
-                        'center',
-
-                      gap:
-                        '7px',
-                    }}
-                  >
-
-                    <input
-                      type="number"
-
-                      min={
-                        1
-                      }
-
-                      step={
-                        1
-                      }
-
-                      value={
-                        insertPackageDuration
-                      }
-
-                      required
-
-                      onChange={(
-                        event
-                      ) =>
-                        setInsertPackageDuration(
-                          Number(
-                            event.target.value
-                          )
-                        )
-                      }
-
-                      style={{
-                        ...modalFieldInputStyle,
-
-                        flex:
-                          1,
-                      }}
-                    />
-
-
-                    <span
-                      style={{
-                        color:
-                          '#64748b',
-
-                        fontSize:
-                          '10px',
-
-                        fontWeight:
-                          700,
-
-                        whiteSpace:
-                          'nowrap',
-                      }}
-                    >
-                      working days
-                    </span>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-
-              <div
-                style={{
-                  padding:
-                    '10px 11px',
-
-                  marginBottom:
-                    '18px',
-
-                  border:
-                    '1px solid #dbeafe',
-
-                  borderRadius:
-                    '6px',
-
-                  background:
-                    '#eff6ff',
-
-                  color:
-                    '#1e40af',
-
-                  fontSize:
-                    '10px',
-
-                  lineHeight:
-                    1.45,
-                }}
-              >
-                RitsuFlow will create the manual row and populate its
-                timeline automatically, skipping weekends and registered
-                holidays.
-              </div>
-
-
-              <div
-                style={{
-                  display:
-                    'flex',
-
-                  justifyContent:
-                    'flex-end',
-
-                  gap:
-                    '8px',
-                }}
-              >
-
-                <button
-                  type="button"
-
-                  disabled={
-                    insertingPackage
-                  }
-
-                  onClick={() =>
-                    setShowInsertPackageModal(
-                      false
-                    )
-                  }
-
-                  style={
-                    secondaryButtonStyle
-                  }
-                >
-                  Cancel
-                </button>
-
-
-                <button
-                  type="submit"
-
-                  disabled={
-                    insertingPackage ||
-                    !insertPackageWorkPackageId ||
-                    !insertPackageLineId ||
-                    !insertPackageStartDate ||
-                    Number(
-                      insertPackageDuration
-                    ) < 1
-                  }
-
-                  style={
-                    insertingPackage ||
-                    !insertPackageWorkPackageId ||
-                    !insertPackageLineId ||
-                    !insertPackageStartDate ||
-                    Number(
-                      insertPackageDuration
-                    ) < 1
-                      ? disabledButtonStyle
-                      : primaryButtonStyle
-                  }
-                >
-                  {insertingPackage
-                    ? 'Inserting...'
-                    : 'Insert Package'}
-                </button>
-
-              </div>
-
-            </form>
-
+          <label className={ui.field}>
+            <span className={ui.fieldLabel}>{t.workPackage}</span>
+            <select value={insertPackageWorkPackageId} required onChange={(event) => setInsertPackageWorkPackageId(event.target.value)}>
+              <option value="">{t.selectWorkPackage}</option>
+              {organizationWorkPackages.map((workPackage) => (
+                <option key={workPackage.id} value={workPackage.id}>
+                  {workPackage.code} · {workPackage.description}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={ui.field}>
+            <span className={ui.fieldLabel}>{t.lineId}</span>
+            <select value={insertPackageLineId} required onChange={(event) => setInsertPackageLineId(event.target.value)}>
+              {Array.from({ length: sheetRows.length + 1 }, (_, index) => index + 1).map((lineId) => (
+                <option key={lineId} value={lineId}>
+                  {t.line} {lineId}{lineId === sheetRows.length + 1 ? t.bottomSuffix : ''}
+                </option>
+              ))}
+            </select>
+            <span className={styles.hint}>{t.lineHelp}</span>
+          </label>
+
+          <div className={styles.grid2}>
+            <label className={ui.field}>
+              <span className={ui.fieldLabel}>{t.startDate}</span>
+              <input
+                type="date"
+                value={insertPackageStartDate}
+                min={selectedPlan?.window_start_date || windowStart || undefined}
+                max={selectedPlan?.window_finish_date || undefined}
+                required
+                onChange={(event) => setInsertPackageStartDate(event.target.value)}
+              />
+            </label>
+            <label className={ui.field}>
+              <span className={ui.fieldLabel}>{t.duration} ({t.workingDays})</span>
+              <input type="number" min={1} step={1} value={insertPackageDuration} required onChange={(event) => setInsertPackageDuration(Number(event.target.value))} />
+            </label>
           </div>
 
-        </div>
-
+          <p className={styles.hint}>{t.insertFoot}</p>
+        </Dialog>
       )}
-
 
       {selectedProjectId &&
         !selectedPlanId &&
         !loading && (
 
-          <div
-            style={
-              emptyStyle
+          <Empty
+            title={t.noPlan}
+            text={t.noPlanText}
+            action={
+              <button type="button" className={ui.btnPrimary} disabled={creatingPlan} onClick={createLookaheadFromBaseline}>
+                {creatingPlan ? t.creatingPlan : t.newFromBaseline}
+              </button>
             }
-          >
-            This project does not have a Lookahead plan yet.
-          </div>
+          />
 
         )}
+
+      {showHolidays && (
+        <Dialog
+          size="small"
+          title={t.holidaysTitle}
+          text={t.holidaysText}
+          onClose={() => setShowHolidays(false)}
+          footer={<button type="button" className={ui.btnPrimary} onClick={() => setShowHolidays(false)}>{t.close}</button>}
+        >
+          <div className={ui.tableWrap}>
+            <table className={ui.table}>
+              <tbody>
+                {[...masterPlanHolidays]
+                  .sort((x, y) => String(x.date).localeCompare(String(y.date)))
+                  .map((holiday) => (
+                    <tr key={holiday.date}>
+                      <td>{formatLongDate(holiday.date, language)}</td>
+                      <td>{holiday.description || t.holiday}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </Dialog>
+      )}
+
+      {dialogs.element}
 
     </div>
   );
@@ -7942,351 +7054,70 @@ Continue?`
 // STYLES
 // ============================================================
 
-const modalFieldLabelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '6px',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    800,
-};
-
-
-const modalFieldInputStyle = {
-  width:
-    '100%',
-
-  height:
-    '38px',
-
-  padding:
-    '0 9px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#0f172a',
-
-  fontSize:
-    '11px',
-
-  outline:
-    'none',
-};
-
-
-const labelStyle = {
-  display:
-    'block',
-
-  marginBottom:
-    '5px',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-};
-
-
-const selectStyle = {
-  width:
-    '100%',
-
-  height:
-    '36px',
-
-  padding:
-    '0 10px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff',
-};
-
-
-const inputStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 8px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff',
-};
-
-
 const headerCellStyle = {
-  border:
-    '1px solid #cbd5e1',
-
-  padding:
-    '5px 4px',
-
-  background:
-    '#f8fafc',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'center',
-
-  fontSize:
-    '9px',
-
-  fontWeight:
-    800,
+  border: '1px solid var(--fo-line-soft)',
+  padding: '6px 4px',
+  background: 'var(--fo-sunken)',
+  color: 'var(--fo-muted)',
+  textAlign: 'center',
+  fontSize: '11px',
+  fontWeight: 600,
 };
 
 
 const calendarHeaderStyle = {
   ...headerCellStyle,
-
-  width:
-    DAY_WIDTH,
-
-  minWidth:
-    DAY_WIDTH,
-
-  padding:
-    '3px 1px',
-
-  fontSize:
-    '8px',
+  width: DAY_WIDTH,
+  minWidth: DAY_WIDTH,
+  padding: '3px 1px',
+  fontSize: '10px',
 };
 
 
 const bodyCellStyle = {
-  border:
-    '1px solid #e2e8f0',
-
-  padding:
-    '3px',
-
-  background:
-    '#fff',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'center',
-
-  verticalAlign:
-    'middle',
+  border: '1px solid var(--fo-line-soft)',
+  padding: '3px',
+  background: 'var(--fo-surface)',
+  color: 'var(--fo-ink)',
+  textAlign: 'center',
+  verticalAlign: 'middle',
 };
 
 
-const primaryButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 12px',
-
-  border:
-    '1px solid #2563eb',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#2563eb',
-
-  color:
-    '#fff',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
-};
 
 
-const secondaryButtonStyle = {
-  height:
-    '36px',
-
-  padding:
-    '0 12px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderRadius:
-    '6px',
-
-  background:
-    '#fff',
-
-  color:
-    '#334155',
-
-  fontSize:
-    '11px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
-};
 
 
-const holidayButtonStyle = {
-  ...secondaryButtonStyle,
-
-  border:
-    '1px solid #fca5a5',
-
-  background:
-    '#fff1f2',
-
-  color:
-    '#b91c1c',
-};
 
 
-const disabledButtonStyle = {
-  ...secondaryButtonStyle,
-
-  opacity:
-    0.45,
-
-  cursor:
-    'not-allowed',
-};
 
 
-const tabStyle = {
-  padding:
-    '9px 14px',
-
-  border:
-    '1px solid #cbd5e1',
-
-  borderBottom:
-    0,
-
-  borderRadius:
-    '6px 6px 0 0',
-
-  background:
-    '#e2e8f0',
-
-  color:
-    '#475569',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    700,
-
-  cursor:
-    'pointer',
-};
 
 
-const activeTabStyle = {
-  ...tabStyle,
 
-  background:
-    '#fff',
 
-  color:
-    '#0f172a',
-};
+
+
+
+
 
 
 const menuButtonStyle = {
-  display:
-    'block',
-
-  width:
-    '100%',
-
-  padding:
-    '7px 8px',
-
-  border:
-    0,
-
-  borderRadius:
-    '4px',
-
-  background:
-    '#ffffff',
-
-  color:
-    '#334155',
-
-  textAlign:
-    'left',
-
-  fontSize:
-    '10px',
-
-  fontWeight:
-    600,
-
-  cursor:
-    'pointer',
+  display: 'block',
+  width: '100%',
+  padding: '8px 10px',
+  border: 0,
+  borderRadius: '6px',
+  background: 'transparent',
+  color: 'var(--fo-ink)',
+  textAlign: 'left',
+  fontSize: '13px',
+  fontWeight: 500,
+  cursor: 'pointer',
 };
 
 
-const emptyStyle = {
-  padding:
-    '50px 20px',
 
-  border:
-    '1px solid #e2e8f0',
-
-  background:
-    '#fff',
-
-  textAlign:
-    'center',
-
-  color:
-    '#64748b',
-
-  fontSize:
-    '12px',
-};
 
 
 

@@ -1,50 +1,222 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
+import { useT } from '../../../lib/i18n/useT'
+import { useLanguage } from '../../../lib/i18n/LanguageProvider'
+import { AppShell, PageHeader, Panel, Badge, Empty, Notice, Segments, ui } from '../../fieldop/ui'
 import ProjectDocuments from './ProjectDocuments'
 import ProjectTeam from './ProjectTeam'
 import DeleteProjectModal from './DeleteProjectModal'
 import ProjectReportButton from './ProjectReportButton'
+import styles from './project.module.css'
 
-const money=(v,c='BRL')=>{if(v===null||v===undefined||v==='')return '—';try{return new Intl.NumberFormat('en-US',{style:'currency',currency:c}).format(Number(v)||0)}catch{return String(v)}}
-const dateValue=v=>{if(!v)return '—';const[y,m,d]=String(v).slice(0,10).split('-');return y&&m&&d?`${d}/${m}/${y}`:String(v)}
-const shortDate=v=>{if(!v)return '—';const[y,m,d]=String(v).slice(0,10).split('-');const n=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return y&&m&&d?`${Number(d)} ${n[Number(m)-1]} ${y}`:String(v)}
-const noteDate=v=>v?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(v)):'—'
-const hasCoordinates=p=>p&&Number.isFinite(Number(p.latitude))&&Number.isFinite(Number(p.longitude))&&Number(p.latitude)>=-90&&Number(p.latitude)<=90&&Number(p.longitude)>=-180&&Number(p.longitude)<=180
-const osmUrl=p=>{const lat=Number(p.latitude),lon=Number(p.longitude),dy=.006,dx=.009;return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(`${lon-dx},${lat-dy},${lon+dx},${lat+dy}`)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lon}`)}`}
-const googleUrl=p=>{const q=hasCoordinates(p)?`${p.latitude},${p.longitude}`:[p.address_line,p.address_number,p.neighborhood,p.city,p.state_region,p.postal_code,p.country_code].filter(Boolean).join(', ');return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`}
+const STATUSES = ['planning', 'active', 'on_hold', 'completed', 'archived']
+const TONE = { active: 'ok', planning: 'info', on_hold: 'warn' }
+const hasCoordinates = (p) => p && Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)) && Math.abs(Number(p.latitude)) <= 90 && Math.abs(Number(p.longitude)) <= 180 && p.latitude !== null && p.longitude !== null && p.latitude !== '' && p.longitude !== ''
+const osmUrl = (p) => { const lat = Number(p.latitude), lon = Number(p.longitude), dy = 0.006, dx = 0.009; return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(`${lon - dx},${lat - dy},${lon + dx},${lat + dy}`)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lon}`)}` }
+const googleUrl = (p) => { const q = hasCoordinates(p) ? `${p.latitude},${p.longitude}` : [p.address_line, p.address_number, p.neighborhood, p.city, p.state_region, p.postal_code, p.country_code].filter(Boolean).join(', '); return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` }
 
-export default function ProjectDetailPage(){
- const params=useParams(),router=useRouter(),projectId=params?.projectId
- const fileInputRef=useRef(null)
- const[project,setProject]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[deleting,setDeleting]=useState(false),[deleteOpen,setDeleteOpen]=useState(false),[uploadingImage,setUploadingImage]=useState(false),[tab,setTab]=useState('Notes')
- const[notes,setNotes]=useState([]),[noteText,setNoteText]=useState(''),[savingNote,setSavingNote]=useState(false),[notesLoading,setNotesLoading]=useState(false)
- useEffect(()=>{if(!projectId)return;let active=true;(async()=>{setLoading(true);setError('');const{data,error:e}=await supabase.from('projects').select('*').eq('id',projectId).maybeSingle();if(!active)return;if(e)setError(e.message||'Unable to load this project.');else if(!data)setError('Project not found or you do not have access to it.');else setProject(data);setLoading(false)})();return()=>{active=false}},[projectId])
- useEffect(()=>{if(!projectId)return;let active=true;(async()=>{setNotesLoading(true);const{data,error:e}=await supabase.from('project_notes').select('*').eq('project_id',projectId).order('created_at',{ascending:false});if(active){if(e)setError(`Unable to load notes: ${e.message}`);else setNotes(data||[]);setNotesLoading(false)}})();return()=>{active=false}},[projectId])
- useEffect(()=>{if(!deleteOpen)return;const close=e=>{if(e.key==='Escape'&&!deleting)setDeleteOpen(false)};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close)},[deleteOpen,deleting])
- async function addNote(){const text=noteText.trim();if(!text||savingNote||!project)return;setSavingNote(true);setError('');const{data:{user}}=await supabase.auth.getUser();if(!user){setError('You must be signed in to add a note.');setSavingNote(false);return}const{data:profile}=await supabase.from('user_profiles').select('full_name,display_name,email').eq('user_id',user.id).maybeSingle();const authorName=profile?.full_name||profile?.display_name||profile?.email||user.email||'RitsuFlow User';const authorEmail=profile?.email||user.email||null;const{data,error:e}=await supabase.from('project_notes').insert({project_id:project.id,note:text,created_by:user.id,author_name:authorName,author_email:authorEmail}).select('*').single();if(e)setError(`Unable to add note: ${e.message}`);else{setNotes(current=>[data,...current]);setNoteText('')}setSavingNote(false)}
- async function deleteNote(note){if(!window.confirm('Delete this note?'))return;setError('');const{error:e}=await supabase.from('project_notes').delete().eq('id',note.id);if(e)setError(`Unable to delete note: ${e.message}`);else setNotes(current=>current.filter(item=>item.id!==note.id))}
- async function deleteProject(){if(!project||deleting)return;setDeleting(true);setError('');const{error:e}=await supabase.from('projects').delete().eq('id',project.id);if(e){setError(`Unable to delete project: ${e.message}`);setDeleting(false);setDeleteOpen(false);return}router.replace('/projects');router.refresh()}
- async function uploadProjectImage(event){const file=event.target.files?.[0];event.target.value='';if(!file||!project||uploadingImage)return;const allowed=['image/jpeg','image/png','image/webp'];if(!allowed.includes(file.type)){setError('Project image must be a JPG, PNG or WebP file.');return}if(file.size>10*1024*1024){setError('Project image must be 10 MB or smaller.');return}setUploadingImage(true);setError('');const extension=file.name.split('.').pop()?.toLowerCase()||'jpg',path=`${project.id}/project-${Date.now()}.${extension}`;const{error:uploadError}=await supabase.storage.from('project-images').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});if(uploadError){setError(`Unable to upload project image: ${uploadError.message}`);setUploadingImage(false);return}const oldPath=project.project_image_path;const{data:updated,error:updateError}=await supabase.from('projects').update({project_image_path:path}).eq('id',project.id).select('*').single();if(updateError){await supabase.storage.from('project-images').remove([path]);setError(`Image uploaded, but the project could not be updated: ${updateError.message}`);setUploadingImage(false);return}if(oldPath&&oldPath!==path)await supabase.storage.from('project-images').remove([oldPath]);setProject(updated);setUploadingImage(false)}
- const mapped=hasCoordinates(project),imageUrl=project?.project_image_path?supabase.storage.from('project-images').getPublicUrl(project.project_image_path).data.publicUrl:''
- return <main style={shell}><header style={header}><Link href="/workspaces" style={brand}><Image src="/logo-white.png" alt="RitsuFlow" width={132} height={48} priority/></Link><div style={{flex:1}}><div style={headerTitle}>Project</div><div style={headerSub}>Shared project record</div></div><Link href="/projects" style={navButton}>← Return to Projects</Link><Link href="/precon" style={{...navButton,...blueButton}}>▣ Go to PreCon</Link><Link href="/fieldop" style={{...navButton,...greenButton}}>⌂ Go to FieldOp</Link></header>
- <section style={content}>{loading&&<div style={panel}><strong>Loading project...</strong></div>}{!loading&&error&&!project&&<div style={panel}><h2>Unable to open project</h2><p>{error}</p></div>}{!loading&&project&&<div style={workspace}>
- <section style={hero}><div style={projectIcon}>▥</div><div style={{minWidth:0,flex:1}}><div style={heroTop}><h1 style={projectName}>{project.name||'Untitled Project'}</h1><span style={statusPill}>{project.status||'planning'}</span></div><div style={projectNumber}>{project.project_id||'Project ID pending'}</div><div style={heroMeta}><span>♙ <b>{project.client_name||'Client not defined'}</b></span><span>● {[project.city,project.state_region].filter(Boolean).join(', ')||'Location not defined'}</span><span>▣ {shortDate(project.planned_start_date)} → {shortDate(project.planned_finish_date)}</span><span>▤ {project.contract_number||'Contract not defined'}</span></div></div><Link href={`/projects/${projectId}/history`} style={{...historyButton,textDecoration:'none'}}>☷ History Log</Link><ProjectReportButton project={project}/><Link href={`/projects/${projectId}/scope`} style={{...scopeButton,textDecoration:'none'}}>⌘ Scope Management</Link><Link href={`/projects/${projectId}/locations`} style={{...locationButton,textDecoration:'none'}}>⌖ Location Breakdown</Link><Link href={`/projects/${projectId}/edit`} style={{...editButton,textDecoration:'none'}}>✎ Edit Project</Link><button onClick={()=>setDeleteOpen(true)} disabled={deleting} style={deleteButton}>▢ Delete Project</button></section>
- {error&&<div style={errorBanner}>{error}</div>}<div style={bodyGrid}><div style={mainColumn}><div style={cardsGrid}>
- <Info icon="●" title="Project Information"><Row label="Project ID" value={project.project_id}/><Row label="Project Name" value={project.name}/><Row label="Contract Number" value={project.contract_number}/><Row label="Client" value={project.client_name}/></Info>
- <Info icon="●" title="Project Address"><Row label="Address" value={[project.address_line,project.address_number].filter(Boolean).join(', ')}/><Row label="Neighborhood" value={project.neighborhood}/><Row label="City / State" value={[project.city,project.state_region].filter(Boolean).join(', ')}/><Row label="ZIP / Country" value={[project.postal_code,project.country_code].filter(Boolean).join(' · ')}/></Info>
- <Info icon="$" title="Contract & Financials"><Row label="Contract Value" value={money(project.contract_value,project.currency_code||'BRL')}/><Row label="Material Value" value={project.material_included?money(project.material_value,project.currency_code||'BRL'):'Not included'}/><Row label="Retainage" value={project.has_retainage?`${project.retainage_percent??'—'}% · ${money(project.retainage_value,project.currency_code||'BRL')}`:'No'}/><Row label="Payment Terms" value={project.has_retainage?`${project.retainage_payment_days??'—'} days · ${dateValue(project.probable_retainage_payment_date)}`:'—'}/></Info>
- <Info icon="▣" title="Schedule"><Row label="Planned Start" value={dateValue(project.planned_start_date)}/><Row label="Planned End" value={dateValue(project.planned_finish_date)}/><Row label="Contractual Term" value={project.contractual_term_days?`${project.contractual_term_days} days`:'—'}/><Row label="Status" value={<span style={smallStatus}>{project.status||'planning'}</span>}/></Info></div>
- <section style={successPanel}><div><div style={successTitle}>⚑ &nbsp; Success Criteria</div><div style={successText}>{project.success_criteria||'Success criteria not defined yet.'}</div></div><Link href={`/projects/${projectId}/edit`} style={{...compactButton,textDecoration:'none'}}>✎ Edit</Link></section>
- <section style={tabsPanel}><div style={tabs}>{['Notes','Documents','Team'].map(t=><button key={t} onClick={()=>setTab(t)} style={{...tabButton,...(tab===t?activeTab:{})}}>{t}</button>)}</div>{tab==='Notes'?<><div style={noteComposer}><textarea value={noteText} onChange={e=>setNoteText(e.target.value)} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')addNote()}} placeholder="Add a note about this project..." style={textarea}/><button onClick={addNote} disabled={savingNote||!noteText.trim()} style={{...addNoteButton,...((savingNote||!noteText.trim())?disabledAction:{})}}>{savingNote?'Saving...':'＋ Add Note'}</button></div><div style={notesList}>{notesLoading?<div style={emptyTab}>Loading notes...</div>:notes.length?notes.map(n=><div key={n.id} style={activity}><div style={{minWidth:0,flex:1}}><div style={noteMeta}><strong>{n.author_name||n.author_email||'RitsuFlow User'}</strong><span>·</span><span>{noteDate(n.created_at)}</span></div><div style={noteBody}>{n.note}</div></div><button onClick={()=>deleteNote(n)} style={noteDelete} title="Delete note">×</button></div>):<div style={emptyTab}>No project notes yet. Add the first note above.</div>}</div></>:tab==='Documents'?<ProjectDocuments project={project}/>:tab==='Team'?<ProjectTeam project={project}/>:null}</section></div>
- <aside style={sideColumn}><section style={sideCard}><div style={sideTitle}>▰ &nbsp; Project Image</div>{imageUrl?<div style={projectImageFrame}><img src={imageUrl} alt={`${project.name||'Project'} image`} style={projectImage}/></div>:<div style={imagePlaceholder}><div style={{fontSize:28}}>▥</div><div>Project image</div></div>}<input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadProjectImage} style={{display:'none'}}/><button type="button" onClick={()=>fileInputRef.current?.click()} disabled={uploadingImage} style={{...sideAction,...(uploadingImage?disabledAction:{})}}>{uploadingImage?'Uploading...':imageUrl?'↥ Change Project Image':'↥ Add Project Image'}</button></section><section style={sideCard}><div style={sideTitle}>♥ &nbsp; Location Map</div>{mapped?<div style={mapContainer}><iframe title={`Map of ${project.name||'project'}`} src={osmUrl(project)} style={mapIframe} loading="lazy" referrerPolicy="no-referrer"/></div>:<div style={mapPlaceholder}><div style={{fontSize:22}}>⌖</div><strong>{project.city||'Project location'}</strong><span>{project.neighborhood||''}</span><span style={coordinatesMessage}>Coordinates not defined</span></div>}<a href={googleUrl(project)} target="_blank" rel="noreferrer" style={mapLink}>● Open in Google Maps ↗</a></section></aside></div></div>}</section>
- <DeleteProjectModal project={project} open={deleteOpen} deleting={deleting} onCancel={()=>setDeleteOpen(false)} onConfirm={deleteProject}/></main>
+export default function ProjectDetailPage() {
+  const params = useParams(), router = useRouter(), projectId = params?.projectId
+  const t = useT('projects')
+  const { language } = useLanguage()
+  const fileInputRef = useRef(null)
+  const [project, setProject] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [tab, setTab] = useState('notes')
+  const [notes, setNotes] = useState([])
+  const [noteText, setNoteText] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const [notesLoading, setNotesLoading] = useState(false)
+
+  useEffect(() => {
+    if (!projectId) return undefined
+    let active = true
+    ;(async () => {
+      setLoading(true); setError('')
+      const { data, error: e } = await supabase.from('projects').select('*').eq('id', projectId).maybeSingle()
+      if (!active) return
+      if (e) setError(e.message || t('detail.errLoad'))
+      else if (!data) setError(t('detail.notFound'))
+      else setProject(data)
+      setLoading(false)
+    })()
+    return () => { active = false }
+  }, [projectId, t])
+
+  useEffect(() => {
+    if (!projectId) return undefined
+    let active = true
+    ;(async () => {
+      setNotesLoading(true)
+      const { data, error: e } = await supabase.from('project_notes').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
+      if (active) { if (e) setError(t('notes.errLoad', { message: e.message })); else setNotes(data || []); setNotesLoading(false) }
+    })()
+    return () => { active = false }
+  }, [projectId, t])
+
+  useEffect(() => {
+    if (!deleteOpen) return undefined
+    const close = (e) => { if (e.key === 'Escape' && !deleting) setDeleteOpen(false) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [deleteOpen, deleting])
+
+  const dateFormat = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'medium' }), [language])
+  const dateTime = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'short', timeStyle: 'short' }), [language])
+  const date = (v) => { if (!v) return '—'; const d = new Date(`${String(v).slice(0, 10)}T12:00:00`); return Number.isNaN(d.getTime()) ? '—' : dateFormat.format(d) }
+  const money = (v, c) => { if (v === null || v === undefined || v === '') return '—'; try { return new Intl.NumberFormat(language, { style: 'currency', currency: c || 'BRL' }).format(Number(v) || 0) } catch { return String(v) } }
+
+  async function addNote() {
+    const text = noteText.trim()
+    if (!text || savingNote || !project) return
+    setSavingNote(true); setError('')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setError(t('notes.errSignedOut')); setSavingNote(false); return }
+    const { data: profile } = await supabase.from('user_profiles').select('full_name,display_name,email').eq('user_id', user.id).maybeSingle()
+    const authorName = profile?.full_name || profile?.display_name || profile?.email || user.email || 'RitsuFlow'
+    const { data, error: e } = await supabase.from('project_notes').insert({ project_id: project.id, note: text, created_by: user.id, author_name: authorName, author_email: profile?.email || user.email || null }).select('*').single()
+    if (e) setError(t('notes.errAdd', { message: e.message }))
+    else { setNotes((current) => [data, ...current]); setNoteText('') }
+    setSavingNote(false)
+  }
+
+  async function deleteNote(note) {
+    if (!window.confirm(t('notes.confirmDelete'))) return
+    setError('')
+    const { error: e } = await supabase.from('project_notes').delete().eq('id', note.id)
+    if (e) setError(t('notes.errDelete', { message: e.message }))
+    else setNotes((current) => current.filter((item) => item.id !== note.id))
+  }
+
+  async function deleteProject() {
+    if (!project || deleting) return
+    setDeleting(true); setError('')
+    const { error: e } = await supabase.from('projects').delete().eq('id', project.id)
+    if (e) { setError(t('detail.errDelete', { message: e.message })); setDeleting(false); setDeleteOpen(false); return }
+    router.replace('/projects'); router.refresh()
+  }
+
+  async function uploadProjectImage(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !project || uploadingImage) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setError(t('image.errType')); return }
+    if (file.size > 10 * 1024 * 1024) { setError(t('image.errSize')); return }
+    setUploadingImage(true); setError('')
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const path = `${project.id}/project-${Date.now()}.${extension}`
+    const { error: uploadError } = await supabase.storage.from('project-images').upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type })
+    if (uploadError) { setError(t('image.errUpload', { message: uploadError.message })); setUploadingImage(false); return }
+    const oldPath = project.project_image_path
+    const { data: updated, error: updateError } = await supabase.from('projects').update({ project_image_path: path }).eq('id', project.id).select('*').single()
+    if (updateError) {
+      await supabase.storage.from('project-images').remove([path])
+      setError(t('image.errSave', { message: updateError.message })); setUploadingImage(false); return
+    }
+    if (oldPath && oldPath !== path) await supabase.storage.from('project-images').remove([oldPath])
+    setProject(updated); setUploadingImage(false)
+  }
+
+  const imageUrl = project?.project_image_path ? supabase.storage.from('project-images').getPublicUrl(project.project_image_path).data.publicUrl : ''
+  const status = STATUSES.includes(project?.status) ? project.status : 'planning'
+  const currency = project?.currency_code || 'BRL'
+
+  if (loading) return <AppShell module="projects" active="overview" projectId={projectId} action={false}><Empty title={t('detail.loading')} /></AppShell>
+  if (!project) return <AppShell module="projects" active="overview" projectId={projectId} action={false}><Empty title={t('detail.unavailable')} text={error} action={<Link className={ui.btn} href="/projects">{t('detail.backToList')}</Link>} /></AppShell>
+
+  const Row = ({ label, value }) => <div className={styles.row}><span>{label}</span><strong>{value === null || value === undefined || value === '' ? '—' : value}</strong></div>
+
+  return <AppShell module="projects" active="overview" projectId={projectId}
+    action={<Link className={ui.btnPrimary} href={`/projects/${projectId}/edit`}>{t('detail.edit')}</Link>}>
+    <PageHeader
+      back={{ href: '/projects', label: t('nav.allProjects') }}
+      title={project.name || t('list.untitled')}
+      meta={<>
+        <span>{[project.project_id, project.client_name, [project.city, project.state_region].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || '—'}</span>
+        <Badge tone={TONE[status]}>{t(`status.${status}`)}</Badge>
+      </>}
+      actions={<>
+        <ProjectReportButton project={project} />
+        <button type="button" className={ui.btnDanger} onClick={() => setDeleteOpen(true)} disabled={deleting}>{t('detail.delete')}</button>
+      </>}
+    />
+    <Notice>{error}</Notice>
+
+    <div className={styles.layout}>
+      <div className={styles.main}>
+        <div className={styles.cards}>
+          <Panel title={t('detail.infoTitle')}>
+            <Row label={t('field.projectId')} value={project.project_id} />
+            <Row label={t('field.contractNumber')} value={project.contract_number} />
+            <Row label={t('field.client')} value={project.client_name} />
+            <Row label={t('field.code')} value={project.code} />
+          </Panel>
+          <Panel title={t('detail.addressTitle')}>
+            <Row label={t('field.address')} value={[project.address_line, project.address_number].filter(Boolean).join(', ')} />
+            <Row label={t('field.neighborhood')} value={project.neighborhood} />
+            <Row label={t('field.cityState')} value={[project.city, project.state_region].filter(Boolean).join(', ')} />
+            <Row label={t('field.zipCountry')} value={[project.postal_code, project.country_code].filter(Boolean).join(' · ')} />
+          </Panel>
+          <Panel title={t('detail.contractTitle')}>
+            <Row label={t('field.contractValue')} value={money(project.contract_value, currency)} />
+            <Row label={t('field.materialValue')} value={project.material_included ? money(project.material_value, currency) : t('detail.notIncluded')} />
+            <Row label={t('field.retainage')} value={project.has_retainage ? `${project.retainage_percent ?? '—'}% · ${money(project.retainage_value, currency)}` : t('detail.no')} />
+            <Row label={t('field.retainagePayment')} value={project.has_retainage ? `${t('detail.days', { count: project.retainage_payment_days ?? '—' })} · ${date(project.probable_retainage_payment_date)}` : '—'} />
+          </Panel>
+          <Panel title={t('detail.scheduleTitle')}>
+            <Row label={t('field.plannedStart')} value={date(project.planned_start_date)} />
+            <Row label={t('field.plannedFinish')} value={date(project.planned_finish_date)} />
+            <Row label={t('field.term')} value={project.contractual_term_days ? t('detail.days', { count: project.contractual_term_days }) : '—'} />
+            <Row label={t('field.status')} value={<Badge tone={TONE[status]}>{t(`status.${status}`)}</Badge>} />
+          </Panel>
+        </div>
+
+        <Panel title={t('detail.successTitle')} actions={<Link className={`${ui.btnGhost} ${ui.small}`} href={`/projects/${projectId}/edit`}>{t('detail.edit')}</Link>}>
+          <p className={styles.pre}>{project.success_criteria || <span className={styles.muted}>{t('detail.successEmpty')}</span>}</p>
+        </Panel>
+
+        <Panel body={false}>
+          <div className={styles.tabBar}><Segments value={tab} onChange={setTab} items={['notes', 'documents', 'team'].map((key) => ({ value: key, label: t(`tab.${key}`) }))} /></div>
+          {tab === 'notes' && <div className={styles.notes}>
+            <div className={styles.composer}>
+              <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') addNote() }} placeholder={t('notes.placeholder')} rows={3} />
+              <button type="button" className={ui.btnPrimary} onClick={addNote} disabled={savingNote || !noteText.trim()}>{savingNote ? t('notes.saving') : t('notes.add')}</button>
+            </div>
+            {notesLoading ? <Empty title={t('notes.loading')} />
+              : notes.length === 0 ? <Empty title={t('notes.empty')} />
+                : <ul className={styles.noteList}>{notes.map((n) => <li key={n.id}>
+                  <div><div className={styles.noteMeta}><strong>{n.author_name || n.author_email || 'RitsuFlow'}</strong> · {n.created_at ? dateTime.format(new Date(n.created_at)) : '—'}</div><p className={styles.pre}>{n.note}</p></div>
+                  <button type="button" className={`${ui.btnGhost} ${ui.small}`} onClick={() => deleteNote(n)} aria-label={t('notes.delete')}>{t('notes.delete')}</button>
+                </li>)}</ul>}
+          </div>}
+          {tab === 'documents' && <div className={styles.legacy}><ProjectDocuments project={project} /></div>}
+          {tab === 'team' && <div className={styles.legacy}><ProjectTeam project={project} /></div>}
+        </Panel>
+      </div>
+
+      <aside className={styles.side}>
+        <Panel title={t('image.title')}>
+          {imageUrl ? <img src={imageUrl} alt={project.name || ''} className={styles.image} /> : <div className={styles.placeholder}>{t('image.none')}</div>}
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadProjectImage} hidden />
+          <button type="button" className={ui.btn} style={{ width: '100%', marginTop: 12 }} onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}>{uploadingImage ? t('image.uploading') : imageUrl ? t('image.change') : t('image.add')}</button>
+        </Panel>
+        <Panel title={t('map.title')}>
+          {hasCoordinates(project)
+            ? <iframe title={t('map.title')} src={osmUrl(project)} className={styles.map} loading="lazy" referrerPolicy="no-referrer" />
+            : <div className={styles.placeholder}><strong>{project.city || t('map.title')}</strong><span>{t('map.noCoordinates')}</span></div>}
+          <a href={googleUrl(project)} target="_blank" rel="noreferrer" className={ui.btnGhost} style={{ marginTop: 8 }}>{t('map.google')}</a>
+        </Panel>
+      </aside>
+    </div>
+
+    <DeleteProjectModal project={project} open={deleteOpen} deleting={deleting} onCancel={() => setDeleteOpen(false)} onConfirm={deleteProject} />
+  </AppShell>
 }
-function Info({icon,title,children}){return <section style={panel}><h2 style={cardTitle}><span style={cardIcon}>{icon}</span>{title}</h2>{children}</section>}
-function Row({label,value}){const display=value===null||value===undefined||value===''?'—':value;return <div style={row}><span style={rowLabel}>{label}</span><strong style={rowValue}>{display}</strong></div>}
-
-const shell={height:'100vh',overflow:'hidden',background:'#f4f8fa',color:'#082f43',fontFamily:'Arial,sans-serif'},header={height:72,boxSizing:'border-box',background:'#063247',display:'flex',alignItems:'center',padding:'0 28px',gap:12,color:'#fff',position:'fixed',top:0,left:0,right:0,zIndex:1000},brand={display:'flex',alignItems:'center',paddingRight:20,marginRight:4,borderRight:'1px solid rgba(255,255,255,.18)'},headerTitle={fontSize:23,fontWeight:800,lineHeight:1},headerSub={fontSize:11,opacity:.8,marginTop:4},navButton={color:'#fff',textDecoration:'none',border:'1px solid rgba(255,255,255,.24)',borderRadius:8,padding:'10px 15px',fontWeight:800,fontSize:13,whiteSpace:'nowrap'},blueButton={background:'#2f86ee',borderColor:'#2f86ee'},greenButton={background:'#11aa61',borderColor:'#11aa61'},content={position:'fixed',top:72,left:0,right:0,bottom:0,overflow:'hidden',padding:'12px 18px 14px',boxSizing:'border-box'},workspace={height:'100%',maxWidth:1800,margin:'0 auto',display:'flex',flexDirection:'column',minHeight:0},panel={background:'#fff',border:'1px solid #d7e3e8',borderRadius:9,padding:'11px 13px',boxShadow:'0 1px 5px rgba(7,47,67,.03)',minWidth:0,boxSizing:'border-box'},hero={...panel,display:'flex',alignItems:'center',gap:12,padding:'10px 14px',flex:'0 0 auto'},projectIcon={width:54,height:54,borderRadius:8,background:'#eaf3f6',display:'grid',placeItems:'center',fontSize:26,color:'#0b6079'},heroTop={display:'flex',alignItems:'center',gap:14},projectName={margin:0,fontSize:23,lineHeight:1},projectNumber={fontSize:14,fontWeight:800,color:'#8aa5b2',marginTop:3},heroMeta={display:'flex',alignItems:'center',gap:18,flexWrap:'wrap',marginTop:5,color:'#597789',fontSize:12},statusPill={padding:'5px 11px',borderRadius:999,background:'#e2f7ee',color:'#087747',fontWeight:800,textTransform:'capitalize',fontSize:12},editButton={background:'#fff',border:'1px solid #c8d8df',borderRadius:7,padding:'8px 11px',fontWeight:800,color:'#486879',fontSize:12,cursor:'pointer',whiteSpace:'nowrap'},historyButton={background:'#fff',border:'1px solid #079a9a',borderRadius:7,padding:'8px 11px',fontWeight:800,color:'#087d7d',fontSize:12,cursor:'pointer',whiteSpace:'nowrap'},scopeButton={background:'#fff',border:'1px solid #2f86ee',borderRadius:7,padding:'8px 11px',fontWeight:800,color:'#1674d1',fontSize:12,cursor:'pointer',whiteSpace:'nowrap'},locationButton={background:'#fff',border:'1px solid #079a9a',borderRadius:7,padding:'8px 11px',fontWeight:800,color:'#087d7d',fontSize:12,cursor:'pointer',whiteSpace:'nowrap'},compactButton={...editButton,padding:'6px 10px'},deleteButton={...editButton,borderColor:'#ef5555',color:'#d92828',background:'#fffafa'},errorBanner={marginTop:7,padding:'7px 10px',border:'1px solid #efb0b0',background:'#fff3f3',color:'#a61b1b',borderRadius:7,fontWeight:700,fontSize:12},bodyGrid={display:'grid',gridTemplateColumns:'minmax(0,1fr) 230px',gap:10,marginTop:10,flex:1,minHeight:0},mainColumn={minWidth:0,display:'flex',flexDirection:'column',minHeight:0},sideColumn={display:'grid',gridTemplateRows:'1fr 1fr',gap:10,minHeight:0},cardsGrid={display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:9,flex:'0 0 auto'},cardTitle={display:'flex',alignItems:'center',gap:7,margin:'0 0 7px',fontSize:14},cardIcon={color:'#079a9a',fontSize:14},row={display:'grid',gridTemplateColumns:'42% minmax(0,1fr)',gap:7,alignItems:'center',minHeight:31,borderBottom:'1px solid #e5edf1'},rowLabel={color:'#6f8794',fontSize:11},rowValue={fontSize:11.5,fontWeight:800,overflowWrap:'anywhere'},smallStatus={display:'inline-block',padding:'4px 8px',borderRadius:999,background:'#e2f7ee',color:'#087747',textTransform:'capitalize'},successPanel={...panel,marginTop:9,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flex:'0 0 auto'},successTitle={fontWeight:800,fontSize:13},successText={color:'#607784',fontSize:11.5,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'70vw'},tabsPanel={...panel,marginTop:9,padding:'0 12px 10px',flex:1,minHeight:0,overflow:'hidden',display:'flex',flexDirection:'column'},tabs={display:'flex',gap:14,borderBottom:'1px solid #dce7eb',flex:'0 0 auto'},tabButton={border:0,background:'transparent',padding:'9px 9px 7px',fontWeight:800,color:'#526f80',fontSize:12,cursor:'pointer',borderBottom:'2px solid transparent'},activeTab={color:'#079a9a',borderBottomColor:'#079a9a'},noteComposer={display:'flex',gap:8,marginTop:8,flex:'0 0 auto'},textarea={flex:1,height:40,resize:'none',border:'1px solid #cddde4',borderRadius:7,padding:'10px',fontFamily:'inherit',fontSize:11.5,boxSizing:'border-box'},addNoteButton={border:0,borderRadius:7,background:'#069b9b',color:'#fff',padding:'0 16px',fontWeight:800,fontSize:12,cursor:'pointer'},notesList={overflowY:'auto',minHeight:0,marginTop:2},activity={display:'flex',alignItems:'flex-start',gap:9,marginTop:7,padding:'7px 9px',border:'1px solid #d5e4f5',background:'#f4f9ff',borderRadius:7,fontSize:11},noteMeta={display:'flex',alignItems:'center',gap:6,color:'#607784',fontSize:10.5},noteBody={marginTop:3,whiteSpace:'pre-wrap',overflowWrap:'anywhere',color:'#25495a'},noteDelete={border:0,background:'transparent',color:'#9b5960',fontSize:18,cursor:'pointer',lineHeight:1},emptyTab={padding:'18px 3px',color:'#718691',fontSize:12},sideCard={...panel,padding:'10px',minHeight:0,display:'flex',flexDirection:'column'},sideTitle={fontWeight:800,fontSize:12.5,marginBottom:7},imagePlaceholder={flex:1,minHeight:80,borderRadius:6,background:'linear-gradient(145deg,#d9edf4,#edf5f1)',display:'flex',flexDirection:'column',gap:4,alignItems:'center',justifyContent:'center',color:'#557987',fontSize:11},projectImageFrame={flex:1,minHeight:80,borderRadius:6,overflow:'hidden',background:'#eaf2f4'},projectImage={display:'block',width:'100%',height:'100%',objectFit:'cover'},sideAction={width:'100%',marginTop:6,border:'1px solid #c8dff5',background:'#f3f9ff',color:'#1971c7',borderRadius:6,padding:'6px',fontWeight:800,fontSize:11,cursor:'pointer'},disabledAction={opacity:.55,cursor:'not-allowed'},mapContainer={flex:1,minHeight:80,borderRadius:6,overflow:'hidden',border:'1px solid #d7e3e8',background:'#edf3f4'},mapIframe={display:'block',width:'100%',height:'100%',minHeight:80,border:0},mapPlaceholder={flex:1,minHeight:80,borderRadius:6,background:'#eef3f2',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#607784',gap:3,fontSize:11},coordinatesMessage={marginTop:3,fontSize:9.5,color:'#8ba0aa'},mapLink={display:'block',marginTop:6,color:'#1971c7',fontWeight:800,textDecoration:'none',fontSize:10.5}

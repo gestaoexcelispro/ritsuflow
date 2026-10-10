@@ -1,11 +1,17 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../../lib/supabase';
+import { readPreconProjectId, rememberPreconProjectId } from '../../preconProject';
+import { useT } from '../../../../lib/i18n/useT';
+import { useLanguage } from '../../../../lib/i18n/LanguageProvider';
+import { Badge, Empty, Icon, Segments, ui } from '../../../fieldop/ui';
+import { Dialog, usePageDialogs } from '../../../fieldop/ui/dialogs';
+import styles from '../../precon.module.css';
 
 // ============================================================
-// MASTER PLAN - SHARED WORK PACKAGE CATALOG INTEGRATION
-// Work Package Database is authoritative for package identity,
-// description, color and selectable planning activities.
+// MASTER PLAN
+// Company work packages chosen for the project are the schedulable
+// activities; locations come from the project's location structure.
 // ============================================================
 
 // ============================================================
@@ -13,13 +19,11 @@ import { supabase } from '../../../../lib/supabase';
 // ============================================================
 //
 // IMPORTANT:
-// Work Packages are NOT hard-coded in Master Plan anymore.
-//
-// All project Work Packages now come from:
-// public.project_work_packages
+// Work packages are NOT hard-coded in Master Plan. They come from the
+// company catalog (see buildWorkPackageCatalog below).
 //
 // These three entries are system/calendar markers only.
-// They are not user Work Packages.
+// They are not project activities.
 // ============================================================
 const SYSTEM_CALENDAR_CODES = {
   '': {
@@ -54,16 +58,6 @@ const getContrastYIQ = (hexcolor) => {
   return (yiq >= 128) ? '#000000' : '#ffffff';
 };
 
-
-// Master Plan visual package codes must always be 1-3 characters.
-// Project service IDs/codes such as SERVICE_xxx are internal identifiers and
-// must never expand the Line of Balance date columns.
-const normalizeText = (value = '') =>
-  String(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .trim();
 
 // ----------------------------------------------------
 // MASTER PLAN LOCATION STRUCTURE INTEGRATION
@@ -189,136 +183,52 @@ const buildMasterPlanSectionsFromLocations = (locations = []) => {
     );
 };
 
-export default function MasterPlanPage() {
-  const t = {
-    title: 'PHYSICAL SCHEDULE - LINE OF BALANCE',
-    selectProject: '-- Select a Project --',
-    scenarioLabel: 'Scenario / Version (Last Planner)',
-    unsavedEdit: '* Unsaved edit...',
-    newBlank: 'New Blank Scenario',
-    
-    saveScenario: ' Save',
-    updateScenario: ' Update',
-    duplicateScenario: ' Duplicate',
-    promptDuplicate: 'Enter a name for the copied Scenario:',
-    scenarioUpdated: 'Scenario updated successfully!',
-    scenarioSaveError: 'The scenario could not be saved.',
-    scenarioLoadError: 'The Master Plan could not be loaded.',
-    packageSyncError: 'The scenario was saved, but the normalized work packages could not be synchronized.',
-    
-    freezeBase: '🔒 Freeze Baseline',
-    editBase: '🔓 Edit Baseline',
-    planning: ' Planning',
-    control: 'Control (Actual)',
-    insertPackage: 'Insert Package',
-    generateSequence: 'Generate Work Sequence',
-    sequenceGenerator: 'Work Sequence Generator',
-    sequenceLocations: '1. Location Flow',
-    sequenceActivities: '2. Activity Sequence',
-    sequenceStart: '3. Start Rule',
-    addActivity: 'Add Activity',
-    durationDays: 'Duration (days)',
-    continuousFlow: 'Continuous Flow',
-    continuousFlowHelp: 'Each package respects the previous activity in the same location and the same activity in the previous location. The later finish controls the start.',
-    packagesWillBeCreated: 'work packages will be created',
-    generatePackages: 'Generate Packages',
-    selectAtLeastOneLocation: 'Select at least one location.',
-    selectAtLeastOneActivity: 'Add at least one activity.',
-    specificStartDate: 'Specific start date',
-    existingPredecessor: 'Existing predecessor',
-    sequenceSettings: 'Sequence Settings',
-    regenerateSequence: 'Regenerate Sequence',
-    sequenceName: 'Sequence Name',
-    defaultSequenceName: 'Main Work Sequence',
-    noSequenceConfigured: 'No generated sequence is configured yet.',
-    confirmRegenerate: 'This sequence may contain manual schedule adjustments. Regenerating will rebuild only the packages created by this sequence. Manual packages created with Insert Package will remain. Continue?',
-    sequenceRegenerated: 'Sequence regenerated successfully.',
-    editSequenceHelp: 'Review locations, activity order, durations, lags, and start rule, then regenerate the sequence.',
-    lagWorkingDays: 'Lag (workdays)',
-    startLag: 'Start Lag (workdays)',
-    dragToReorder: 'Drag rows to reorder, or use the arrows.',
-    dependencySyncError: 'The scenario was saved, but the dependency network could not be synchronized.',
-    dragPackageHint: 'Drag horizontally to reschedule',
-    dragPackageLockedRow: 'Work packages stay locked to their Location row.',
-    undoBtn: 'Undo',
-    showWeekends: 'Show Weekends',
-    hideWeekends: 'Hide Weekends',
-    holidaysBtn: ' Holidays',
-    exportPdf: ' Export PDF',
-    startPrev: 'Expected Start',
-    endPrev: 'Expected Finish',
-    noProject: 'No Project Selected',
-    noProjectDesc: 'Select a project from the menu above to create or view the Master Plan.',
-    descHeader: 'DESCRIPTION',
-    plannedBadge: 'PLANNED',
-    actualBadge: 'ACTUAL',
-    addRow: '+ Add Row',
-    addSection: '+ Add New Schedule Section',
-    newSecTitle: 'NEW WORK SECTION',
-    intWork: 'INTERIOR WORK PACKAGES',
-    extWork: 'EXTERIOR WORK PACKAGES',
-    legend: 'LEGEND:',
-    selectOrType: 'Select or type the step...',
-    
-    confirmFreeze: 'Are you sure you want to freeze the current schedule? This will create the official project Baseline.',
-    confirmUnfreeze: 'WARNING: Unfreezing the baseline will allow changes to the Planned schedule. Do you want to continue?',
-    promptScenario: 'Enter a name for this Scenario/Version:',
-    scenarioSaved: 'Scenario saved successfully! You can switch between scenarios in the top menu.',
-    confirmClear: 'Do you want to clear the current schedule to create a blank scenario?',
-    confirmLoad: 'This will load the selected scenario and replace the current grid. Do you want to continue?',
-    errHolidayExists: 'A holiday is already registered for this date!',
-    confirmDelSection: 'Do you want to delete this section?',
-    errFillFields: 'Fill in Activity, Location, and Duration.',
-    errSelectDate: 'Select the start date.',
-    errSelectPred: 'Select a predecessor package.',
-    errOutOfRange: 'The chosen date is outside the schedule range.',
-    warnEndEarly: (days, duration) => `Warning: The schedule ended before all days were allocated. ${days} of ${duration} working days were allocated.`,
-    
-    // Textos do Modal de Pacote
-    mPkgTitle: 'Insert Work Package',
-    mPkgService: 'Service / Activity',
-    mPkgSelect: '-- Select --',
-    mPkgZone: 'Location / Zone',
-    mPkgRadioDate: ' Start on Specific Date',
-    mPkgRadioPred: ' Start after Predecessor',
-    mPkgStartDate: 'Start Date',
-    mPkgLinkPred: 'Link to Finish of:',
-    mPkgSelectPred: '-- Select Completed Package --',
-    mPkgNoPred: 'No package added yet. Use Specific Date first.',
-    mPkgDuration: 'Duration (Working Days)',
-    mPkgCancel: 'Cancel',
-    mPkgAddGrid: 'Add to Grid',
-    
+// ============================================================
+// PROJECT WORK PACKAGES (company catalog)
+// ============================================================
+// Master Plan schedules company work packages (Settings › Work
+// packages): 3-letter codes with fixed colors, the same on every
+// project. Each project chooses the ones it uses (rows come from
+// get_project_work_package_options; only selected, active ones are
+// schedulable).
+const buildWorkPackageCatalog = (options = []) => {
+  const reserved = new Set(Object.keys(SYSTEM_CALENDAR_CODES));
+  const catalog = {};
 
-    mHolTitle: 'Register Holidays (Local/State/Federal)',
-    mHolDescPlace: 'Description (e.g., National Holiday)',
-    mHolAdd: 'Add',
-    mHolDateCol: 'Date',
-    mHolDescCol: 'Description',
-    mHolActionCol: 'Action',
-    mHolEmpty: 'No holidays registered.',
-    mHolDel: 'Delete',
-    mHolDone: 'Done',
-    
-    mPdfTitle: 'Print Configuration (PDF)',
-    mPdfSugest: 'System Suggestion:',
-    mPdfSugestText: (len) => `Based on your current schedule width (${len} columns), we recommend using paper size`,
-    mPdfSize: 'Paper Size',
-    mPdf_a4: 'A4 (Standard)',
-    mPdf_a3: 'A3 (Recommended)',
-    mPdf_a2: 'A2 (Large)',
-    mPdf_a1: 'A1 (Giant)',
-    mPdf_a0: 'A0 (Extreme)',
-    mPdf_unica: 'Perfect Fit (Single Continuous Page)',
-    mPdfOrient: 'Orientation',
-    mPdfLand: 'Landscape (Horizontal)',
-    mPdfPort: 'Portrait (Vertical)',
-    mPdfConfirm: 'Confirm and Download PDF',
-  };
+  options
+    .filter((option) => option.selected_for_project && option.organization_package_active)
+    .forEach((option) => {
+      const code = String(option.code || '').trim().toUpperCase();
+      if (!code || reserved.has(code)) return;
+      const color = String(option.color || '#64748b').toUpperCase();
+      catalog[code] = {
+        labelPt: option.description || code,
+        labelEn: option.description || code,
+        color,
+        text: getContrastYIQ(color),
+        organizationWorkPackageId: option.organization_work_package_id,
+        projectServiceId: null,
+        sourceServiceCode: code,
+        unit: '',
+        source: 'organization_work_packages',
+      };
+    });
+
+  return catalog;
+};
+
+export default function MasterPlanPage() {
+  // Texts live in messages/precon.<language>.json under masterPlan.*; `t.key` reads them.
+  const translate = useT('precon');
+  const { language } = useLanguage();
+  const t = React.useMemo(
+    () => new Proxy({}, { get: (_, key) => translate(`masterPlan.${String(key)}`) }),
+    [translate]
+  );
+  const tv = (key, vars) => translate(`masterPlan.${key}`, vars);
+  const dialogs = usePageDialogs();
 
   const [projects, setProjects] = useState([]);
-  const [projectCoverUrls, setProjectCoverUrls] = useState({});
-  const [projectProgressMap, setProjectProgressMap] = useState({});
   const [selectedProjectId, setSelectedProjectId] = useState('');
 
   const [isBaselineFrozen, setIsBaselineFrozen] = useState(false);
@@ -329,16 +239,57 @@ export default function MasterPlanPage() {
   const [hideWeekends, setHideWeekends] = useState(false);
 
   // ============================================================
-  // SHARED PROJECT WORK PACKAGE CATALOG
+  // PROJECT WORK PACKAGE CATALOG
   // ============================================================
   //
-  // project_work_packages is now the source of truth for Work Package
-  // identity, description and color.
-  //
-  // OFF / FER are calendar markers, not Work Packages, so they remain
-  // system-level visual definitions.
+  // Keyed by the 3-letter work package code shown in the grid
+  // (buildWorkPackageCatalog). OFF / FER are calendar markers,
+  // not work packages, so they remain system-level visual definitions.
   //
   const [projectServices, setProjectServices] = useState({});
+  const [workPackageOptions, setWorkPackageOptions] = useState([]);
+  const [showPackagesModal, setShowPackagesModal] = useState(false);
+  const [packageSavingId, setPackageSavingId] = useState('');
+
+  const applyWorkPackageOptions = (rows) => {
+    setWorkPackageOptions(rows);
+    setProjectServices(buildWorkPackageCatalog(rows));
+  };
+
+  // Add or remove a company work package from this project's plan.
+  const toggleProjectWorkPackage = async (option) => {
+    const code = String(option.code || '').toUpperCase();
+    const selecting = !option.selected_for_project;
+    const usedInPlan =
+      workPackages.some((pkg) => String(pkg.activity || '').toUpperCase() === code) ||
+      Object.values(plannedCellData).some((value) => String(value || '').toUpperCase() === code);
+
+    if (!selecting && usedInPlan) {
+      const proceed = await dialogs.confirm(
+        translate('masterPlan.confirmRemoveUsedPackage', { code }),
+        { danger: true }
+      );
+      if (!proceed) return;
+    }
+
+    setPackageSavingId(option.organization_work_package_id);
+    const { error } = await supabase.rpc('set_project_work_package_selected', {
+      target_project_id: selectedProjectId,
+      target_organization_work_package_id: option.organization_work_package_id,
+      target_selected: selecting
+    });
+
+    if (error) {
+      dialogs.notify(`${t.workPackagesSaveError}\n${error.message}`, 'bad');
+    } else {
+      const { data, error: reloadError } = await supabase.rpc('get_project_work_package_options', {
+        target_project_id: selectedProjectId
+      });
+      if (reloadError) dialogs.notify(`${t.workPackagesSaveError}\n${reloadError.message}`, 'bad');
+      else applyWorkPackageOptions(data || []);
+    }
+    setPackageSavingId('');
+  };
 
   const workPackageCatalog = {
     ...projectServices,
@@ -437,7 +388,7 @@ export default function MasterPlanPage() {
   const formatScenarioDate = (value) => {
     if (!value) return '';
     return new Date(value).toLocaleDateString(
-      'en-US',
+      language,
       {
         year: 'numeric',
         month: '2-digit',
@@ -1210,560 +1161,120 @@ export default function MasterPlanPage() {
     // calendar expansion and the save operation.
 
     // ----------------------------------------------------
-    // 1. CLEAR PREVIOUS NORMALIZED NETWORK
-    // ----------------------------------------------------
-    const {
-      error: dependencyDeleteError
-    } = await supabase
-      .from(
-        'master_plan_package_dependencies'
-      )
-      .delete()
-      .eq(
-        'scenario_id',
-        scenarioId
-      )
-      .eq(
-        'project_id',
-        selectedProjectId
-      );
-
-    if (dependencyDeleteError) {
-      console.error(
-        'Master Plan - delete normalized dependencies:',
-        dependencyDeleteError
-      );
-
-      return {
-        ok: false,
-        error: dependencyDeleteError
-      };
-    }
-
-    const {
-      error: deleteError
-    } = await supabase
-      .from(
-        'master_plan_packages'
-      )
-      .delete()
-      .eq(
-        'scenario_id',
-        scenarioId
-      )
-      .eq(
-        'project_id',
-        selectedProjectId
-      );
-
-    if (deleteError) {
-      console.error(
-        'Master Plan - delete normalized packages:',
-        deleteError
-      );
-
-      return {
-        ok: false,
-        error: deleteError
-      };
-    }
-
-    if (packages.length === 0) {
-      return {
-        ok: true,
-        insertedCount: 0,
-        dependencyCount: 0
-      };
-    }
-
-    // ----------------------------------------------------
-    // 2. LOOKUP MAPS
+    // R3 · ONE DATABASE CALL SAVES THE WHOLE SCENARIO
+    //
+    // save_master_plan_packages updates each package in
+    // place (matched by its screen key, pkg.id), inserts new
+    // ones, deletes removed ones and rebuilds the dependency
+    // network in a single transaction. Package ids survive a
+    // save, so Lookahead items, constraints, weekly items and
+    // production activities keep their links.
     // ----------------------------------------------------
     const rowById = new Map();
 
     sections.forEach((section) => {
       (section.rows || []).forEach((row) => {
-        rowById.set(
-          row.id,
-          row
-        );
+        rowById.set(row.id, row);
       });
     });
 
-    const packageByUiId =
-      new Map(
-        packages.map(
-          (pkg) => [
-            pkg.id,
-            pkg
-          ]
-        )
-      );
-
-    const dbIdByUiId =
-      new Map();
-
-    const inserted =
-      new Set();
-
-    const visiting =
-      new Set();
-
-    // ----------------------------------------------------
-    // 3. INSERT PACKAGES IN DEPENDENCY ORDER
-    //
-    // This preserves the existing DB constraint:
-    //
-    // predecessor start rule
-    //     => predecessor_package_id must already exist.
-    //
-    // We still preserve EVERY logical predecessor separately
-    // in master_plan_package_dependencies afterward.
-    // ----------------------------------------------------
-    const insertPackage = async (
-      pkg,
-      sequenceNumber
-    ) => {
-      if (!pkg?.id) {
-        throw new Error(
-          'Master Plan package is missing its UI identifier.'
-        );
-      }
-
-      if (
-        inserted.has(
-          pkg.id
-        )
-      ) {
-        return dbIdByUiId.get(
-          pkg.id
-        );
-      }
-
-      if (
-        visiting.has(
-          pkg.id
-        )
-      ) {
-        throw new Error(
-          `Circular dependency detected for package ${pkg.id}.`
-        );
-      }
-
-      visiting.add(
-        pkg.id
-      );
-
-      const dependencies =
-        getPackageDependencies(
-          pkg
-        );
-
-      // Compatibility controlling predecessor.
-      // The full network is stored later in the dependency table.
-      const controllingDependency =
-        dependencies.find(
-          (dependency) =>
-            dependency.predecessorId ===
-            pkg.predecessorId
-        ) ||
-        dependencies[0] ||
-        null;
-
-      let controllingPredecessorDbId =
-        null;
-
-      if (
-        controllingDependency
-          ?.predecessorId
-      ) {
-        const predecessor =
-          packageByUiId.get(
-            controllingDependency
-              .predecessorId
-          );
-
-        if (!predecessor) {
-          throw new Error(
-            `Predecessor ${controllingDependency.predecessorId} was not found in this scenario.`
-          );
-        }
-
-        const predecessorIndex =
-          packages.findIndex(
-            (item) =>
-              item.id ===
-              predecessor.id
-          );
-
-        controllingPredecessorDbId =
-          await insertPackage(
-            predecessor,
-            predecessorIndex >= 0
-              ? predecessorIndex
-              : 0
-          );
-      }
-
-      const row =
-        rowById.get(
-          pkg.rowId
-        ) || null;
-
-      const service =
-        workPackageCatalog[
-          pkg.activity
-        ] || null;
-
-      const hasPredecessor =
-        Boolean(
-          controllingPredecessorDbId
-        );
-
-      const fallbackStartDate =
-        pkg.startDate ||
-        dataInicio ||
-        null;
-
-      const persistedSchedule =
-        immutableSnapshot.get(
-          pkg.id
-        ) ||
-        null;
-
-      const scheduledStartDate =
-        persistedSchedule
-          ?.scheduledStartDate ||
-        null;
-
-      const scheduledFinishDate =
-        persistedSchedule
-          ?.scheduledFinishDate ||
-        null;
-
-      if (
-        !scheduledStartDate ||
-        !scheduledFinishDate
-      ) {
-        console.warn(
-          'Master Plan - immutable schedule snapshot missing dates:',
-          {
-            packageId:
-              pkg.id,
-            packageCode:
-              pkg.activity,
-            rowId:
-              pkg.rowId
-          }
-        );
-      }
-
-      const persistedSequenceGroupId =
-        persistedSchedule
-          ?.sequenceGroupId ||
-        null;
-
-      const payload = {
-        scenario_id:
-          scenarioId,
-
-        project_id:
-          selectedProjectId,
-
-        location_id:
-          pkg.locationId ||
-          row?.locationId ||
-          null,
-
-        project_service_id:
-          pkg.projectServiceId ||
-          service?.projectServiceId ||
-          null,
-
-        row_key:
-          pkg.rowId ||
-          null,
-
-        package_code:
-          String(
-            pkg.activity ||
-            ''
-          )
-            .trim()
-            .toUpperCase()
-            .slice(
-              0,
-              3
-            ) ||
-          null,
-
-        location_name:
-          row?.description ||
-          null,
-
-        location_path:
-          pkg.locationPath ||
-          row?.locationPath ||
-          row?.description ||
-          null,
-
-        service_name:
-          service?.labelEn ||
-          pkg.activity ||
-          null,
-
-        service_code:
-          service?.sourceServiceCode ||
-          pkg.activity ||
-          null,
-
-        unit:
-          service?.unit ||
-          null,
-
-        start_rule:
-          hasPredecessor
-            ? 'predecessor'
-            : 'date',
-
-        planned_start_date:
-          hasPredecessor
-            ? null
-            : fallbackStartDate,
-
-        predecessor_package_id:
-          controllingPredecessorDbId,
-
-        duration_working_days:
-          Math.max(
-            1,
-            Number(
-              pkg.duration ||
-              1
-            )
-          ),
-
-        lag_working_days:
-          Math.max(
-            0,
-            Number(
-              controllingDependency
-                ?.lagWorkingDays ||
-              pkg.lagWorkingDays ||
-              0
-            )
-          ),
-
-        manual_delay_working_days:
-          Math.max(
-            0,
-            Number(
-              pkg.manualDelayWorkingDays ||
-              0
-            )
-          ),
-
-        scheduled_start_date:
-          scheduledStartDate,
-
-        scheduled_finish_date:
-          scheduledFinishDate,
-
-        sequence_group_id:
-          persistedSequenceGroupId,
-
-        sequence_number:
-          Math.max(
-            0,
-            Number(
-              sequenceNumber ||
-              0
-            )
-          )
-      };
-
-      const {
-        data: insertedPackage,
-        error: insertError
-      } = await supabase
-        .from(
-          'master_plan_packages'
-        )
-        .insert(
-          payload
-        )
-        .select(`
-          id,
-          scheduled_start_date,
-          scheduled_finish_date,
-          sequence_group_id
-        `)
-        .single();
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      if (
-        scheduledStartDate &&
-        insertedPackage
-          ?.scheduled_start_date !==
-          scheduledStartDate
-      ) {
-        throw new Error(
-          `Master Plan schedule persistence mismatch for ${pkg.activity}: expected start ${scheduledStartDate}, stored ${insertedPackage?.scheduled_start_date || 'NULL'}.`
-        );
-      }
-
-      if (
-        scheduledFinishDate &&
-        insertedPackage
-          ?.scheduled_finish_date !==
-          scheduledFinishDate
-      ) {
-        throw new Error(
-          `Master Plan schedule persistence mismatch for ${pkg.activity}: expected finish ${scheduledFinishDate}, stored ${insertedPackage?.scheduled_finish_date || 'NULL'}.`
-        );
-      }
-
-      dbIdByUiId.set(
-        pkg.id,
-        insertedPackage.id
-      );
-
-      inserted.add(
-        pkg.id
-      );
-
-      visiting.delete(
-        pkg.id
-      );
-
-      return insertedPackage.id;
-    };
+    const packageUiIds = new Set(packages.map((pkg) => pkg.id));
+    const packageRows = [];
+    const dependencyRows = [];
 
     try {
-      for (
-        let index = 0;
-        index < packages.length;
-        index += 1
-      ) {
-        await insertPackage(
-          packages[index],
-          index
-        );
-      }
-    } catch (error) {
-      console.error(
-        'Master Plan - normalized package insertion:',
-        error
-      );
+      packages.forEach((pkg, index) => {
+        if (!pkg?.id) {
+          throw new Error('Master Plan package is missing its UI identifier.');
+        }
 
-      return {
-        ok: false,
-        error
-      };
-    }
+        const dependencies = getPackageDependencies(pkg);
 
-    // ----------------------------------------------------
-    // 4. INSERT FULL MULTI-PREDECESSOR NETWORK
-    // ----------------------------------------------------
-    const dependencyRows =
-      [];
+        // Compatibility controlling predecessor; the full
+        // network goes to the dependency table.
+        const controllingDependency =
+          dependencies.find((dependency) => dependency.predecessorId === pkg.predecessorId) ||
+          dependencies[0] ||
+          null;
 
-    packages.forEach((pkg) => {
-      const packageDbId =
-        dbIdByUiId.get(
-          pkg.id
-        );
+        if (controllingDependency?.predecessorId && !packageUiIds.has(controllingDependency.predecessorId)) {
+          throw new Error(`Predecessor ${controllingDependency.predecessorId} was not found in this scenario.`);
+        }
 
-      if (!packageDbId) {
-        return;
-      }
+        const row = rowById.get(pkg.rowId) || null;
+        const service = workPackageCatalog[pkg.activity] || null;
+        const persistedSchedule = immutableSnapshot.get(pkg.id) || null;
+        const scheduledStartDate = persistedSchedule?.scheduledStartDate || null;
+        const scheduledFinishDate = persistedSchedule?.scheduledFinishDate || null;
 
-      getPackageDependencies(
-        pkg
-      ).forEach(
-        (dependency) => {
-          const predecessorDbId =
-            dbIdByUiId.get(
-              dependency
-                .predecessorId
-            );
+        if (!scheduledStartDate || !scheduledFinishDate) {
+          console.warn('Master Plan - immutable schedule snapshot missing dates:', {
+            packageId: pkg.id,
+            packageCode: pkg.activity,
+            rowId: pkg.rowId
+          });
+        }
 
-          if (
-            !predecessorDbId
-          ) {
+        packageRows.push({
+          ui_key: pkg.id,
+          predecessor_ui_key: controllingDependency?.predecessorId || null,
+          location_id: pkg.locationId || row?.locationId || null,
+          project_service_id: pkg.projectServiceId || service?.projectServiceId || null,
+          row_key: pkg.rowId || null,
+          package_code: String(pkg.activity || '').trim().toUpperCase().slice(0, 3) || null,
+          location_name: row?.description || null,
+          location_path: pkg.locationPath || row?.locationPath || row?.description || null,
+          service_name: service?.labelEn || pkg.activity || null,
+          service_code: service?.sourceServiceCode || pkg.activity || null,
+          unit: service?.unit || null,
+          planned_start_date: pkg.startDate || dataInicio || null,
+          duration_working_days: Math.max(1, Number(pkg.duration || 1)),
+          lag_working_days: Math.max(0, Number(controllingDependency?.lagWorkingDays || pkg.lagWorkingDays || 0)),
+          manual_delay_working_days: Math.max(0, Number(pkg.manualDelayWorkingDays || 0)),
+          scheduled_start_date: scheduledStartDate,
+          scheduled_finish_date: scheduledFinishDate,
+          sequence_group_id: persistedSchedule?.sequenceGroupId || null,
+          sequence_number: index
+        });
+
+        dependencies.forEach((dependency) => {
+          if (!dependency?.predecessorId || !packageUiIds.has(dependency.predecessorId)) {
             return;
           }
 
           dependencyRows.push({
-            scenario_id:
-              scenarioId,
-
-            project_id:
-              selectedProjectId,
-
-            package_id:
-              packageDbId,
-
-            predecessor_package_id:
-              predecessorDbId,
-
-            dependency_type:
-              dependency.type ||
-              'external',
-
-            lag_working_days:
-              Math.max(
-                0,
-                Number(
-                  dependency
-                    .lagWorkingDays ||
-                  0
-                )
-              )
+            ui_key: pkg.id,
+            predecessor_ui_key: dependency.predecessorId,
+            dependency_type: dependency.type || 'external',
+            lag_working_days: Math.max(0, Number(dependency.lagWorkingDays || 0))
           });
-        }
-      );
+        });
+      });
+    } catch (error) {
+      console.error('Master Plan - prepare packages:', error);
+
+      return { ok: false, error };
+    }
+
+    const { data: saved, error: saveError } = await supabase.rpc('save_master_plan_packages', {
+      target_scenario_id: scenarioId,
+      target_packages: packageRows,
+      target_dependencies: dependencyRows
     });
 
-    if (
-      dependencyRows.length > 0
-    ) {
-      const {
-        error:
-          dependencyInsertError
-      } = await supabase
-        .from(
-          'master_plan_package_dependencies'
-        )
-        .insert(
-          dependencyRows
-        );
+    if (saveError) {
+      console.error('Master Plan - save packages:', saveError);
 
-      if (
-        dependencyInsertError
-      ) {
-        console.error(
-          'Master Plan - insert dependency network:',
-          dependencyInsertError
-        );
-
-        return {
-          ok: false,
-          error:
-            dependencyInsertError
-        };
-      }
+      return { ok: false, error: saveError };
     }
+
+    const summary = (saved || [])[0] || {};
 
     return {
       ok: true,
-      insertedCount:
-        inserted.size,
-      dependencyCount:
-        dependencyRows.length
+      insertedCount: Number(summary.inserted_count || 0) + Number(summary.updated_count || 0),
+      dependencyCount: dependencyRows.length,
+      removedLookaheadItems: Number(summary.removed_lookahead_items || 0)
     };
   };
 
@@ -1775,14 +1286,9 @@ export default function MasterPlanPage() {
           id,
           code,
           name,
-          client_name,
           status,
-          city,
-          state_region,
-          country_code,
-          cover_image_path,
           created_at
-        `)
+        `).eq('stage', 'contract')
         .neq('status', 'archived')
         .order('created_at', { ascending: false });
 
@@ -1794,64 +1300,10 @@ export default function MasterPlanPage() {
       const projects = data || [];
       setProjects(projects);
 
-      // If the user opened a project card, restore that project directly
-      // from the URL while keeping the sidebar route unchanged.
-      const projectIdFromUrl = new URLSearchParams(window.location.search).get('projectId');
+      // Open the project chosen in the URL or last selected in PreCon.
+      const projectIdFromUrl = readPreconProjectId();
       if (projectIdFromUrl && projects.some((project) => project.id === projectIdFromUrl)) {
         setSelectedProjectId(projectIdFromUrl);
-      }
-
-      // Project covers use the same private Storage bucket already used by
-      // Project Setup and Daily Reports project cards.
-      const [coverEntries, progressResult] = await Promise.all([
-        Promise.all(
-          projects.map(async (project) => {
-            if (!project.cover_image_path) return [project.id, ''];
-
-            const { data: signedData, error: signedError } = await supabase.storage
-              .from('project-covers')
-              .createSignedUrl(project.cover_image_path, 60 * 60);
-
-            if (signedError) {
-              console.warn('Master Plan - project cover:', signedError);
-              return [project.id, ''];
-            }
-
-            return [project.id, signedData?.signedUrl || ''];
-          })
-        ),
-
-        supabase
-          .from('production_control_project_portfolio')
-          .select(`
-            project_id,
-            scope_item_count,
-            not_started_count,
-            in_progress_count,
-            completed_count,
-            overall_progress_percentage,
-            last_production_date,
-            has_production_scope
-          `)
-      ]);
-
-      setProjectCoverUrls(Object.fromEntries(coverEntries));
-
-      if (progressResult.error) {
-        console.warn(
-          'Master Plan - production control portfolio:',
-          progressResult.error
-        );
-        setProjectProgressMap({});
-      } else {
-        const progressMap = Object.fromEntries(
-          (progressResult.data || []).map((item) => [
-            item.project_id,
-            item
-          ])
-        );
-
-        setProjectProgressMap(progressMap);
       }
     };
 
@@ -1879,7 +1331,6 @@ export default function MasterPlanPage() {
       const [
         locationsResult,
         workPackagesResult,
-        servicesResult,
         scenariosResult
       ] = await Promise.all([
         supabase
@@ -1898,41 +1349,11 @@ export default function MasterPlanPage() {
           .order('name', { ascending: true }),
 
         // ----------------------------------------------------
-        // SHARED WORK PACKAGE DATABASE
+        // PROJECT WORK PACKAGES (company catalog + selection)
         // ----------------------------------------------------
-        // This is the authoritative source for selectable Master Plan
-        // Work Packages, descriptions and colors.
-        supabase.rpc(
-          'get_project_work_packages',
-          {
-            target_project_id:
-              selectedProjectId
-          }
-        ),
-
-        // ----------------------------------------------------
-        // LEGACY PROJECT SERVICES
-        // ----------------------------------------------------
-        // Retained only during the migration stage because
-        // master_plan_packages.project_service_id still references
-        // public.project_services.
-        //
-        // We NEVER store a project_work_packages UUID in that old FK.
-        supabase
-          .from('project_services')
-          .select(`
-            id,
-            project_id,
-            service_code,
-            service_name,
-            unit,
-            sequence_number,
-            is_active
-          `)
-          .eq('project_id', selectedProjectId)
-          .eq('is_active', true)
-          .order('sequence_number', { ascending: true })
-          .order('service_name', { ascending: true }),
+        supabase.rpc('get_project_work_package_options', {
+          target_project_id: selectedProjectId
+        }),
 
         supabase
           .from('master_plan_scenarios')
@@ -1956,12 +1377,11 @@ export default function MasterPlanPage() {
       const loadError =
         locationsResult.error ||
         workPackagesResult.error ||
-        servicesResult.error ||
         scenariosResult.error;
 
       if (loadError) {
         console.error('Master Plan - load:', loadError);
-        alert(`${t.scenarioLoadError}\n${loadError.message}`);
+        dialogs.notify(`${t.scenarioLoadError}\n${loadError.message}`, 'bad');
         return;
       }
 
@@ -2014,151 +1434,10 @@ export default function MasterPlanPage() {
         ].filter(Boolean)
       );
 
-      // ======================================================
-      // SHARED PROJECT WORK PACKAGE CATALOG
-      // ======================================================
-      //
-      // Work Package code, standard description and color now come
-      // from public.project_work_packages.
-      //
-      // project_services is consulted only to preserve the existing
-      // master_plan_packages.project_service_id foreign-key linkage
-      // while the normalized schema is migrated in a later step.
-      //
-      // A catalog Work Package that has no matching legacy
-      // project_services row remains perfectly valid in Master Plan;
-      // its project_service_id is simply persisted as NULL.
-      // ======================================================
-
-      const legacyProjectServices =
-        servicesResult.data || [];
-
-      const findLegacyProjectService = (
-        workPackage
-      ) => {
-        const packageCode =
-          normalizeText(
-            workPackage?.code ||
-            ''
-          ).replace(
-            /[^A-Z0-9]/g,
-            ''
-          );
-
-        const packageDescription =
-          normalizeText(
-            workPackage?.description ||
-            ''
-          );
-
-        return (
-          legacyProjectServices.find(
-            (service) =>
-              normalizeText(
-                service?.service_code ||
-                ''
-              ).replace(
-                /[^A-Z0-9]/g,
-                ''
-              ) === packageCode
-          ) ||
-          legacyProjectServices.find(
-            (service) =>
-              normalizeText(
-                service?.service_name ||
-                ''
-              ) === packageDescription
-          ) ||
-          null
-        );
-      };
-
-      const projectWorkPackageMap =
-        {};
-
-      (
-        workPackagesResult.data ||
-        []
-      ).forEach(
-        (workPackage) => {
-          const code =
-            normalizeText(
-              workPackage?.code ||
-              ''
-            ).replace(
-              /[^A-Z]/g,
-              ''
-            );
-
-          if (
-            code.length !== 3
-          ) {
-            console.warn(
-              'Master Plan - ignored invalid Work Package code:',
-              workPackage
-            );
-            return;
-          }
-
-          const color =
-            String(
-              workPackage?.color ||
-              '#64748b'
-            ).toUpperCase();
-
-          const legacyService =
-            findLegacyProjectService(
-              workPackage
-            );
-
-          projectWorkPackageMap[
-            code
-          ] = {
-            labelPt:
-              workPackage.description ||
-              code,
-
-            labelEn:
-              workPackage.description ||
-              code,
-
-            color,
-
-            text:
-              getContrastYIQ(
-                color
-              ),
-
-            // IMPORTANT:
-            // This remains the legacy public.project_services UUID
-            // when a compatible service exists. It is NOT the
-            // project_work_packages UUID.
-            projectServiceId:
-              legacyService?.id ||
-              null,
-
-            // Persistent shared Work Package identity. This stays
-            // available inside the Master Plan scenario snapshot and
-            // prepares the normalized schema migration.
-            projectWorkPackageId:
-              workPackage.id,
-
-            sourceServiceCode:
-              legacyService?.service_code ||
-              code,
-
-            unit:
-              legacyService?.unit ||
-              '',
-
-            source:
-              'project_work_packages'
-          };
-        }
-      );
-
-      setProjectServices(
-        projectWorkPackageMap
+      // The project's selected company work packages are the
+      // schedulable Master Plan activities (see buildWorkPackageCatalog).
+      applyWorkPackageOptions(
+        workPackagesResult.data || []
       );
 
       const mappedVersions = (scenariosResult.data || []).map(mapScenarioRecord);
@@ -2210,7 +1489,9 @@ export default function MasterPlanPage() {
 
       const dates = [];
       let currentDate = new Date(startDate);
-      const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      // Header labels follow the user's language (day/month order, weekday names).
+      const dayMonth = new Intl.DateTimeFormat(language, { day: '2-digit', month: '2-digit' });
+      const weekday = new Intl.DateTimeFormat(language, { weekday: 'short' });
 
       while (currentDate <= endDate) {
         const clonedDate = new Date(currentDate);
@@ -2223,8 +1504,8 @@ export default function MasterPlanPage() {
         const isHoliday = holidays.some(f => f.date === isoDate);
 
         dates.push({
-          dateLabel: `${month}/${day}`,
-          weekLabel: weekdays[weekdayIndex],
+          dateLabel: dayMonth.format(clonedDate),
+          weekLabel: weekday.format(clonedDate).replace('.', ''),
           isWeekend: weekdayIndex === 0 || weekdayIndex === 6,
           isHoliday: isHoliday,
           isoDate: isoDate // Stable database and history key
@@ -2235,7 +1516,7 @@ export default function MasterPlanPage() {
       setCalendarDates(dates);
     };
     generateCalendarDates();
-  }, [dataInicio, dataFim, holidays, selectedProjectId]);
+  }, [dataInicio, dataFim, holidays, selectedProjectId, language]);
 
   const visibleDates = calendarDates.filter(d => hideWeekends ? !d.isWeekend : true);
 
@@ -3186,13 +2467,13 @@ export default function MasterPlanPage() {
   };
 
   const handleFreezeBaseline = async () => {
-    if (!window.confirm(t.confirmFreeze)) return;
+    if (!(await dialogs.confirm(t.confirmFreeze))) return;
     if (!selectedProjectId) return;
 
     let targetScenarioId = activeScenarioId;
 
     if (!targetScenarioId) {
-      const nomeCenario = prompt(t.promptScenario);
+      const nomeCenario = await dialogs.prompt(t.promptScenario);
       if (!nomeCenario?.trim()) return;
 
       const { data: createdScenario, error: createError } = await supabase
@@ -3221,7 +2502,7 @@ export default function MasterPlanPage() {
 
       if (createError) {
         console.error('Master Plan - create baseline scenario:', createError);
-        alert(`${t.scenarioSaveError}\n${createError.message}`);
+        dialogs.notify(`${t.scenarioSaveError}\n${createError.message}`, 'bad');
         return;
       }
 
@@ -3248,7 +2529,7 @@ export default function MasterPlanPage() {
 
       if (clearError) {
         console.error('Master Plan - clear previous baseline:', clearError);
-        alert(`${t.scenarioSaveError}\n${clearError.message}`);
+        dialogs.notify(`${t.scenarioSaveError}\n${clearError.message}`, 'bad');
         return;
       }
     }
@@ -3280,7 +2561,7 @@ export default function MasterPlanPage() {
 
     if (error) {
       console.error('Master Plan - freeze baseline:', error);
-      alert(`${t.scenarioSaveError}\n${error.message}`);
+      dialogs.notify(`${t.scenarioSaveError}\n${error.message}`, 'bad');
       return;
     }
 
@@ -3319,18 +2600,17 @@ export default function MasterPlanPage() {
       );
 
     if (!packageSync.ok) {
-      alert(
+      dialogs.notify(
         `${t.packageSyncError}
 ${
           packageSync.error?.message ||
           ''
-        }`
-      );
+        }`, 'bad');
     }
   };
 
   const handleUnfreeze = async () => {
-    if (!window.confirm(t.confirmUnfreeze)) return;
+    if (!(await dialogs.confirm(t.confirmUnfreeze, { danger: true }))) return;
 
     if (activeScenarioId) {
       const { data, error } = await supabase
@@ -3360,7 +2640,7 @@ ${
 
       if (error) {
         console.error('Master Plan - unfreeze baseline:', error);
-        alert(`${t.scenarioSaveError}\n${error.message}`);
+        dialogs.notify(`${t.scenarioSaveError}\n${error.message}`, 'bad');
         return;
       }
 
@@ -3381,7 +2661,7 @@ ${
   const handleSaveScenario = async () => {
     if (!selectedProjectId) return;
 
-    const nomeCenario = prompt(t.promptScenario);
+    const nomeCenario = await dialogs.prompt(t.promptScenario);
     if (!nomeCenario?.trim()) return;
 
     const { data, error } = await supabase
@@ -3410,7 +2690,7 @@ ${
 
     if (error) {
       console.error('Master Plan - save scenario:', error);
-      alert(`${t.scenarioSaveError}\n${error.message}`);
+      dialogs.notify(`${t.scenarioSaveError}\n${error.message}`, 'bad');
       return;
     }
 
@@ -3436,17 +2716,16 @@ ${
       );
 
     if (!packageSync.ok) {
-      alert(
+      dialogs.notify(
         `${t.packageSyncError}
 ${
           packageSync.error?.message ||
           ''
-        }`
-      );
+        }`, 'bad');
       return;
     }
 
-    alert(t.scenarioSaved);
+    dialogs.notify(t.scenarioSaved, 'ok');
   };
 
   const handleUpdateScenario = async () => {
@@ -3477,7 +2756,7 @@ ${
 
     if (error) {
       console.error('Master Plan - update scenario:', error);
-      alert(`${t.scenarioSaveError}\n${error.message}`);
+      dialogs.notify(`${t.scenarioSaveError}\n${error.message}`, 'bad');
       return;
     }
 
@@ -3502,23 +2781,27 @@ ${
       );
 
     if (!packageSync.ok) {
-      alert(
+      dialogs.notify(
         `${t.packageSyncError}
 ${
           packageSync.error?.message ||
           ''
-        }`
-      );
+        }`, 'bad');
       return;
     }
 
-    alert(t.scenarioUpdated);
+    if (packageSync.removedLookaheadItems > 0) {
+      dialogs.notify(tv('removedLookaheadItems', { count: packageSync.removedLookaheadItems }), 'warn');
+      return;
+    }
+
+    dialogs.notify(t.scenarioUpdated, 'ok');
   };
 
   const handleDuplicateScenario = async () => {
     if (!selectedProjectId) return;
 
-    const nomeCopia = prompt(t.promptDuplicate);
+    const nomeCopia = await dialogs.prompt(t.promptDuplicate);
     if (!nomeCopia?.trim()) return;
 
     const { data, error } = await supabase
@@ -3548,7 +2831,7 @@ ${
 
     if (error) {
       console.error('Master Plan - duplicate scenario:', error);
-      alert(`${t.scenarioSaveError}\n${error.message}`);
+      dialogs.notify(`${t.scenarioSaveError}\n${error.message}`, 'bad');
       return;
     }
 
@@ -3572,22 +2855,21 @@ ${
       );
 
     if (!packageSync.ok) {
-      alert(
+      dialogs.notify(
         `${t.packageSyncError}
 ${
           packageSync.error?.message ||
           ''
-        }`
-      );
+        }`, 'bad');
       return;
     }
 
-    alert(t.scenarioSaved);
+    dialogs.notify(t.scenarioSaved, 'ok');
   };
 
-  const handleLoadScenario = (scenarioId) => {
+  const handleLoadScenario = async (scenarioId) => {
     if (!scenarioId) {
-      if (window.confirm(t.confirmClear)) {
+      if ((await dialogs.confirm(t.confirmClear, { danger: true }))) {
         saveHistory();
         setWorkPackages([]);
         setHolidays([]);
@@ -3616,7 +2898,7 @@ ${
       return;
     }
 
-    if (!window.confirm(t.confirmLoad)) return;
+    if (!(await dialogs.confirm(t.confirmLoad))) return;
 
     saveHistory();
 
@@ -3629,7 +2911,7 @@ ${
   const handleAddHoliday = (e) => {
     e.preventDefault();
     if (newHolidayDate && newHolidayDescription) {
-      if (holidays.find(f => f.date === newHolidayDate)) return alert(t.errHolidayExists);
+      if (holidays.find(f => f.date === newHolidayDate)) return dialogs.notify(t.errHolidayExists, 'warn');
       saveHistory();
       setHolidays([...holidays, { date: newHolidayDate, description: newHolidayDescription }]);
       setNewHolidayDate(''); 
@@ -3649,8 +2931,8 @@ ${
   
   const handleUpdateSectionTitle = (secId, newTitle) => setSections(sections.map(s => s.id === secId ? { ...s, title: newTitle } : s));
   
-  const handleRemoveSection = (secId) => { 
-    if(window.confirm(t.confirmDelSection)) {
+  const handleRemoveSection = async (secId) => {
+    if (await dialogs.confirm(t.confirmDelSection, { danger: true })) {
       saveHistory();
       setSections(sections.filter(s => s.id !== secId)); 
     }
@@ -3766,7 +3048,7 @@ ${
       null;
 
     if (!config) {
-      alert(t.noSequenceConfigured);
+      dialogs.notify(t.noSequenceConfigured, 'warn');
       return;
     }
 
@@ -4033,22 +3315,22 @@ ${
     return endIndex;
   };
 
-  const gerarSequenciaTrabalho = () => {
+  const gerarSequenciaTrabalho = async () => {
     const selectedLocations =
       sequenceLocations.filter((item) => item.selected);
 
     if (selectedLocations.length === 0) {
-      alert(t.selectAtLeastOneLocation);
+      dialogs.notify(t.selectAtLeastOneLocation, 'warn');
       return;
     }
 
     if (sequenceActivities.length === 0) {
-      alert(t.selectAtLeastOneActivity);
+      dialogs.notify(t.selectAtLeastOneActivity, 'warn');
       return;
     }
 
     if (sequenceStartType === 'date' && !sequenceStartDate) {
-      alert(t.errSelectDate);
+      dialogs.notify(t.errSelectDate, 'warn');
       return;
     }
 
@@ -4056,7 +3338,7 @@ ${
       sequenceStartType === 'predecessor' &&
       !sequencePredecessor
     ) {
-      alert(t.errSelectPred);
+      dialogs.notify(t.errSelectPred, 'warn');
       return;
     }
 
@@ -4064,7 +3346,7 @@ ${
 
     if (
       isRegenerating &&
-      !window.confirm(t.confirmRegenerate)
+      !(await dialogs.confirm(t.confirmRegenerate, { danger: true }))
     ) {
       return;
     }
@@ -4297,7 +3579,7 @@ ${
           locationId: location.locationId || null,
           locationPath: location.label || '',
           projectServiceId: service?.projectServiceId || null,
-          projectWorkPackageId: service?.projectWorkPackageId || null,
+          organizationWorkPackageId: service?.organizationWorkPackageId || null,
           packageStartType:
             isFirstGeneratedPackage &&
             sequenceStartType === 'date'
@@ -4401,22 +3683,21 @@ ${
     setSequenceEditingId(sequenceGroupId);
     setShowSequenceModal(false);
 
-    alert(
+    dialogs.notify(
       isRegenerating
         ? t.sequenceRegenerated
-        : `${generated.length} ${t.packagesWillBeCreated}.`
-    );
+        : translate('masterPlan.packagesCreated', { count: generated.length }), 'ok');
   };
 
   const handleInsertAutomationPackage = (e) => {
     e.preventDefault();
     if (!packageActivity || !packageRowId || packageDuration < 1) {
-      alert(t.errFillFields);
+      dialogs.notify(t.errFillFields, 'warn');
       return;
     }
 
-    if (packageStartType === 'date' && !packageStartDate) return alert(t.errSelectDate);
-    if (packageStartType === 'predecessor' && !predecessorPackageId) return alert(t.errSelectPred);
+    if (packageStartType === 'date' && !packageStartDate) return dialogs.notify(t.errSelectDate, 'warn');
+    if (packageStartType === 'predecessor' && !predecessorPackageId) return dialogs.notify(t.errSelectPred, 'warn');
 
     saveHistory();
 
@@ -4477,8 +3758,8 @@ ${
         selectedService?.projectServiceId ||
         null,
 
-      projectWorkPackageId:
-        selectedService?.projectWorkPackageId ||
+      organizationWorkPackageId:
+        selectedService?.organizationWorkPackageId ||
         null,
 
       packageStartType: packageStartType,
@@ -4517,736 +3798,516 @@ ${
 
   let globalIdCounter = 1;
 
-  const addButtonStyle = {
-    backgroundColor: '#ebf8ff', color: '#2b6cb0', border: '1px dashed #3182ce',
-    padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold',
-    fontSize: '0.75rem', display: 'inline-block', marginTop: '5px'
+  const cx = (...names) => names.filter(Boolean).join(' ');
+  const selectedLocationCount = sequenceLocations.filter((item) => item.selected).length;
+  const projectOptions = projects.map((project) => (
+    <option key={project.id} value={project.id}>
+      {project.code ? `${project.code} – ` : ''}{project.name}
+    </option>
+  ));
+  const handleProjectSelect = (event) => {
+    const projectId = event.target.value;
+    setSelectedProjectId(projectId);
+    rememberPreconProjectId(projectId);
+  };
+  // Calendar markers keep their codes (OFF, FER); their names follow the language.
+  const activityLabel = (code, info) =>
+    code === 'OFF' ? t.weekend : code === 'FER' ? t.holiday : (info?.labelEn || code);
+  const activityOptions = Object.entries(workPackageCatalog)
+    .filter(([code]) => code !== '' && code !== 'OFF' && code !== 'FER');
+  const formatHolidayDate = (isoDate) => {
+    const [year, month, day] = String(isoDate || '').split('-').map(Number);
+    if (!year || !month || !day) return isoDate || '';
+    return new Intl.DateTimeFormat(language, { day: '2-digit', month: '2-digit', year: 'numeric' })
+      .format(new Date(year, month - 1, day));
   };
 
-  // ----------------------------------------------------
-  // MASTER PLAN PROJECT SELECTOR
-  // ----------------------------------------------------
-  // The sidebar opens this portfolio view first. Selecting a project keeps
-  // the existing Master Plan workspace on the same route using ?projectId=.
+  // No project selected yet: a compact picker (the Overview tab lists every project).
   if (!selectedProjectId) {
     return (
-      <main style={{ minHeight: 'calc(100vh - 80px)', padding: '24px 22px 50px', background: 'radial-gradient(circle at top right, rgba(8, 170, 150, 0.06), transparent 28%), #f8fafc', fontFamily: 'sans-serif' }}>
-        <section style={{ marginBottom: '30px' }}>
-          <p style={{ margin: '0 0 10px', color: '#009f8e', fontSize: '0.78rem', fontWeight: 900, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
-            PLANNING &amp; PRODUCTION CONTROL
-          </p>
-          <h1 style={{ margin: 0, color: '#061b2f', fontSize: '3.35rem', lineHeight: 1, fontWeight: 900, letterSpacing: '-0.04em' }}>
-            Master Plan
-          </h1>
-          <p style={{ margin: '18px 0 0', color: '#536a86', fontSize: '0.95rem' }}>
-            Select a project to access its Master Plan.
-          </p>
-        </section>
-
-        {projects.length === 0 ? (
-          <div style={{ maxWidth: '620px', padding: '28px', border: '1px dashed #cbd5e1', borderRadius: '14px', background: '#fff', color: '#64748b' }}>
-            No projects are available for Master Plan.
-          </div>
-        ) : (
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 365px))', gap: '22px', alignItems: 'start' }}>
-            {projects.map((project) => {
-              const locationText = [project.city, project.state_region].filter(Boolean).join(', ');
-              const coverUrl = projectCoverUrls[project.id];
-              const progressRecord = projectProgressMap[project.id] || null;
-              const hasProductionScope = Boolean(progressRecord?.has_production_scope);
-              const rawProgress = Number(progressRecord?.overall_progress_percentage);
-              const progress = hasProductionScope && Number.isFinite(rawProgress)
-                ? Math.max(0, Math.min(100, rawProgress))
-                : null;
-              const progressLabel = progress === null
-                ? '—'
-                : `${Math.round(progress)}%`;
-              const progressHelper = !hasProductionScope
-                ? 'Production Control data not available yet.'
-                : progressRecord.completed_count > 0
-                  ? `${progressRecord.completed_count} of ${progressRecord.scope_item_count} scope items completed.`
-                  : progressRecord.in_progress_count > 0
-                    ? `${progressRecord.in_progress_count} scope item${progressRecord.in_progress_count === 1 ? '' : 's'} in progress.`
-                    : 'Production scope available. Field production has not started yet.';
-
-              return (
-                <article key={project.id} style={{ overflow: 'hidden', border: '1px solid #d9e2ec', borderRadius: '15px', background: '#fff', boxShadow: '0 14px 30px rgba(15, 23, 42, 0.055)' }}>
-                  <div style={{ position: 'relative', height: '215px', overflow: 'hidden', background: 'linear-gradient(135deg, #173b5f, #2f6e78)' }}>
-                    {coverUrl ? (
-                      <img src={coverUrl} alt={`${project.name} project`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.72)', fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.08em' }}>
-                        PROJECT COVER
-                      </div>
-                    )}
-                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(4, 24, 43, 0.86) 0%, rgba(4, 24, 43, 0.2) 55%, rgba(4, 24, 43, 0.05) 100%)' }} />
-                    <div style={{ position: 'absolute', left: '18px', right: '18px', bottom: '17px', color: '#fff' }}>
-                      <div style={{ marginBottom: '6px', fontSize: '0.68rem', fontWeight: 900, letterSpacing: '0.12em' }}>
-                        {project.code || 'UNASSIGNED'}
-                      </div>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 900, letterSpacing: '0.02em', textTransform: 'uppercase' }}>
-                        {project.name}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '18px 19px 16px' }}>
-                    <p style={{ margin: '0 0 7px', color: '#00a18f', fontSize: '0.63rem', fontWeight: 900, letterSpacing: '0.13em' }}>PROJECT</p>
-                    <h2 style={{ margin: '0 0 7px', color: '#061b2f', fontSize: '1.05rem', fontWeight: 900 }}>{project.name}</h2>
-                    <p style={{ margin: '0 0 5px', color: '#536a86', fontSize: '0.78rem' }}>{project.client_name || 'Client not assigned'}</p>
-                    <p style={{ margin: 0, color: '#7890a8', fontSize: '0.74rem' }}>{locationText || project.country_code || 'Location not assigned'}</p>
-
-                    <div style={{ height: '1px', margin: '19px 0 17px', background: '#e6edf3' }} />
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '11px' }}>
-                      <span style={{ color: '#36516d', fontSize: '0.68rem', fontWeight: 900 }}>Overall Progress</span>
-                      <span style={{ color: progress === null ? '#91a3b5' : '#00a18f', fontSize: '0.72rem', fontWeight: 900 }}>
-                        {progressLabel}
-                      </span>
-                    </div>
-                    <div style={{ width: '100%', height: '7px', overflow: 'hidden', borderRadius: '999px', background: '#e5ebf0' }}>
-                      <div
-                        style={{
-                          width: progress === null ? '0%' : `${progress}%`,
-                          height: '100%',
-                          borderRadius: '999px',
-                          background: '#00aa96',
-                          transition: 'width 180ms ease'
-                        }}
-                      />
-                    </div>
-                    <p style={{ margin: '9px 0 0', color: '#91a3b5', fontSize: '0.66rem' }}>
-                      {progressHelper}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.href = `/dashboard/planning/master-plan?projectId=${project.id}`;
-                    }}
-                    style={{ width: '100%', minHeight: '48px', padding: '0 19px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: 0, borderTop: '1px solid #e6edf3', background: '#fff', color: '#071c31', cursor: 'pointer', fontSize: '0.73rem', fontWeight: 900, textAlign: 'left' }}
-                  >
-                    <span>Open Project</span>
-                    <span style={{ width: '28px', height: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: '#e8faf6', color: '#008f80', fontSize: '1rem' }}>→</span>
-                  </button>
-                </article>
-              );
-            })}
-          </section>
-        )}
-      </main>
+      <div className={styles.frame}>
+        <div className={styles.pickProject}>
+          <Empty
+            title={t.noProject}
+            text={projects.length ? t.noProjectDesc : t.noProjectsAvailable}
+            action={projects.length > 0 && (
+              <select value="" onChange={handleProjectSelect} aria-label={t.projectLabel}>
+                <option value="">{t.selectProject}</option>
+                {projectOptions}
+              </select>
+            )}
+          />
+        </div>
+        {dialogs.element}
+      </div>
     );
   }
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', height: 'calc(100vh - 100px)', display: 'flex', flexDirection: 'column' }}>
-      
+    <div className={styles.frame}>
       <datalist id="lista-zonas-coleta">
         {zonasColeta.map((zona, idx) => <option key={idx} value={zona} />)}
       </datalist>
 
-      <div style={{ marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '15px' }}>
-        <div>
-          <h1 style={{ color: '#2A4365', margin: 0, fontStyle: 'italic', fontSize: '1.5rem', marginBottom: '10px' }}>
-            {t.title}
-          </h1>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              <select
-                value={selectedProjectId}
-                onChange={(e) => { const projectId = e.target.value; setSelectedProjectId(projectId); if (projectId) window.history.replaceState({}, '', `/dashboard/planning/master-plan?projectId=${projectId}`); }}
-                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e0', minWidth: '300px', fontSize: '0.9rem', outline: 'none' }}
-              >
-                <option value="">{t.selectProject}</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.code ? `${p.code} - ` : ''}{p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* Project, scenario, baseline and schedule window */}
+      <div className={styles.toolbar}>
+        <div className={styles.group}>
+          <label className={styles.control}>
+            <span>{t.projectLabel}</span>
+            <select className={styles.projectSelect} value={selectedProjectId} onChange={handleProjectSelect}>
+              {projectOptions}
+            </select>
+          </label>
 
-            {selectedProjectId && (
-              <>
-                {!isBaselineFrozen && (
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', borderLeft: '2px solid #e2e8f0', paddingLeft: '15px', borderRight: '2px solid #e2e8f0', paddingRight: '15px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: '#718096', marginBottom: '2px', textTransform: 'uppercase' }}>{t.scenarioLabel}</label>
-                      <select
-                        value={activeScenarioId || ''}
-                        onChange={(e) => handleLoadScenario(e.target.value)}
-                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0', fontSize: '0.85rem', outline: 'none', minWidth: '200px', backgroundColor: activeScenarioId ? '#ebf8ff' : '#fff' }}
-                      >
-                        <option value="">{activeScenarioId === null && workPackages.length > 0 ? t.unsavedEdit : t.newBlank}</option>
-                        {scenarios.map(v => <option key={v.id} value={v.id}>{v.nome} ({v.data})</option>)}
-                      </select>
-                    </div>
-
-                    {activeScenarioId === null ? (
-                      <button 
-                        onClick={handleSaveScenario} 
-                        disabled={workPackages.length === 0}
-                        style={{ backgroundColor: '#4a5568', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: workPackages.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.8rem', opacity: workPackages.length === 0 ? 0.5 : 1, marginTop: '14px' }}
-                      >
-                        {t.saveScenario}
-                      </button>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '5px', marginTop: '14px' }}>
-                        <button 
-                          onClick={handleUpdateScenario} 
-                          style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
-                          title="Update current scenario"
-                        >
-                          {t.updateScenario}
-                        </button>
-                        <button 
-                          onClick={handleDuplicateScenario} 
-                          style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
-                          title="Create a copy of this scenario"
-                        >
-                          {t.duplicateScenario}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  {!isBaselineFrozen ? (
-                    <button onClick={handleFreezeBaseline} style={{ backgroundColor: '#1a365d', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginTop: '14px' }}>
-                      {t.freezeBase}
-                    </button>
-                  ) : (
-                    <>
-                      <button onClick={handleUnfreeze} style={{ backgroundColor: '#e2e8f0', color: '#4a5568', border: '1px solid #cbd5e0', padding: '8px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>
-                        {t.editBase}
-                      </button>
-                      <div style={{ display: 'flex', backgroundColor: '#edf2f7', borderRadius: '6px', border: '1px solid #cbd5e0', overflow: 'hidden' }}>
-                        <button 
-                          onClick={() => setControlMode(false)} 
-                          style={{ backgroundColor: !controlMode ? '#3182ce' : 'transparent', color: !controlMode ? 'white' : '#4a5568', border: 'none', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
-                        >
-                          {t.planning}
-                        </button>
-                        <button 
-                          onClick={() => setControlMode(true)} 
-                          style={{ backgroundColor: controlMode ? '#dd6b20' : 'transparent', color: controlMode ? 'white' : '#4a5568', border: 'none', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
-                        >
-                          {t.control}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          {!isBaselineFrozen && (
+            <>
+              <label className={styles.control}>
+                <span>{t.scenarioLabel}</span>
+                <select className={styles.scenarioSelect} value={activeScenarioId || ''} onChange={(e) => handleLoadScenario(e.target.value)}>
+                  <option value="">{activeScenarioId === null && workPackages.length > 0 ? t.unsavedEdit : t.newBlank}</option>
+                  {scenarios.map((v) => <option key={v.id} value={v.id}>{v.nome} ({v.data})</option>)}
+                </select>
+              </label>
+              {activeScenarioId === null ? (
+                <button type="button" className={ui.btn} onClick={handleSaveScenario} disabled={workPackages.length === 0}>
+                  {t.saveScenario}
+                </button>
+              ) : (
+                <>
+                  <button type="button" className={ui.btn} onClick={handleUpdateScenario} title={t.updateScenarioHint}>{t.updateScenario}</button>
+                  <button type="button" className={ui.btnGhost} onClick={handleDuplicateScenario} title={t.duplicateScenarioHint}>{t.duplicateScenario}</button>
+                </>
+              )}
+            </>
+          )}
         </div>
 
-        {selectedProjectId && (
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button onClick={abrirGeradorSequencia} disabled={isBaselineFrozen} style={{ backgroundColor: '#008f8c', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.6 : 1 }}>
-              {t.generateSequence}
-            </button>
+        <div className={styles.group}>
+          {!isBaselineFrozen ? (
+            <button type="button" className={ui.btn} onClick={handleFreezeBaseline}>{t.freezeBase}</button>
+          ) : (
+            <>
+              <span className={styles.state}><Badge tone="ok">{t.baselineFrozen}</Badge></span>
+              <button type="button" className={ui.btnGhost} onClick={handleUnfreeze}>{t.editBase}</button>
+              <Segments
+                items={[{ value: 'plan', label: t.planning }, { value: 'control', label: t.control }]}
+                value={controlMode ? 'control' : 'plan'}
+                onChange={(value) => setControlMode(value === 'control')}
+              />
+            </>
+          )}
+        </div>
 
-            <button
-              onClick={abrirConfiguracoesSequencia}
-              disabled={
-                isBaselineFrozen ||
-                sequenceConfigurations.length === 0
-              }
-              title={
-                sequenceConfigurations.length === 0
-                  ? t.noSequenceConfigured
-                  : t.editSequenceHelp
-              }
-              style={{
-                backgroundColor:
-                  sequenceConfigurations.length === 0 || isBaselineFrozen
-                    ? '#cbd5e1'
-                    : '#475569',
-                color: 'white',
-                border: 'none',
-                padding: '8px 15px',
-                borderRadius: '6px',
-                cursor:
-                  sequenceConfigurations.length === 0 || isBaselineFrozen
-                    ? 'not-allowed'
-                    : 'pointer',
-                fontWeight: 'bold',
-                fontSize: '0.85rem',
-                opacity:
-                  sequenceConfigurations.length === 0 || isBaselineFrozen
-                    ? 0.65
-                    : 1
-              }}
-            >
-              {t.sequenceSettings}
-            </button>
-
-            <button onClick={() => setShowWorkPackageModal(true)} disabled={isBaselineFrozen} style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.6 : 1 }}>
-              {t.insertPackage}
-            </button>
-
-            <button 
-              onClick={handleUndo} 
-              disabled={history.length === 0 || isBaselineFrozen} 
-              style={{ backgroundColor: history.length === 0 ? '#e2e8f0' : '#e53e3e', color: history.length === 0 ? '#a0aec0' : 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: history.length === 0 || isBaselineFrozen ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
-            >
-              ↩ {t.undoBtn}
-            </button>
-
-            <button onClick={() => setHideWeekends(!hideWeekends)} style={{ backgroundColor: hideWeekends ? '#2a4365' : '#edf2f7', color: hideWeekends ? 'white' : '#4a5568', border: '1px solid #cbd5e0', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
-              {hideWeekends ? t.showWeekends : t.hideWeekends}
-            </button>
-            <button onClick={() => setShowHolidaysModal(true)} style={{ backgroundColor: '#dd6b20', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
-              {t.holidaysBtn}
-            </button>
-            <button onClick={() => { setPdfConfig(prev => ({ ...prev, formato: formatoIdealCode })); setShowPdfModal(true); }} style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
-              {t.exportPdf}
-            </button>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: '#f7fafc', padding: '8px 15px', borderRadius: '8px', border: '1px solid #cbd5e0' }}>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#4a5568', marginBottom: '2px' }}>{t.startPrev}</label>
-                <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} disabled={isBaselineFrozen} style={{ padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none', color: '#2d3748', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.7 : 1 }} />
-              </div>
-              <span style={{ color: '#a0aec0', fontWeight: 'bold', marginTop: '12px' }}>➞</span>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#4a5568', marginBottom: '2px' }}>{t.endPrev}</label>
-                <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} disabled={isBaselineFrozen} style={{ padding: '4px 6px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none', color: '#2d3748', cursor: isBaselineFrozen ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: isBaselineFrozen ? 0.7 : 1 }} />
-              </div>
-            </div>
+        <div className={cx(styles.group, styles.push)}>
+          <div className={styles.dateRange}>
+            <label className={styles.control}>
+              <span>{t.startPrev}</span>
+              <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} disabled={isBaselineFrozen} />
+            </label>
+            <span className={styles.dateArrow} aria-hidden="true">→</span>
+            <label className={styles.control}>
+              <span>{t.endPrev}</span>
+              <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} disabled={isBaselineFrozen} />
+            </label>
           </div>
-        )}
+        </div>
       </div>
 
-      {!selectedProjectId && (
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f7fafc', borderRadius: '8px', border: '2px dashed #cbd5e0' }}>
-          <div style={{ textAlign: 'center', color: '#718096' }}>
-            <span style={{ fontSize: '3rem', display: 'block', marginBottom: '10px' }}></span>
-            <h2>{t.noProject}</h2>
-            <p>{t.noProjectDesc}</p>
-          </div>
+      {/* Planning actions */}
+      <div className={styles.toolbar}>
+        <div className={styles.group}>
+          <button type="button" className={ui.btn} onClick={() => setShowPackagesModal(true)}>
+            {t.workPackagesBtn} · {activityOptions.length}
+          </button>
+          <button type="button" className={ui.btnPrimary} onClick={abrirGeradorSequencia} disabled={isBaselineFrozen || activityOptions.length === 0}>
+            <Icon name="plus" size={18} />{t.generateSequence}
+          </button>
+          <button
+            type="button"
+            className={ui.btn}
+            onClick={abrirConfiguracoesSequencia}
+            disabled={isBaselineFrozen || sequenceConfigurations.length === 0}
+            title={sequenceConfigurations.length === 0 ? t.noSequenceConfigured : t.editSequenceHelp}
+          >
+            {t.sequenceSettings}
+          </button>
+          <button type="button" className={ui.btn} onClick={() => setShowWorkPackageModal(true)} disabled={isBaselineFrozen}>
+            {t.insertPackage}
+          </button>
+          <button type="button" className={ui.btnGhost} onClick={handleUndo} disabled={history.length === 0 || isBaselineFrozen}>
+            ↩ {t.undoBtn}
+          </button>
         </div>
+        <div className={cx(styles.group, styles.push)}>
+          <button type="button" className={ui.btnGhost} onClick={() => setHideWeekends(!hideWeekends)}>
+            {hideWeekends ? t.showWeekends : t.hideWeekends}
+          </button>
+          <button type="button" className={ui.btnGhost} onClick={() => setShowHolidaysModal(true)}>{t.holidaysBtn}</button>
+          <button type="button" className={ui.btn} onClick={() => { setPdfConfig((prev) => ({ ...prev, formato: formatoIdealCode })); setShowPdfModal(true); }}>
+            {t.exportPdf}
+          </button>
+        </div>
+      </div>
+
+      {/* Company work packages used by this project */}
+      {showPackagesModal && (
+        <Dialog
+          title={t.workPackagesTitle}
+          text={t.workPackagesText}
+          onClose={() => setShowPackagesModal(false)}
+          footer={(
+            <>
+              <a className={cx(ui.btnGhost, styles.dialogFootNote)} href="/settings/work-packages">{t.manageCatalog}</a>
+              <button type="button" className={ui.btnPrimary} onClick={() => setShowPackagesModal(false)}>{t.workPackagesDone}</button>
+            </>
+          )}
+        >
+          {workPackageOptions.length === 0 ? (
+            <p className={styles.hint}>{t.workPackagesEmptyCatalog}</p>
+          ) : (
+            <div className={styles.list} style={{ maxHeight: 'none' }}>
+              {workPackageOptions.map((option) => (
+                <label
+                  key={option.organization_work_package_id}
+                  className={cx(styles.listRow, option.selected_for_project && styles.listRowOn)}
+                  style={{ gridTemplateColumns: '20px 14px 44px minmax(0, 1fr) auto', cursor: 'pointer' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(option.selected_for_project)}
+                    disabled={packageSavingId === option.organization_work_package_id || (!option.organization_package_active && !option.selected_for_project)}
+                    onChange={() => toggleProjectWorkPackage(option)}
+                  />
+                  <span className={styles.swatch} style={{ backgroundColor: option.color || '#64748b' }} />
+                  <strong>{option.code}</strong>
+                  <span className={styles.listText} title={option.description}>{option.description}</span>
+                  {!option.organization_package_active ? <Badge tone="warn">{t.workPackagesInactive}</Badge> : <span />}
+                </label>
+              ))}
+            </div>
+          )}
+        </Dialog>
       )}
 
-      {/* MODAL: WORK SEQUENCE GENERATOR */}
+      {/* Work sequence generator */}
       {showSequenceModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3500, padding: '20px' }}>
-          <div style={{ backgroundColor: 'white', width: 'min(1050px, 96vw)', maxHeight: '92vh', overflowY: 'auto', borderRadius: '12px', boxShadow: '0 24px 70px rgba(0,0,0,0.28)', fontFamily: 'sans-serif' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 2 }}>
+        <Dialog
+          size="wide"
+          title={sequenceEditingId ? t.sequenceSettings : t.sequenceGenerator}
+          text={sequenceEditingId ? t.editSequenceHelp : undefined}
+          onClose={() => setShowSequenceModal(false)}
+          footer={(
+            <>
+              <span className={styles.dialogFootNote}>
+                {translate('masterPlan.sequenceSummary', {
+                  locations: selectedLocationCount,
+                  activities: sequenceActivities.length,
+                  packages: selectedLocationCount * sequenceActivities.length,
+                })}
+              </span>
+              <button type="button" className={ui.btn} onClick={() => setShowSequenceModal(false)}>{t.mPkgCancel}</button>
+              <button type="button" className={ui.btnPrimary} onClick={gerarSequenciaTrabalho}>
+                {sequenceEditingId ? t.regenerateSequence : t.generatePackages}
+              </button>
+            </>
+          )}
+        >
+          <label className={ui.field} style={{ maxWidth: 420 }}>
+            <span className={ui.fieldLabel}>{t.sequenceName}</span>
+            <input type="text" value={sequenceName} onChange={(e) => setSequenceName(e.target.value)} />
+          </label>
+
+          <div className={styles.grid2}>
+            <section className={styles.box}>
               <div>
-                <div style={{ fontSize: '0.7rem', fontWeight: 900, letterSpacing: '0.08em', color: '#008f8c', marginBottom: '4px' }}>MASTER PLAN</div>
-                <h2 style={{ margin: 0, color: '#0b2239' }}>
-                  {sequenceEditingId ? t.sequenceSettings : t.sequenceGenerator}
-                </h2>
-                {sequenceEditingId && (
-                  <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '0.75rem' }}>
-                    {t.editSequenceHelp}
-                  </p>
-                )}
+                <h3 className={styles.boxTitle}>{t.sequenceLocations}</h3>
+                <p className={styles.hint}>{t.dragToReorder}</p>
               </div>
-              <button type="button" onClick={() => setShowSequenceModal(false)} style={{ border: 'none', background: 'transparent', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
-            </div>
-
-            <div style={{ padding: '18px 24px 0' }}>
-              <label style={{ display: 'block', marginBottom: '5px', color: '#475569', fontSize: '0.72rem', fontWeight: 800 }}>
-                {t.sequenceName}
-              </label>
-              <input
-                type="text"
-                value={sequenceName}
-                onChange={(e) => setSequenceName(e.target.value)}
-                style={{ width: '100%', maxWidth: '420px', padding: '9px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#0f172a' }}
-              />
-            </div>
-
-            <div style={{ padding: '18px 24px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-              <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                <h3 style={{ margin: '0 0 5px', color: '#0b2239' }}>{t.sequenceLocations}</h3>
-                <div style={{ marginBottom: '12px', fontSize: '0.72rem', color: '#64748b' }}>{t.dragToReorder}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', maxHeight: '330px', overflowY: 'auto' }}>
-                  {sequenceLocations.map((location, index) => (
+              <div className={styles.list}>
+                {sequenceLocations.map((location, index) => {
+                  const over = sequenceDragOver?.type === 'location' && sequenceDragOver?.index === index;
+                  return (
                     <div
                       key={location.rowId}
                       draggable
                       onDragStart={() => setSequenceDrag({ type: 'location', index })}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setSequenceDragOver({ type: 'location', index });
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        finalizarDragSequencia('location', index);
-                      }}
-                      onDragEnd={() => {
-                        setSequenceDrag(null);
-                        setSequenceDragOver(null);
-                      }}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '28px 26px 1fr 30px 30px',
-                        gap: '7px',
-                        alignItems: 'center',
-                        padding: '8px',
-                        backgroundColor:
-                          sequenceDragOver?.type === 'location' &&
-                          sequenceDragOver?.index === index
-                            ? '#ccfbf1'
-                            : location.selected
-                              ? '#f0fdfa'
-                              : '#f8fafc',
-                        border:
-                          sequenceDragOver?.type === 'location' &&
-                          sequenceDragOver?.index === index
-                            ? '2px solid #14b8a6'
-                            : '1px solid #e2e8f0',
-                        borderRadius: '7px',
-                        cursor: 'grab'
-                      }}
+                      onDragOver={(e) => { e.preventDefault(); setSequenceDragOver({ type: 'location', index }); }}
+                      onDrop={(e) => { e.preventDefault(); finalizarDragSequencia('location', index); }}
+                      onDragEnd={() => { setSequenceDrag(null); setSequenceDragOver(null); }}
+                      className={cx(styles.listRow, location.selected && styles.listRowOn, over && styles.listRowOver)}
+                      style={{ gridTemplateColumns: '20px 18px minmax(0, 1fr) 32px 32px' }}
                     >
-                      <input type="checkbox" checked={location.selected} onChange={(e) => setSequenceLocations((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: e.target.checked } : item))} />
-                      <span title={t.dragToReorder} style={{ color: '#94a3b8', fontWeight: 900, letterSpacing: '-2px', cursor: 'grab', userSelect: 'none' }}>⋮⋮</span>
-                      <div title={location.label} style={{ minWidth: 0, fontSize: '0.78rem', fontWeight: 700, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{index + 1}. {location.label}</div>
-                      <button type="button" disabled={index === 0} onClick={() => moveSequence(setSequenceLocations, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↑</button>
-                      <button type="button" disabled={index === sequenceLocations.length - 1} onClick={() => moveSequence(setSequenceLocations, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↓</button>
+                      <input
+                        type="checkbox"
+                        checked={location.selected}
+                        aria-label={location.label}
+                        onChange={(e) => setSequenceLocations((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: e.target.checked } : item))}
+                      />
+                      <span className={styles.handle} title={t.dragToReorder} aria-hidden="true">⋮⋮</span>
+                      <span className={styles.listText} title={location.label}>{index + 1}. {location.label}</span>
+                      <button type="button" className={styles.iconBtn} disabled={index === 0} onClick={() => moveSequence(setSequenceLocations, index, -1)} aria-label={t.moveUp}>↑</button>
+                      <button type="button" className={styles.iconBtn} disabled={index === sequenceLocations.length - 1} onClick={() => moveSequence(setSequenceLocations, index, 1)} aria-label={t.moveDown}>↓</button>
                     </div>
-                  ))}
-                </div>
-              </section>
-
-              <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                <h3 style={{ margin: '0 0 5px', color: '#0b2239' }}>{t.sequenceActivities}</h3>
-                <div style={{ marginBottom: '12px', fontSize: '0.72rem', color: '#64748b' }}>{t.dragToReorder}</div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', marginBottom: '12px' }}>
-                  <select value={sequenceNewActivity} onChange={(e) => setSequenceNewActivity(e.target.value)} style={{ padding: '9px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
-                    <option value="">{t.mPkgSelectAct}</option>
-                    {Object.entries(workPackageCatalog).map(([code, service]) => (
-                      <option key={code} value={code}>{code} - {service.labelEn}</option>
-                    ))}
-                  </select>
-                  <button type="button" onClick={addSequenceActivity} style={{ padding: '9px 12px', border: 'none', borderRadius: '6px', backgroundColor: '#0b2239', color: 'white', fontWeight: 800, cursor: 'pointer' }}>{t.addActivity}</button>
-                </div>
-
-                {sequenceActivities.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '24px 28px 1fr 78px 78px 30px 30px 30px', gap: '7px', padding: '0 8px 5px', fontSize: '0.64rem', fontWeight: 800, color: '#64748b' }}>
-                    <span></span>
-                    <span>#</span>
-                    <span>ACTIVITY</span>
-                    <span>{t.durationDays}</span>
-                    <span>{t.lagWorkingDays}</span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', maxHeight: '275px', overflowY: 'auto' }}>
-                  {sequenceActivities.map((activity, index) => {
-                    const service = workPackageCatalog[activity.code];
-                    return (
-                      <div
-                        key={activity.id}
-                        draggable
-                        onDragStart={() => setSequenceDrag({ type: 'activity', index })}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          setSequenceDragOver({ type: 'activity', index });
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          finalizarDragSequencia('activity', index);
-                        }}
-                        onDragEnd={() => {
-                          setSequenceDrag(null);
-                          setSequenceDragOver(null);
-                        }}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '24px 28px 1fr 78px 78px 30px 30px 30px',
-                          gap: '7px',
-                          alignItems: 'center',
-                          padding: '8px',
-                          border:
-                            sequenceDragOver?.type === 'activity' &&
-                            sequenceDragOver?.index === index
-                              ? '2px solid #14b8a6'
-                              : '1px solid #e2e8f0',
-                          backgroundColor:
-                            sequenceDragOver?.type === 'activity' &&
-                            sequenceDragOver?.index === index
-                              ? '#f0fdfa'
-                              : 'white',
-                          borderRadius: '7px',
-                          cursor: 'grab'
-                        }}
-                      >
-                        <span title={t.dragToReorder} style={{ color: '#94a3b8', fontWeight: 900, letterSpacing: '-2px', cursor: 'grab', userSelect: 'none' }}>⋮⋮</span>
-                        <strong style={{ color: '#008f8c' }}>{index + 1}</strong>
-                        <div style={{ minWidth: 0, fontSize: '0.76rem', fontWeight: 700 }}>{activity.code} · {service?.labelEn}</div>
-                        <input type="number" min="1" title={t.durationDays} value={activity.duration} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, duration: Math.max(1, Number(e.target.value || 1)) } : item))} style={{ width: '100%', padding: '7px', border: '1px solid #cbd5e1', borderRadius: '5px' }} />
-                        <input type="number" min="0" title={t.lagWorkingDays} value={activity.lag ?? 0} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, lag: Math.max(0, Number(e.target.value || 0)) } : item))} style={{ width: '100%', padding: '7px', border: '1px solid #cbd5e1', borderRadius: '5px' }} />
-                        <button type="button" disabled={index === 0} onClick={() => moveSequence(setSequenceActivities, index, -1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↑</button>
-                        <button type="button" disabled={index === sequenceActivities.length - 1} onClick={() => moveSequence(setSequenceActivities, index, 1)} style={{ height: '28px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white' }}>↓</button>
-                        <button type="button" onClick={() => setSequenceActivities((current) => current.filter((_, itemIndex) => itemIndex !== index))} style={{ height: '28px', border: 'none', borderRadius: '5px', background: '#fff1f2', color: '#e11d48', fontWeight: 900, cursor: 'pointer' }}>×</button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section style={{ gridColumn: '1 / -1', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                <h3 style={{ margin: '0 0 12px', color: '#0b2239' }}>{t.sequenceStart}</h3>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
-                    <input type="radio" checked={sequenceStartType === 'date'} onChange={() => setSequenceStartType('date')} />
-                    {t.specificStartDate}
-                  </label>
-                  <input type="date" disabled={sequenceStartType !== 'date'} value={sequenceStartDate} onChange={(e) => setSequenceStartDate(e.target.value)} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }} />
-
-                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
-                    <input type="radio" checked={sequenceStartType === 'predecessor'} onChange={() => setSequenceStartType('predecessor')} />
-                    {t.existingPredecessor}
-                  </label>
-                  <select disabled={sequenceStartType !== 'predecessor'} value={sequencePredecessor} onChange={(e) => setSequencePredecessor(e.target.value)} style={{ minWidth: '260px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
-                    <option value="">{t.mPkgSelectPred}</option>
-                    {existingPackages.map((pkg) => (
-                      <option key={pkg.id} value={pkg.id}>{pkg.label}</option>
-                    ))}
-                  </select>
-
-                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, opacity: sequenceStartType === 'predecessor' ? 1 : 0.5 }}>
-                    {t.startLag}
-                    <input
-                      type="number"
-                      min="0"
-                      disabled={sequenceStartType !== 'predecessor'}
-                      value={sequenceStartLag}
-                      onChange={(e) => setSequenceStartLag(Math.max(0, Number(e.target.value || 0)))}
-                      style={{ width: '72px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
-                    />
-                  </label>
-                </div>
-
-                <div style={{ marginTop: '15px', padding: '12px 14px', backgroundColor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px' }}>
-                  <strong style={{ display: 'block', color: '#0f766e', marginBottom: '4px' }}>{t.continuousFlow}</strong>
-                  <span style={{ fontSize: '0.78rem', color: '#475569' }}>{t.continuousFlowHelp}</span>
-                </div>
-              </section>
-            </div>
-
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', position: 'sticky', bottom: 0, backgroundColor: 'white' }}>
-              <div style={{ color: '#475569', fontSize: '0.82rem' }}>
-                <strong>{sequenceLocations.filter((item) => item.selected).length}</strong> locations × <strong>{sequenceActivities.length}</strong> activities = <strong>{sequenceLocations.filter((item) => item.selected).length * sequenceActivities.length}</strong> {t.packagesWillBeCreated}
+                  );
+                })}
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button type="button" onClick={() => setShowSequenceModal(false)} style={{ padding: '10px 16px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white', cursor: 'pointer', fontWeight: 700 }}>{t.mPkgCancel}</button>
-                <button type="button" onClick={gerarSequenciaTrabalho} style={{ padding: '10px 18px', border: 'none', borderRadius: '6px', background: '#008f8c', color: 'white', cursor: 'pointer', fontWeight: 900 }}>{sequenceEditingId ? t.regenerateSequence : t.generatePackages}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+            </section>
 
-      {/* MODAL: INSERIR PACOTE DE TRABALHO */}
-      {showWorkPackageModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '10px', width: '550px', fontFamily: 'sans-serif' }}>
-            <h2 style={{ color: '#1a365d', marginBottom: '20px' }}>{t.mPkgTitle}</h2>
-            
-            <form onSubmit={handleInsertAutomationPackage} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              
-              <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgService}</label>
-                  <div style={{ display: 'flex', gap: '5px' }}>
-                    <select required value={packageActivity} onChange={(e) => setPackageActivity(e.target.value)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
-                      <option value="">{t.mPkgSelect}</option>
-                      {Object.entries(workPackageCatalog)
-                        .filter(([sigla]) => sigla !== '' && sigla !== 'OFF' && sigla !== 'FER')
-                        .map(([sigla, info]) => (
-                          <option key={sigla} value={sigla}>{info.labelEn} ({sigla})</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgZone}</label>
-                  <select required value={packageRowId} onChange={(e) => setPackageRowId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
-                    <option value="">{t.mPkgSelect}</option>
-                    {sections.map(sec => (
-                      <optgroup key={sec.id} label={sec.title}>
-                        {sec.rows.map(row => (
-                          <option key={row.id} value={row.id}>{row.description || `Row ID: ${row.id}`}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ backgroundColor: '#f7fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', color: '#2d3748', cursor: 'pointer', fontWeight: 'bold' }}>
-                    <input type="radio" name="packageStartType" value="date" checked={packageStartType === 'date'} onChange={() => setPackageStartType('date')} />
-                    {t.mPkgRadioDate}
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem', color: '#2d3748', cursor: 'pointer', fontWeight: 'bold' }}>
-                    <input type="radio" name="packageStartType" value="predecessor" checked={packageStartType === 'predecessor'} onChange={() => setPackageStartType('predecessor')} />
-                    {t.mPkgRadioPred}
-                  </label>
-                </div>
-
-                {packageStartType === 'date' ? (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgStartDate}</label>
-                    <input type="date" required={packageStartType === 'date'} value={packageStartDate} onChange={(e) => setPackageStartDate(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
-                  </div>
-                ) : (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgLinkPred}</label>
-                    <select required={packageStartType === 'predecessor'} value={predecessorPackageId} onChange={(e) => setPredecessorPackageId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
-                      <option value="">{t.mPkgSelectPred}</option>
-                      {existingPackages.map(p => (
-                        <option key={p.id} value={p.id}>{p.label}</option>
-                      ))}
-                    </select>
-                    {existingPackages.length === 0 && (
-                      <p style={{ fontSize: '0.75rem', color: '#e53e3e', marginTop: '5px' }}>{t.mPkgNoPred}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
+            <section className={styles.box}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPkgDuration}</label>
-                <input type="number" required min="1" value={packageDuration} onChange={(e) => setPackageDuration(Number(e.target.value))} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} />
+                <h3 className={styles.boxTitle}>{t.sequenceActivities}</h3>
+                <p className={styles.hint}>{t.dragToReorder}</p>
+              </div>
+              <div className={styles.inline}>
+                <select value={sequenceNewActivity} onChange={(e) => setSequenceNewActivity(e.target.value)} style={{ flex: 1, minWidth: 0 }} aria-label={t.mPkgService}>
+                  <option value="">{t.mPkgSelectAct}</option>
+                  {activityOptions.map(([code, service]) => (
+                    <option key={code} value={code}>{code} – {service.labelEn}</option>
+                  ))}
+                </select>
+                <button type="button" className={ui.btn} onClick={addSequenceActivity}>{t.addActivity}</button>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px' }}>
-                <button type="button" onClick={() => setShowWorkPackageModal(false)} style={{ backgroundColor: '#cbd5e0', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', color: '#4a5568', fontWeight: 'bold' }}>{t.mPkgCancel}</button>
-                <button type="submit" style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mPkgAddGrid}</button>
+              <div className={styles.listScroll}>
+              {sequenceActivities.length > 0 && (
+                <div className={styles.listHead} style={{ gridTemplateColumns: '18px 22px minmax(0, 1fr) 76px 76px 32px 32px 32px' }}>
+                  <span /><span>#</span><span>{t.activityHeader}</span><span>{t.durationDays}</span><span>{t.lagWorkingDays}</span><span /><span /><span />
+                </div>
+              )}
+
+              <div className={styles.list} style={{ maxHeight: 275 }}>
+                {sequenceActivities.map((activity, index) => {
+                  const service = workPackageCatalog[activity.code];
+                  const over = sequenceDragOver?.type === 'activity' && sequenceDragOver?.index === index;
+                  return (
+                    <div
+                      key={activity.id}
+                      draggable
+                      onDragStart={() => setSequenceDrag({ type: 'activity', index })}
+                      onDragOver={(e) => { e.preventDefault(); setSequenceDragOver({ type: 'activity', index }); }}
+                      onDrop={(e) => { e.preventDefault(); finalizarDragSequencia('activity', index); }}
+                      onDragEnd={() => { setSequenceDrag(null); setSequenceDragOver(null); }}
+                      className={cx(styles.listRow, over && styles.listRowOver)}
+                      style={{ gridTemplateColumns: '18px 22px minmax(0, 1fr) 76px 76px 32px 32px 32px' }}
+                    >
+                      <span className={styles.handle} title={t.dragToReorder} aria-hidden="true">⋮⋮</span>
+                      <strong>{index + 1}</strong>
+                      <span className={styles.listText} title={service?.labelEn}>{activity.code} · {service?.labelEn}</span>
+                      <input type="number" min="1" aria-label={t.durationDays} value={activity.duration} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, duration: Math.max(1, Number(e.target.value || 1)) } : item))} />
+                      <input type="number" min="0" aria-label={t.lagWorkingDays} value={activity.lag ?? 0} onChange={(e) => setSequenceActivities((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, lag: Math.max(0, Number(e.target.value || 0)) } : item))} />
+                      <button type="button" className={styles.iconBtn} disabled={index === 0} onClick={() => moveSequence(setSequenceActivities, index, -1)} aria-label={t.moveUp}>↑</button>
+                      <button type="button" className={styles.iconBtn} disabled={index === sequenceActivities.length - 1} onClick={() => moveSequence(setSequenceActivities, index, 1)} aria-label={t.moveDown}>↓</button>
+                      <button type="button" className={cx(styles.iconBtn, styles.iconBtnDanger)} onClick={() => setSequenceActivities((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={t.removeActivity}>×</button>
+                    </div>
+                  );
+                })}
               </div>
-            </form>
+              </div>
+            </section>
           </div>
-        </div>
+
+          <section className={styles.box}>
+            <h3 className={styles.boxTitle}>{t.sequenceStart}</h3>
+            <div className={styles.inline}>
+              <label className={styles.radio}>
+                <input type="radio" checked={sequenceStartType === 'date'} onChange={() => setSequenceStartType('date')} />
+                {t.specificStartDate}
+              </label>
+              <input type="date" disabled={sequenceStartType !== 'date'} value={sequenceStartDate} onChange={(e) => setSequenceStartDate(e.target.value)} aria-label={t.specificStartDate} />
+            </div>
+            <div className={styles.inline}>
+              <label className={styles.radio}>
+                <input type="radio" checked={sequenceStartType === 'predecessor'} onChange={() => setSequenceStartType('predecessor')} />
+                {t.existingPredecessor}
+              </label>
+              <select disabled={sequenceStartType !== 'predecessor'} value={sequencePredecessor} onChange={(e) => setSequencePredecessor(e.target.value)} style={{ minWidth: 240, flex: 1 }} aria-label={t.existingPredecessor}>
+                <option value="">{t.mPkgSelectPred}</option>
+                {existingPackages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.label}</option>)}
+              </select>
+              <label className={styles.radio} style={{ opacity: sequenceStartType === 'predecessor' ? 1 : 0.5 }}>
+                {t.startLag}
+                <input type="number" min="0" disabled={sequenceStartType !== 'predecessor'} value={sequenceStartLag} onChange={(e) => setSequenceStartLag(Math.max(0, Number(e.target.value || 0)))} style={{ width: 80 }} />
+              </label>
+            </div>
+            <div className={cx(ui.notice, ui.noticeOk)}>
+              <strong>{t.continuousFlow}.</strong> {t.continuousFlowHelp}
+            </div>
+          </section>
+        </Dialog>
       )}
 
-      {/* MODAL: FERIADOS */}
-      {showHolidaysModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '10px', width: '500px', fontFamily: 'sans-serif' }}>
-            <h2 style={{ color: '#1a365d', marginBottom: '20px' }}>{t.mHolTitle}</h2>
-            
-            <form onSubmit={handleAddHoliday} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-              <input type="date" required value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none' }} />
-              <input type="text" required placeholder={t.mHolDescPlace} value={newHolidayDescription} onChange={(e) => setNewHolidayDescription(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', outline: 'none' }} />
-              <button type="submit" style={{ backgroundColor: '#3182ce', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolAdd}</button>
-            </form>
+      {/* Insert one work package */}
+      {showWorkPackageModal && (
+        <Dialog
+          as="form"
+          onSubmit={handleInsertAutomationPackage}
+          title={t.mPkgTitle}
+          onClose={() => setShowWorkPackageModal(false)}
+          footer={(
+            <>
+              <button type="button" className={ui.btn} onClick={() => setShowWorkPackageModal(false)}>{t.mPkgCancel}</button>
+              <button type="submit" className={ui.btnPrimary}>{t.mPkgAddGrid}</button>
+            </>
+          )}
+        >
+          <div className={styles.grid2}>
+            <label className={ui.field}>
+              <span className={ui.fieldLabel}>{t.mPkgService}</span>
+              <select required value={packageActivity} onChange={(e) => setPackageActivity(e.target.value)}>
+                <option value="">{t.mPkgSelect}</option>
+                {activityOptions.map(([code, info]) => <option key={code} value={code}>{info.labelEn} ({code})</option>)}
+              </select>
+            </label>
+            <label className={ui.field}>
+              <span className={ui.fieldLabel}>{t.mPkgZone}</span>
+              <select required value={packageRowId} onChange={(e) => setPackageRowId(e.target.value)}>
+                <option value="">{t.mPkgSelect}</option>
+                {sections.map((sec) => (
+                  <optgroup key={sec.id} label={sec.title}>
+                    {sec.rows.map((row) => <option key={row.id} value={row.id}>{row.description || translate('masterPlan.rowFallback', { id: row.id })}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+          </div>
 
-            <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '20px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f7fafc' }}>
-                  <tr>
-                    <th style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>{t.mHolDateCol}</th>
-                    <th style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>{t.mHolDescCol}</th>
-                    <th style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>{t.mHolActionCol}</th>
-                  </tr>
+          <div className={styles.box}>
+            <div className={styles.radios}>
+              <label className={styles.radio}>
+                <input type="radio" name="packageStartType" value="date" checked={packageStartType === 'date'} onChange={() => setPackageStartType('date')} />
+                {t.mPkgRadioDate}
+              </label>
+              <label className={styles.radio}>
+                <input type="radio" name="packageStartType" value="predecessor" checked={packageStartType === 'predecessor'} onChange={() => setPackageStartType('predecessor')} />
+                {t.mPkgRadioPred}
+              </label>
+            </div>
+            {packageStartType === 'date' ? (
+              <label className={ui.field}>
+                <span className={ui.fieldLabel}>{t.mPkgStartDate}</span>
+                <input type="date" required value={packageStartDate} onChange={(e) => setPackageStartDate(e.target.value)} />
+              </label>
+            ) : (
+              <label className={ui.field}>
+                <span className={ui.fieldLabel}>{t.mPkgLinkPred}</span>
+                <select required value={predecessorPackageId} onChange={(e) => setPredecessorPackageId(e.target.value)}>
+                  <option value="">{t.mPkgSelectPred}</option>
+                  {existingPackages.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+                {existingPackages.length === 0 && <span className={styles.errorText}>{t.mPkgNoPred}</span>}
+              </label>
+            )}
+          </div>
+
+          <label className={ui.field} style={{ maxWidth: 220 }}>
+            <span className={ui.fieldLabel}>{t.mPkgDuration}</span>
+            <input type="number" required min="1" value={packageDuration} onChange={(e) => setPackageDuration(Number(e.target.value))} />
+          </label>
+        </Dialog>
+      )}
+
+      {/* Project holidays */}
+      {showHolidaysModal && (
+        <Dialog
+          title={t.mHolTitle}
+          onClose={() => setShowHolidaysModal(false)}
+          footer={<button type="button" className={ui.btnPrimary} onClick={() => setShowHolidaysModal(false)}>{t.mHolDone}</button>}
+        >
+          <form onSubmit={handleAddHoliday} className={styles.inline}>
+            <input type="date" required value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} aria-label={t.mHolDateCol} />
+            <input type="text" required placeholder={t.mHolDescPlace} value={newHolidayDescription} onChange={(e) => setNewHolidayDescription(e.target.value)} style={{ flex: 1, minWidth: 160 }} aria-label={t.mHolDescCol} />
+            <button type="submit" className={ui.btn}>{t.mHolAdd}</button>
+          </form>
+
+          {holidays.length === 0 ? (
+            <p className={styles.hint}>{t.mHolEmpty}</p>
+          ) : (
+            <div className={ui.tableWrap}>
+              <table className={ui.table}>
+                <thead>
+                  <tr><th>{t.mHolDateCol}</th><th>{t.mHolDescCol}</th><th /></tr>
                 </thead>
                 <tbody>
-                  {holidays.length === 0 ? (
-                    <tr><td colSpan={3} style={{ padding: '15px', textAlign: 'center', color: '#a0aec0' }}>{t.mHolEmpty}</td></tr>
-                  ) : (
-                    holidays.sort((a, b) => new Date(a.data) - new Date(b.data)).map((f, i) => {
-                      const parts = f.date.split('-');
-                      const displayDate = `${parts[1]}/${parts[2]}/${parts[0]}`;
-                      return (
-                        <tr key={i} style={{ borderBottom: '1px solid #edf2f7' }}>
-                          <td style={{ padding: '8px' }}>{displayDate}</td>
-                          <td style={{ padding: '8px', fontWeight: 'bold', color: '#2d3748' }}>{f.description}</td>
-                          <td style={{ padding: '8px', textAlign: 'center' }}>
-                            <button onClick={() => handleRemoveHoliday(f.date)} style={{ border: 'none', background: 'transparent', color: '#e53e3e', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolDel}</button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
+                  {[...holidays].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((f) => (
+                    <tr key={f.date}>
+                      <td>{formatHolidayDate(f.date)}</td>
+                      <td>{f.description}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button type="button" className={cx(ui.btnGhost, ui.small)} onClick={() => handleRemoveHoliday(f.date)}>{t.mHolDel}</button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowHolidaysModal(false)} style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mHolDone}</button>
-            </div>
-          </div>
-        </div>
+          )}
+        </Dialog>
       )}
 
-      {/* MODAL: PDF */}
+      {/* PDF export */}
       {showPdfModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '10px', width: '480px', fontFamily: 'sans-serif' }}>
-            <h2 style={{ color: '#1a365d', marginBottom: '20px' }}>{t.mPdfTitle}</h2>
-            
-            <div style={{ backgroundColor: '#ebf8ff', padding: '12px', borderRadius: '6px', border: '1px solid #90cdf4', marginBottom: '20px' }}>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#2b6cb0', lineHeight: '1.4' }}>
-                 <strong>{t.mPdfSugest}</strong> {t.mPdfSugestText(visibleDates.length)} <strong>{formatoIdealCode.toUpperCase()}</strong>.
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '25px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPdfSize}</label>
-                <select value={pdfConfig.formato} onChange={(e) => setPdfConfig({...pdfConfig, formato: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }}>
-                  <option value="a4">{t.mPdf_a4}</option>
-                  <option value="a3">{t.mPdf_a3}</option>
-                  <option value="a2">{t.mPdf_a2}</option>
-                  <option value="a1">{t.mPdf_a1}</option>
-                  <option value="a0">{t.mPdf_a0}</option>
-                  <option value="unica">{t.mPdf_unica}</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px', color: '#4a5568' }}>{t.mPdfOrient}</label>
-                <select value={pdfConfig.orientacao} onChange={(e) => setPdfConfig({...pdfConfig, orientacao: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', outline: 'none' }} disabled={pdfConfig.formato === 'unica'}>
-                  <option value="landscape">{t.mPdfLand}</option>
-                  <option value="portrait">{t.mPdfPort}</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button onClick={() => setShowPdfModal(false)} style={{ backgroundColor: '#cbd5e0', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer' }}>{t.mPkgCancel}</button>
-              <button onClick={gerarPDF} style={{ backgroundColor: '#2f855a', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>{t.mPdfConfirm}</button>
-            </div>
+        <Dialog
+          title={t.mPdfTitle}
+          onClose={() => setShowPdfModal(false)}
+          footer={(
+            <>
+              <button type="button" className={ui.btn} onClick={() => setShowPdfModal(false)}>{t.mPkgCancel}</button>
+              <button type="button" className={ui.btnPrimary} onClick={gerarPDF}>{t.mPdfConfirm}</button>
+            </>
+          )}
+        >
+          <div className={styles.box}>
+            <p className={styles.hint}>
+              {translate('masterPlan.mPdfSugestText', { columns: visibleDates.length, size: formatoIdealCode.toUpperCase() })}
+            </p>
           </div>
-        </div>
+          <label className={ui.field}>
+            <span className={ui.fieldLabel}>{t.mPdfSize}</span>
+            <select value={pdfConfig.formato} onChange={(e) => setPdfConfig({ ...pdfConfig, formato: e.target.value })}>
+              <option value="a4">{t.mPdf_a4}</option>
+              <option value="a3">{t.mPdf_a3}</option>
+              <option value="a2">{t.mPdf_a2}</option>
+              <option value="a1">{t.mPdf_a1}</option>
+              <option value="a0">{t.mPdf_a0}</option>
+              <option value="unica">{t.mPdf_unica}</option>
+            </select>
+          </label>
+          <label className={ui.field}>
+            <span className={ui.fieldLabel}>{t.mPdfOrient}</span>
+            <select value={pdfConfig.orientacao} onChange={(e) => setPdfConfig({ ...pdfConfig, orientacao: e.target.value })} disabled={pdfConfig.formato === 'unica'}>
+              <option value="landscape">{t.mPdfLand}</option>
+              <option value="portrait">{t.mPdfPort}</option>
+            </select>
+          </label>
+        </Dialog>
       )}
 
-      {selectedProjectId && (
-        <>
-          <div style={{ flex: 1, overflow: 'auto', backgroundColor: 'white', border: '1px solid #cbd5e0', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+      {dialogs.element}
+
+      <div className={styles.frameBody}>
+        {activityOptions.length === 0 && (
+          <div className={cx(ui.notice, ui.noticeWarn, styles.inline)}>
+            <span style={{ flex: 1 }}>{t.noWorkPackagesNotice}</span>
+            <button type="button" className={cx(ui.btn, ui.small)} onClick={() => setShowPackagesModal(true)}>{t.chooseWorkPackages}</button>
+          </div>
+        )}
+          <div className={styles.gridWrap}>
             <div id="conteudo-masterplan-pdf" style={{ minWidth: 'max-content', paddingBottom: '20px' }}>
               
               <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap', width: '100%' }}>
-                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#1a365d' }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--fo-navy)' }}>
                   <tr>
-                    <th rowSpan={2} style={{ position: 'sticky', left: 0, zIndex: 11, backgroundColor: '#1a365d', color: 'white', padding: '8px', borderRight: '1px solid #2a4365', width: '40px' }}>ID</th>
-                    <th rowSpan={2} style={{ position: 'sticky', left: '40px', zIndex: 11, backgroundColor: '#1a365d', color: 'white', padding: '8px 15px', borderRight: '1px solid #2a4365', textAlign: 'left', minWidth: '320px' }}>{t.descHeader}</th>
+                    <th rowSpan={2} style={{ position: 'sticky', left: 0, zIndex: 11, backgroundColor: 'var(--fo-navy)', color: 'white', padding: '8px', borderRight: '1px solid #2a4365', width: '40px' }}>{t.idHeader}</th>
+                    <th rowSpan={2} style={{ position: 'sticky', left: '40px', zIndex: 11, backgroundColor: 'var(--fo-navy)', color: 'white', padding: '8px 15px', borderRight: '1px solid #2a4365', textAlign: 'left', minWidth: 'var(--mp-desc, 320px)' }}>{t.descHeader}</th>
                     {visibleDates.map((d, i) => (
-                      <th key={`data-${i}`} style={{ backgroundColor: '#1a365d', borderRight: '1px solid #2a4365', borderBottom: '1px solid #2a4365', padding: '4px 2px', fontSize: '0.8rem', color: 'white', textAlign: 'center' }}>
+                      <th key={`data-${i}`} style={{ backgroundColor: 'var(--fo-navy)', borderRight: '1px solid #2a4365', borderBottom: '1px solid #2a4365', padding: '4px 2px', fontSize: '0.8rem', color: 'white', textAlign: 'center' }}>
                         {d.dateLabel}
                       </th>
                     ))}
                   </tr>
                   <tr>
                     {visibleDates.map((d, i) => (
-                      <th key={`sem-${i}`} style={{ backgroundColor: d.isHoliday ? '#c53030' : (d.isWeekend ? '#718096' : '#edf2f7'), borderRight: '1px solid #cbd5e0', borderBottom: '1px solid #cbd5e0', padding: '4px 2px', fontSize: '0.75rem', color: (d.isHoliday || d.isWeekend) ? 'white' : '#1a365d', fontWeight: 'bold', textAlign: 'center' }}>
+                      <th key={`sem-${i}`} style={{ backgroundColor: d.isHoliday ? '#c53030' : (d.isWeekend ? '#718096' : '#edf2f7'), borderRight: '1px solid #cbd5e0', borderBottom: '1px solid #cbd5e0', padding: '4px 2px', fontSize: '0.75rem', color: (d.isHoliday || d.isWeekend) ? 'white' : 'var(--fo-navy)', fontWeight: 'bold', textAlign: 'center' }}>
                         {d.weekLabel}
                       </th>
                     ))}
@@ -5272,7 +4333,7 @@ ${
 
                               {section.source === 'location_structure' && (
                                 <span
-                                  title="Generated from Project Location Structure"
+                                  title={t.locationBadgeHint}
                                   style={{
                                     flexShrink: 0,
                                     padding: '2px 6px',
@@ -5284,7 +4345,7 @@ ${
                                     letterSpacing: '0.05em'
                                   }}
                                 >
-                                  LOCATION
+                                  {t.locationBadge}
                                 </span>
                               )}
                             </div>
@@ -5498,7 +4559,7 @@ ${
                               <td style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: controlMode ? '#f7fafc' : 'white', padding: '4px', textAlign: 'center', color: '#4a5568', borderRight: '1px solid #e2e8f0', fontWeight: '500' }}>
                                 {currentId}
                               </td>
-                              <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: controlMode ? '#f7fafc' : 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: '320px' }}>
+                              <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: controlMode ? '#f7fafc' : 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: 'var(--mp-desc, 320px)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '90%' }}>
                                     <input 
@@ -5530,7 +4591,7 @@ ${
                                 <td style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', padding: '4px', borderRight: '1px solid #e2e8f0', color: 'transparent' }}>
                                   {currentId}
                                 </td>
-                                <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: '320px' }}>
+                                <td style={{ position: 'sticky', left: '40px', zIndex: 5, backgroundColor: 'white', padding: '4px 10px', borderRight: '2px solid #cbd5e0', minWidth: 'var(--mp-desc, 320px)' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '90%' }}>
                                       <span style={{ flex: 1, color: '#a0aec0', fontSize: '0.85rem', paddingLeft: '2px' }}>↳ {row.description}</span>
@@ -5548,7 +4609,7 @@ ${
                       {!isBaselineFrozen && (
                         <tr>
                           <td colSpan={2} style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', padding: '5px 15px', borderBottom: '1px solid #cbd5e0' }}>
-                            <button onClick={() => handleAddRow(section.id)} style={addButtonStyle}>{t.addRow}</button>
+                            <button type="button" onClick={() => handleAddRow(section.id)} className={cx(ui.btnGhost, ui.small)}>+ {t.addRow}</button>
                           </td>
                           {visibleDates.map((d, i) => (
                             <td key={`add-${section.id}-${i}`} style={{ borderBottom: '1px solid #cbd5e0', backgroundColor: d.isHoliday ? '#fed7d7' : (d.isWeekend ? '#e2e8f0' : 'white') }}></td>
@@ -5562,8 +4623,8 @@ ${
                   {!isBaselineFrozen && (
                     <tr>
                       <td colSpan={2 + visibleDates.length} style={{ padding: '20px', backgroundColor: '#f4f7f6', textAlign: 'left' }}>
-                        <button onClick={handleAddSection} style={{ backgroundColor: '#2a4365', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                          {t.addSection}
+                        <button type="button" onClick={handleAddSection} className={ui.btn}>
+                          + {t.addSection}
                         </button>
                       </td>
                     </tr>
@@ -5572,54 +4633,16 @@ ${
               </table>
             </div>
           </div>
-          
-          <div style={{ marginTop: '15px', padding: '10px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #cbd5e0', display: 'flex', gap: '15px', flexWrap: 'wrap', fontSize: '0.75rem' }}>
-            <span style={{ fontWeight: 'bold', color: '#1a365d' }}>{t.legend}</span>
-            {Object.entries(workPackageCatalog).filter(([sigla]) => sigla !== '').map(([sigla, info]) => (
-              <div key={sigla} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <div style={{ width: '12px', height: '12px', backgroundColor: info.color, borderRadius: '2px', border: '1px solid #cbd5e0' }}></div>
-                <span><b>{sigla}</b> - {info.labelEn}</span>
-              </div>
+          <div className={styles.legend}>
+            <span className={styles.legendTitle}>{t.legend}</span>
+            {Object.entries(workPackageCatalog).filter(([code]) => code !== '').map(([code, info]) => (
+              <span key={code} className={styles.legendItem}>
+                <span className={styles.swatch} style={{ backgroundColor: info.color }} />
+                <span><b>{code}</b> – {activityLabel(code, info)}</span>
+              </span>
             ))}
           </div>
-        </>
-      )}
-
+        </div>
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

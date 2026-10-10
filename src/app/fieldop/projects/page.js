@@ -1,25 +1,58 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabase'
-import styles from './projects.module.css'
+import { useT } from '../../../lib/i18n/useT'
+import { useLanguage } from '../../../lib/i18n/LanguageProvider'
+import { FieldOpShell, Panel, Badge, Empty, Notice, ui } from '../ui'
+
+const STATUSES = ['planning', 'active', 'on_hold', 'completed', 'archived']
+const STATUS_TONE = { active: 'ok', planning: 'info', on_hold: 'warn' }
+
+/** Which of the four FieldOp setup parts each project has: activities, locations, workforce, report settings. */
+async function loadSetupProgress(projectIds) {
+  const progress = new Map(projectIds.map((id) => [id, new Set()]))
+  if (!projectIds.length) return progress
+  const [activities, locations, assignments, manualWorkers, settings] = await Promise.all([
+    supabase.from('fieldop_project_activities').select('project_id').in('project_id', projectIds).eq('is_active', true),
+    supabase.from('fieldop_project_locations').select('project_id').in('project_id', projectIds).eq('is_active', true),
+    supabase.from('field_project_assignments').select('project_id').in('project_id', projectIds).eq('status', 'active'),
+    supabase.from('fieldop_manual_workers').select('project_id').in('project_id', projectIds).eq('status', 'active'),
+    supabase.from('fieldop_daily_report_settings').select('project_id').in('project_id', projectIds),
+  ])
+  const mark = (result, part) => (result.data || []).forEach((row) => progress.get(row.project_id)?.add(part))
+  mark(activities, 'activities')
+  mark(locations, 'locations')
+  mark(assignments, 'workforce')
+  mark(manualWorkers, 'workforce')
+  mark(settings, 'settings')
+  return progress
+}
 
 export default function FieldOpProjectsPage() {
+  const t = useT('fieldopSetup')
+  const tf = useT('fieldop')
+  const { language } = useLanguage()
   const [projects, setProjects] = useState([])
+  const [setup, setSetup] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
 
   useEffect(() => {
     let active = true
     async function load() {
       setLoading(true)
-      const { data, error: loadError } = await supabase.from('projects').select('*').order('created_at', { ascending: true })
+      const { data, error: loadError } = await supabase.from('projects').select('*').eq('stage', 'contract').order('created_at', { ascending: true })
       if (!active) return
-      if (loadError) { setError(loadError.message); setProjects([]) }
-      else { setError(''); setProjects(data || []) }
+      if (loadError) { setError(loadError.message); setProjects([]); setLoading(false); return }
+      setError('')
+      setProjects(data || [])
+      const progress = await loadSetupProgress((data || []).map((project) => project.id))
+      if (!active) return
+      setSetup(progress)
       setLoading(false)
     }
     load()
@@ -27,73 +60,68 @@ export default function FieldOpProjectsPage() {
   }, [])
 
   const visibleProjects = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return projects
-    return projects.filter((p) => [p.project_id, p.name, p.client, p.client_name, p.city, p.state_region, p.status].filter(Boolean).join(' ').toLowerCase().includes(q))
-  }, [projects, search])
+    const query = search.trim().toLowerCase()
+    return projects.filter((project) => {
+      if (statusFilter && project.status !== statusFilter) return false
+      if (!query) return true
+      return [project.project_id, project.name, project.code, project.client_name, project.city, project.state_region, project.status ? tf(`status.${project.status}`) : '']
+        .filter(Boolean).join(' ').toLowerCase().includes(query)
+    })
+  }, [projects, search, statusFilter, tf])
 
+  const dateFormat = useMemo(() => new Intl.DateTimeFormat(language, { dateStyle: 'short' }), [language])
   const date = (value) => {
     if (!value) return '—'
-    const d = new Date(`${String(value).slice(0, 10)}T12:00:00`)
-    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR')
+    const parsed = new Date(`${String(value).slice(0, 10)}T12:00:00`)
+    return Number.isNaN(parsed.getTime()) ? '—' : dateFormat.format(parsed)
   }
-  const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0))
+  const money = (value, currency) => {
+    try {
+      return new Intl.NumberFormat(language, { style: 'currency', currency: currency || 'BRL' }).format(Number(value || 0))
+    } catch {
+      return `${currency || ''} ${Number(value || 0).toFixed(2)}`
+    }
+  }
 
-  return <main className={styles.shell}>
-    <aside className={styles.sidebar}>
-      <Link href="/fieldop" className={styles.brand}><Image src="/logo-white.png" alt="RitsuFlow" width={150} height={55} priority /></Link>
-      <div className={styles.navTitle}>FIELD OPERATIONS</div>
-      <nav>
-        <Link href="/fieldop"><i>⌂</i>Portfolio Overview</Link>
-        <Link href="/fieldop/projects" className={styles.active}><i>▣</i>Projects</Link>
-        <Link href="/dashboard/field-management/workforce"><i>♙</i>Workforce</Link>
-        <Link href="/dashboard/projects/operations"><i>⌖</i>Operations</Link>
-        <Link href="/dashboard/projects/constraints"><i>△</i>Occurrences</Link>
-        <Link href="/fieldop/reports/daily"><i>▤</i>Reports</Link>
-        <Link href="/settings"><i>⚙</i>Settings</Link>
-      </nav>
-      <Link href="/workspaces" className={styles.workspaceReturn}>← <span>Workspaces</span></Link>
-    </aside>
+  // Setup progress: four parts (activities, locations, workforce, report settings).
+  function setupCell(projectId) {
+    const done = setup.get(projectId)?.size || 0
+    return <span style={{ display: 'grid', gap: 6, minWidth: 120 }}>
+      <span style={{ fontSize: 14, color: done === 4 ? 'var(--fo-ok)' : 'var(--fo-muted)', fontWeight: done === 4 ? 600 : 400 }}>{done === 4 ? t('list.setupReady') : done > 0 ? t('list.setupPartial', { done }) : t('list.setupNone')}</span>
+      <span className={ui.stack} style={{ height: 6 }}>{[0, 1, 2, 3].map((i) => <i key={i} style={{ flex: 1, background: i < done ? 'var(--fo-teal-ink)' : 'var(--fo-line-soft)' }} />)}</span>
+    </span>
+  }
 
-    <section className={styles.main}>
-      <header className={styles.topbar}>
-        <div className={styles.pageTitle}>Projects</div>
-        <label className={styles.search}>⌕ <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects, clients, or locations..." /><kbd>Ctrl K</kbd></label>
-        <div className={styles.user}><button>♧<em>3</em></button><b>EF</b><div><strong>Eduardo Freitas</strong><span>Operations Manager</span></div><span>⌄</span></div>
-      </header>
-
-      <div className={styles.content}>
-        <section className={styles.projectsPanel}>
-          <div className={styles.panelHead}>
-            <div><h1>Projects</h1><p>Projects from RitsuFlow. Configure field operations and daily reporting for each project.</p></div>
-            <div className={styles.filters}><span>⌕ {search || 'Search projects...'}</span><button>All Statuses⌄</button><button>All Clients⌄</button></div>
-          </div>
-          <div className={styles.tableWrap}>
-            <table><thead><tr><th>Project ID</th><th>Project</th><th>Client</th><th>Location</th><th>Phase</th><th>Start Date</th><th>End Date</th><th>Contract Value</th><th>Status</th><th>FieldOp Setup</th><th>Actions</th></tr></thead>
-              <tbody>
-                {loading && <tr><td colSpan="11" className={styles.message}>Loading projects...</td></tr>}
-                {!loading && error && <tr><td colSpan="11" className={styles.message}>Unable to load projects: {error}</td></tr>}
-                {!loading && !error && visibleProjects.length === 0 && <tr><td colSpan="11" className={styles.message}>No projects found.</td></tr>}
-                {!loading && !error && visibleProjects.map((p) => {
-                  const location = [p.city, p.state_region].filter(Boolean).join(', ') || '—'
-                  const status = p.status || 'planning'
-                  const phase = p.phase || status
-                  return <tr key={p.id}>
-                    <td><b>{p.project_id || '—'}</b></td>
-                    <td><div className={styles.projectName}><i>{(p.name || 'P').charAt(0).toUpperCase()}</i><span><b>{p.name || 'Untitled Project'}</b><small>{p.code || '—'}</small></span></div></td>
-                    <td>{p.client || p.client_name || '—'}</td><td>{location}</td><td><span className={styles.phase}>{phase}</span></td>
-                    <td>{date(p.planned_start_date || p.start_date)}</td><td>{date(p.planned_end_date || p.end_date)}</td><td>{money(p.contract_value)}</td>
-                    <td><span className={String(status).toLowerCase().includes('risk') || String(status).toLowerCase().includes('hold') ? styles.attention : styles.ok}>{status}</span></td>
-                    <td><span className={styles.setupPending}>○ Not configured</span></td>
-                    <td><Link className={styles.configureProject} href={`/fieldop/projects/${p.id}`}>Configure</Link></td>
-                  </tr>
-                })}
-              </tbody>
-            </table>
-          </div>
-          <footer className={styles.tableFooter}><span>Showing {visibleProjects.length} of {projects.length} {projects.length === 1 ? 'project' : 'projects'}</span><span>‹　<b>1</b>　›</span></footer>
-        </section>
-      </div>
-    </section>
-  </main>
+  return <FieldOpShell active="projects">
+    <Notice>{error && t('list.error', { error })}</Notice>
+    <Panel body={false} title={t('list.showing', { shown: visibleProjects.length, total: projects.length })}
+      actions={<>
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('list.search')} aria-label={t('list.search')} style={{ width: 220 }} />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label={t('list.colStatus')} style={{ width: 180 }}>
+          <option value="">{t('list.allStatuses')}</option>
+          {STATUSES.map((status) => <option key={status} value={status}>{tf(`status.${status}`)}</option>)}
+        </select>
+      </>}>
+      {loading ? <Empty title={t('list.loading')} />
+        : visibleProjects.length === 0 ? <Empty title={t('list.empty')} />
+          : <div className={ui.tableWrap}><table className={`${ui.table} ${ui.cards}`}>
+            <thead><tr><th>{t('list.colProject')}</th><th>{t('list.colClient')}</th><th>{t('list.colLocation')}</th><th>{t('list.colEnd')}</th><th>{t('list.colValue')}</th><th>{t('list.colStatus')}</th><th>{t('list.colSetup')}</th><th /></tr></thead>
+            <tbody>{visibleProjects.map((project) => {
+              const location = [project.city, project.state_region].filter(Boolean).join(', ') || '—'
+              const status = project.status || 'planning'
+              const configured = (setup.get(project.id)?.size || 0) > 0
+              return <tr key={project.id}>
+                <td data-label=""><span><Link className={ui.rowLink} href={`/fieldop/projects/${project.id}`}>{project.name || tf('projects.untitled')}</Link><span className={ui.sub}>{[project.project_id, project.code].filter(Boolean).join(' · ') || '—'}</span></span></td>
+                <td data-label={t('list.colClient')}>{project.client_name || '—'}</td>
+                <td data-label={t('list.colLocation')}>{location}</td>
+                <td data-label={t('list.colEnd')}><span>{date(project.planned_finish_date)}<span className={ui.sub}>{t('list.colStart')}: {date(project.planned_start_date)}</span></span></td>
+                <td data-label={t('list.colValue')} style={{ whiteSpace: 'nowrap' }}>{money(project.contract_value, project.currency_code)}</td>
+                <td data-label={t('list.colStatus')}><Badge tone={STATUS_TONE[status]}>{tf(`status.${status}`)}</Badge></td>
+                <td data-label={t('list.colSetup')}>{setupCell(project.id)}</td>
+                <td data-label=""><Link className={`${configured ? ui.btn : ui.btnPrimary} ${ui.small}`} href={`/fieldop/projects/${project.id}`}>{configured ? t('list.open') : t('list.configure')}</Link></td>
+              </tr>
+            })}</tbody>
+          </table></div>}
+    </Panel>
+  </FieldOpShell>
 }

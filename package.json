@@ -4,9 +4,24 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run test:platform-map && npm run check:i18n && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:platform-map": "node scripts/check-platform-map.mjs && node scripts/check-platform-map-layout.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "test": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test 'scripts/*.test.mjs'",
+    "check": "npm run test:platform-map && npm run check:i18n && npm test",
+    "test:commercial": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/commercial-pricing.test.mjs",
+    "test:ceilings": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/ceiling-types.test.mjs",
+    "test:floors": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/floor-types.test.mjs",
+    "test:pull": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/pull-schedule.test.mjs",
+    "test:scope-import": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/scope-import.test.mjs",
+    "test:task-drawings": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/task-drawings.test.mjs",
+    "test:field-sheet": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/field-sheet.test.mjs",
+    "test:task-materials": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/task-materials.test.mjs",
+    "test:field-sheet-data": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/field-sheet-data.test.mjs",
+    "test:library": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/standard-library.test.mjs",
+    "library:sql": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/standard-library/generate.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.1",
@@ -20,6 +35,18 @@
     "react": "^18",
     "react-dom": "^18",
     "react-leaflet": "^4.2.1",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "rete": "^2.0.6",
+    "rete-area-plugin": "^2.1.5",
+    "rete-react-plugin": "^2.1.0",
+    "rete-render-utils": "^2.0.3",
+    "styled-components": "^6.1.19",
+    "pdfjs-dist-v5": "npm:pdfjs-dist@^5.4.149"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18"
   }
 }
