@@ -5,7 +5,7 @@
 // "Predecessor" check. See src/lib/planning/locationPlan.ts.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { loadLocationPlan, locationPath, progressIndex, waitsFor } from '../../../lib/planning/locationPlan';
+import { lastProgressIndex, loadLocationPlan, locationPath, progressIndex, waitsFor } from '../../../lib/planning/locationPlan';
 
 export function useLocationPlan(projectId) {
   const [plan, setPlan] = useState(null);
@@ -25,7 +25,7 @@ export function useLocationPlan(projectId) {
         supabase.rpc('get_project_work_package_options', { target_project_id: projectId }),
         supabase
           .from('weekly_plan_items')
-          .select('location_id, organization_work_package_id, unit, actual_quantity, planned_quantity, execution_result, weekly_plans!inner(status)')
+          .select('location_id, organization_work_package_id, unit, actual_quantity, planned_quantity, execution_result, completed_at, planned_finish_date, weekly_plans!inner(status)')
           .eq('project_id', projectId)
           .not('location_id', 'is', null)
           .neq('weekly_plans.status', 'cancelled'),
@@ -51,6 +51,7 @@ export function useLocationPlan(projectId) {
       return packages.find((w) => String(w.code || '').trim().toUpperCase() === c)?.organization_work_package_id || null;
     };
     const doneOf = plan ? progressIndex(plan, progress) : () => 1;
+    const lastDoneOf = lastProgressIndex(progress);
     const locationName = (id) => plan?.locations.find((l) => l.id === id)?.name || '—';
     const codeOf = (id) => byId.get(id)?.code || '—';
     /** Locations of one package: quantity from Tasks, done so far and what it still waits for. */
@@ -74,7 +75,7 @@ export function useLocationPlan(projectId) {
             locationPath: locationPath(plan.locations, r.locationId),
             done,
             remaining: Math.max(0, r.quantity - done),
-            waits: waitsFor(plan, wpId, r.locationId, doneOf),
+            waits: waitsFor(plan, wpId, r.locationId, doneOf, { lastDoneOf }),
           };
         });
       cache.set(wpId, out);

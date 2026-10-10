@@ -124,7 +124,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     const drawn = drawnLocations(service)
     return allocateScopeStep(takeoff, {
       layerIds: all.map((l) => l.id), unit: service.unit, step: service.takeoff_step, rule: service.allocation_rule,
-      productionLocationIds: new Set([...productionIds].filter((id) => !drawn.has(id))), claimed: claimedOf(service), flowRank,
+      productionLocationIds: new Set([...productionIds].filter((id) => !drawn.has(id))), knownLocationIds: productionIds, claimed: claimedOf(service), flowRank,
       exteriorLocationOf: (key) => exteriorLocationOf(key, locations, takeoff.levels),
     })
   }

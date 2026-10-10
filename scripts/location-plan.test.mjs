@@ -67,3 +67,27 @@ test("the planner's predecessors replace the defaults", () => {
   const p = buildLocationPlan({ data, scopes, locations, deps: [{ scope_item_id: 'ins', predecessor_scope_item_id: 'frm', link: 'same_location', lag_days: 0 }], drawings: [] })
   assert.deepEqual(waitsFor(p, 'INS', 'room7', progressIndex(p, [])), []) // no framing in Room 7 itself
 })
+
+test('asymmetric wall: Side A in the neighbour room still waits for the carrier framing', () => {
+  const asym = { ...data, layers: [{ ...data.layers[0], wall_type_id: 'asym' }], wallTypes: [{ id: 'asym', boards: [{ side: 'A', product: 'RU', count: 1 }, { side: 'B', product: 'ST', count: 1 }] }] }
+  const p = buildLocationPlan({ data: asym, scopes, locations, deps: [], drawings: [] })
+  const none = progressIndex(p, [])
+  // Face A (+n) of the wall drawn left → right looks into Room 7: Side A boards are done there.
+  assert.ok(p.rows.some(r => r.locationId === 'room7' && r.wpId === 'BRD'))
+  assert.deepEqual(waitsFor(p, 'BRD', 'room7', none).map(x => `${x.locationId}:${x.wpId}`), ['room1:FRM'])
+})
+
+test('a predecessor lag holds the successor until the lag has run', async () => {
+  const { lastProgressIndex, addWorkingDays } = await import('../src/lib/planning/locationPlan.ts')
+  const deps = [{ scope_item_id: 'ins', predecessor_scope_item_id: 'frm', link: 'carrier_location', lag_days: 2 }]
+  const p = buildLocationPlan({ data, scopes, locations, deps, drawings: [] })
+  const progress = [
+    { location_id: 'room1', organization_work_package_id: 'FRM', unit: 'm²', actual_quantity: 28, completed_at: '2026-10-09T15:00:00Z' },
+  ]
+  const doneOf = progressIndex(p, progress)
+  const lastDoneOf = lastProgressIndex(progress)
+  assert.equal(addWorkingDays('2026-10-09', 2), '2026-10-13') // Friday + 2 working days = Tuesday
+  const before = waitsFor(p, 'INS', 'room7', doneOf, { lastDoneOf, today: '2026-10-12' })
+  assert.deepEqual(before.map(x => `${x.locationId}:${x.wpId}:${x.readyOn}`), ['room1:FRM:2026-10-13'])
+  assert.deepEqual(waitsFor(p, 'INS', 'room7', doneOf, { lastDoneOf, today: '2026-10-13' }), [])
+})

@@ -5,7 +5,7 @@
 // and its predecessors (default wall sequence, including the links to the carrier room).
 import { useEffect, useMemo, useState } from 'react'
 import { useTakeoffT } from '@/lib/i18n/useTakeoffT'
-import { ALLOCATION_RULES, defaultRuleFor, type AllocationRule } from '@/lib/takeoff/scopeAllocation'
+import { allowedRulesFor, defaultRuleFor, type AllocationRule } from '@/lib/takeoff/scopeAllocation'
 import { defaultPredecessors, type DepLink, type StepDep } from '@/lib/takeoff/stepPredecessors'
 import { ui } from '../ui'
 
@@ -33,7 +33,9 @@ export default function TaskSettingsDialog({ scope, scopes, workPackages, deps, 
   const t = useTakeoffT()
   const defaults = useMemo(() => defaultPredecessors(scope, scopes), [scope, scopes])
   const [wp, setWp] = useState(scope.organization_work_package_id || '')
-  const [rule, setRule] = useState<AllocationRule | ''>(scope.allocation_rule || '')
+  // A face goes 100% to the room it faces: board / joints / insulation only offer 'face' or 'manual'.
+  const allowedRules = allowedRulesFor(scope.takeoff_step)
+  const [rule, setRule] = useState<AllocationRule | ''>(scope.allocation_rule && allowedRules.includes(scope.allocation_rule) ? scope.allocation_rule : '')
   const [list, setList] = useState<StepDep[]>(deps.length ? deps : defaults)
   const [add, setAdd] = useState('')
   // "+ New work package": the company library may not have the package yet.
@@ -103,7 +105,7 @@ export default function TaskSettingsDialog({ scope, scopes, workPackages, deps, 
           <div style={head}>{t('taskSettings.rule')}</div>
           <select style={input} value={rule} onChange={e => setRule(e.target.value as AllocationRule | '')}>
             <option value="">{t('taskSettings.ruleDefault', { rule: t(`taskSettings.rule.${ruleDefault}` as const) })}</option>
-            {ALLOCATION_RULES.map(r => <option key={r} value={r}>{t(`taskSettings.rule.${r}` as const)}</option>)}
+            {allowedRules.map(r => <option key={r} value={r}>{t(`taskSettings.rule.${r}` as const)}</option>)}
           </select>
           <span style={ui.small}>{t(`taskSettings.ruleHint.${(rule || ruleDefault) as AllocationRule}` as const)}</span>
         </section>

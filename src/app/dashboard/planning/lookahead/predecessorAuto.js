@@ -12,7 +12,7 @@ export function predecessorAuto(locationPlan, row) {
     .filter((r) => r.waits.length)
     .map((r) => ({
       location: r.locationName,
-      waits: r.waits.map((w) => ({ code: locationPlan.codeOf(w.wpId), location: locationPlan.locationName(w.locationId), done: Math.round(w.done * 100) })),
+      waits: r.waits.map((w) => ({ code: locationPlan.codeOf(w.wpId), location: locationPlan.locationName(w.locationId), done: Math.round(w.done * 100), readyOn: w.readyOn || null })),
     }));
   const total = new Set(open.map((r) => r.locationId)).size;
   const blockedCount = new Set(open.filter((r) => r.waits.length).map((r) => r.locationId)).size;

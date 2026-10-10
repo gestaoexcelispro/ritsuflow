@@ -63,9 +63,39 @@ test('exterior wall: inside face to the room, outside face to the level Exterior
   assert.ok(near(run(d, 'board_b', { exteriorLocationOf: () => 'extL1' }).get('extL1'), 28))
 })
 
-test('position rule keeps the old 50/50 split', () => {
-  const r = run(dividing, 'board_a', { rule: 'position' })
+test('a face step ignores an old carrier / 50-50 choice: 100% to the room it faces', () => {
+  for (const rule of ['position', 'carrier']) {
+    const r = run(dividing, 'board_b', { rule })
+    assert.ok(near(r.get('room7'), 28) && !r.get('room1'), rule)
+  }
+  // Lines that are not wall steps keep the position (50/50) split.
+  const r = allocateScopeStep(dividing, { ...base, layerIds: ['W'], step: null, rule: 'position' }).byLocation
   assert.ok(near(r.get('room1'), 14) && near(r.get('room7'), 14))
+})
+
+test('allowed rules per step', async () => {
+  const { allowedRulesFor } = await import('../src/lib/takeoff/scopeAllocation.ts')
+  assert.deepEqual(allowedRulesFor('board_a'), ['face', 'manual'])
+  assert.deepEqual(allowedRulesFor('framing'), ['carrier', 'manual'])
+  assert.deepEqual(allowedRulesFor(null), ['face', 'carrier', 'position', 'manual'])
+})
+
+test('a neighbour room without a zone is not "Exterior": its face is reported as not allocated', () => {
+  // Room 7 has no zone, but a zone (Room 9) lies 2 m further up: the gap is a room not zoned yet.
+  const d = data([el('d', 'W', [[0, 5], [10, 5]])])
+  d.zones = [d.zones[0], { id: 'z9', source_id: 's', location_id: 'room9', points: rect(0, 7.5, 10, 9) }]
+  const ext = exteriorKeyOf({ id: 's', level_id: 'L1' })
+  const r = allocateScopeStep(d, { ...base, layerIds: ['W'], step: 'board_b' })
+  assert.equal(r.byLocation.get(ext), undefined)
+  assert.ok(near(r.unallocated, 28))
+})
+
+test('a neighbour room drawn by hand is not "Exterior": its face counts as covered by the drawing', () => {
+  const ext = exteriorKeyOf({ id: 's', level_id: 'L1' })
+  const r = allocateScopeStep(dividing, { ...base, layerIds: ['W'], step: 'board_b', productionLocationIds: new Set(['room1']), knownLocationIds: new Set(['room1', 'room7']) })
+  assert.equal(r.byLocation.get(ext), undefined)
+  assert.equal(r.byLocation.get('room7'), undefined)
+  assert.ok(near(r.claimed, 28))
 })
 
 test('default predecessors follow the wall sequence, with cross-room links to the carrier', async () => {
@@ -73,7 +103,7 @@ test('default predecessors follow the wall sequence, with cross-room links to th
   const steps = ['framing', 'board_a', 'joints_a', 'insulation', 'board_b', 'joints_b'].map(s => ({ id: s, takeoff_layer_id: 'L', takeoff_step: s }))
   const of = s => defaultPredecessors(steps.find(x => x.id === s), steps).map(d => `${d.predecessorId}:${d.link}`)
   assert.deepEqual(of('framing'), [])
-  assert.deepEqual(of('board_a'), ['framing:same_location'])
+  assert.deepEqual(of('board_a'), ['framing:carrier_location'])
   assert.deepEqual(of('insulation'), ['framing:carrier_location', 'board_a:carrier_location'])
   assert.deepEqual(of('board_b'), ['insulation:same_location'])
   const noIns = steps.filter(s => s.id !== 'insulation')

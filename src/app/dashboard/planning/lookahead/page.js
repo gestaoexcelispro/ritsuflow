@@ -6096,7 +6096,7 @@ export default function LookaheadPage() {
                                         disabled={!canApply}
                                         title={auto.allReady
                                           ? (canApply ? tv('autoPred.applyHint', { ready: auto.ready, total: auto.total }) : tv('autoPred.readyHint', { ready: auto.ready, total: auto.total }))
-                                          : tv('autoPred.blockedHint', { list: auto.blocked.map((b) => tv('autoPred.blockedItem', { location: b.location, waits: b.waits.map((w) => tv('autoPred.waitItem', { code: w.code, location: w.location, done: w.done })).join(', ') })).join('\n') })}
+                                          : tv('autoPred.blockedHint', { list: auto.blocked.map((b) => tv('autoPred.blockedItem', { location: b.location, waits: b.waits.map((w) => (w.readyOn ? tv('autoPred.waitLagItem', { code: w.code, location: w.location, date: w.readyOn }) : tv('autoPred.waitItem', { code: w.code, location: w.location, done: w.done }))).join(', ') })).join('\n') })}
                                         onClick={() => { if (canApply) handleGroupedReadinessChange(row, column.key, 'clear'); }}
                                         style={{ display: 'block', width: '100%', marginTop: 3, padding: '1px 4px', border: 0, borderRadius: 4, fontSize: '9px', fontWeight: 800, textAlign: 'center',
                                           background: auto.allReady ? '#dcfce7' : auto.ready ? '#fef3c7' : '#fee2e2',

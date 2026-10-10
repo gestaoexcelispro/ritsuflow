@@ -989,6 +989,7 @@
   "weekly.loc.finished": "Terminado",
   "weekly.loc.waits": "Espera: {list}",
   "weekly.loc.waitsItem": "{code} en {location} ({done}%)",
+  "weekly.loc.waitsLagItem": "{code} en {location}: desfase hasta {date}",
   "weekly.loc.inWeek": "en esta semana",
   "weekly.loc.hint": "Una fila por ubicación marcada, con la cantidad restante. Actividad, responsable y notas vienen del formulario.",
   "weekly.loc.add": "Agregar {count} fila(s)",
@@ -999,5 +1000,6 @@
   "lookahead.autoPred.readyHint": "Tareas de RitsuScope: predecesoras terminadas en {ready} de {total} ubicaciones.",
   "lookahead.autoPred.blockedHint": "Tareas de RitsuScope — aún esperando:\n{list}",
   "lookahead.autoPred.blockedItem": "{location}: {waits}",
-  "lookahead.autoPred.waitItem": "{code} en {location} ({done}%)"
+  "lookahead.autoPred.waitItem": "{code} en {location} ({done}%)",
+  "lookahead.autoPred.waitLagItem": "{code} en {location}: desfase hasta {date}"
 }
