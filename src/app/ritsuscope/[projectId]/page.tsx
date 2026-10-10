@@ -1035,6 +1035,21 @@ export default function TakeoffWorkspacePage() {
     }
     return render3DImage({ items: scene.items, ptPerM: k, width, height, tags: v.tags, underlay: under, zones: v.zones ? scene.zones : [], grid: false, view: v }).catch(() => null)
   }
+  /** Rooms that carry the walls of a scope line's location (its framing / Side A are done there). */
+  function carrierRoomsOf(scopeId: string, locationId: string): string[] {
+    const sc = taskScopes.find(x => x.id === scopeId)
+    if (!sc?.takeoff_layer_id) return []
+    const data: TakeoffData = {
+      layers, elements: rawElements, sources: sources.filter(x => x.kind === 'pdf_page'), levels, zones: zones.filter(z => z.location_id),
+      wallTypes: wallTypes.map(w => ({ id: w.id, boards: w.boards })), carriers: taskCarriers,
+    }
+    const production = new Set<string>(taskLocations.filter(l => !TASK_GROUP_KINDS.has(l.location_type)).map(l => l.id))
+    const r = allocateScopeStep(data, {
+      layerIds: [sc.takeoff_layer_id], unit: sc.unit || 'm²', step: sc.takeoff_step, rule: sc.allocation_rule, productionLocationIds: production,
+      flowRank: flowRankOf(taskLocations), exteriorLocationOf: key => exteriorLocationOf(key, taskLocations, levels),
+    })
+    return [...(r.carrierOf?.get(locationId) || [])]
+  }
   async function makeFieldSheet(kind: FieldKind, revision: number | null, issuedBy: string, cfg: ReportCfg) {
     if (!taskLocation || (kind === 'activity' && !taskScope)) throw new Error(t('task.panel.pick'))
     const { sheet, frame, k } = reportArea(cfg)
@@ -1048,6 +1063,9 @@ export default function TakeoffWorkspacePage() {
     const items = [...estimate, ...planning]
     const walls: WallRef[] = sheetItems.filter(it => it.kind === 'linear').flatMap(it => it.shapes.map(sh => ({ pts: sh.pts, openings: sh.openings, kind: it.kind })))
     const scopes = taskScopes.filter(sc => lines.some(r => r.scope_item_id === sc.id))
+    // Work package of each line (PreCon bridge): "FRM · 1.1" wherever the sheet names an activity.
+    const wpOf = (sc: TaskScopeRow | undefined) => (sc?.organization_work_package_id ? workPackages.find(w => w.organization_work_package_id === sc.organization_work_package_id)?.code || '' : '')
+    const codeOf = (sc: TaskScopeRow) => [wpOf(sc), sc.scope_code || ''].filter(Boolean).join(' · ')
     const rows: FieldSheetRow[] = scopes.map(sc => {
       const mine = lines.filter(r => r.scope_item_id === sc.id)
       const qty = mine.reduce((a, r) => a + Number(r.quantity || 0), 0)
@@ -1058,7 +1076,7 @@ export default function TakeoffWorkspacePage() {
         const m = measureTaskLines(mine.map(r => r.points), { ptPerM: k, heightM: h, unit: sc.unit, walls })
         if (m.measure === 'wallArea') detail = [tags, t('task.panel.breakdown', { length: formatNumber(m.length, 2), height: h ? formatNumber(h, 2) : '—', openings: formatNumber(m.openings, 2) })].filter(Boolean).join(' · ')
       }
-      return { color: colorOfScope(sc.id), code: sc.scope_code || '', name: sc.scope_name, qty: `${formatNumber(qty, 2)} ${sc.unit || ''}`.trim(), detail }
+      return { color: colorOfScope(sc.id), code: codeOf(sc), name: sc.scope_name, qty: `${formatNumber(qty, 2)} ${sc.unit || ''}`.trim(), detail }
     })
     const matGroups = scopes.map(sc => ({ sc, rows: materialsFor(sc.id, taskLocation.id) })).filter(g => g.rows.length)
 
@@ -1069,7 +1087,19 @@ export default function TakeoffWorkspacePage() {
     const fScopes: FieldScope[] = scopes.map(sc => ({ id: sc.id, code: sc.scope_code || '', name: sc.scope_name, color: colorOfScope(sc.id), step: inferStep(sc.takeoff_step, sc.scope_name), unit: sc.unit || null, itemKey: sc.takeoff_layer_id || null }))
     const fLines: FieldTaskLine[] = lines.filter(r => r.source_id === sheet!.id).map(r => ({ id: r.id, tag: r.tag || null, scope_item_id: r.scope_item_id, points: r.points, side: r.side, height_m: r.height_m, quantity: r.quantity, unit: r.unit }))
     const nf = (v: number) => formatNumber(v, 2)
-    const actName = (id: string) => { const sc = scopes.find(x => x.id === id); return sc ? `${sc.scope_code || ''} ${sc.scope_name}`.trim() : '' }
+    const actName = (id: string) => { const sc = scopes.find(x => x.id === id); return sc ? `${codeOf(sc)} ${sc.scope_name}`.trim() : '' }
+    // Order of work: what each step waits for — here, or in the room that carries the wall (Tasks ⚙).
+    const afterOf = (scopeId: string): string => depsOf(scopeId).map(d => {
+      const p = taskScopes.find(x => x.id === d.predecessorId)
+      if (!p) return ''
+      let where = ''
+      if (d.link === 'carrier_location') {
+        const rooms = carrierRoomsOf(scopeId, taskLocation.id).filter(id => id !== taskLocation.id)
+        where = rooms.length ? rooms.map(id => taskLocations.find(l => l.id === id)?.name || '').filter(Boolean).join(', ') : ''
+      }
+      const lag = d.lagDays ? ` (+${d.lagDays}d)` : ''
+      return `${codeOf(p)}${where ? ` – ${where}` : ''}${lag}`
+    }).filter(Boolean).join('; ')
     const infos = taskInfos(fLines, fScopes, tallItems, k)
     const placeName = (p: string) => t(`fixings.place.${p}` as TakeoffMessageKey)
     const cards = cfg.show.walls ? wallCards(fLines, fScopes, tallItems, k, it => (projectRecipeCtx.wallTypeOf?.(it) ?? null) as unknown as WallTypeInfo | null) : []
@@ -1088,7 +1118,7 @@ export default function TakeoffWorkspacePage() {
     const checkOf = (step: string | null) => t((['framing', 'board_a', 'board_b', 'insulation', 'joints_a', 'joints_b'].includes(step || '') ? `fs.check.${step}` : 'fs.check.other') as TakeoffMessageKey)
     const sequence = cfg.show.sequence ? sequenceOf(fScopes).map(r => (r.kind === 'hold'
       ? { color: null, title: t('fs.hold.title'), check: t('fs.hold.services'), hold: true }
-      : { color: r.color, title: `${r.code} ${r.name}`.trim(), check: checkOf(r.step) })) : null
+      : { color: r.color, title: `${codeOf(scopes.find(x => x.id === r.scopeId) || ({ scope_code: r.code } as TaskScopeRow))} ${r.name}`.trim(), after: afterOf(r.scopeId), check: checkOf(r.step) })) : null
     const history = cfg.show.history ? [
       ...fieldIssues.filter(i => i.location_id === taskLocation.id).slice().sort((a, b) => a.issued_at.localeCompare(b.issued_at))
         .map(i => ({ rev: `REV ${i.revision}${i.kind === 'activity' ? ` · ${scopes.find(x => x.id === i.scope_item_id)?.scope_code || taskScopes.find(x => x.id === i.scope_item_id)?.scope_code || ''}` : ''}`, date: new Date(i.issued_at).toLocaleDateString(language), by: i.issued_by_name || '—' })),
@@ -1109,7 +1139,7 @@ export default function TakeoffWorkspacePage() {
       show: { table: cfg.show.table, detail: cfg.show.detail, qr: cfg.show.qr },
       info: { responsible: cfg.responsible, crew: cfg.crew, dates, notes: cfg.notes },
       materials: (cfg.show.materials || cfg.show.materialSummary) && matGroups.length ? {
-        groups: cfg.show.materials ? matGroups.map(g => ({ color: colorOfScope(g.sc.id), title: `${g.sc.scope_code || ''} ${g.sc.scope_name}`.trim(), rows: g.rows.map(r => ({ mat: r.mat, ...fmtMat(r) })) })) : [],
+        groups: cfg.show.materials ? matGroups.map(g => ({ color: colorOfScope(g.sc.id), title: `${codeOf(g.sc)} ${g.sc.scope_name}`.trim(), rows: g.rows.map(r => ({ mat: r.mat, ...fmtMat(r) })) })) : [],
         summary: cfg.show.materialSummary ? matSummary.map(r => ({ mat: r.mat, ...fmtMat(r) })) : null,
       } : null,
       view3d,
@@ -1130,7 +1160,7 @@ export default function TakeoffWorkspacePage() {
         elevationsNote: t('fs.elevationsNote'),
         studs: n => t('fs.studs', { n }),
         sequenceTitle: t('fs.page.sequence'),
-        seqCols: [t('fs.col.order'), t('fs.col.activity'), t('fs.col.check'), t('fs.col.by'), t('fs.col.date')],
+        seqCols: [t('fs.col.order'), t('fs.col.activity'), t('fs.col.after'), t('fs.col.check'), t('fs.col.by'), t('fs.col.date')],
         logTitle: t('fs.page.log'),
         logCols: [t('fs.col.tag'), t('fs.col.activity'), t('fs.col.date'), t('fs.col.crew'), t('fs.col.pct'), t('fs.col.notes')],
         historyTitle: t('fs.page.history'),

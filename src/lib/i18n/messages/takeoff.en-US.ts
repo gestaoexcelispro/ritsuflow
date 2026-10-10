@@ -442,6 +442,7 @@ const takeoffEnUS: TakeoffMessages = {
   'print.byLocation': "Materials by location",
   'print.noLocation': "Outside any location",
   'print.byLocationNote': "Each type split by location: walls by length (a wall on the edge of two rooms is split between them), floors and ceilings by area. Whole units are rounded up per location, so locations can add up to slightly more than the total.",
+  'fs.col.after': "After",
   'taskSettings.title': "Activity settings",
   'taskSettings.wp': "Work package",
   'taskSettings.wpNone': "— No work package —",

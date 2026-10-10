@@ -443,6 +443,7 @@ const takeoffPtBR = {
   'print.byLocation': "Materiais por localização",
   'print.noLocation': "Fora de qualquer localização",
   'print.byLocationNote': "Cada tipologia dividida por localização: paredes pelo comprimento (parede na divisa de dois ambientes é dividida entre eles), pisos e forros pela área. Unidades inteiras são arredondadas para cima por localização, então a soma pode passar um pouco do total.",
+  'fs.col.after': "Depois de",
   'taskSettings.title': "Configurações da atividade",
   'taskSettings.wp': "Pacote de trabalho",
   'taskSettings.wpNone': "— Sem pacote de trabalho —",
