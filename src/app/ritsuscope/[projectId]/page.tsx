@@ -786,6 +786,21 @@ export default function TakeoffWorkspacePage() {
   const lockedSection = !licensed && (section === 'takeoff' || section === 'tasks' || section === 'estimating')
   const toolbarShown = !lockedSection && (section === 'zoning' || section === 'takeoff' || section === 'tasks') && isPdf && viewMode === 'plan'
 
+  // (Hook: must stay above the loading return below.)
+  /** Where the open activity's work is done, location by location (same engine as Scope › Allocation). */
+  const taskAuto = useMemo(() => {
+    const sc = taskScopes.find(x => x.id === taskScopeId)
+    if (section !== 'tasks' || !sc?.takeoff_layer_id) return null
+    const data: TakeoffData = {
+      layers, elements: rawElements, sources: sources.filter(x => x.kind === 'pdf_page'), levels, zones: zones.filter(z => z.location_id),
+      wallTypes: wallTypes.map(w => ({ id: w.id, boards: w.boards })), carriers: taskCarriers,
+    }
+    const production = new Set<string>(taskLocations.filter(l => !TASK_GROUP_KINDS.has(l.location_type)).map(l => l.id))
+    return allocateScopeStep(data, {
+      layerIds: [sc.takeoff_layer_id], unit: sc.unit || 'm²', step: sc.takeoff_step, rule: sc.allocation_rule, productionLocationIds: production,
+      flowRank: flowRankOf(taskLocations), exteriorLocationOf: key => exteriorLocationOf(key, taskLocations, levels),
+    })
+  }, [section, taskScopeId, taskScopes, layers, rawElements, sources, levels, zones, wallTypes, taskCarriers, taskLocations])
   if (loading || !project) {
     return (
       <section style={{ ...ui.page, padding: 16 }}>
@@ -2499,20 +2514,6 @@ export default function TakeoffWorkspacePage() {
   const drawnOf = (scopeId: string, locationId: string) => taskRows.filter(r => r.scope_item_id === scopeId && r.location_id === locationId).reduce((a, r) => a + Number(r.quantity || 0), 0)
   const hasZone = (locationId: string) => zones.some(z => z.location_id === locationId && Array.isArray(z.points) && z.points.length >= 3)
   // ---------- Activity settings (⚙): work package, allocation rule, carriers, predecessors ----------
-  /** Where the open activity's work is done, location by location (same engine as Scope › Allocation). */
-  const taskAuto = useMemo(() => {
-    const sc = taskScopes.find(x => x.id === taskScopeId)
-    if (section !== 'tasks' || !sc?.takeoff_layer_id) return null
-    const data: TakeoffData = {
-      layers, elements: rawElements, sources: sources.filter(x => x.kind === 'pdf_page'), levels, zones: zones.filter(z => z.location_id),
-      wallTypes: wallTypes.map(w => ({ id: w.id, boards: w.boards })), carriers: taskCarriers,
-    }
-    const production = new Set<string>(taskLocations.filter(l => !TASK_GROUP_KINDS.has(l.location_type)).map(l => l.id))
-    return allocateScopeStep(data, {
-      layerIds: [sc.takeoff_layer_id], unit: sc.unit || 'm²', step: sc.takeoff_step, rule: sc.allocation_rule, productionLocationIds: production,
-      flowRank: flowRankOf(taskLocations), exteriorLocationOf: key => exteriorLocationOf(key, taskLocations, levels),
-    })
-  }, [section, taskScopeId, taskScopes, layers, rawElements, sources, levels, zones, wallTypes, taskCarriers, taskLocations])
   /** Predecessors of a line: the planner's, else the default wall sequence. */
   const depsOf = (scopeId: string): StepDep[] => {
     const own = taskDeps.filter(d => d.scope_item_id === scopeId)
