@@ -10,36 +10,38 @@ import {
 } from 'next/navigation'
 
 
+// R5 · The company gets workspace licences (organization_workspace_entitlements), the same
+// record every licence check reads. The old module list wrote a seat licence nobody read.
 const moduleOptions = [
   {
-    key: 'project_setup',
-    label: 'Project Setup',
+    key: 'projects',
+    label: 'Projects',
     description:
-      'Project creation, setup and location structure.',
+      'Projects, scope register and locations.',
   },
   {
-    key: 'planning',
-    label: 'Planning',
+    key: 'precon',
+    label: 'PreCon',
     description:
-      'Master Plan, Lookahead and Weekly Planning.',
+      'Master Plan, Pull planning, Lookahead, Constraints and Weekly Planning.',
   },
   {
-    key: 'daily_reports',
-    label: 'Daily Reports',
+    key: 'fieldop',
+    label: 'FieldOp',
     description:
-      'Field reporting and productivity tracking.',
+      'QR hub, attendance, daily reports and production.',
   },
   {
-    key: 'workforce',
-    label: 'Workforce',
+    key: 'ritsuscope',
+    label: 'RitsuScope',
     description:
-      'Attendance, check-in/out and workforce control.',
+      'Drawing takeoff, zoning, tasks and field sheets.',
   },
   {
-    key: 'production_control',
-    label: 'Production Control',
+    key: 'commercial',
+    label: 'Commercial',
     description:
-      'Production Map, Status Matrix and control tools.',
+      'Bids, markups and proposals.',
   },
 ]
 
@@ -106,11 +108,9 @@ function getInitialForm() {
     expiresAt: '',
 
     moduleKeys: [
-      'project_setup',
-      'planning',
-      'daily_reports',
-      'workforce',
-      'production_control',
+      'projects',
+      'precon',
+      'fieldop',
     ],
 
     primaryAdminName: '',
@@ -295,7 +295,16 @@ export default function AddOrganizationClient() {
       seatLimit < 1
     ) {
       return (
-        'Seat limit must be at least 1.'
+        'Active project limit must be at least 1.'
+      )
+    }
+
+    if (
+      !form.moduleKeys.includes('projects') &&
+      !form.moduleKeys.includes('commercial')
+    ) {
+      return (
+        'A company needs Projects, Commercial, or both.'
       )
     }
 
@@ -875,7 +884,7 @@ export default function AddOrganizationClient() {
                 }}
               >
                 Commercial access,
-                seat limit and
+                active project limit and
                 license period.
               </p>
 
@@ -982,7 +991,7 @@ export default function AddOrganizationClient() {
                       800,
                   }}
                 >
-                  Seat Limit
+                  Active project limit
 
                   <input
                     type="number"
@@ -1248,7 +1257,7 @@ export default function AddOrganizationClient() {
                         '0.95rem',
                     }}
                   >
-                    Modules
+                    Workspaces
                   </h3>
 
                   <p
@@ -1261,7 +1270,7 @@ export default function AddOrganizationClient() {
                     }}
                   >
                     Choose the
-                    capabilities included
+                    workspaces included
                     in this license.
                   </p>
                 </div>

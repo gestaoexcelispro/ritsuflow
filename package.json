@@ -9,6 +9,8 @@
     "lint": "next lint",
     "test:platform-map": "node scripts/check-platform-map.mjs && node scripts/check-platform-map-layout.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
+    "test": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test 'scripts/*.test.mjs'",
+    "check": "npm run test:platform-map && npm run check:i18n && npm test",
     "test:commercial": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/commercial-pricing.test.mjs",
     "test:ceilings": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/ceiling-types.test.mjs",
     "test:floors": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/floor-types.test.mjs",

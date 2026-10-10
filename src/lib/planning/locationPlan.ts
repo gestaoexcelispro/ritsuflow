@@ -3,7 +3,7 @@
 //     is physically done (face / carrier rule, drawn task lines win), grouped by
 //     project_scopes.organization_work_package_id;
 //   * which predecessors each (location, work package) waits for — project_scope_dependencies, else the
-//     default wall sequence — including the "carrier room" links of dividing walls;
+//     default wall sequence — including the "carrier room" links of dividing walls and their lags;
 //   * how much is already done — Weekly plan items tied to a location and a work package.
 // The scope register and the Commercial estimate are not touched.
 import type { createClient } from '@/lib/supabase/client'
@@ -28,7 +28,7 @@ export type PlanDepRow = { scope_item_id: string; predecessor_scope_item_id: str
 export type PlanDrawing = { scope_item_id: string; location_id: string; source_id: string; points: Vec2[]; quantity: number | null }
 export type PlanWorkPackage = { id: string; code: string; description: string | null; color?: string | null }
 /** Progress already reported (Weekly plan items with a location and a work package). */
-export type PlanProgress = { location_id: string | null; organization_work_package_id: string | null; unit: string | null; actual_quantity: number | null; planned_quantity?: number | null; execution_result?: string | null }
+export type PlanProgress = { location_id: string | null; organization_work_package_id: string | null; unit: string | null; actual_quantity: number | null; planned_quantity?: number | null; execution_result?: string | null; completed_at?: string | null; planned_finish_date?: string | null }
 
 /** One (location × work package × unit) with its quantity from Tasks. */
 export type LocationPackageRow = { locationId: string; wpId: string; unit: string; quantity: number; scopeIds: string[] }
@@ -36,7 +36,7 @@ export type LocationPackageRow = { locationId: string; wpId: string; unit: strin
 export type LocationPlan = {
   /** scope line → location → quantity (only real locations; Exterior buckets without a location are dropped). */
   scopeQty: Map<string, Map<string, number>>
-  /** scope line → room → the rooms that carry its walls. */
+  /** scope line → room → the rooms across its walls (the carrier's framing, the other face). */
   carrierByScope: Map<string, Map<string, Set<string>>>
   rows: LocationPackageRow[]
   depsOf: (scopeId: string) => StepDep[]
@@ -74,7 +74,7 @@ export function buildLocationPlan(input: { data: TakeoffData; scopes: PlanScope[
     const claimed: ClaimedLine[] = own.map(d => ({ source_id: d.source_id, points: d.points }))
     const r = allocateScopeStep(data, {
       layerIds: [sc.takeoff_layer_id], unit: sc.unit || 'm²', step: sc.takeoff_step, rule: sc.allocation_rule,
-      productionLocationIds: new Set([...production].filter(id => !drawn.has(id))), claimed, flowRank,
+      productionLocationIds: new Set([...production].filter(id => !drawn.has(id))), knownLocationIds: production, claimed, flowRank,
       exteriorLocationOf: key => exteriorLocationOf(key, locations, data.levels),
     })
     const q = new Map<string, number>()
@@ -130,25 +130,74 @@ export function progressIndex(plan: LocationPlan, progress: PlanProgress[]): (lo
 /** Done enough to release the successors (rounding of drawn openings leaves tiny gaps). */
 export const DONE_AT = 0.995
 
-export type Wait = { locationId: string; wpId: string; done: number }
+export type Wait = { locationId: string; wpId: string; done: number; readyOn?: string }
+
+/** Last day work was reported for each location × work package (ISO date), for the predecessor lags. */
+export function lastProgressIndex(progress: PlanProgress[]): (locationId: string, wpId: string) => string | null {
+  const last = new Map<string, string>()
+  for (const p of progress) {
+    if (!p.location_id || !p.organization_work_package_id) continue
+    const day = String(p.completed_at || p.planned_finish_date || '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue
+    const key = `${p.location_id}|${p.organization_work_package_id}`
+    if (!last.has(key) || day > last.get(key)!) last.set(key, day)
+  }
+  return (locationId, wpId) => last.get(`${locationId}|${wpId}`) || null
+}
+
+/** ISO date + n working days (Monday to Friday). */
+export function addWorkingDays(iso: string, n: number): string {
+  const d = new Date(`${iso}T12:00:00Z`)
+  let left = Math.max(0, Math.round(n))
+  while (left > 0) {
+    d.setUTCDate(d.getUTCDate() + 1)
+    const wd = d.getUTCDay()
+    if (wd !== 0 && wd !== 6) left--
+  }
+  return d.toISOString().slice(0, 10)
+}
+
 /**
  * Koskela "Predecessor" for one work package in one location: the other packages it waits for, in the
- * same location or in the rooms that carry its walls, that are not done yet. Steps of the same package
- * (e.g. Side A and Side B boards both under BRD) are the crew's own sequence and are not checked here.
+ * same location or — for 'carrier_location' links — also in the rooms across its walls, that are not done
+ * yet. A predecessor with a lag is done only `lagDays` working days after its last reported work
+ * (`readyOn`). Steps of the same package (e.g. Side A and Side B boards both under BRD) are the crew's own
+ * sequence and are not checked here.
  */
-export function waitsFor(plan: LocationPlan, wpId: string, locationId: string, doneOf: (locationId: string, wpId: string) => number): Wait[] {
+export function waitsFor(
+  plan: LocationPlan,
+  wpId: string,
+  locationId: string,
+  doneOf: (locationId: string, wpId: string) => number,
+  opts: { lastDoneOf?: (locationId: string, wpId: string) => string | null; today?: string } = {},
+): Wait[] {
   const waits = new Map<string, Wait>()
+  const today = opts.today || new Date().toISOString().slice(0, 10)
   for (const sc of plan.scopes) {
     if (sc.organization_work_package_id !== wpId || !(plan.scopeQty.get(sc.id)?.get(locationId)! > 0)) continue
     for (const d of plan.depsOf(sc.id)) {
       const pred = plan.scopes.find(s => s.id === d.predecessorId)
       const P = pred?.organization_work_package_id
       if (!pred || !P || P === wpId) continue
-      const carriers = d.link === 'carrier_location' ? plan.carrierByScope.get(sc.id)?.get(locationId) : undefined
-      const where = carriers && carriers.size ? [...carriers] : [locationId]
+      // 'carrier_location': this room and the rooms across its walls, but only where the predecessor step
+      // itself has work (progress is per package, so e.g. Side B boards in this room must not hold up
+      // insulation that waits for Side A).
+      const across = d.link === 'carrier_location' ? plan.carrierByScope.get(sc.id)?.get(locationId) : undefined
+      const where = across
+        ? [locationId, ...[...across].filter(id => id !== locationId)].filter(m => (plan.scopeQty.get(pred.id)?.get(m) || 0) > 0)
+        : [locationId]
       for (const m of where) {
         const done = doneOf(m, P)
-        if (done < DONE_AT) waits.set(`${m}|${P}`, { locationId: m, wpId: P, done })
+        if (done < DONE_AT) { waits.set(`${m}|${P}`, { locationId: m, wpId: P, done }); continue }
+        const lag = Number(d.lagDays) || 0
+        const last = lag > 0 && opts.lastDoneOf ? opts.lastDoneOf(m, P) : null
+        if (last) {
+          const readyOn = addWorkingDays(last, lag)
+          if (today < readyOn) {
+            const prev = waits.get(`${m}|${P}`)
+            if (!prev || (prev.readyOn && prev.readyOn < readyOn)) waits.set(`${m}|${P}`, { locationId: m, wpId: P, done, readyOn })
+          }
+        }
       }
     }
   }

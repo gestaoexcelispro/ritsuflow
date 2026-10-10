@@ -105,6 +105,8 @@ function sideDist(p: Vec2, a: Vec2, b: Vec2): number {
 }
 
 const EDGE_M = 0.2
+/** A face with no zone is a room not zoned yet when another zone lies within this distance (m), else Exterior. */
+const GAP_M = 3
 
 export function allocateFromTakeoff(data: TakeoffData, input: { layerIds: string[]; unit: string; productionLocationIds: Set<string>; claimed?: ClaimedLine[] }): AllocationResult {
   const byLocation = new Map<string, number>()
@@ -211,6 +213,21 @@ export function defaultRuleFor(step: string | null | undefined): AllocationRule 
   return 'position'
 }
 
+/**
+ * Rules a step may use. A face (board, joints, insulation) goes 100% to the room it faces, so it can only
+ * be 'face' or 'manual'; framing only 'carrier' or 'manual'. Other lines keep every rule.
+ */
+export function allowedRulesFor(step: string | null | undefined): AllocationRule[] {
+  if (step === 'framing') return ['carrier', 'manual']
+  if (step && WALL_STEPS.has(step)) return ['face', 'manual']
+  return ALLOCATION_RULES
+}
+
+/** The planner's rule when the step allows it, else the step's default (an old saved choice is ignored). */
+export function effectiveRuleFor(step: string | null | undefined, rule: AllocationRule | null | undefined): AllocationRule {
+  return rule && allowedRulesFor(step).includes(rule) ? rule : defaultRuleFor(step)
+}
+
 /** Key of a level's exterior bucket in `byLocation` (until mapped to a real location). */
 export const EXTERIOR = 'exterior:'
 export const exteriorKeyOf = (sheet: Pick<SourceRow, 'id' | 'level_id'>) => `${EXTERIOR}${sheet.level_id || sheet.id}`
@@ -231,6 +248,11 @@ export type StepInput = {
   /** Planner's choice; default from the step. */
   rule?: AllocationRule | null
   productionLocationIds: Set<string>
+  /**
+   * Every production location, including those left out of the automatic split because they are drawn
+   * by hand. A face looking into one of them is that room's (already drawn), not "Exterior".
+   */
+  knownLocationIds?: Set<string>
   claimed?: ClaimedLine[]
   /** Order of the location flow (lower first); carriers of dividing walls default to the lower. */
   flowRank: Map<string, number>
@@ -244,7 +266,7 @@ export type StepInput = {
 
 /** The allocation of one scope step, by its rule (see above). */
 export function allocateScopeStep(data: TakeoffData, input: StepInput): AllocationResult {
-  const rule = input.rule || defaultRuleFor(input.step)
+  const rule = effectiveRuleFor(input.step, input.rule)
   const base = { layerIds: input.layerIds, unit: input.unit, productionLocationIds: input.productionLocationIds, claimed: input.claimed }
   if (rule === 'manual') {
     const r = allocateFromTakeoff(data, base)
@@ -259,7 +281,8 @@ export function allocateScopeStep(data: TakeoffData, input: StepInput): Allocati
     : { byLocation: new Map(), total: 0, unallocated: 0, uncalibratedSheets: [], claimed: 0 }
   const carrierOf = new Map<string, Set<string>>()
   out.carrierOf = carrierOf
-  const add = (id: string, v: number) => { const key = id.startsWith(EXTERIOR) ? input.exteriorLocationOf?.(id) || id : id; out.byLocation.set(key, (out.byLocation.get(key) || 0) + v) }
+  const mapped = (id: string) => (id.startsWith(EXTERIOR) ? input.exteriorLocationOf?.(id) || id : id)
+  const add = (id: string, v: number) => { const key = mapped(id); out.byLocation.set(key, (out.byLocation.get(key) || 0) + v) }
   const walls = data.layers.filter(l => input.layerIds.includes(l.id) && l.kind === 'linear')
   const levelById = new Map(data.levels.map(l => [l.id, l] as [string, LevelRow]))
   const rankOf = (id: string) => input.flowRank.get(id) ?? 1e9
@@ -277,8 +300,13 @@ export function allocateScopeStep(data: TakeoffData, input: StepInput): Allocati
     const h = level ? wallHeightOf(masterOf(level, levelById)) : null
     const raw = rowsToItems(walls, data.elements, new Map([[sheet.id, 1]]))
     const items: TakeoffItem[] = h ? fillLevelHeights(raw, () => h) : raw
-    const zones = data.zones.filter(z => z.source_id === sheet.id && z.location_id && input.productionLocationIds.has(z.location_id) && z.points.length >= 3)
+    // Faces are found against every production room (drawn by hand or not) …
+    const known = input.knownLocationIds || input.productionLocationIds
+    const zones = data.zones.filter(z => z.source_id === sheet.id && z.location_id && known.has(z.location_id) && z.points.length >= 3)
     const zoneAt = (p: Vec2) => zones.find(z => pointInPolygon(p, z.points))?.location_id || null
+    // … and any zone on the sheet tells a room without a zone from the outside of the building.
+    const sheetZones = data.zones.filter(z => z.source_id === sheet.id && z.points.length >= 3)
+    const anyZoneAt = (p: Vec2) => sheetZones.some(z => pointInPolygon(p, z.points))
     const claimLines = (input.claimed || []).filter(c => c.source_id === sheet.id && c.points.length >= 2)
     const claimTol = CLAIM_M * k
     const isClaimed = (p: Vec2) => claimLines.some(c => { for (let i = 1; i < c.points.length; i++) if (sideDist(p, c.points[i - 1], c.points[i]) <= claimTol) return true; return false })
@@ -311,24 +339,43 @@ export function allocateScopeStep(data: TakeoffData, input: StepInput): Allocati
             walked += w
             const p: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
             if (claimLines.length && isClaimed(p)) { parts.push({ loc: null, w, claimed: true }); continue }
-            const zA = zoneAt([p[0] + n[0] * probe, p[1] + n[1] * probe])
-            const zB = zoneAt([p[0] - n[0] * probe, p[1] - n[1] * probe])
-            if (!zA && !zB) { parts.push({ loc: null, w, claimed: false }); continue }
-            // The room on each face (an exterior face goes to the level's Exterior bucket).
-            const faceA = zA || exterior
-            const faceB = zB || exterior
+            // The room on each face: a zone; null = a room with no zone yet (something is drawn further
+            // out on that side); the level's Exterior only when nothing is drawn within GAP_M.
+            const faceOf = (sign: 1 | -1): string | null => {
+              const at = (d: number): Vec2 => [p[0] + sign * n[0] * d, p[1] + sign * n[1] * d]
+              const z = zoneAt(at(probe))
+              if (z) return z
+              for (let d = 1; d <= GAP_M; d++) if (anyZoneAt(at(probe + d * k))) return null
+              return exterior
+            }
+            const faceA = faceOf(1)
+            const faceB = faceOf(-1)
+            const roomA = faceA && !faceA.startsWith(EXTERIOR) ? faceA : null
+            const roomB = faceB && !faceB.startsWith(EXTERIOR) ? faceB : null
+            if (!roomA && !roomB) { parts.push({ loc: null, w, claimed: false }); continue }
             // Carrier: the planner's pick for this wall when it is one of its rooms, else the first in the flow.
             let carrier: string
-            if (zA && zB) carrier = override && (override === zA || override === zB) ? override : (rankOf(zA) < rankOf(zB) || (rankOf(zA) === rankOf(zB) && zA <= zB) ? zA : zB)
-            else carrier = (zA || zB)!
+            if (roomA && roomB) carrier = override && (override === roomA || override === roomB) ? override : (rankOf(roomA) < rankOf(roomB) || (rankOf(roomA) === rankOf(roomB) && roomA <= roomB) ? roomA : roomB)
+            else carrier = (roomA || roomB)!
             const other = carrier === faceA ? faceB : faceA
-            if (other !== carrier) { const key = other.startsWith(EXTERIOR) ? input.exteriorLocationOf?.(other) || other : other; const set = carrierOf.get(key) || new Set<string>(); set.add(carrier); carrierOf.set(key, set) }
-            let loc: string
+            // Side B (the open face) of this stretch: insulation and Side B work happen there.
+            const sideB = symmetric ? other : faceB
+            const sideA = symmetric ? carrier : faceA
+            let loc: string | null
             if (rule === 'carrier' || step === 'framing') loc = carrier
-            else if (step === 'insulation') loc = other
-            else if (onA) loc = symmetric ? carrier : faceA
-            else if (onB) loc = symmetric ? other : faceB
+            else if (step === 'insulation' || onB) loc = sideB
+            else if (onA) loc = sideA
             else loc = carrier
+            // The rooms across this stretch from where the work lands (framing in the carrier, the other face):
+            // what the "carrier room" predecessors of this step wait for.
+            if (loc) {
+              const key = mapped(loc)
+              const set = carrierOf.get(key) || new Set<string>()
+              for (const r of [carrier, faceA, faceB]) if (r && r !== loc) set.add(mapped(r))
+              if (set.size) carrierOf.set(key, set)
+            }
+            // A face looking into a room drawn by hand is covered by that drawing.
+            if (loc && !loc.startsWith(EXTERIOR) && !input.productionLocationIds.has(loc)) { parts.push({ loc: null, w, claimed: true }); continue }
             parts.push({ loc, w, claimed: false })
           }
         }

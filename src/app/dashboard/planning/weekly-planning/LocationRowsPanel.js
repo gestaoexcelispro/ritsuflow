@@ -34,7 +34,7 @@ export default function LocationRowsPanel({ locationPlan, packageCode, existingI
   }
 
   const chosen = rows.filter((r) => picked.has(r.locationId));
-  const waitText = (r) => r.waits.map((w) => tr('loc.waitsItem', { code: locationPlan.codeOf(w.wpId), location: locationPlan.locationName(w.locationId), done: Math.round(w.done * 100) })).join(' · ');
+  const waitText = (r) => r.waits.map((w) => (w.readyOn ? tr('loc.waitsLagItem', { code: locationPlan.codeOf(w.wpId), location: locationPlan.locationName(w.locationId), date: w.readyOn }) : tr('loc.waitsItem', { code: locationPlan.codeOf(w.wpId), location: locationPlan.locationName(w.locationId), done: Math.round(w.done * 100) }))).join(' · ');
 
   return (
     <div style={box}>

@@ -42,6 +42,7 @@
   "masterPlan.promptDuplicate": "Nome da cópia",
   "masterPlan.scenarioSaved": "Cenário salvo. Você pode trocar de cenário no topo da página.",
   "masterPlan.scenarioUpdated": "Cenário atualizado.",
+  "masterPlan.removedLookaheadItems": "Cenário atualizado. {count} itens do Lookahead apontavam para pacotes que você removeu e foram retirados do Lookahead.",
   "masterPlan.scenarioSaveError": "Não foi possível salvar o cenário.",
   "masterPlan.scenarioLoadError": "Não foi possível carregar o plano mestre.",
   "masterPlan.packageSyncError": "O cenário foi salvo, mas não foi possível sincronizar os pacotes de trabalho.",
@@ -263,6 +264,14 @@
   "lookahead.cancel": "Cancelar",
   "lookahead.inserting": "Inserindo…",
   "lookahead.noPlan": "Este projeto ainda não tem um plano lookahead.",
+  "lookahead.newFromBaseline": "Novo a partir da linha de base",
+  "lookahead.creatingPlan": "Criando…",
+  "lookahead.noPlanText": "Crie um a partir da linha de base congelada do Plano mestre. Todo pacote que cai na janela entra automaticamente.",
+  "lookahead.confirmNewPlan": "Criar um novo lookahead a partir da linha de base, começando em {start} por {weeks} semanas? O plano ativo atual será encerrado (fica na lista, somente leitura).",
+  "lookahead.errNoBaseline": "Este projeto ainda não tem uma linha de base congelada do Plano mestre. Congele uma no Plano mestre primeiro.",
+  "lookahead.errCreate": "Não foi possível criar o lookahead.",
+  "lookahead.createdNotice": "Lookahead criado: {items} pacotes em {rows} linhas.",
+  "lookahead.refreshedNotice": "{items} novos pacotes vieram da linha de base.",
   "lookahead.confirmDeleteRow": "Excluir esta linha? As avaliações de prontidão dela também são removidas.",
   "lookahead.thisPackage": "este pacote de trabalho",
   "lookahead.confirmConstraint": "{package} · {category} será marcado como Não.\n\nUma restrição será criada no registro de restrições e este critério será gerenciado em Restrições até ser liberado.\n\nContinuar?",
@@ -980,6 +989,7 @@
   "weekly.loc.finished": "Concluído",
   "weekly.loc.waits": "Aguarda: {list}",
   "weekly.loc.waitsItem": "{code} em {location} ({done}%)",
+  "weekly.loc.waitsLagItem": "{code} em {location}: defasagem até {date}",
   "weekly.loc.inWeek": "nesta semana",
   "weekly.loc.hint": "Uma linha por local marcado, com a quantidade restante. Atividade, responsável e observações vêm do formulário.",
   "weekly.loc.add": "Adicionar {count} linha(s)",
@@ -990,5 +1000,6 @@
   "lookahead.autoPred.readyHint": "Tarefas do RitsuScope: predecessoras concluídas em {ready} de {total} locais.",
   "lookahead.autoPred.blockedHint": "Tarefas do RitsuScope — ainda aguardando:\n{list}",
   "lookahead.autoPred.blockedItem": "{location}: {waits}",
-  "lookahead.autoPred.waitItem": "{code} em {location} ({done}%)"
+  "lookahead.autoPred.waitItem": "{code} em {location} ({done}%)",
+  "lookahead.autoPred.waitLagItem": "{code} em {location}: defasagem até {date}"
 }

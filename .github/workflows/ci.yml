@@ -1,0 +1,31 @@
+# R7 · Every pull request (and every push to main) runs the checks that guard RitsuFlow:
+# the 17 test files (pricing, takeoff, tasks, planning…), the language check (en-US / es / pt-BR)
+# and the platform map checks. The production build itself is checked by the Vercel preview of the PR.
+# No install step: the tests use Node's built-in runner and TypeScript stripping only.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Tests, languages and platform map
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Platform map
+        run: npm run test:platform-map
+      - name: Languages (en-US, es, pt-BR)
+        run: npm run check:i18n
+      - name: Tests
+        run: npm test

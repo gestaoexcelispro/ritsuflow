@@ -42,6 +42,7 @@
   "masterPlan.promptDuplicate": "Nombre de la copia",
   "masterPlan.scenarioSaved": "Escenario guardado. Puedes cambiar de escenario en la parte superior de la página.",
   "masterPlan.scenarioUpdated": "Escenario actualizado.",
+  "masterPlan.removedLookaheadItems": "Escenario actualizado. {count} ítems del Lookahead apuntaban a paquetes que eliminó y se quitaron del Lookahead.",
   "masterPlan.scenarioSaveError": "No se pudo guardar el escenario.",
   "masterPlan.scenarioLoadError": "No se pudo cargar el plan maestro.",
   "masterPlan.packageSyncError": "El escenario se guardó, pero no se pudieron sincronizar sus paquetes de trabajo.",
@@ -263,6 +264,14 @@
   "lookahead.cancel": "Cancelar",
   "lookahead.inserting": "Insertando…",
   "lookahead.noPlan": "Este proyecto aún no tiene un plan lookahead.",
+  "lookahead.newFromBaseline": "Nuevo desde la línea base",
+  "lookahead.creatingPlan": "Creando…",
+  "lookahead.noPlanText": "Créelo a partir de la línea base congelada del Plan maestro. Cada paquete que cae en la ventana entra automáticamente.",
+  "lookahead.confirmNewPlan": "¿Crear un nuevo lookahead desde la línea base, a partir del {start} por {weeks} semanas? El plan activo actual se cerrará (se conserva en la lista, solo lectura).",
+  "lookahead.errNoBaseline": "Este proyecto aún no tiene una línea base congelada del Plan maestro. Congélela primero en Plan maestro.",
+  "lookahead.errCreate": "No se pudo crear el lookahead.",
+  "lookahead.createdNotice": "Lookahead creado: {items} paquetes en {rows} filas.",
+  "lookahead.refreshedNotice": "{items} paquetes nuevos llegaron de la línea base.",
   "lookahead.confirmDeleteRow": "¿Eliminar esta fila? Sus evaluaciones de preparación también se eliminan.",
   "lookahead.thisPackage": "este paquete de trabajo",
   "lookahead.confirmConstraint": "{package} · {category} se marcará como No.\n\nSe creará una restricción en el registro de restricciones y este criterio se gestionará en Restricciones hasta que se libere.\n\n¿Continuar?",
@@ -980,6 +989,7 @@
   "weekly.loc.finished": "Terminado",
   "weekly.loc.waits": "Espera: {list}",
   "weekly.loc.waitsItem": "{code} en {location} ({done}%)",
+  "weekly.loc.waitsLagItem": "{code} en {location}: desfase hasta {date}",
   "weekly.loc.inWeek": "en esta semana",
   "weekly.loc.hint": "Una fila por ubicación marcada, con la cantidad restante. Actividad, responsable y notas vienen del formulario.",
   "weekly.loc.add": "Agregar {count} fila(s)",
@@ -990,5 +1000,6 @@
   "lookahead.autoPred.readyHint": "Tareas de RitsuScope: predecesoras terminadas en {ready} de {total} ubicaciones.",
   "lookahead.autoPred.blockedHint": "Tareas de RitsuScope — aún esperando:\n{list}",
   "lookahead.autoPred.blockedItem": "{location}: {waits}",
-  "lookahead.autoPred.waitItem": "{code} en {location} ({done}%)"
+  "lookahead.autoPred.waitItem": "{code} en {location} ({done}%)",
+  "lookahead.autoPred.waitLagItem": "{code} en {location}: desfase hasta {date}"
 }
