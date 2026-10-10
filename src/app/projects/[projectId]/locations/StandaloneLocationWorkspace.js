@@ -199,15 +199,22 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
   }, [takeoff, selectedServiceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * A scope line without a FieldOp activity record gets one now, inactive: location quantities need it,
-   * and FieldOp only uses the item once it is activated in FieldOp's project setup.
+   * R4 · Allocating quantities by location means the work is live, so the scope line's FieldOp activity
+   * is created (or switched back on) as active. Before, it was created inactive and FieldOp ignored it
+   * until someone activated it by hand in FieldOp's project setup.
    */
-  async function ensureActivity(service) {
-    if (!service.pending) return service.id
+  async function activate(id) {
+    const { error: e } = await supabase.from('fieldop_project_activities').update({ is_active: true, updated_at: new Date().toISOString() }).eq('id', id).eq('project_id', projectId).eq('is_active', false)
+    if (e) throw e
+  }
+  async function ensureActivity(service, makeActive = true) {
+    if (!service.pending) { if (makeActive) await activate(service.id); return service.id }
     const { data: found } = await supabase.from('fieldop_project_activities').select('id').eq('project_id', projectId).eq('source', 'scope').eq('scope_item_id', service.source_scope_item_id).limit(1)
     let id = found?.[0]?.id
-    if (!id) {
-      const { data, error: e } = await supabase.from('fieldop_project_activities').insert({ project_id: projectId, source: 'scope', scope_item_id: service.source_scope_item_id, is_active: false }).select('id').single()
+    if (id) {
+      if (makeActive) await activate(id)
+    } else {
+      const { data, error: e } = await supabase.from('fieldop_project_activities').insert({ project_id: projectId, source: 'scope', scope_item_id: service.source_scope_item_id, is_active: makeActive }).select('id').single()
       if (e) throw e
       id = data.id
     }
@@ -366,7 +373,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
     setAllocationSaving(true); setAllocationMessage('')
     const desired = locations.filter((location) => !nonProductionTypes.has(location.location_type)).map((location) => ({ location, quantity: number(draftAllocations[`${selectedService.id}:${location.id}`]) })).filter((item) => item.quantity > 0)
     let serviceId = selectedService.id
-    try { serviceId = await ensureActivity(selectedService); await writeAllocation(serviceId, desired.map((d) => ({ locationId: d.location.id, quantity: d.quantity }))); await reloadAllocations() } catch (e) { setAllocationMessage(e?.message || String(e)); setAllocationSaving(false); return }
+    try { serviceId = await ensureActivity(selectedService, desired.length > 0); await writeAllocation(serviceId, desired.map((d) => ({ locationId: d.location.id, quantity: d.quantity }))); await reloadAllocations() } catch (e) { setAllocationMessage(e?.message || String(e)); setAllocationSaving(false); return }
     try { await history('scope_location_allocation_updated', 'Scope allocation updated', `${selectedService.service_name} was allocated by production location`, serviceId, { service_id: serviceId, service_name: selectedService.service_name, scope_quantity: selectedServiceTotal, allocated_quantity: draftSelectedTotal, unit: selectedService.unit, locations: desired.map((item) => ({ location_id: item.location.id, location_name: item.location.name, quantity: item.quantity })) }) } catch (historyError) { setAllocationMessage(historyError.message); setAllocationSaving(false); return }
     setAllocationMessage(t('loc.alloc.saved')); setAllocationSaving(false); router.refresh()
   }
@@ -387,7 +394,7 @@ export default function StandaloneLocationWorkspace({ projectId, projectName, pr
       try {
         const add = [...linkDraft].filter((id) => id !== auto?.id && !manual.some((l) => l.id === id))
         const remove = manual.filter((l) => !linkDraft.has(l.id)).map((l) => l.id)
-        const activityId = add.length ? await ensureActivity(selectedService) : selectedService.id
+        const activityId = add.length ? await ensureActivity(selectedService, false) : selectedService.id
         if (add.length) { const { error: e1 } = await supabase.from('takeoff_layers').update({ scope_activity_id: activityId }).in('id', add); if (e1) throw e1 }
         if (remove.length) { const { error: e2 } = await supabase.from('takeoff_layers').update({ scope_activity_id: null }).in('id', remove); if (e2) throw e2 }
         await refreshTakeoff(); setLinkOpen(false)
