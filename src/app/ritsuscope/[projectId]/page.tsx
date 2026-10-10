@@ -30,7 +30,7 @@ import ElementPanel from './ElementPanel'
 import ChecksPanel from './ChecksPanel'
 import RevisionPanel from './RevisionPanel'
 import View3D, { DEFAULT_VIEW3D, render3DImage, type View3DCamera, type View3DStorey } from './View3D'
-import { elevationsOf, hostWall, sequenceOf, taskInfos, wallCards, type FieldScope, type FieldTaskLine, type WallCard, type WallTypeInfo } from '@/lib/takeoff/fieldSheetData'
+import { elevationsOf, hostWall, sequenceOf, taskInfos, wallCardOf, wallCards, type FieldScope, type FieldTaskLine, type WallCard, type WallTypeInfo } from '@/lib/takeoff/fieldSheetData'
 import PdfWorkspace, { type WorkCommand } from './PdfWorkspace'
 import PlanView from './PlanView'
 import ProjectPurchases from './ProjectPurchases'
@@ -43,7 +43,7 @@ import WallTypeCard from './WallTypeCard'
 import OpeningsEditor from './OpeningsEditor'
 import { useRecipeContext } from './useRecipeContext'
 import MaterialsCatalog from './MaterialsCatalog'
-import { ZONE_COLUMNS, scaleRatio, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
+import { ZONE_COLUMNS, pointInPolygon, scaleRatio, type ZoneKind, type ZoneRow } from '@/lib/takeoff/zones'
 import { createFloorsForLevels, createLocationsForZones, loadLocations, placeRootLocations } from '@/lib/takeoff/locationSync'
 import { importLegacyLocationMap, importableOutline, loadLegacyLocationMaps, type LegacyMap } from '@/lib/takeoff/importLocationMap'
 import type { ElementOpening, TakeoffItem, Vec2 } from '@/lib/takeoff/geometry'
@@ -242,6 +242,8 @@ export default function TakeoffWorkspacePage() {
   const [carrierPick, setCarrierPick] = useState(false)
   /** Tasks 3D: task bands pulled apart (framing, boards, joints…). */
   const [taskExplode, setTaskExplode] = useState(false)
+  /** Tasks 3D: the wall (element) and construction layer clicked ('framing', 'board:A:0'…). */
+  const [taskPick3d, setTaskPick3d] = useState<{ elementId: string; part: string | null } | null>(null)
   const [taskScopeId, setTaskScopeId] = useState<string | null>(null)
   const [taskLocationId, setTaskLocationId] = useState<string | null>(null)
   /** Task line clicked on the drawing: its properties show in the right panel. */
@@ -1434,8 +1436,17 @@ export default function TakeoffWorkspacePage() {
         {section === 'tasks' ? (
           // Task view in 3D: the task layers as coloured bands on the wall faces (stacked when several activities share a
           // face), each with its tag; the estimate walls see-through; the sheet and the locations' colours underneath.
-          <View3D key={`tasks-${selectedSource.id}`} items={tasks3d.items} ptPerM={ptPerM} selectedId={null} onSelect={() => {}} initialTags onView={setLiveView3d}
-            underlays={tasks3d.underlays} underlayZones={tasks3d.zones} explodeControl={{ on: taskExplode, onToggle: () => setTaskExplode(v => !v) }} />
+          <View3D key={`tasks-${selectedSource.id}`} items={tasks3d.items} ptPerM={ptPerM} initialTags onView={setLiveView3d}
+            underlays={tasks3d.underlays} underlayZones={tasks3d.zones} explodeControl={{ on: taskExplode, onToggle: () => setTaskExplode(v => !v) }}
+            selectedId={inspectLineId ? `plan:${inspectLineId}` : taskPick3d?.elementId || null} selectedPart={taskPick3d?.part || null}
+            onSelect={(id, part) => {
+              // A task band → its task line card; a wall (or one of its construction layers) → the layer card.
+              if (!id) { setInspectLineId(null); setTaskPick3d(null); return }
+              setRightOpen(true)
+              if (id.startsWith('plan:') || id.startsWith('task:')) { setTaskPick3d(null); setInspectLineId(id.slice(5)); return }
+              setInspectLineId(null)
+              setTaskPick3d({ elementId: id, part: part || null })
+            }} />
         ) : canShowModel && scope3d === 'model' ? (
           <View3D key={isIfcModel ? 'model' : 'building'} items={shownModelItems} ptPerM={1} storeys={modelData.storeys} selectedId={selectedElementId} onSelect={selectFromModel}
             underlays={isIfcModel ? undefined : underlay3d.model.underlays} underlayZones={isIfcModel ? undefined : underlay3d.model.zones}
@@ -2717,10 +2728,73 @@ export default function TakeoffWorkspacePage() {
       </div>
     </div>
   })()
+  /** Properties of the wall layer clicked in the Tasks 3D view (Construction layers on: framing or a board). */
+  const layerCard = (() => {
+    if (!taskPick3d || viewMode !== '3d') return null
+    const item = tasks3d.items.find(it => it.shapes.some(sh => sh.id === taskPick3d.elementId))
+    const shape = item?.shapes.find(sh => sh.id === taskPick3d.elementId)
+    if (!item || !shape) return null
+    const k = ptPerM
+    const q = k > 0 ? layerQuantities({ ...item, shapes: [shape] }, k) : null
+    const card = wallCardOf(item, (projectRecipeCtx.wallTypeOf?.(item) ?? null) as unknown as WallTypeInfo | null)
+    const part = taskPick3d.part || null
+    const face = part?.startsWith('board:') ? (part.split(':')[1] as 'A' | 'B') : null
+    const layerNo = part?.startsWith('board:') ? Number(part.split(':')[2]) || 0 : 0
+    // Rooms on each face (face A = left of the drawing direction), at the middle of the longest stretch.
+    const pts = shape.pts
+    let best = 0, bi = 1
+    for (let i = 1; i < pts.length; i++) { const L = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (L > best) { best = L; bi = i } }
+    const roomAt = (sgn: 1 | -1): string | null => {
+      if (!(best > 0) || !selectedSource) return null
+      const a = pts[bi - 1], b = pts[bi]
+      const u: Vec2 = [(b[0] - a[0]) / best, (b[1] - a[1]) / best]
+      const off = ((item.thickness || 0.1) / 2 + 0.3) * k * sgn
+      const p: Vec2 = [(a[0] + b[0]) / 2 - u[1] * off, (a[1] + b[1]) / 2 + u[0] * off]
+      return locationZonesOf(selectedSource.id).find(z => pointInPolygon(p, z.points as Vec2[]))?.location_id || null
+    }
+    const roomA = roomAt(1), roomB = roomAt(-1)
+    const nameOf = (id: string | null) => (id ? taskLocations.find(l => l.id === id)?.name || '—' : t('task.layer3d.exterior'))
+    const rank = flowRankOf(taskLocations)
+    const picked = taskCarriers.find(c => c.element_id === taskPick3d.elementId)?.location_id || null
+    const carrier = roomA && roomB ? (picked && (picked === roomA || picked === roomB) ? picked : ((rank.get(roomA) ?? 1e9) <= (rank.get(roomB) ?? 1e9) ? roomA : roomB)) : roomA || roomB
+    const row = (label: string, value: string) => <div style={{ display: 'grid', gridTemplateColumns: '104px 1fr', gap: 6, fontSize: 11.5 }}><span style={{ color: '#6b8089' }}>{label}</span><b style={{ color: '#173441', fontWeight: 700 }}>{value}</b></div>
+    const nf2 = (v: number) => formatNumber(v, 2)
+    const b = face === 'A' ? card.faceA : face === 'B' ? card.faceB : null
+    const title = face ? t(face === 'A' ? 'task.layer3d.boardA' : 'task.layer3d.boardB') : part ? t('task.layer3d.framing') : t('task.layer3d.wall')
+    return <div style={{ display: 'grid', gap: 6, padding: 10, border: '2px solid #e11d48', borderRadius: 8, background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 12, height: 4, borderRadius: 2, background: item.color }} />
+        <b style={{ flex: 1, fontSize: 13, color: '#173441' }}>{title}</b>
+        <button type="button" onClick={() => setTaskPick3d(null)} aria-label="×" style={{ border: 0, background: 'transparent', cursor: 'pointer', fontSize: 15, color: '#6b8089' }}>×</button>
+      </div>
+      {row(t('task.layer3d.wallType'), item.name)}
+      {card.thicknessMm ? row(t('fs.spec.thickness'), `${card.thicknessMm} mm`) : null}
+      {q && row(t('task.inspect.length'), `${nf2(q.len)} m`)}
+      {shape.h ? row(t('task.inspect.height'), `${nf2(Number(shape.h))} m`) : null}
+      {!part && <div style={{ fontSize: 11, color: '#6b8089' }}>{t('task.layer3d.turnOnLayers')}</div>}
+      {part && !face && <>
+        {row(t('fs.spec.studs'), `${card.stud} @ ${nf2(card.spacingM)} m${card.doubleStuds ? ` · ${t('fs.spec.double')}` : ''}`)}
+        {row(t('fs.spec.tracks'), card.track)}
+        {card.maxHeightM ? row(t('fs.spec.maxHeight'), `${nf2(card.maxHeightM)} m`) : null}
+        {row(t('fs.spec.insulation'), card.insulation || '—')}
+        {q && row(t('task.layer3d.area'), `${nf2(q.wall)} m²`)}
+        {row(t('task.layer3d.carrier'), `${nameOf(carrier)}${picked && picked === carrier ? ` · ${t('task.layer3d.picked')}` : ''}`)}
+      </>}
+      {face && b && <>
+        {row(t('task.layer3d.board'), b.name)}
+        {row(t('task.layer3d.layer'), t('task.layer3d.layerOf', { n: layerNo + 1, total: Math.max(b.layers, layerNo + 1) }))}
+        {row(t('fs.spec.thickness'), `${formatNumber(b.thkMm, 1)} mm`)}
+        {q && row(t('task.layer3d.netArea'), `${nf2(q.net ?? q.wall)} m²`)}
+        {row(t('task.layer3d.room'), nameOf(face === 'A' ? roomA : roomB))}
+      </>}
+      {part && row(t('task.layer3d.rooms'), `A: ${nameOf(roomA)} · B: ${nameOf(roomB)}`)}
+    </div>
+  })()
   const tasksRight = (
     <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
       <a href={backToAllocation} style={{ ...ui.backLink, fontSize: 12 }}>← {t('task.panel.back')}</a>
       {inspectCard}
+      {layerCard}
       {!taskScope || !taskLocation ? <div style={{ ...ui.small, lineHeight: 1.5 }}>{t('task.panel.pick')}</div> : <>
         <div>
           <div style={{ fontSize: 10.5, color: '#6b8089', fontWeight: 700 }}>{taskScope.scope_code} · {t('task.panel.in', { location: taskLocation.name })}</div>
