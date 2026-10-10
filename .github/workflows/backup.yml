@@ -1,0 +1,81 @@
+# R8 · Nightly database backup (option C: free plan + GitHub).
+# Supabase does not back up free-plan projects, so this job saves a full copy every night:
+#   roles.sql  – database roles
+#   schema.sql – tables, functions, policies, triggers (public, private and other app schemas)
+#   data.sql   – every row, including sign-in accounts (auth)
+# Not included: the files in Supabase Storage (uploaded PDF sheets, photos) — only their records.
+# The repository is public, so anyone signed in to GitHub can download its artifacts: the three files are
+# packed and ENCRYPTED (AES-256, passphrase in BACKUP_PASSPHRASE) before they are kept as a workflow
+# artifact for 30 days (Actions › Nightly database backup › a run › Artifacts).
+# Needs two repository secrets:
+#   SUPABASE_DB_URL    – Supabase › Connect › Session pooler, with the password
+#   BACKUP_PASSPHRASE  – a long passphrase only you know (keep a copy outside GitHub: without it the
+#                        backups cannot be opened)
+name: Nightly database backup
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 03:00 in São Paulo
+  workflow_dispatch: # "Run workflow" button for a backup on demand
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check the secrets
+        run: |
+          missing=0
+          for name in SUPABASE_DB_URL BACKUP_PASSPHRASE; do
+            if [ -z "${!name}" ]; then echo "::error::Add the repository secret $name (Settings › Secrets and variables › Actions)."; missing=1; fi
+          done
+          if [ ${#BACKUP_PASSPHRASE} -gt 0 ] && [ ${#BACKUP_PASSPHRASE} -lt 16 ]; then echo "::error::BACKUP_PASSPHRASE must be at least 16 characters."; missing=1; fi
+          exit $missing
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Dump roles, schema and data
+        run: |
+          mkdir -p backup
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/roles.sql --role-only
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --use-copy --data-only -x "storage.buckets_vectors" -x "storage.vector_indexes"
+
+      - name: Check the dump is not empty
+        run: |
+          ls -l backup
+          for f in roles schema data; do
+            if [ ! -s "backup/$f.sql" ]; then echo "::error::backup/$f.sql is empty"; exit 1; fi
+          done
+          grep -q 'CREATE TABLE' backup/schema.sql || { echo "::error::schema.sql has no tables"; exit 1; }
+          echo "Tables in schema: $(grep -c 'CREATE TABLE' backup/schema.sql)"
+          echo "Table copies in data: $(grep -c '^COPY ' backup/data.sql)"
+
+      - name: Pack and encrypt (only the encrypted file leaves the runner)
+        run: |
+          tar -czf ritsuflow-db.tar.gz -C backup roles.sql schema.sql data.sql
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 -o ritsuflow-db.tar.gz.gpg ritsuflow-db.tar.gz
+          rm -rf backup ritsuflow-db.tar.gz
+          ls -l ritsuflow-db.tar.gz.gpg
+
+      - name: Keep the backup for 30 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: ritsuflow-db-${{ github.run_number }}-${{ github.run_id }}
+          path: ritsuflow-db.tar.gz.gpg
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error
