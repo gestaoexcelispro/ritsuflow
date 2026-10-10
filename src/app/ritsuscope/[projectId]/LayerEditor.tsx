@@ -220,14 +220,14 @@ export default function LayerEditor({ layer, recipes, onSaved, onClose }: Props)
     </label>
   )
 
-  /** Check boxes for the places where the framing touches another system. */
-  const places = (key: 'anchorAt' | 'bandAt', label: string) => (
+  /** Places where the framing touches another system: always floor, ceiling and free ends (fixed rule). */
+  const places = (_key: 'anchorAt' | 'bandAt', label: string) => (
     <div style={fieldStyle}>
       {label}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {(['floor', 'ceiling', 'walls'] as const).map(pl => (
-          <label key={pl} style={checkStyle}>
-            <input type="checkbox" checked={form[key][pl]} onChange={e => set(key, { ...form[key], [pl]: e.target.checked })} />
+          <label key={pl} style={{ ...checkStyle, opacity: 0.8 }} title={t('fixings.always')}>
+            <input type="checkbox" checked readOnly disabled />
             {t(`fixings.place.${pl}` as Parameters<typeof t>[0])}
           </label>
         ))}
