@@ -873,8 +873,31 @@ export default function PdfWorkspace(props: Props) {
     if (gone.length) await onChanged()
   }
 
+  /** Tasks: deletes every task line picked with the selection box (one confirmation for all). */
+  async function deleteTaskBox() {
+    const ids = boxSel.filter(id => id.startsWith('task:') || id.startsWith('plan:')).map(id => id.slice(5))
+    if (!ids.length) return
+    if (!window.confirm(t('task.confirmDeleteMany', { count: ids.length }))) return
+    const supabase = createClient()
+    const gone: string[] = []
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error: e } = await supabase.from('location_task_drawings').delete().in('id', ids.slice(i, i + 200)).select('id')
+      if (e) { setError(t('workspace.error', { message: e.message })); break }
+      for (const row of data || []) gone.push((row as { id: string }).id)
+    }
+    const goneSet = new Set(gone)
+    setCreated(prev => prev.filter(c => !goneSet.has(c.id)))
+    setBoxSel([])
+    setTaskSel(null)
+    if (gone.length === 0) setError(t('element.deleteDenied'))
+    else if (gone.length < ids.length) setError(t('element.deletedPartial', { done: gone.length, total: ids.length }))
+    else setMessage(t('task.deletedMany', { count: gone.length }))
+    if (gone.length) await onChanged()
+  }
+
   async function deleteSelected() {
     if (tasksMode) {
+      if (boxSel.length) { await deleteTaskBox(); return }
       if (!taskSel) return
       if (!window.confirm(t('task.confirmDelete'))) return
       const id = taskSel.slice(5)
@@ -920,7 +943,7 @@ export default function PdfWorkspace(props: Props) {
       if (event.key === 'Enter' && mode === 'draw' && !faceMode) void finishDraft()
       if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => (tasksMode && takeWall ? [] : prev.slice(0, -1))) }
       if (event.key === 'Backspace' && mode === 'measure') { event.preventDefault(); setMeasureDone(false); setMeasurePts(prev => prev.slice(0, -1)) }
-      if (event.key === 'Delete' && mode === 'select' && (tasksMode ? taskSel : zoning ? selectedZoneId : selectedId || boxSel.length)) void deleteSelected()
+      if (event.key === 'Delete' && mode === 'select' && (tasksMode ? taskSel || boxSel.length : zoning ? selectedZoneId : selectedId || boxSel.length)) void deleteSelected()
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && draft.length === 0) { event.preventDefault(); void undoLast() }
     }
     window.addEventListener('keydown', onKey)
@@ -1178,7 +1201,7 @@ export default function PdfWorkspace(props: Props) {
     if (roomPicking) return roomPickPts.length ? t('rooms.pickSecond') : t('rooms.pickFirst')
     if (mode === 'detect') return ''
     if (mode === 'origin') return originPts.length === 0 ? t('origin.hint.point') : originPts.length === 1 ? t('origin.hint.direction') : t('origin.hint.done')
-    if (tasksMode) return taskSel ? t('task.hint.selected') : t('task.hint.select')
+    if (tasksMode) return boxSel.length ? t('task.hint.boxSelected') : taskSel ? t('task.hint.selected') : t('task.hint.select')
     if (zoning) return sheetZones.length ? t('zone.hint.select') : t('zone.hint.empty')
     if (boxSel.length) return t('box.selectedHint')
     // Nothing selected: no banner over the sheet (the help is in the Select button's tooltip).
@@ -1265,7 +1288,8 @@ export default function PdfWorkspace(props: Props) {
   ]
 
   const selectionActive = tasksMode ? !!taskSel : zoning ? !!selectedZoneId : !!selectedId
-  const canBox = mode === 'select' && !zoning && !tasksMode && !openingPick
+  // Tasks: the box picks task lines (this activity's and the others'), never the estimate walls.
+  const canBox = mode === 'select' && !zoning && !openingPick && !areaPicking
   const boxSelSet = useMemo(() => new Set(boxSel), [boxSel])
 
   /** Ends a box drag: picks the elements in the box (window or crossing) and selects them. */
@@ -1278,6 +1302,13 @@ export default function PdfWorkspace(props: Props) {
     const c = toPt(x, y)
     const box = { x0: Math.min(a[0], c[0]), y0: Math.min(a[1], c[1]), x1: Math.max(a[0], c[0]), y1: Math.max(a[1], c[1]) }
     let ids = boxSelect(items, box, x < b.x)
+    if (tasksMode) {
+      ids = ids.filter(id => id.startsWith('task:') || id.startsWith('plan:'))
+      if (b.shift) ids = Array.from(new Set([...boxSel, ...(taskSel ? [taskSel] : []), ...ids]))
+      if (ids.length === 1) { setBoxSel([]); setTaskSel(ids[0]) }
+      else { setBoxSel(ids); setTaskSel(null) }
+      return
+    }
     if (b.shift) ids = Array.from(new Set([...boxSel, ...(selectedId ? [selectedId] : []), ...ids]))
     if (ids.length === 1) { setBoxSel([]); onSelect(ids[0]) }
     else { setBoxSel(ids); onSelect(null) }
@@ -1493,7 +1524,7 @@ export default function PdfWorkspace(props: Props) {
         {!zoning && boxSel.length > 0 && (
           <div style={{ ...pill, pointerEvents: 'auto', fontWeight: 700 }}>
             {t('box.count', { count: boxSel.length })}
-            <button type="button" style={{ ...smallBtn(false), height: 26, borderColor: '#e5b4b4', color: '#a44343' }} onClick={() => void deleteBoxSelection()}>{t('box.delete')}</button>
+            <button type="button" style={{ ...smallBtn(false), height: 26, borderColor: '#e5b4b4', color: '#a44343' }} onClick={() => void (tasksMode ? deleteTaskBox() : deleteBoxSelection())}>{t('box.delete')}</button>
             <button type="button" style={{ ...smallBtn(false), height: 26 }} onClick={() => setBoxSel([])}>{t('box.clear')}</button>
           </div>
         )}
