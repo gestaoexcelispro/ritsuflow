@@ -125,10 +125,10 @@ begin
     admin_user.name,
     admin_user.email,
     coalesce(
-      (select array_agg(m.module_key order by m.module_key)
+      (select array_agg(m.module_key::text order by m.module_key)
          from private.organization_modules m
         where m.organization_id = o.id and m.enabled = true),
-      (select array_agg(w.workspace_key order by w.workspace_key)
+      (select array_agg(w.workspace_key::text order by w.workspace_key)
          from public.organization_workspace_entitlements w
         where w.organization_id = o.id and w.is_entitled),
       array[]::text[]

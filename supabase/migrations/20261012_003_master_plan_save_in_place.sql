@@ -50,6 +50,8 @@ declare
   v_deleted integer := 0;
   v_removed_items integer := 0;
   v_fallback_start date;
+  v_map jsonb := '{}'::jsonb;   -- ui_key → package id
+  v_ids uuid[] := array[]::uuid[];
 begin
   select s.project_id into v_project_id
   from public.master_plan_scenarios s
@@ -62,12 +64,6 @@ begin
   if jsonb_typeof(coalesce(target_packages, '[]'::jsonb)) <> 'array' then
     raise exception 'target_packages must be a JSON array.';
   end if;
-
-  create temporary table if not exists pg_temp.mp_key_map (
-    ui_key text primary key,
-    package_id uuid not null
-  ) on commit drop;
-  truncate pg_temp.mp_key_map;
 
   -- 1. Dependencies are rebuilt at the end.
   delete from public.master_plan_package_dependencies d
@@ -160,8 +156,8 @@ begin
       v_updated := v_updated + 1;
     end if;
 
-    insert into pg_temp.mp_key_map (ui_key, package_id) values (v_key, v_id)
-    on conflict on constraint mp_key_map_pkey do update set package_id = excluded.package_id;
+    v_map := v_map || jsonb_build_object(v_key, v_id);
+    v_ids := array_append(v_ids, v_id);
   end loop;
 
   -- 3. Controlling predecessor and the final start rule.
@@ -170,9 +166,10 @@ begin
     predecessor_package_id = pred.package_id,
     planned_start_date = null
   from jsonb_array_elements(coalesce(target_packages, '[]'::jsonb)) src(value)
-  join pg_temp.mp_key_map self on self.ui_key = trim(src.value ->> 'ui_key')
-  join pg_temp.mp_key_map pred on pred.ui_key = trim(src.value ->> 'predecessor_ui_key')
+  cross join lateral (select (v_map ->> trim(src.value ->> 'ui_key'))::uuid as package_id) self
+  cross join lateral (select (v_map ->> trim(src.value ->> 'predecessor_ui_key'))::uuid as package_id) pred
   where p.id = self.package_id
+    and pred.package_id is not null
     and pred.package_id <> self.package_id;
 
   -- 4. Packages no longer in the plan. Lookahead items that pointed at them go
@@ -181,31 +178,36 @@ begin
   using public.master_plan_packages p
   where wi.master_plan_package_id = p.id
     and p.scenario_id = target_scenario_id
-    and not exists (select 1 from pg_temp.mp_key_map m where m.package_id = p.id);
+    and not (p.id = any (v_ids));
   get diagnostics v_removed_items = row_count;
 
   delete from public.master_plan_packages p
   where p.scenario_id = target_scenario_id
-    and not exists (select 1 from pg_temp.mp_key_map m where m.package_id = p.id);
+    and not (p.id = any (v_ids));
   get diagnostics v_deleted = row_count;
 
   -- 5. Full multi-predecessor network.
   insert into public.master_plan_package_dependencies (
     scenario_id, project_id, package_id, predecessor_package_id, dependency_type, lag_working_days
   )
-  select distinct on (self.package_id, pred.package_id)
-    target_scenario_id, v_project_id, self.package_id, pred.package_id,
-    case when d.value ->> 'dependency_type' in ('trade', 'flow', 'external')
-         then d.value ->> 'dependency_type' else 'external' end,
-    greatest(0, coalesce((d.value ->> 'lag_working_days')::integer, 0))
-  from jsonb_array_elements(coalesce(target_dependencies, '[]'::jsonb)) d(value)
-  join pg_temp.mp_key_map self on self.ui_key = trim(d.value ->> 'ui_key')
-  join pg_temp.mp_key_map pred on pred.ui_key = trim(d.value ->> 'predecessor_ui_key')
-  where self.package_id <> pred.package_id;
+  select distinct on (x.package_id, x.predecessor_id)
+    target_scenario_id, v_project_id, x.package_id, x.predecessor_id, x.dependency_type, x.lag
+  from (
+    select (v_map ->> trim(d.value ->> 'ui_key'))::uuid as package_id,
+           (v_map ->> trim(d.value ->> 'predecessor_ui_key'))::uuid as predecessor_id,
+           case when d.value ->> 'dependency_type' in ('trade', 'flow', 'external')
+                then d.value ->> 'dependency_type' else 'external' end as dependency_type,
+           greatest(0, coalesce((d.value ->> 'lag_working_days')::integer, 0)) as lag
+    from jsonb_array_elements(coalesce(target_dependencies, '[]'::jsonb)) d(value)
+  ) x
+  where x.package_id is not null
+    and x.predecessor_id is not null
+    and x.package_id <> x.predecessor_id
+  order by x.package_id, x.predecessor_id;
 
   return query
-    select m.ui_key, m.package_id, v_inserted, v_updated, v_deleted, v_removed_items
-    from pg_temp.mp_key_map m;
+    select m.key, m.value::uuid, v_inserted, v_updated, v_deleted, v_removed_items
+    from jsonb_each_text(v_map) m;
 
   if not found then
     return query select null::text, null::uuid, v_inserted, v_updated, v_deleted, v_removed_items;
