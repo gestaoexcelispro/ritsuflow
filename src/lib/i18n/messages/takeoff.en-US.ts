@@ -460,6 +460,7 @@ const takeoffEnUS: TakeoffMessages = {
   'task.layer3d.picked': "picked on plan",
   'task.layer3d.exterior': "Exterior",
   'task.layer3d.turnOnLayers': "Turn on Construction layers and click the framing or a board to see that layer.",
+  'fixings.always': "Always: wherever the framing meets another system (slab, ceiling, existing wall).",
   'taskSettings.title': "Activity settings",
   'taskSettings.wp': "Work package",
   'taskSettings.wpNone': "— No work package —",

@@ -43,14 +43,21 @@ export const DEFAULT_TEE_STUDS = 2
 export const DEFAULT_ANCHOR_SPACING = 0.6
 export const DEFAULT_ANCHOR_EDGE = 0.1
 
-/** Default fixings: anchors in the floor and ceiling slabs, acoustic band under the floor track. */
+/**
+ * Rule confirmed by Eduardo: where the framing meets another construction system it is always fixed
+ * and sealed — anchors and acoustic band at the floor (bottom track), the ceiling (top track) and the
+ * walls (end studs at free ends, i.e. against masonry, concrete…). Not a per-wall-type choice.
+ */
+export const FIXING_PLACES_ALWAYS = { floor: true, ceiling: true, walls: true } as const
+
+/** Default fixings: anchors and acoustic band wherever the framing meets another system. */
 export function defaultFixings(names: { anchor?: string; band?: string } = {}): FixingsConfig {
   return {
     anchorSpacing: DEFAULT_ANCHOR_SPACING,
     anchorEdge: DEFAULT_ANCHOR_EDGE,
-    anchorAt: { floor: true, ceiling: true, walls: false },
+    anchorAt: { ...FIXING_PLACES_ALWAYS },
     anchorName: names.anchor || 'Bucha de nylon S6 + parafuso (fixação da guia)',
-    bandAt: { floor: true, ceiling: false, walls: false },
+    bandAt: { ...FIXING_PLACES_ALWAYS },
     bandName: names.band || 'Banda acústica',
     bandRoll: null,
   }
@@ -61,17 +68,14 @@ export function fixingsOf(raw: unknown): FixingsConfig | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   const d = defaultFixings()
-  const places = (v: unknown, def: FixingsConfig['anchorAt']) => {
-    const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
-    return { floor: typeof o.floor === 'boolean' ? o.floor : def.floor, ceiling: typeof o.ceiling === 'boolean' ? o.ceiling : def.ceiling, walls: typeof o.walls === 'boolean' ? o.walls : def.walls }
-  }
   const pos = (v: unknown, def: number) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : def)
   return {
     anchorSpacing: pos(r.anchorSpacing, d.anchorSpacing),
     anchorEdge: typeof r.anchorEdge === 'number' && r.anchorEdge >= 0 ? r.anchorEdge : d.anchorEdge,
-    anchorAt: places(r.anchorAt, d.anchorAt),
+    // Places are fixed by the rule above (older wall types stored their own ticks: ignored).
+    anchorAt: { ...FIXING_PLACES_ALWAYS },
     anchorName: typeof r.anchorName === 'string' && r.anchorName.trim() ? r.anchorName.trim() : d.anchorName,
-    bandAt: places(r.bandAt, d.bandAt),
+    bandAt: { ...FIXING_PLACES_ALWAYS },
     bandName: typeof r.bandName === 'string' && r.bandName.trim() ? r.bandName.trim() : d.bandName,
     bandRoll: typeof r.bandRoll === 'number' && r.bandRoll > 0 ? r.bandRoll : null,
   }

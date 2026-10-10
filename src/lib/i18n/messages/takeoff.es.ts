@@ -23,6 +23,7 @@ const takeoffEs: Record<TakeoffMessageKey, string> = {
   'task.layer3d.picked': "elegido en el plano",
   'task.layer3d.exterior': "Exterior",
   'task.layer3d.turnOnLayers': "Active Capas constructivas y haga clic en la estructura o en una placa para ver esa capa.",
+  'fixings.always': "Siempre: donde la estructura encuentra otro sistema (losa, cielorraso, muro existente).",
   'taskSettings.title': "Configuración de la actividad",
   'taskSettings.wp': "Paquete de trabajo",
   'taskSettings.wpNone': "— Sin paquete de trabajo —",

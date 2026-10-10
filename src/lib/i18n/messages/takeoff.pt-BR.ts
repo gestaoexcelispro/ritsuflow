@@ -461,6 +461,7 @@ const takeoffPtBR = {
   'task.layer3d.picked': "escolhido na planta",
   'task.layer3d.exterior': "Exterior",
   'task.layer3d.turnOnLayers': "Ative Camadas construtivas e clique na estrutura ou numa placa para ver essa camada.",
+  'fixings.always': "Sempre: onde a estrutura encontra outro sistema (laje, forro, parede existente).",
   'taskSettings.title': "Configurações da atividade",
   'taskSettings.wp': "Pacote de trabalho",
   'taskSettings.wpNone': "— Sem pacote de trabalho —",
