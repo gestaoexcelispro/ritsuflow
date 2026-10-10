@@ -6,6 +6,7 @@ import type { TakeoffMessageKey } from './takeoff.pt-BR'
 const takeoffEs: Record<TakeoffMessageKey, string> = {
   ...takeoffEnUS,
   'fs.col.after': "Después de",
+  'report.v3d.explode': "Capas separadas",
   'taskSettings.title': "Configuración de la actividad",
   'taskSettings.wp': "Paquete de trabajo",
   'taskSettings.wpNone': "— Sin paquete de trabajo —",

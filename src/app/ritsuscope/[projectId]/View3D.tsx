@@ -89,6 +89,11 @@ type Props = {
   initialTags?: boolean
   /** Called when the user stops orbiting: the view on screen (for the field sheet's 3D picture). */
   onView?: (view: View3DCamera) => void
+  /**
+   * Explode handled by the page (task view): the page pulls its own layers apart (each task band away
+   * from the wall), so the button works even without construction layers.
+   */
+  explodeControl?: { on: boolean; onToggle: () => void }
 }
 
 type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; group: any; raf: number }
@@ -96,7 +101,7 @@ type Scene = { THREE: Three; renderer: any; scene: any; cam: any; ctl: any; grou
 const NO_UNDERLAYS: UnderlaySpec[] = []
 const NO_ZONES: UnderlayZone[] = []
 
-export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage, initialTags = false, onView }: Props) {
+export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, underlays = NO_UNDERLAYS, underlayZones = NO_ZONES, preferPage, initialTags = false, onView, explodeControl }: Props) {
   const t = useTakeoffT()
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<Scene | null>(null)
@@ -107,7 +112,8 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
   onViewRef.current = onView
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [layered, setLayered] = useState(true)
-  const [explode, setExplode] = useState(false)
+  const [explodeOwn, setExplode] = useState(false)
+  const explode = explodeControl ? explodeControl.on : explodeOwn
   /** Construction layers: which board sides are drawn (none = framing only). */
   const [boards, setBoards] = useState<BoardSides>('both')
   /** Tag of each wall stretch floating above it (off by default: busy on big models). */
@@ -301,7 +307,7 @@ export default function View3D({ items, ptPerM, selectedId, onSelect, storeys, u
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', minHeight: 0, minWidth: 0 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', minWidth: 0 }}>
         <button type="button" style={toggle(layered)} onClick={() => setLayered(v => !v)}>{t('view3d.layers')}</button>
-        <button type="button" style={toggle(explode)} disabled={!layered} onClick={() => setExplode(v => !v)}>{t('view3d.explode')}</button>
+        <button type="button" style={toggle(explode)} disabled={!explodeControl && !layered} onClick={() => (explodeControl ? explodeControl.onToggle() : setExplode(v => !v))}>{t('view3d.explode')}</button>
         <span title={t('view3d.boardsHint')} style={{ display: 'flex', alignItems: 'center', gap: 0, opacity: layered ? 1 : 0.45 }}>
           <span style={{ fontSize: 10, fontWeight: 800, color: '#536d78', marginRight: 6 }}>{t('view3d.boards')}</span>
           {BOARD_SIDES.map((v, i) => (
