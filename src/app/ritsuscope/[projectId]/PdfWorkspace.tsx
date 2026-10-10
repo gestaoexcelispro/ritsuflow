@@ -873,8 +873,54 @@ export default function PdfWorkspace(props: Props) {
     if (gone.length) await onChanged()
   }
 
+  /** Tasks: deletes every task line picked with the selection box (one confirmation for all). */
+  async function deleteTaskBox() {
+    const ids = boxSel.filter(id => id.startsWith('task:') || id.startsWith('plan:')).map(id => id.slice(5))
+    if (!ids.length) return
+    if (!window.confirm(t('task.confirmDeleteMany', { count: ids.length }))) return
+    const supabase = createClient()
+    const gone: string[] = []
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error: e } = await supabase.from('location_task_drawings').delete().in('id', ids.slice(i, i + 200)).select('id')
+      if (e) { setError(t('workspace.error', { message: e.message })); break }
+      for (const row of data || []) gone.push((row as { id: string }).id)
+    }
+    const goneSet = new Set(gone)
+    setCreated(prev => prev.filter(c => !goneSet.has(c.id)))
+    setBoxSel([])
+    setTaskSel(null)
+    if (gone.length === 0) setError(t('element.deleteDenied'))
+    else if (gone.length < ids.length) setError(t('element.deletedPartial', { done: gone.length, total: ids.length }))
+    else setMessage(t('task.deletedMany', { count: gone.length }))
+    if (gone.length) await onChanged()
+  }
+
+  /** Zoning: deletes every location outline picked with the selection box (one confirmation for all). */
+  async function deleteZoneBox() {
+    const ids = boxSel.filter(id => sheetZones.some(z => z.id === id))
+    if (!ids.length) return
+    if (!window.confirm(t('zone.confirmDeleteMany', { count: ids.length }))) return
+    const supabase = createClient()
+    const gone: string[] = []
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error: e } = await supabase.from('takeoff_zones').delete().in('id', ids.slice(i, i + 200)).select('id')
+      if (e) { setError(t('workspace.error', { message: e.message })); break }
+      for (const row of data || []) gone.push((row as { id: string }).id)
+    }
+    const goneSet = new Set(gone)
+    setCreated(prev => prev.filter(c => !goneSet.has(c.id)))
+    setBoxSel([])
+    onSelectZone(null)
+    if (gone.length === 0) setError(t('element.deleteDenied'))
+    else if (gone.length < ids.length) setError(t('element.deletedPartial', { done: gone.length, total: ids.length }))
+    else setMessage(t('zone.deletedMany', { count: gone.length }))
+    if (gone.length) await onChanged()
+  }
+
   async function deleteSelected() {
+    if (zoning && boxSel.length) { await deleteZoneBox(); return }
     if (tasksMode) {
+      if (boxSel.length) { await deleteTaskBox(); return }
       if (!taskSel) return
       if (!window.confirm(t('task.confirmDelete'))) return
       const id = taskSel.slice(5)
@@ -920,7 +966,7 @@ export default function PdfWorkspace(props: Props) {
       if (event.key === 'Enter' && mode === 'draw' && !faceMode) void finishDraft()
       if (event.key === 'Backspace' && mode === 'draw') { event.preventDefault(); setDraft(prev => (tasksMode && takeWall ? [] : prev.slice(0, -1))) }
       if (event.key === 'Backspace' && mode === 'measure') { event.preventDefault(); setMeasureDone(false); setMeasurePts(prev => prev.slice(0, -1)) }
-      if (event.key === 'Delete' && mode === 'select' && (tasksMode ? taskSel : zoning ? selectedZoneId : selectedId || boxSel.length)) void deleteSelected()
+      if (event.key === 'Delete' && mode === 'select' && (tasksMode ? taskSel || boxSel.length : zoning ? selectedZoneId || boxSel.length : selectedId || boxSel.length)) void deleteSelected()
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && draft.length === 0) { event.preventDefault(); void undoLast() }
     }
     window.addEventListener('keydown', onKey)
@@ -1178,8 +1224,8 @@ export default function PdfWorkspace(props: Props) {
     if (roomPicking) return roomPickPts.length ? t('rooms.pickSecond') : t('rooms.pickFirst')
     if (mode === 'detect') return ''
     if (mode === 'origin') return originPts.length === 0 ? t('origin.hint.point') : originPts.length === 1 ? t('origin.hint.direction') : t('origin.hint.done')
-    if (tasksMode) return taskSel ? t('task.hint.selected') : t('task.hint.select')
-    if (zoning) return sheetZones.length ? t('zone.hint.select') : t('zone.hint.empty')
+    if (tasksMode) return boxSel.length ? t('task.hint.boxSelected') : taskSel ? t('task.hint.selected') : t('task.hint.select')
+    if (zoning) return boxSel.length ? t('zone.hint.boxSelected') : sheetZones.length ? t('zone.hint.select') : t('zone.hint.empty')
     if (boxSel.length) return t('box.selectedHint')
     // Nothing selected: no banner over the sheet (the help is in the Select button's tooltip).
     return selectedId ? t('move.hint') : ''
@@ -1189,10 +1235,10 @@ export default function PdfWorkspace(props: Props) {
     // Largest first, so the rooms drawn inside a block or zone stay on top and clickable.
     ...sheetZones.filter(z => z.is_visible).slice().sort((p, q) => polyArea(q.points) - polyArea(p.points)).map(z => {
       const a = scale > 0 ? polyArea(z.points) / (scale * scale) : 0
-      return { id: z.id, name: z.name, color: z.color, pts: z.points, label: scale > 0 ? `${formatNumber(a, 2)} m²` : '', selected: z.id === selectedZoneId, macro: isMacroKind(z.zone_kind) }
+      return { id: z.id, name: z.name, color: z.color, pts: z.points, label: scale > 0 ? `${formatNumber(a, 2)} m²` : '', selected: z.id === selectedZoneId, picked: zoning && boxSel.includes(z.id), macro: isMacroKind(z.zone_kind) }
     }),
     ...(namedRoomSugs || []).map(r => ({ id: `sug:${r.id}`, name: r.name, color: '#16A34A', pts: r.pts, label: `${formatNumber(r.areaM2, 2)} m²`, selected: false, suggested: true, on: roomPicked.has(r.id) })),
-  ], [sheetZones, scale, formatNumber, selectedZoneId, namedRoomSugs, roomPicked])
+  ], [sheetZones, scale, formatNumber, selectedZoneId, namedRoomSugs, roomPicked, zoning, boxSel])
 
   const isTool = (m: Mode, s?: Shape) => mode === m && (!s || shape === s)
   type ToolGroup = 'edit' | 'ref' | 'draw' | 'model' | 'services'
@@ -1265,7 +1311,9 @@ export default function PdfWorkspace(props: Props) {
   ]
 
   const selectionActive = tasksMode ? !!taskSel : zoning ? !!selectedZoneId : !!selectedId
-  const canBox = mode === 'select' && !zoning && !tasksMode && !openingPick
+  // Tasks: the box picks task lines (this activity's and the others'), never the estimate walls.
+  // Zoning: the box picks location outlines (not the room suggestions).
+  const canBox = mode === 'select' && !openingPick && !areaPicking && !roomPicking
   const boxSelSet = useMemo(() => new Set(boxSel), [boxSel])
 
   /** Ends a box drag: picks the elements in the box (window or crossing) and selects them. */
@@ -1277,7 +1325,22 @@ export default function PdfWorkspace(props: Props) {
     const a = toPt(b.x, b.y)
     const c = toPt(x, y)
     const box = { x0: Math.min(a[0], c[0]), y0: Math.min(a[1], c[1]), x1: Math.max(a[0], c[0]), y1: Math.max(a[1], c[1]) }
+    if (zoning) {
+      const zoneItems = [{ key: 'zones', kind: 'area' as const, name: '', system: '', color: '', thickness: 0, height: 0, shapes: sheetZones.filter(z => z.is_visible && z.points.length >= 3).map(z => ({ id: z.id, page: 1, pts: z.points })) }] as unknown as TakeoffItem[]
+      let zids = boxSelect(zoneItems, box, x < b.x)
+      if (b.shift) zids = Array.from(new Set([...boxSel, ...(selectedZoneId ? [selectedZoneId] : []), ...zids]))
+      if (zids.length === 1) { setBoxSel([]); onSelectZone(zids[0]) }
+      else { setBoxSel(zids); onSelectZone(null) }
+      return
+    }
     let ids = boxSelect(items, box, x < b.x)
+    if (tasksMode) {
+      ids = ids.filter(id => id.startsWith('task:') || id.startsWith('plan:'))
+      if (b.shift) ids = Array.from(new Set([...boxSel, ...(taskSel ? [taskSel] : []), ...ids]))
+      if (ids.length === 1) { setBoxSel([]); setTaskSel(ids[0]) }
+      else { setBoxSel(ids); setTaskSel(null) }
+      return
+    }
     if (b.shift) ids = Array.from(new Set([...boxSel, ...(selectedId ? [selectedId] : []), ...ids]))
     if (ids.length === 1) { setBoxSel([]); onSelect(ids[0]) }
     else { setBoxSel(ids); onSelect(null) }
@@ -1354,7 +1417,10 @@ export default function PdfWorkspace(props: Props) {
             if (el && r && (event.clientX - r.left >= el.clientWidth || event.clientY - r.top >= el.clientHeight)) return
             const target = event.target as Element
             const onShape = target instanceof SVGElement && !(target instanceof SVGSVGElement && !target.ownerSVGElement)
-            if (!onShape) {
+            // Zoning: rooms cover the plan, so a drag may start on a location's outline (a plain click still selects it);
+            // its corner handles keep moving points.
+            const onZone = zoning && target instanceof SVGPolygonElement
+            if (!onShape || onZone) {
               event.preventDefault() // no text selection while dragging
               band.current = { x: event.clientX, y: event.clientY, shift: event.shiftKey, active: false }
             }
@@ -1490,10 +1556,10 @@ export default function PdfWorkspace(props: Props) {
             <button type="button" style={xSmall} onClick={() => { setError(''); setMessage('') }}>×</button>
           </div>
         )}
-        {!zoning && boxSel.length > 0 && (
+        {boxSel.length > 0 && (
           <div style={{ ...pill, pointerEvents: 'auto', fontWeight: 700 }}>
-            {t('box.count', { count: boxSel.length })}
-            <button type="button" style={{ ...smallBtn(false), height: 26, borderColor: '#e5b4b4', color: '#a44343' }} onClick={() => void deleteBoxSelection()}>{t('box.delete')}</button>
+            {t(zoning ? 'zone.box.count' : tasksMode ? 'task.box.count' : 'box.count', { count: boxSel.length })}
+            <button type="button" style={{ ...smallBtn(false), height: 26, borderColor: '#e5b4b4', color: '#a44343' }} onClick={() => void (zoning ? deleteZoneBox() : tasksMode ? deleteTaskBox() : deleteBoxSelection())}>{t('box.delete')}</button>
             <button type="button" style={{ ...smallBtn(false), height: 26 }} onClick={() => setBoxSel([])}>{t('box.clear')}</button>
           </div>
         )}

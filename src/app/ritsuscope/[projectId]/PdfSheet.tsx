@@ -15,7 +15,7 @@ import { layoutLabels, type LabelIn } from '@/lib/takeoff/labelLayout'
 import { TASK_TAG_PT, tagBox } from '@/lib/takeoff/fieldSheet'
 
 export type Suggestion = { id: string; pts: [Vec2, Vec2]; on: boolean }
-export type ZoneShape = { id: string; name: string; color: string; pts: Vec2[]; label: string; selected: boolean; suggested?: boolean; on?: boolean; /** Block / Zone / Area: dashed outline, light fill, label at the top. */ macro?: boolean }
+export type ZoneShape = { id: string; name: string; color: string; pts: Vec2[]; label: string; selected: boolean; /** In the box selection (highlighted, no vertex handles). */ picked?: boolean; suggested?: boolean; on?: boolean; /** Block / Zone / Area: dashed outline, light fill, label at the top. */ macro?: boolean }
 
 /** Largest canvas side we render; beyond this the browser scales the bitmap. */
 const MAX_CANVAS_SIDE = 8192
@@ -456,8 +456,8 @@ export default function PdfSheet(props: Props) {
                   <polygon points={pts} fill={z.on ? '#16A34A' : '#C2410C'} fillOpacity={z.on ? 0.18 : 0.06} stroke={z.on ? '#16A34A' : '#C2410C'} strokeWidth={stroke(2)} strokeDasharray={`${stroke(8)} ${stroke(5)}`} {...pick} />
                 ) : (
                   z.macro
-                    ? <polygon points={pts} fill={z.color} fillOpacity={z.selected ? 0.16 : 0.06} stroke={z.selected ? '#0b6b63' : z.color} strokeWidth={stroke(z.selected ? 3 : 2.2)} strokeDasharray={`${stroke(10)} ${stroke(6)}`} {...pick} />
-                    : <polygon points={pts} fill={z.color} fillOpacity={z.selected ? 0.42 : 0.26} stroke={z.selected ? '#0b6b63' : z.color} strokeWidth={stroke(z.selected ? 2.5 : 1.2)} {...pick} />
+                    ? <polygon points={pts} fill={z.color} fillOpacity={z.selected || z.picked ? 0.16 : 0.06} stroke={z.selected || z.picked ? '#0b6b63' : z.color} strokeWidth={stroke(z.selected || z.picked ? 3 : 2.2)} strokeDasharray={`${stroke(10)} ${stroke(6)}`} {...pick} />
+                    : <polygon points={pts} fill={z.color} fillOpacity={z.selected || z.picked ? 0.42 : 0.26} stroke={z.selected || z.picked ? '#0b6b63' : z.color} strokeWidth={stroke(z.selected || z.picked ? 2.5 : 1.2)} {...pick} />
                 )}
                 <text x={cx} y={cy - stroke(3)} textAnchor="middle" fontSize={stroke(12)} fontWeight={700} fill="#173441" style={{ pointerEvents: 'none' }} fontFamily="system-ui, sans-serif">{z.name}</text>
                 <text x={cx} y={cy + stroke(12)} textAnchor="middle" fontSize={stroke(11)} fill="#294955" style={{ pointerEvents: 'none' }} fontFamily="system-ui, sans-serif">{z.label}</text>
