@@ -651,6 +651,9 @@ export default function LookaheadPage() {
     setSavingLookahead,
   ] = useState(false);
 
+  // R2: creating a plan from the frozen Master plan baseline.
+  const [creatingPlan, setCreatingPlan] = useState(false);
+
 
   // ==========================================================
   // SELECTED PLAN
@@ -2022,6 +2025,31 @@ export default function LookaheadPage() {
         );
 
 
+        // ----------------------------------------------------
+        // 4. PULL BASELINE PACKAGES THAT NOW FALL IN THE WINDOW
+        //    (never duplicates or resets existing items)
+        // ----------------------------------------------------
+
+        const {
+          data: refreshed,
+          error: refreshError,
+        } = await supabase.rpc(
+          'refresh_lookahead_from_baseline',
+          { target_lookahead_plan_id: selectedPlanId }
+        );
+
+        if (refreshError) {
+          throw refreshError;
+        }
+
+        const addedItems = Number(refreshed?.[0]?.added_items || 0);
+
+        if (addedItems > 0) {
+          dialogs.notify(tv('refreshedNotice', { items: addedItems }));
+          await loadWorkspace(selectedPlanId, { silent: true });
+        }
+
+
       } catch (error) {
 
         console.error(
@@ -2044,6 +2072,63 @@ export default function LookaheadPage() {
       }
 
     };
+
+
+  // ==========================================================
+  // R2 · CREATE A LOOKAHEAD FROM THE FROZEN BASELINE
+  // One database call: creates the active plan, closes the
+  // previous active one, pulls the packages in the window and
+  // adds their package rows.
+  // ==========================================================
+
+  const createLookaheadFromBaseline = async () => {
+    if (!selectedProjectId || creatingPlan) {
+      return;
+    }
+
+    // Default window: Monday of the current week.
+    let start = parseDate(windowStart);
+    if (!start) {
+      const today = new Date();
+      const weekday = (today.getDay() + 6) % 7;
+      start = addDays(new Date(today.getFullYear(), today.getMonth(), today.getDate()), -weekday);
+    }
+    const startIso = toIsoDate(start);
+    const weeks = Number.isInteger(Number(horizonWeeks)) && Number(horizonWeeks) >= 1 ? Number(horizonWeeks) : 6;
+
+    if (plans.length > 0) {
+      const confirmed = await dialogs.confirm(tv('confirmNewPlan', { start: startIso, weeks }));
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setCreatingPlan(true);
+    setErrorMessage('');
+
+    try {
+      const { data, error } = await supabase.rpc('create_lookahead_plan_from_baseline', {
+        target_project_id: selectedProjectId,
+        target_window_start: startIso,
+        target_horizon_weeks: weeks,
+        target_name: null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const result = data?.[0] || {};
+      dialogs.notify(tv('createdNotice', { items: Number(result.added_items || 0), rows: Number(result.added_rows || 0) }));
+      await loadPlans(selectedProjectId);
+    } catch (error) {
+      console.error('Create Lookahead:', error);
+      const message = String(error?.message || '');
+      setErrorMessage(message.includes('NO_BASELINE') ? t.errNoBaseline : message || t.errCreate);
+    } finally {
+      setCreatingPlan(false);
+    }
+  };
 
 
   // ==========================================================
@@ -4038,6 +4123,9 @@ export default function LookaheadPage() {
           </label>
           <button type="button" className={ui.btn} disabled={!selectedPlanId || savingLookahead} onClick={saveLookahead}>
             {savingLookahead ? t.saving : t.save}
+          </button>
+          <button type="button" className={ui.btnGhost} disabled={!selectedProjectId || creatingPlan} onClick={createLookaheadFromBaseline}>
+            {creatingPlan ? t.creatingPlan : t.newFromBaseline}
           </button>
         </div>
 
@@ -6918,7 +7006,15 @@ export default function LookaheadPage() {
         !selectedPlanId &&
         !loading && (
 
-          <Empty title={t.noPlan} />
+          <Empty
+            title={t.noPlan}
+            text={t.noPlanText}
+            action={
+              <button type="button" className={ui.btnPrimary} disabled={creatingPlan} onClick={createLookaheadFromBaseline}>
+                {creatingPlan ? t.creatingPlan : t.newFromBaseline}
+              </button>
+            }
+          />
 
         )}
 
